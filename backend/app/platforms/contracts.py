@@ -73,6 +73,11 @@ class KnownDiagnosticTemplate(BaseModel):
     cleanup_idempotent: bool | None = None
     cleanup_retry_strategy: str = 'UNSPECIFIED'
     cleanup_guard: str | None = None
+    # FXS / sub-mode prompt contract: entering the submode yields a distinct prompt
+    # and a read-only snapshot command is available. Kept optional for compat.
+    submode_prompt: str | None = None
+    snapshot_command: str | None = None
+    snapshot_fields: list[str] = Field(default_factory=list)
     source_refs: list[str] = Field(default_factory=list)
 
 

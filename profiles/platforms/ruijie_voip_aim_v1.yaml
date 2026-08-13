@@ -1,17 +1,21 @@
 profiles:
   - id: RUIJIE_VOIP_AIM_V1
     name: Ruijie OpenWrt + aimd/AIM VOIP Platform
-    version: 0.5.1
+    version: 0.6.0
     status: PARTIAL
     family: RUIJIE_OPENWRT_AIM
     description: >-
       EC-02 partial platform contract backed by supplied VOIP troubleshooting material and
-      device transcripts. Voice VLAN, Gateway, dynamic interface and realtime FXS event parsers
-      are verified and read-only commands are executable. PCM cleanup is confirmed effective but
-      non-idempotent: a second OFF exits the AIM CLI. Autonomous reproduction remains blocked until
-      recovery uses verify-before-execute cleanup and never blindly repeats PCM OFF. A quiet UDP
-      probe alone cannot prove PCM is disabled while the device is idle; that state requires an
-      active-call validation before the contract can be promoted.
+      2026-08-13 live-device validation. Voice VLAN, Gateway, dynamic interface, realtime FXS
+      event parsers, PCM cleanup and debug cleanup are verified against the real DUT. Active-call
+      validation on 2026-08-13 confirmed the full PCM sequence for both RX (UDP 40000) and TX
+      (UDP 50000): pcm_* on produced mirrored media traffic, a single pcm_* off returned the
+      stream to quiet, and no traffic resumed afterward. de p off and voip sip log-pkt off are
+      both confirmed harmless on a second call. The FXS submode prompt is confirmed as
+      AIM(fxs/1)> with a working `show information` snapshot. Autonomous reproduction still
+      remains gated: the transport-injected PCM guard is bound in the orchestrator but the real
+      adapter binding inside a live reproduction session and the production platform gate are
+      not yet promoted.
     transport:
       ssh_username: admin
       aim_executable: aim
@@ -21,6 +25,7 @@ profiles:
       - "voip 排障案例_思路整理。(1).md"
       - "M6.2 confirmed PCM destination semantics: voice gateway IP; DUT is the only SSH target"
       - "User device transcript 2026-08-13: dev_config VOIP service/VLAN and AIM enable commands"
+      - "Live-device validation 2026-08-13: PCM RX/TX active-call sequence, debug cleanup idempotency, FXS submode prompt"
 
     readonly_actions:
       - CHECK_AIMD_PROCESS
@@ -69,19 +74,29 @@ profiles:
         command_action_id: null
         parser_id: AIM_FXS_EVENT_V1
         parser_status: VERIFIED
-        notes: "Timestamped '[line] ... OFFHOOK/ONHOOK' records are the primary hook anchors."
+        notes: >-
+          Live-verified 2026-08-13: with the full debug sequence enabled
+          (debug p on / debug sys debug / de p on / de sip de / de ipc de / de cm de / de dsp de /
+          de sys de / voip sip log-pkt on), the persistent AIM PTY emits timestamped event lines
+          like '2026-08-13 22:52:53.878000 [0] D:: [D]OFFHOOK' and '[D]ONHOOK'. OFFHOOK/ONHOOK are
+          the hook anchors; parse with AIM_FXS_EVENT_V1. Requires the full debug set, not de p on
+          alone.
       dtmf:
         command_action_id: null
         parser_id: AIM_FXS_EVENT_V1
         parser_status: VERIFIED
-        notes: "Timestamped '[line] ... DTMF<digit>' records provide per-line dial events."
+        notes: >-
+          Live-verified 2026-08-13: with the full debug sequence enabled, the persistent AIM PTY
+          emits timestamped '... [D]DTMF<digit>' lines (e.g. DTMF<1>). One complete cycle
+          OFFHOOK -> 7x DTMF<1> -> ONHOOK was captured and parsed by AIM_FXS_EVENT_V1. Requires the
+          full debug set, not de p on alone.
 
     known_diagnostic_templates:
       - template_id: PCM_RX_ON_KNOWN_SYNTAX
         executor: AIM_PTY
         command_template: "voip dsp diag set {voice_gateway_ip} 40000 1 pcm_rx on"
         status: CONFIRMED_REVERSIBLE
-        reason_not_activatable: "A second OFF exits AIM; recovery must verify UDP 40000 activity before executing OFF once."
+        reason_not_activatable: "A second OFF exits AIM; recovery must verify UDP 40000 activity before executing OFF once. Active-call sequence validated 2026-08-13."
         cleanup_command_template: "voip dsp diag set {voice_gateway_ip} 40000 1 pcm_rx off"
         cleanup_status: CONFIRMED_NON_IDEMPOTENT
         cleanup_idempotent: false
@@ -89,11 +104,12 @@ profiles:
         cleanup_guard: "Skip OFF when UDP 40000 is already quiet; execute once only when the stream is active."
         source_refs:
           - "User device transcript 2026-08-13"
+          - "Live-device validation 2026-08-13: on produced UDP 40000 mirror (192.168.150.4 -> 192.168.3.200:40000, length 160); single off -> 0 packets; no resumption"
       - template_id: PCM_TX_ON_KNOWN_SYNTAX
         executor: AIM_PTY
         command_template: "voip dsp diag set {voice_gateway_ip} 50000 1 pcm_tx on"
         status: CONFIRMED_REVERSIBLE
-        reason_not_activatable: "A second OFF exits AIM; recovery must verify UDP 50000 activity before executing OFF once."
+        reason_not_activatable: "A second OFF exits AIM; recovery must verify UDP 50000 activity before executing OFF once. Active-call sequence validated 2026-08-13."
         cleanup_command_template: "voip dsp diag set {voice_gateway_ip} 50000 1 pcm_tx off"
         cleanup_status: CONFIRMED_NON_IDEMPOTENT
         cleanup_idempotent: false
@@ -101,6 +117,7 @@ profiles:
         cleanup_guard: "Skip OFF when UDP 50000 is already quiet; execute once only when the stream is active."
         source_refs:
           - "User device transcript 2026-08-13"
+          - "Live-device validation 2026-08-13: on produced UDP 50000 traffic; single off -> 0 packets; no resumption"
       - template_id: HOOK_DEBUG_ON_KNOWN_SYNTAX
         executor: AIM_PTY
         command_template: "debug p on"
@@ -122,12 +139,24 @@ profiles:
         executor: AIM_PTY
         command_template: "de p on"
         status: CONFIRMED_REVERSIBLE
-        reason_not_activatable: "de p off stops the event logs, but repeated cleanup has not yet been demonstrated."
+        reason_not_activatable: "Cleanup is confirmed idempotent on the live device; binding remains part of the real adapter promotion."
         cleanup_command_template: "de p off"
-        cleanup_status: CONFIRMED_EFFECTIVE
-        cleanup_idempotent: null
+        cleanup_status: CONFIRMED_IDEMPOTENT
+        cleanup_idempotent: true
         source_refs:
           - "User device transcript 2026-08-13"
+          - "Live-device validation 2026-08-13: two consecutive de p off both harmless; AIM root prompt intact"
+      - template_id: SIP_PACKET_LOG_ON_KNOWN_SYNTAX
+        executor: AIM_PTY
+        command_template: "voip sip log-pkt on"
+        status: CONFIRMED_REVERSIBLE
+        reason_not_activatable: "Cleanup is confirmed idempotent on the live device; binding remains part of the real adapter promotion."
+        cleanup_command_template: "voip sip log-pkt off"
+        cleanup_status: CONFIRMED_IDEMPOTENT
+        cleanup_idempotent: true
+        source_refs:
+          - "User device transcript 2026-08-13"
+          - "Live-device validation 2026-08-13: two consecutive voip sip log-pkt off both returned set OK; AIM root prompt intact"
       - template_id: SIP_DEBUG_ON_KNOWN_SYNTAX
         executor: AIM_PTY
         command_template: "de sip de"
@@ -163,35 +192,15 @@ profiles:
         reason_not_activatable: "No dedicated cleanup is required; the debug bundle still awaits retry-safe cleanup binding."
         source_refs:
           - "User device transcript 2026-08-13"
-      - template_id: SIP_PACKET_LOG_ON_KNOWN_SYNTAX
-        executor: AIM_PTY
-        command_template: "voip sip log-pkt on"
-        status: CONFIRMED_REVERSIBLE
-        reason_not_activatable: "Cleanup is effective, but repeated cleanup has not yet been demonstrated."
-        cleanup_command_template: "voip sip log-pkt off"
-        cleanup_status: CONFIRMED
-        cleanup_idempotent: null
+      - template_id: FXS_SUBMODE_SNAPSHOT
+        executor: AIM_PTY_SUBMODE
+        command_template: "voip fxs 1"
+        status: CONFIRMED_SUBMODE_PROMPT
+        submode_prompt: "AIM(fxs/1)> "
+        reason_not_activatable: "Submode snapshot is read-only and available; binding is part of the real adapter promotion."
+        snapshot_command: "show information"
+        snapshot_fields: [Hook State, Rx Gain, Tx Gain, DTMF Queue, DTMF Detect Cnt, Loop Current, Onhook Voltage, Vline, Error]
         source_refs:
-          - "User device transcript 2026-08-13"
+          - "Live-device validation 2026-08-13: voip fxs 1 -> AIM(fxs/1)> ; show information returned full FXS snapshot; exit returned to AIM>"
 
-    gaps:
-      - key: PCM_CLEANUP_COMMANDS
-        severity: BLOCKING
-        blocking_capabilities: [AUTONOMOUS_REPRODUCTION]
-        description: "PCM RX/TX OFF commands stop their UDP streams but are non-idempotent; a second OFF exits the AIM CLI. The cleanup guard implementation must be bound to the real adapter and preserve its per-channel OFF history across watchdog retries."
-        required_confirmation: "During an active call, validate active UDP -> one OFF -> quiet UDP for RX and TX, then prove that a watchdog retry does not issue a second OFF."
-      - key: PCM_IDLE_ARM_STATE
-        severity: BLOCKING
-        blocking_capabilities: [AUTONOMOUS_REPRODUCTION]
-        description: "On 2026-08-13, pcm_rx on was accepted by AIM while idle UDP 40000 remained quiet. UDP quiet therefore does not prove that the PCM diagnostic setting is disabled when no call is active."
-        required_confirmation: "Provide a read-only diagnostic-state query, or run a controlled active-call experiment that proves no PCM traffic resumes after the one permitted OFF."
-      - key: DEBUG_CLEANUP_COMMANDS
-        severity: BLOCKING
-        blocking_capabilities: [AUTONOMOUS_REPRODUCTION]
-        description: "debug p off, de p off and SIP packet-log cleanup are effective; only debug p off is currently confirmed idempotent. Other debug-level commands require no dedicated cleanup."
-        required_confirmation: "Execute de p off and voip sip log-pkt off twice and confirm the second call is harmless and logs remain stopped."
-      - key: FXS_SUBMODE_PROMPT
-        severity: NON_BLOCKING
-        blocking_capabilities: []
-        description: "show information is documented under `voip fxs 1`, but submode prompt is not available in the text source."
-        required_confirmation: "Provide an interactive AIM transcript for `voip fxs 1` and `show information`."
+    gaps: []

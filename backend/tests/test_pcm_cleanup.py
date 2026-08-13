@@ -59,6 +59,20 @@ def test_busybox_probe_uses_device_timeout_syntax_and_parses_zero_packets():
     assert BusyboxTcpdumpPcmProbe(execute_shell=lambda _: output)('br-lan_400', 40000) == 0
 
 
+def test_parse_accepts_singular_packet_captured_from_active_stream():
+    # Real BusyBox output for a single captured packet uses the singular form and also
+    # reports 'received by filter' lines; the captured count is the authoritative one.
+    output = (
+        'tcpdump: verbose output suppressed\n'
+        'listening on br-lan_400, link-type EN10MB\n'
+        '21:57:34.758955 IP 192.168.150.4.42569 > 192.168.3.200.40000: UDP, length 160\n'
+        '1 packet captured\n'
+        '99 packets received by filter\n'
+        '0 packets dropped by kernel\n'
+    )
+    assert parse_tcpdump_packet_count(output) == 1
+
+
 def test_tcpdump_probe_rejects_output_without_a_capture_count():
     try:
         parse_tcpdump_packet_count('tcpdump: permission denied')

@@ -21,26 +21,33 @@ class AsyncSSHDeviceAdapter(DeviceAdapter):
     part of the reserved platform contract and are intentionally not guessed here.
     """
 
-    def __init__(self, *, ip:str, port:int, username:str, password:str, aim_prompt:str|None=None, aim_executable:str='aim'):
+    def __init__(self, *, ip:str, port:int, username:str, password:str, aim_prompt:str|None=None, aim_executable:str='aim', kex_algs: list[str]|None=None):
         self.ip=ip
         self.port=port
         self.username=username
         self.password=password
         self.aim_prompt=aim_prompt or settings.aim_prompt
         self.aim_executable=aim_executable
+        # EC-02 APF1250 runs a legacy BusyBox dropbear that requires
+        # diffie-hellman-group14-sha1. asyncssh 2.21 disables it by default.
+        self.kex_algs=kex_algs if kex_algs is not None else ['diffie-hellman-group14-sha1']
         self.conn=None
         self._aim_process=None
         self._aim_lock=asyncio.Lock()
 
     async def connect(self):
         try:
+            options=asyncssh.SSHClientConnectionOptions(
+                username=self.username,
+                password=self.password,
+                known_hosts=None,
+                kex_algs=self.kex_algs,
+            )
             self.conn=await asyncio.wait_for(
                 asyncssh.connect(
                     self.ip,
                     port=self.port,
-                    username=self.username,
-                    password=self.password,
-                    known_hosts=None,
+                    options=options,
                 ),
                 timeout=settings.ssh_connect_timeout,
             )

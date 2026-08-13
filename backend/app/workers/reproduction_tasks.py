@@ -17,6 +17,12 @@ def start_reproduction(session_id: str):
         if not row: return {'status':'NOT_FOUND','session_id':session_id}
         ReproductionOrchestrator().start(db,session=row,owner_worker=f'celery:{start_reproduction.request.id}',actor='reproduction-worker')
         db.commit()
+        # When the session reaches the watching state, hand FXS activity detection to
+        # the dedicated watcher task on the reproduction worker queue.
+        from app.contracts.enums import ReproductionState
+        if ReproductionState(row.state) in {ReproductionState.WATCHING, ReproductionState.ACTIVITY_DETECTED}:
+            from app.workers.reproduction_event_tasks import watch_fxs_events
+            watch_fxs_events.apply_async(args=[row.id], queue='reproduction')
         return {'session_id':row.id,'state':row.state}
 
 

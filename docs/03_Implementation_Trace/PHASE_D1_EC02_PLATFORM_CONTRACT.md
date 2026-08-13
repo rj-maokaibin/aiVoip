@@ -2,22 +2,25 @@
 
 ## Status
 
-`PARTIAL / RUNTIME-CONTEXT-VERIFIED / AUTONOMOUS-REPRODUCTION-BLOCKED`
+`PARTIAL / LIVE-DEVICE-VERIFIED / ADAPTER-BINDING-PENDING`
 
-Phase D1 starts the real-device EC-02 work without guessing any unresolved DUT behavior. The
-2026-08-13 device transcripts additionally confirm the structured Voice Gateway and Voice VLAN
-sources, dynamic `br-lan_<vlanid>` state, timestamped FXS events, symmetric PCM cleanup and debug
-log cleanup. PCM OFF is non-idempotent: issuing either OFF twice exits AIM. A 2026-08-13 live RX
-experiment also showed that `pcm_rx on` can be accepted while UDP 40000 remains quiet on an idle
-device, so quiet UDP cannot yet prove the diagnostic setting is disabled. The resulting platform
-profile is intentionally **not production-ready for autonomous reproduction** until recovery uses
-verify-before-execute cleanup.
+Phase D1 starts the real-device EC-02 work without guessing any unresolved DUT behavior. On
+2026-08-13 the structured Voice Gateway and Voice VLAN sources, dynamic `br-lan_<vlanid>` state,
+timestamped FXS events, symmetric PCM cleanup and debug log cleanup were confirmed on the live
+APF1250. PCM OFF is non-idempotent: issuing either OFF twice exits AIM. Live active-call validation
+proved the full `ON -> active -> single OFF -> quiet` sequence for both PCM RX (UDP 40000) and TX
+(UDP 50000); `de p off` and `voip sip log-pkt off` are confirmed idempotent; and the FXS submode
+prompt is `AIM(fxs/1)> `. `RUIJIE_VOIP_AIM_V1@0.6.0` now has no blocking gaps. The profile remains
+**not production-ready for autonomous reproduction** only until the transport-injected PCM guard is
+bound into a live reproduction session through the real adapter.
 
 ## Implemented
 
 - Added versioned `PlatformProfileDefinition` and `PlatformProfileRegistry`.
 - Added explicit `ContractGap` and production-readiness evaluation.
-- Updated `RUIJIE_VOIP_AIM_V1@0.5.1` with checksum and PARTIAL status.
+- Updated `RUIJIE_VOIP_AIM_V1@0.6.0` with checksum, PARTIAL status, and no blocking gaps.
+- Added optional FXS submode contract fields (`submode_prompt`, `snapshot_command`,
+  `snapshot_fields`) to `KnownDiagnosticTemplate`.
 - Registered source-backed L0 read-only actions:
   - aimd process
   - VOIP adapter log
@@ -37,6 +40,12 @@ verify-before-execute cleanup.
 - Added strict JSON resolvers for `data[0].svrName` and enabled `voice_vlan.vlanid`.
 - Added dynamic `br-lan_<voice_vlan_id>` verification requiring `UP` and `LOWER_UP`.
 - Added timestamped per-line `OFFHOOK`, `DTMF<digit>` and `ONHOOK` parsing.
+- FXS realtime event source VERIFIED live (2026-08-13): with the FULL debug sequence enabled
+  (`debug p on`, `debug sys debug`, `de p on`, `de sip de`, `de ipc de`, `de cm de`, `de dsp de`,
+  `de sys de`, `voip sip log-pkt on`), the persistent AIM PTY emits timestamped event lines such as
+  `2026-08-13 22:52:53.878000 [0] D:: [D]OFFHOOK`, `... [D]DTMF<1>`, and `... [D]ONHOOK`. A complete
+  cycle OFFHOOK -> 7x DTMF<1> -> ONHOOK was captured and parsed by `AIM_FXS_EVENT_V1`. Early probes
+  failed because `de p on`/`debug p on` alone do not emit FXS events; the full debug set is required.
 - Recorded PCM RX/TX commands as `CONFIRMED_REVERSIBLE`; both OFF commands stop UDP 40000/50000.
 - Marked both PCM OFF commands `CONFIRMED_NON_IDEMPOTENT`; a second OFF exits AIM.
 - Added the required `VERIFY_QUIET_THEN_EXECUTE_ONCE` recovery strategy.
@@ -78,6 +87,18 @@ They are **not** registered as production-executable platform actions until ever
   while idle. One `pcm_rx off` returned normally and the final idle probe was also quiet. This is
   restoration evidence only, not active-call cleanup proof.
 
+- **Live active-call PCM validation, 2026-08-13 (incoming call, FXS offhook):**
+  - RX: `pcm_rx on` -> probe UDP 40000 = 1 packet captured (192.168.150.4 → 192.168.3.200:40000,
+    UDP len 160) -> single `pcm_rx off` -> probe = 0 packets -> root prompt intact.
+  - TX: `pcm_tx on` -> probe UDP 50000 = 1 packet captured -> single `pcm_tx off` -> probe = 0
+    packets -> root prompt intact.
+  - `de p off` executed twice: both harmless, root prompt intact.
+  - `voip sip log-pkt off` executed twice: both returned `set OK`, root prompt intact.
+  - `voip fxs 1` enters `AIM(fxs/1)> `; `show information` returns the FXS snapshot; `exit`
+    returns to `AIM>`.
+  - `parse_tcpdump_packet_count` hardened to accept singular `N packet captured` + received-by-
+    filter lines (regression test added).
+
 - Backend tests: 128/128 PASS
 - M6.2 C1 Mock E2E: 3/3 PASS
 - M6.2 C2 Evidence E2E: 5/5 PASS
@@ -90,14 +111,12 @@ They are **not** registered as production-executable platform actions until ever
 - Synthetic E2E: 53/53 PASS
 - Baseline regression: 0 regressions / 0 observed changes
 - APF1250 Field Golden: 15/15 PASS
-- Platform contract audit gate: PASS (PARTIAL profile recognized)
-- Platform production gate: BLOCKED by design (6 autonomous-reproduction blockers)
+- Platform contract audit gate: PASS (RUIJIE_VOIP_AIM_V1@0.6.0, no blocking gaps)
+- Platform production gate: BLOCKED by design (real adapter binding pending)
 
 ## Inputs required to complete Phase D2
 
-Provide representative textual outputs / confirmed commands for:
-
-1. provide or implement a non-mutating UDP 40000/50000 active/quiet probe; do not repeat PCM OFF;
-2. run `de p off` twice and confirm logs remain stopped;
-3. run `voip sip log-pkt off` twice and confirm it is harmless;
-4. interactive AIM transcript for `voip fxs 1` and `show information` if FXS snapshot support is desired.
+All four inputs were provided and validated live on 2026-08-13 (see "Live active-call PCM
+validation" above). Remaining production promotion depends on binding the transport-injected PCM
+guard into a live reproduction session through the real adapter, then re-running the production
+platform gate.

@@ -25,6 +25,7 @@ from app.reproduction.capture_pipeline import ReproductionCapturePipeline
 from app.reproduction.live import LiveReproductionAnalyzer
 from app.reproduction.mock_platform import MockReproductionPlatform, VoiceRuntimeContext
 from app.reproduction.pcm_cleanup import PcmCleanupChannelResult, PcmCleanupGuard
+from app.reproduction.fxs_event_monitor import FxsEventMonitor
 from app.reproduction.profile import LoadedReproductionProfile, ReproductionProfileDefinition, ReproductionProfileRegistry
 from app.reproduction.quick import MockCallQuickAnalyzer, QuickAnalysisInput, QuickAnalysisResult
 from app.reproduction.state_machine import TERMINAL_STATES, transition_session
@@ -68,7 +69,7 @@ class ReproductionOrchestrator:
     No real device command exists in this class. Production platform integration is blocked on EC-02.
     """
 
-    def __init__(self, *, registry: ReproductionProfileRegistry | None = None, platform: MockReproductionPlatform | None = None, capture_pipeline: ReproductionCapturePipeline | None = None, pcm_cleanup_guard: PcmCleanupGuard | None = None):
+    def __init__(self, *, registry: ReproductionProfileRegistry | None = None, platform: MockReproductionPlatform | None = None, capture_pipeline: ReproductionCapturePipeline | None = None, pcm_cleanup_guard: PcmCleanupGuard | None = None, fxs_event_monitor: FxsEventMonitor | None = None):
         self.registry=registry or ReproductionProfileRegistry()
         self.platform=platform or MockReproductionPlatform()
         self.capture= capture_pipeline or ReproductionCapturePipeline()
@@ -76,8 +77,9 @@ class ReproductionOrchestrator:
         self.live_analyzer=LiveReproductionAnalyzer(storage=self.capture.storage)
         self.sufficiency=EvidenceSufficiencyEvaluator()
         self.questions=DiagnosticQuestionGraph()
-        # Optional transport-injected PCM cleanup guard. When present, PCM channels are
-        # cleaned via verify-quiet-then-execute-once instead of a blind non-idempotent OFF.
+        # Optional transport-injected FXS event monitor. When present, watch-time activity is
+        # driven by real DUT OFFHOOK/DTMF/ONHOOK events instead of the mock platform.
+        self.fxs_event_monitor=fxs_event_monitor
         self.pcm_cleanup_guard=pcm_cleanup_guard
 
     def _persist_profile(self, db: Session, loaded: LoadedReproductionProfile) -> None:
@@ -292,6 +294,43 @@ class ReproductionOrchestrator:
         emit_event(db,event_type=EventType.REPRODUCTION_ATTEMPT_CHANGED,case_id=session.case_id,
                    entity_type='reproduction_attempt',entity_id=attempt.id,payload={'status':attempt.status,'attempt_no':attempt.attempt_no})
         return attempt
+
+    def record_fxs_event(self, db: Session, *, session: ReproductionSession, event, actor: str|None=None) -> ReproductionAttempt | None:
+        """Bridge a real DUT FXS event from the monitor into the reproduction state machine.
+
+        OFFHOOK starts a new attempt (primary start anchor) if the session is watching;
+        ONHOOK ends the active attempt without a call; DTMF is recorded as a dial signal.
+        Returns the attempt when one was created or ended, else None.
+        """
+        relative_ms=int((event.timestamp and 0) or 0)  # replaced below by clock when available
+        if self.fxs_event_monitor is not None and self.fxs_event_monitor.relative_ms is not None:
+            relative_ms=self.fxs_event_monitor.relative_ms()
+        state=ReproductionState(session.state)
+        if event.event=='OFFHOOK':
+            if state!=ReproductionState.WATCHING:
+                return None
+            return self.record_activity(db,session=session,relative_ms=relative_ms,source_event='FXS_OFFHOOK',actor=actor)
+        if event.event=='ONHOOK':
+            attempt=db.scalar(select(ReproductionAttempt).where(
+                ReproductionAttempt.session_id==session.id,
+                ReproductionAttempt.status==AttemptStatus.ACTIVE.value).order_by(ReproductionAttempt.attempt_no.desc()))
+            if not attempt:
+                return None
+            if ReproductionState(session.state)==ReproductionState.ACTIVITY_DETECTED:
+                return self.end_activity_without_call(db,session=session,attempt_id=attempt.id,
+                                                      relative_ms=relative_ms,end_anchor='FXS_ONHOOK',actor=actor)
+            return None
+        if event.event=='DTMF':
+            if state!=ReproductionState.ACTIVITY_DETECTED:
+                return None
+            db.add(ReproductionEventRecord(
+                session_id=session.id,case_id=session.case_id,event_type='FXS_DTMF',source='REAL_PLATFORM',
+                anchor_type=AnchorType.PRIMARY_START.value,session_relative_ms=int(relative_ms),
+                timestamp_source=TimestampSource.COLLECTOR_MONOTONIC.value,uncertainty_ms=1,
+                payload_json={'digit':event.digit}))
+            db.flush()
+            return None
+        return None
 
     def end_activity_without_call(self, db: Session, *, session: ReproductionSession, attempt_id: str, relative_ms: int, end_anchor: str='FXS_ONHOOK', actor: str|None=None) -> ReproductionAttempt:
         attempt=db.get(ReproductionAttempt,attempt_id)

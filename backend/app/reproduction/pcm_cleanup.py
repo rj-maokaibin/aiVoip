@@ -11,7 +11,7 @@ AimCommandExecutor = Callable[[str], None]
 ShellCommandExecutor = Callable[[str], str]
 
 
-_TCPDUMP_CAPTURED = re.compile(r'(?m)^\s*(\d+) packets captured\s*$')
+_TCPDUMP_CAPTURED = re.compile(r'(?m)^\s*(\d+) packets? captured\s*$')
 
 
 def build_busybox_tcpdump_probe(*, voice_interface: str, port: int, seconds: int = 5) -> str:

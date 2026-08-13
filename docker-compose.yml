@@ -48,6 +48,7 @@ services:
       - ./rules:/app/rules:ro
       - ./knowledge:/app/knowledge:ro
       - ./tools:/tools:ro
+      - /home/dev/secret.yaml:/home/dev/secret.yaml:ro
       - ${REPRODUCTION_CAPTURE_ROOT:-/tmp/voip-reproduction-capture}:/tmp/voip-reproduction-capture
       - ${REPRODUCTION_OBJECT_ROOT:-/tmp/voip-reproduction-objects}:/tmp/voip-reproduction-objects
     depends_on:
@@ -67,6 +68,7 @@ services:
       - ./profiles:/app/profiles:ro
       - ./rules:/app/rules:ro
       - ./knowledge:/app/knowledge:ro
+      - /home/dev/secret.yaml:/home/dev/secret.yaml:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -149,11 +151,14 @@ services:
     build:
       context: ./backend
     env_file: ${VOIP_APP_ENV_FILE:-.env}
-    command: celery -A app.workers.celery_app:celery_app worker -Q reproduction --loglevel=INFO --concurrency=2
+    command: >-
+      sh -c "ln -sfn /app/profiles /profiles &&
+      celery -A app.workers.celery_app:celery_app worker -Q reproduction --loglevel=INFO --concurrency=2"
     volumes:
       - ./profiles:/app/profiles:ro
       - ./rules:/app/rules:ro
       - ./knowledge:/app/knowledge:ro
+      - /home/dev/secret.yaml:/home/dev/secret.yaml:ro
     depends_on:
       postgres:
         condition: service_healthy

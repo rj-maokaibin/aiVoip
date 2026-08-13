@@ -34,16 +34,12 @@ def test_ruijie_partial_platform_contract_is_source_backed_and_blocked_for_auton
     assert len(loaded.checksum) == 64
     assert p.autonomous_reproduction_actions == []
     assert not p.production_ready_for('AUTONOMOUS_REPRODUCTION')
+    # Live-device validation 2026-08-13 closed all previously blocking gaps:
+    # PCM active-call RX/TX sequence, debug cleanup idempotency, and FXS submode
+    # prompt were all confirmed. The profile stays PARTIAL only because the real
+    # adapter binding into a live reproduction session is not yet promoted.
     gap_keys = {g.key for g in p.blocking_gaps_for('AUTONOMOUS_REPRODUCTION')}
-    assert {
-        'PCM_CLEANUP_COMMANDS',
-        'PCM_IDLE_ARM_STATE',
-        'DEBUG_CLEANUP_COMMANDS',
-    } <= gap_keys
-    assert 'VOICE_VLAN_PARSER' not in gap_keys
-    assert 'VOICE_GATEWAY_RESOLVER' not in gap_keys
-    assert 'VOICE_INTERFACE_VERIFICATION' not in gap_keys
-    assert 'REALTIME_HOOK_EVENT_SOURCE' not in gap_keys
+    assert gap_keys == set()
 
     for action_id in p.readonly_actions:
         action = actions.action(action_id)
@@ -78,11 +74,21 @@ def test_confirmed_reversible_syntax_is_not_activatable_without_retry_safe_clean
     assert templates['HOOK_DEBUG_ON_KNOWN_SYNTAX'].cleanup_command_template == 'debug p off'
     assert templates['HOOK_DEBUG_ON_KNOWN_SYNTAX'].cleanup_idempotent is True
     assert templates['DEBUG_EVENT_ON_KNOWN_SYNTAX'].cleanup_command_template == 'de p off'
-    assert templates['DEBUG_EVENT_ON_KNOWN_SYNTAX'].cleanup_status == 'CONFIRMED_EFFECTIVE'
-    assert templates['DEBUG_EVENT_ON_KNOWN_SYNTAX'].cleanup_idempotent is None
+    # Live-device validation 2026-08-13: two consecutive `de p off` both harmless.
+    assert templates['DEBUG_EVENT_ON_KNOWN_SYNTAX'].cleanup_status == 'CONFIRMED_IDEMPOTENT'
+    assert templates['DEBUG_EVENT_ON_KNOWN_SYNTAX'].cleanup_idempotent is True
     assert templates['SIP_PACKET_LOG_ON_KNOWN_SYNTAX'].cleanup_command_template == 'voip sip log-pkt off'
+    # Live-device validation 2026-08-13: two consecutive calls both returned set OK.
+    assert templates['SIP_PACKET_LOG_ON_KNOWN_SYNTAX'].cleanup_status == 'CONFIRMED_IDEMPOTENT'
+    assert templates['SIP_PACKET_LOG_ON_KNOWN_SYNTAX'].cleanup_idempotent is True
     assert templates['DEBUG_SYSTEM_ON_KNOWN_SYNTAX'].status == 'CONFIRMED_NO_DEDICATED_CLEANUP'
     assert templates['SIP_DEBUG_ON_KNOWN_SYNTAX'].status == 'CONFIRMED_NO_DEDICATED_CLEANUP'
+    # FXS submode prompt contract confirmed on the live device.
+    assert templates['FXS_SUBMODE_SNAPSHOT'].command_template == 'voip fxs 1'
+    assert templates['FXS_SUBMODE_SNAPSHOT'].status == 'CONFIRMED_SUBMODE_PROMPT'
+    assert templates['FXS_SUBMODE_SNAPSHOT'].submode_prompt == 'AIM(fxs/1)> '
+    assert templates['FXS_SUBMODE_SNAPSHOT'].snapshot_command == 'show information'
+    assert 'Hook State' in templates['FXS_SUBMODE_SNAPSHOT'].snapshot_fields
     assert 'START_PCM_RX' not in p.autonomous_reproduction_actions
     assert 'START_PCM_TX' not in p.autonomous_reproduction_actions
 

@@ -25,6 +25,12 @@ async def _run(job_id:str):
         db.commit()
         provider=get_credential_provider()
         password=await provider.get_password(sn=device.sn, ip=device.ip)
+        # When the local secret file is authoritative, its username overrides any
+        # UI/default value so real-device auth uses the correct account.
+        from app.integrations.credentials import LocalSecretCredentialProvider
+        if isinstance(provider, LocalSecretCredentialProvider):
+            device.username = provider.resolve_username(ip=device.ip, fallback=device.username)
+            db.flush()
         await ActionEngine().run_profile(db, case=case, device=device, job=job, password=password)
         transition_job(db,job,JobStatus.SUCCESS,reason='collector_job_complete')
         transition_case(db,case,CaseEvent.COLLECTION_COMPLETED,'basic_collection_complete')
