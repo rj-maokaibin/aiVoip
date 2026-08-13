@@ -1,0 +1,864 @@
+{
+  "analyzer": "pcm_intelligence",
+  "version": "0.1.0",
+  "status": "SUCCEEDED",
+  "profile_id": "ruijie_aim_diag_v1",
+  "format": {
+    "sample_rate": 8000,
+    "bit_depth": 16,
+    "signed": true,
+    "endian": "little",
+    "channels": 1,
+    "payload_bytes": 160,
+    "expected_packet_interval_ms": 10.0
+  },
+  "summary": {
+    "tap_count": 2,
+    "total_packets": 27818,
+    "session_count": 16,
+    "ignored_size_mismatch_packets": 0
+  },
+  "streams": [
+    {
+      "tap": {
+        "name": "pcm_rx",
+        "direction": "RX",
+        "dst_port": 40000
+      },
+      "packet_count": 13909,
+      "sessions": [
+        {
+          "session_index": 0,
+          "start_time": 1786153067.619008,
+          "end_time": 1786153072.806943,
+          "packet_count": 520,
+          "payload_bytes": 83200,
+          "audio_duration_seconds": 5.2,
+          "capture_duration_seconds": 5.187935,
+          "median_packet_interval_ms": 9.99999,
+          "max_packet_interval_ms": 10.38003,
+          "gap_event_count": 0,
+          "gap_events": [],
+          "signal": {
+            "sample_count": 41600,
+            "rms": 934.801235,
+            "dbfs": -30.894613,
+            "peak": 32768.0,
+            "dc_offset": -3.856322,
+            "clipping_percent": 0.01682692
+          },
+          "hum": {
+            "dominant_family": "50Hz",
+            "score": 0.000607,
+            "level": "LOW",
+            "component_scores": {
+              "50Hz": 0.000607,
+              "60Hz": 0.000387
+            }
+          },
+          "dtmf_events": [],
+          "dtmf_sequences": []
+        },
+        {
+          "session_index": 1,
+          "start_time": 1786153078.126959,
+          "end_time": 1786153087.227026,
+          "packet_count": 911,
+          "payload_bytes": 145760,
+          "audio_duration_seconds": 9.11,
+          "capture_duration_seconds": 9.100067,
+          "median_packet_interval_ms": 9.99999,
+          "max_packet_interval_ms": 37.800074,
+          "gap_event_count": 1,
+          "gap_events": [
+            {
+              "time": 1786153085.08482,
+              "delta_ms": 37.800074,
+              "excess_ms": 27.800074
+            }
+          ],
+          "signal": {
+            "sample_count": 72880,
+            "rms": 1098.493003,
+            "dbfs": -29.493053,
+            "peak": 32768.0,
+            "dc_offset": -1.658493,
+            "clipping_percent": 0.00823271
+          },
+          "hum": {
+            "dominant_family": "50Hz",
+            "score": 0.000231,
+            "level": "LOW",
+            "component_scores": {
+              "50Hz": 0.000231,
+              "60Hz": 0.000198
+            }
+          },
+          "dtmf_events": [
+            {
+              "digit": "6",
+              "start_seconds": 3.82,
+              "end_seconds": 3.98,
+              "duration_ms": 160.0,
+              "confidence": 1.0,
+              "classification": "DTMF_CANDIDATE"
+            }
+          ],
+          "dtmf_sequences": [
+            {
+              "digits": "6",
+              "start_seconds": 3.82,
+              "end_seconds": 3.98,
+              "event_count": 1,
+              "min_confidence": 1.0
+            }
+          ]
+        },
+        {
+          "session_index": 2,
+          "start_time": 1786153087.717008,
+          "end_time": 1786153096.697015,
+          "packet_count": 899,
+          "payload_bytes": 143840,
+          "audio_duration_seconds": 8.99,
+          "capture_duration_seconds": 8.980007,
+          "median_packet_interval_ms": 9.99999,
+          "max_packet_interval_ms": 35.679817,
+          "gap_event_count": 1,
+          "gap_events": [
+            {
+              "time": 1786153095.13267,
+              "delta_ms": 35.679817,
+              "excess_ms": 25.679817
+            }
+          ],
+          "signal": {
+            "sample_count": 71920,
+            "rms": 1773.614245,
+            "dbfs": -25.331815,
+            "peak": 32768.0,
+            "dc_offset": -0.196955,
+            "clipping_percent": 0.03197998
+          },
+          "hum": {
+            "dominant_family": "50Hz",
+            "score": 0.000331,
+            "level": "LOW",
+            "component_scores": {
+              "50Hz": 0.000331,
+              "60Hz": 0.000243
+            }
+          },
+          "dtmf_events": [
+            {
+              "digit": "8",
+              "start_seconds": 0.78,
+              "end_seconds": 0.9,
+              "duration_ms": 120.0,
+              "confidence": 1.0,
+              "classification": "DTMF_CANDIDATE"
+            },
+            {
+              "digit": "8",
+              "start_seconds": 1.9,
+              "end_seconds": 2.02,
+              "duration_ms": 120.0,
+              "confidence": 1.0,
+              "classification": "DTMF_CANDIDATE"
+            },
+            {
+              "digit": "0",
+              "start_seconds": 2.64,
+              "end_seconds": 2.74,
+              "duration_ms": 100.0,
+              "confidence": 0.870446,
+              "classification": "DTMF_CANDIDATE"
+            },
+            {
+              "digit": "2",
+              "start_seconds": 3.18,
+              "end_seconds": 3.3,
+              "duration_ms": 120.0,
+              "confidence": 1.0,
+              "classification": "DTMF_CANDIDATE"
+            }
+          ],
+          "dtmf_sequences": [
+            {
+              "digits": "8802",
+              "start_seconds": 0.78,
+              "end_seconds": 3.3,
+              "event_count": 4,
+              "min_confidence": 0.870446
+            }
+          ]
+        },
+        {
+          "session_index": 3,
+          "start_time": 1786153098.147059,
+          "end_time": 1786153098.717001,
+          "packet_count": 58,
+          "payload_bytes": 9280,
+          "audio_duration_seconds": 0.58,
+          "capture_duration_seconds": 0.569942,
+          "median_packet_interval_ms": 9.99999,
+          "max_packet_interval_ms": 10.060072,
+          "gap_event_count": 0,
+          "gap_events": [],
+          "signal": {
+            "sample_count": 4640,
+            "rms": 1348.352237,
+            "dbfs": -27.712932,
+            "peak": 32767.0,
+            "dc_offset": -27.362069,
+            "clipping_percent": 0.04310345
+          },
+          "hum": {
+            "dominant_family": "50Hz",
+            "score": 0.008268,
+            "level": "LOW",
+            "component_scores": {
+              "50Hz": 0.008268,
+              "60Hz": 0.004221
+            }
+          },
+          "dtmf_events": [],
+          "dtmf_sequences": []
+        },
+        {
+          "session_index": 4,
+          "start_time": 1786153099.407023,
+          "end_time": 1786153101.297008,
+          "packet_count": 190,
+          "payload_bytes": 30400,
+          "audio_duration_seconds": 1.9,
+          "capture_duration_seconds": 1.889985,
+          "median_packet_interval_ms": 9.99999,
+          "max_packet_interval_ms": 10.319948,
+          "gap_event_count": 0,
+          "gap_events": [],
+          "signal": {
+            "sample_count": 15200,
+            "rms": 1079.581257,
+            "dbfs": -29.643892,
+            "peak": 32767.0,
+            "dc_offset": -9.335329,
+            "clipping_percent": 0.01315789
+          },
+          "hum": {
+            "dominant_family": "60Hz",
+            "score": 0.002443,
+            "level": "LOW",
+            "component_scores": {
+              "50Hz": 0.00193,
+              "60Hz": 0.002443
+            }
+          },
+          "dtmf_events": [],
+          "dtmf_sequences": []
+        },
+        {
+          "session_index": 5,
+          "start_time": 1786153126.427163,
+          "end_time": 1786153132.537102,
+          "packet_count": 612,
+          "payload_bytes": 97920,
+          "audio_duration_seconds": 6.12,
+          "capture_duration_seconds": 6.109939,
+          "median_packet_interval_ms": 9.99999,
+          "max_packet_interval_ms": 24.21999,
+          "gap_event_count": 0,
+          "gap_events": [],
+          "signal": {
+            "sample_count": 48960,
+            "rms": 2117.268806,
+            "dbfs": -23.793479,
+            "peak": 32768.0,
+            "dc_offset": -0.336397,
+            "clipping_percent": 0.03676471
+          },
+          "hum": {
+            "dominant_family": "60Hz",
+            "score": 0.000957,
+            "level": "LOW",
+            "component_scores": {
+              "50Hz": 0.000621,
+              "60Hz": 0.000957
+            }
+          },
+          "dtmf_events": [
+            {
+              "digit": "8",
+              "start_seconds": 1.42,
+              "end_seconds": 1.52,
+              "duration_ms": 100.0,
+              "confidence": 1.0,
+              "classification": "DTMF_CANDIDATE"
+            },
+            {
+              "digit": "8",
+              "start_seconds": 1.6,
+              "end_seconds": 1.72,
+              "duration_ms": 120.0,
+              "confidence": 1.0,
+              "classification": "DTMF_CANDIDATE"
+            },
+            {
+              "digit": "0",
+              "start_seconds": 1.86,
+              "end_seconds": 1.96,
+              "duration_ms": 100.0,
+              "confidence": 0.862593,
+              "classification": "DTMF_CANDIDATE"
+            },
+            {
+              "digit": "2",
+              "start_seconds": 2.12,
+              "end_seconds": 2.24,
+              "duration_ms": 120.0,
+              "confidence": 1.0,
+              "classification": "DTMF_CANDIDATE"
+            }
+          ],
+          "dtmf_sequences": [
+            {
+              "digits": "8802",
+              "start_seconds": 1.42,
+              "end_seconds": 2.24,
+              "event_count": 4,
+              "min_confidence": 0.862593
+            }
+          ]
+        },
+        {
+          "session_index": 6,
+          "start_time": 1786153146.737244,
+          "end_time": 1786153205.017438,
+          "packet_count": 5829,
+          "payload_bytes": 932640,
+          "audio_duration_seconds": 58.29,
+          "capture_duration_seconds": 58.280194,
+          "median_packet_interval_ms": 9.99999,
+          "max_packet_interval_ms": 39.779902,
+          "gap_event_count": 5,
+          "gap_events": [
+            {
+              "time": 1786153155.42037,
+              "delta_ms": 33.140182,
+              "excess_ms": 23.140182
+            },
+            {
+              "time": 1786153165.4692,
+              "delta_ms": 31.919956,
+              "excess_ms": 21.919956
+            },
+            {
+              "time": 1786153175.51721,
+              "delta_ms": 39.779902,
+              "excess_ms": 29.779902
+            },
+            {
+              "time": 1786153185.56454,
+              "delta_ms": 37.279844,
+              "excess_ms": 27.279844
+            },
+            {
+              "time": 1786153195.61299,
+              "delta_ms": 35.640001,
+              "excess_ms": 25.640001
+            }
+          ],
+          "signal": {
+            "sample_count": 466320,
+            "rms": 969.368394,
+            "dbfs": -30.579222,
+            "peak": 32768.0,
+            "dc_offset": -0.441602,
+            "clipping_percent": 0.00450335
+          },
+          "hum": {
+            "dominant_family": "60Hz",
+            "score": 8.2e-05,
+            "level": "LOW",
+            "component_scores": {
+              "50Hz": 6.5e-05,
+              "60Hz": 8.2e-05
+            }
+          },
+          "dtmf_events": [
+            {
+              "digit": "8",
+              "start_seconds": 1.24,
+              "end_seconds": 1.4,
+              "duration_ms": 160.0,
+              "confidence": 1.0,
+              "classification": "DTMF_CANDIDATE"
+            },
+            {
+              "digit": "8",
+              "start_seconds": 1.58,
+              "end_seconds": 1.74,
+              "duration_ms": 160.0,
+              "confidence": 1.0,
+              "classification": "DTMF_CANDIDATE"
+            },
+            {
+              "digit": "0",
+              "start_seconds": 2.22,
+              "end_seconds": 2.38,
+              "duration_ms": 160.0,
+              "confidence": 0.872312,
+              "classification": "DTMF_CANDIDATE"
+            },
+            {
+              "digit": "2",
+              "start_seconds": 3.24,
+              "end_seconds": 3.42,
+              "duration_ms": 180.0,
+              "confidence": 1.0,
+              "classification": "DTMF_CANDIDATE"
+            }
+          ],
+          "dtmf_sequences": [
+            {
+              "digits": "8802",
+              "start_seconds": 1.24,
+              "end_seconds": 3.42,
+              "event_count": 4,
+              "min_confidence": 0.872312
+            }
+          ]
+        },
+        {
+          "session_index": 7,
+          "start_time": 1786153302.83919,
+          "end_time": 1786153351.727896,
+          "packet_count": 4890,
+          "payload_bytes": 782400,
+          "audio_duration_seconds": 48.9,
+          "capture_duration_seconds": 48.888706,
+          "median_packet_interval_ms": 9.99999,
+          "max_packet_interval_ms": 39.000034,
+          "gap_event_count": 5,
+          "gap_events": [
+            {
+              "time": 1786153306.1399,
+              "delta_ms": 32.279968,
+              "excess_ms": 22.279968
+            },
+            {
+              "time": 1786153316.19245,
+              "delta_ms": 34.700155,
+              "excess_ms": 24.700155
+            },
+            {
+              "time": 1786153326.23668,
+              "delta_ms": 39.000034,
+              "excess_ms": 29.000034
+            },
+            {
+              "time": 1786153336.28635,
+              "delta_ms": 38.579941,
+              "excess_ms": 28.579941
+            },
+            {
+              "time": 1786153346.33402,
+              "delta_ms": 36.179781,
+              "excess_ms": 26.179781
+            }
+          ],
+          "signal": {
+            "sample_count": 391200,
+            "rms": 2100.611649,
+            "dbfs": -23.862083,
+            "peak": 32768.0,
+            "dc_offset": -0.254939,
+            "clipping_percent": 0.00741309
+          },
+          "hum": {
+            "dominant_family": "50Hz",
+            "score": 7.5e-05,
+            "level": "LOW",
+            "component_scores": {
+              "50Hz": 7.5e-05,
+              "60Hz": 5e-05
+            }
+          },
+          "dtmf_events": [
+            {
+              "digit": "8",
+              "start_seconds": 0.84,
+              "end_seconds": 0.94,
+              "duration_ms": 100.0,
+              "confidence": 1.0,
+              "classification": "DTMF_CANDIDATE"
+            },
+            {
+              "digit": "8",
+              "start_seconds": 1.02,
+              "end_seconds": 1.14,
+              "duration_ms": 120.0,
+              "confidence": 1.0,
+              "classification": "DTMF_CANDIDATE"
+            },
+            {
+              "digit": "0",
+              "start_seconds": 1.36,
+              "end_seconds": 1.46,
+              "duration_ms": 100.0,
+              "confidence": 0.867974,
+              "classification": "DTMF_CANDIDATE"
+            },
+            {
+              "digit": "3",
+              "start_seconds": 1.76,
+              "end_seconds": 1.88,
+              "duration_ms": 120.0,
+              "confidence": 1.0,
+              "classification": "DTMF_CANDIDATE"
+            }
+          ],
+          "dtmf_sequences": [
+            {
+              "digits": "8803",
+              "start_seconds": 0.84,
+              "end_seconds": 1.88,
+              "event_count": 4,
+              "min_confidence": 0.867974
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "tap": {
+        "name": "pcm_tx",
+        "direction": "TX",
+        "dst_port": 50000
+      },
+      "packet_count": 13909,
+      "sessions": [
+        {
+          "session_index": 0,
+          "start_time": 1786153067.619048,
+          "end_time": 1786153072.807063,
+          "packet_count": 520,
+          "payload_bytes": 83200,
+          "audio_duration_seconds": 5.2,
+          "capture_duration_seconds": 5.188015,
+          "median_packet_interval_ms": 9.99999,
+          "max_packet_interval_ms": 10.619879,
+          "gap_event_count": 0,
+          "gap_events": [],
+          "signal": {
+            "sample_count": 41600,
+            "rms": 0.0,
+            "dbfs": null,
+            "peak": 0.0,
+            "dc_offset": 0.0,
+            "clipping_percent": 0.0
+          },
+          "hum": {
+            "dominant_family": "50Hz",
+            "score": 0.0,
+            "level": "LOW",
+            "component_scores": {
+              "50Hz": 0.0,
+              "60Hz": 0.0
+            }
+          },
+          "dtmf_events": [],
+          "dtmf_sequences": []
+        },
+        {
+          "session_index": 1,
+          "start_time": 1786153078.127099,
+          "end_time": 1786153087.227186,
+          "packet_count": 911,
+          "payload_bytes": 145760,
+          "audio_duration_seconds": 9.11,
+          "capture_duration_seconds": 9.100087,
+          "median_packet_interval_ms": 9.99999,
+          "max_packet_interval_ms": 37.739992,
+          "gap_event_count": 1,
+          "gap_events": [
+            {
+              "time": 1786153085.08502,
+              "delta_ms": 37.739992,
+              "excess_ms": 27.739992
+            }
+          ],
+          "signal": {
+            "sample_count": 72880,
+            "rms": 0.0,
+            "dbfs": null,
+            "peak": 0.0,
+            "dc_offset": 0.0,
+            "clipping_percent": 0.0
+          },
+          "hum": {
+            "dominant_family": "50Hz",
+            "score": 0.0,
+            "level": "LOW",
+            "component_scores": {
+              "50Hz": 0.0,
+              "60Hz": 0.0
+            }
+          },
+          "dtmf_events": [],
+          "dtmf_sequences": []
+        },
+        {
+          "session_index": 2,
+          "start_time": 1786153087.717168,
+          "end_time": 1786153096.697155,
+          "packet_count": 899,
+          "payload_bytes": 143840,
+          "audio_duration_seconds": 8.99,
+          "capture_duration_seconds": 8.979987,
+          "median_packet_interval_ms": 9.99999,
+          "max_packet_interval_ms": 35.719872,
+          "gap_event_count": 1,
+          "gap_events": [
+            {
+              "time": 1786153095.13283,
+              "delta_ms": 35.719872,
+              "excess_ms": 25.719872
+            }
+          ],
+          "signal": {
+            "sample_count": 71920,
+            "rms": 0.0,
+            "dbfs": null,
+            "peak": 0.0,
+            "dc_offset": 0.0,
+            "clipping_percent": 0.0
+          },
+          "hum": {
+            "dominant_family": "50Hz",
+            "score": 0.0,
+            "level": "LOW",
+            "component_scores": {
+              "50Hz": 0.0,
+              "60Hz": 0.0
+            }
+          },
+          "dtmf_events": [],
+          "dtmf_sequences": []
+        },
+        {
+          "session_index": 3,
+          "start_time": 1786153098.147199,
+          "end_time": 1786153098.717121,
+          "packet_count": 58,
+          "payload_bytes": 9280,
+          "audio_duration_seconds": 0.58,
+          "capture_duration_seconds": 0.569922,
+          "median_packet_interval_ms": 9.99999,
+          "max_packet_interval_ms": 10.060072,
+          "gap_event_count": 0,
+          "gap_events": [],
+          "signal": {
+            "sample_count": 4640,
+            "rms": 0.0,
+            "dbfs": null,
+            "peak": 0.0,
+            "dc_offset": 0.0,
+            "clipping_percent": 0.0
+          },
+          "hum": {
+            "dominant_family": "50Hz",
+            "score": 0.0,
+            "level": "LOW",
+            "component_scores": {
+              "50Hz": 0.0,
+              "60Hz": 0.0
+            }
+          },
+          "dtmf_events": [],
+          "dtmf_sequences": []
+        },
+        {
+          "session_index": 4,
+          "start_time": 1786153099.407183,
+          "end_time": 1786153101.297148,
+          "packet_count": 190,
+          "payload_bytes": 30400,
+          "audio_duration_seconds": 1.9,
+          "capture_duration_seconds": 1.889965,
+          "median_packet_interval_ms": 9.99999,
+          "max_packet_interval_ms": 10.4599,
+          "gap_event_count": 0,
+          "gap_events": [],
+          "signal": {
+            "sample_count": 15200,
+            "rms": 0.0,
+            "dbfs": null,
+            "peak": 0.0,
+            "dc_offset": 0.0,
+            "clipping_percent": 0.0
+          },
+          "hum": {
+            "dominant_family": "50Hz",
+            "score": 0.0,
+            "level": "LOW",
+            "component_scores": {
+              "50Hz": 0.0,
+              "60Hz": 0.0
+            }
+          },
+          "dtmf_events": [],
+          "dtmf_sequences": []
+        },
+        {
+          "session_index": 5,
+          "start_time": 1786153126.427343,
+          "end_time": 1786153132.537222,
+          "packet_count": 612,
+          "payload_bytes": 97920,
+          "audio_duration_seconds": 6.12,
+          "capture_duration_seconds": 6.109879,
+          "median_packet_interval_ms": 9.99999,
+          "max_packet_interval_ms": 24.039984,
+          "gap_event_count": 0,
+          "gap_events": [],
+          "signal": {
+            "sample_count": 48960,
+            "rms": 0.0,
+            "dbfs": null,
+            "peak": 0.0,
+            "dc_offset": 0.0,
+            "clipping_percent": 0.0
+          },
+          "hum": {
+            "dominant_family": "50Hz",
+            "score": 0.0,
+            "level": "LOW",
+            "component_scores": {
+              "50Hz": 0.0,
+              "60Hz": 0.0
+            }
+          },
+          "dtmf_events": [],
+          "dtmf_sequences": []
+        },
+        {
+          "session_index": 6,
+          "start_time": 1786153146.737404,
+          "end_time": 1786153205.019538,
+          "packet_count": 5829,
+          "payload_bytes": 932640,
+          "audio_duration_seconds": 58.29,
+          "capture_duration_seconds": 58.282134,
+          "median_packet_interval_ms": 9.99999,
+          "max_packet_interval_ms": 39.700031,
+          "gap_event_count": 5,
+          "gap_events": [
+            {
+              "time": 1786153155.42051,
+              "delta_ms": 33.139944,
+              "excess_ms": 23.139944
+            },
+            {
+              "time": 1786153165.46936,
+              "delta_ms": 31.940222,
+              "excess_ms": 21.940222
+            },
+            {
+              "time": 1786153175.51739,
+              "delta_ms": 39.700031,
+              "excess_ms": 29.700031
+            },
+            {
+              "time": 1786153185.56678,
+              "delta_ms": 37.660122,
+              "excess_ms": 27.660122
+            },
+            {
+              "time": 1786153195.61493,
+              "delta_ms": 35.539865,
+              "excess_ms": 25.539865
+            }
+          ],
+          "signal": {
+            "sample_count": 466320,
+            "rms": 174.452264,
+            "dbfs": -45.475467,
+            "peak": 4682.0,
+            "dc_offset": -0.039284,
+            "clipping_percent": 0.0
+          },
+          "hum": {
+            "dominant_family": "60Hz",
+            "score": 8e-06,
+            "level": "LOW",
+            "component_scores": {
+              "50Hz": 6e-06,
+              "60Hz": 8e-06
+            }
+          },
+          "dtmf_events": [],
+          "dtmf_sequences": []
+        },
+        {
+          "session_index": 7,
+          "start_time": 1786153302.83923,
+          "end_time": 1786153351.730836,
+          "packet_count": 4890,
+          "payload_bytes": 782400,
+          "audio_duration_seconds": 48.9,
+          "capture_duration_seconds": 48.891606,
+          "median_packet_interval_ms": 9.99999,
+          "max_packet_interval_ms": 38.81979,
+          "gap_event_count": 5,
+          "gap_events": [
+            {
+              "time": 1786153306.14004,
+              "delta_ms": 32.299995,
+              "excess_ms": 22.299995
+            },
+            {
+              "time": 1786153316.19433,
+              "delta_ms": 34.060001,
+              "excess_ms": 24.060001
+            },
+            {
+              "time": 1786153326.23856,
+              "delta_ms": 38.699865,
+              "excess_ms": 28.699865
+            },
+            {
+              "time": 1786153336.28855,
+              "delta_ms": 38.81979,
+              "excess_ms": 28.81979
+            },
+            {
+              "time": 1786153346.33612,
+              "delta_ms": 35.419941,
+              "excess_ms": 25.419941
+            }
+          ],
+          "signal": {
+            "sample_count": 391200,
+            "rms": 62.268637,
+            "dbfs": -54.423612,
+            "peak": 2240.0,
+            "dc_offset": -0.011547,
+            "clipping_percent": 0.0
+          },
+          "hum": {
+            "dominant_family": "60Hz",
+            "score": 3e-05,
+            "level": "LOW",
+            "component_scores": {
+              "50Hz": 2.5e-05,
+              "60Hz": 3e-05
+            }
+          },
+          "dtmf_events": [],
+          "dtmf_sequences": []
+        }
+      ]
+    }
+  ]
+}

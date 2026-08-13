@@ -1,0 +1,24 @@
+key: CODEC_NEGOTIATION_MISMATCH
+version: 1.0.0
+name: SDP与实际RTP编码不一致
+fault_domain: DSP/Codec
+priority: 5
+enabled: true
+when:
+  and:
+  - path: anomaly_counts.CODEC_NEGOTIATION_MISMATCH
+    op: gte
+    value: 1
+then:
+- action: hypothesis
+  payload:
+    code: CODEC_NEGOTIATION_MISMATCH
+    title: SDP协商与实际RTP Codec不一致
+    fault_domain: DSP/Codec
+    confidence: 0.98
+    status: SUPPORTED
+    confirmable: true
+    evidence_level: L1
+    rationale: SDP Offer/Answer协商结果与实际RTP Payload映射不一致，属于直接协议证据。
+dsl_version: 2
+category: SUPPORT

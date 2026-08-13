@@ -1,0 +1,13 @@
+{
+  "status": "PASS",
+  "checks": {
+    "required_f2_files": true,
+    "frontend_reproducible_docker_contract": true,
+    "compose_no_default_postgres_password": true,
+    "compose_no_default_minio_root": true,
+    "secret_file_contract_exposed": true,
+    "auth_implementation": true,
+    "feishu_implementation": true
+  },
+  "errors": []
+}

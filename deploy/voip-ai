@@ -1,0 +1,295 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+DEFAULT_ENV="${VOIP_ENV_FILE:-/etc/voip-ai/production.env}"
+ENV_FILE="$DEFAULT_ENV"
+PROJECT="${VOIP_PROJECT_NAME:-voip-ai}"
+FIELD_PCAP=""
+KEEP_STACK=0
+SKIP_BACKUP=0
+
+usage() {
+  cat <<'USAGE'
+VOIP AI V1.0 production deployment CLI
+
+Usage:
+  deploy/voip-ai [global options] <command>
+
+Global options:
+  --env FILE          Production env file (default: /etc/voip-ai/production.env)
+  --project NAME      Docker Compose project name (default: voip-ai)
+  --field-pcap FILE   Field PCAP used by release verification
+  --keep-stack        Keep E2E stack on failure
+  --skip-backup       Skip automatic PostgreSQL backup before deploy/upgrade
+
+Commands:
+  preflight           Validate host, production env, secrets and release prerequisites
+  prepare-host        Create persistent data/backup directories
+  build               Build immutable application images
+  deploy              Preflight, backup, migrate, start production stack and verify runtime
+  verify              Verify live production stack and write source-bound runtime evidence
+  release             Deploy + Docker full-stack E2E + strict V1.0 release gate
+  status              Show Compose status and backend/frontend health
+  logs                Follow backend and worker logs
+  backup-db           Create a compressed PostgreSQL logical backup
+  down                 Stop application containers without deleting volumes/data
+  help                 Show this help
+
+The release command is intentionally fail-closed. While EC-02 is pending or frontend
+package-lock/runtime evidence is missing, it exits non-zero instead of converting blockers to PASS.
+USAGE
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --env) ENV_FILE="$2"; shift 2 ;;
+    --project) PROJECT="$2"; shift 2 ;;
+    --field-pcap) FIELD_PCAP="$2"; shift 2 ;;
+    --keep-stack) KEEP_STACK=1; shift ;;
+    --skip-backup) SKIP_BACKUP=1; shift ;;
+    -h|--help) usage; exit 0 ;;
+    *) COMMAND="$1"; shift; break ;;
+  esac
+done
+COMMAND="${COMMAND:-help}"
+
+cd "$ROOT"
+ENV_FILE="$(python3 - "$ENV_FILE" <<'PY'
+from pathlib import Path
+import sys
+print(Path(sys.argv[1]).expanduser().resolve())
+PY
+)"
+
+compose() {
+  VOIP_APP_ENV_FILE="$ENV_FILE" docker compose \
+    --project-name "$PROJECT" \
+    --env-file "$ENV_FILE" \
+    -f docker-compose.yml -f docker-compose.production.yml "$@"
+}
+
+env_value() {
+  python3 - "$ENV_FILE" "$1" <<'PY'
+from pathlib import Path
+import sys
+path=Path(sys.argv[1]); key=sys.argv[2]
+for raw in path.read_text(encoding='utf-8').splitlines():
+    line=raw.strip()
+    if not line or line.startswith('#') or '=' not in line: continue
+    if line.startswith('export '): line=line[7:].strip()
+    k,v=line.split('=',1)
+    if k.strip()!=key: continue
+    v=v.strip()
+    if len(v)>=2 and v[0]==v[-1] and v[0] in {'"',"'"}: v=v[1:-1]
+    print(v); raise SystemExit(0)
+raise SystemExit(1)
+PY
+}
+
+require_docker() {
+  command -v docker >/dev/null 2>&1 || { echo "ERROR: docker CLI is required" >&2; exit 127; }
+  docker compose version >/dev/null 2>&1 || { echo "ERROR: docker compose plugin is required" >&2; exit 127; }
+  docker info >/dev/null 2>&1 || { echo "ERROR: Docker daemon is not reachable" >&2; exit 126; }
+}
+
+host_preflight() {
+  require_docker
+  [[ -f "$ENV_FILE" ]] || { echo "ERROR: production env file missing: $ENV_FILE" >&2; exit 2; }
+  mkdir -p validation
+  python3 deploy/deployment_preflight.py --env-file "$ENV_FILE" --mode deploy --out validation/phase_f3_deployment_preflight.json
+  compose config >/dev/null
+  echo "Docker/Compose configuration: PASS"
+}
+
+prepare_host() {
+  local root min_gb
+  root="$(env_value VOIP_DATA_ROOT 2>/dev/null || echo /data/voip)"
+  min_gb="$(env_value VOIP_MIN_FREE_GB 2>/dev/null || echo 20)"
+  if [[ $EUID -ne 0 && ! -w "$(dirname "$root")" ]]; then
+    echo "ERROR: $root requires elevated permission. Run prepare-host with sudo or pre-create it." >&2
+    exit 2
+  fi
+  mkdir -p "$root"/{postgres,redis,minio,reproduction/capture,reproduction/objects,backups,release}
+  chmod 0750 "$root" "$root/backups" "$root/release" || true
+  local avail
+  avail="$(df -Pk "$root" | awk 'NR==2 {print int($4/1024/1024)}')"
+  if (( avail < min_gb )); then
+    echo "ERROR: only ${avail} GiB free under $root; VOIP_MIN_FREE_GB=${min_gb}" >&2
+    exit 2
+  fi
+  echo "Host directories ready: $root (${avail} GiB free)"
+}
+
+backup_db() {
+  require_docker
+  local data_root ts out
+  data_root="$(env_value VOIP_DATA_ROOT 2>/dev/null || echo /data/voip)"
+  mkdir -p "$data_root/backups"
+  if ! compose ps --status running --services 2>/dev/null | grep -qx postgres; then
+    echo "PostgreSQL is not running; no existing DB backup required."
+    return 0
+  fi
+  ts="$(date -u +%Y%m%dT%H%M%SZ)"
+  out="$data_root/backups/voip-${ts}.sql.gz"
+  compose exec -T postgres pg_dump -U voip -d voip | gzip -9 > "$out"
+  test -s "$out"
+  chmod 0600 "$out" || true
+  echo "Database backup: $out"
+}
+
+build_images() {
+  host_preflight
+  echo "Building production images for source manifest:"
+  python3 tools/source_manifest_gate.py
+  compose build --pull backend collector-worker packet-worker pcm-worker media-worker diagnosis-worker reproduction-worker frontend release-runner
+}
+
+wait_http() {
+  local url="$1" timeout="${2:-180}" start now
+  start="$(date +%s)"
+  until curl -fsS "$url" >/dev/null 2>&1; do
+    now="$(date +%s)"
+    if (( now - start >= timeout )); then
+      echo "ERROR: timeout waiting for $url" >&2
+      return 1
+    fi
+    sleep 2
+  done
+}
+
+deploy_stack() {
+  host_preflight
+  prepare_host
+  if [[ "$SKIP_BACKUP" != "1" ]]; then backup_db; fi
+  build_images
+
+  echo "Starting PostgreSQL, Redis and MinIO..."
+  compose up -d postgres redis minio
+  echo "Applying Alembic migration explicitly before application promotion..."
+  compose run --rm backend alembic upgrade head
+  echo "Starting backend, workers and frontend..."
+  compose up -d backend collector-worker packet-worker pcm-worker media-worker diagnosis-worker reproduction-worker frontend
+
+  local timeout backend_port frontend_port
+  timeout="$(env_value VOIP_HEALTH_TIMEOUT_SECONDS 2>/dev/null || echo 180)"
+  backend_port="$(env_value VOIP_BACKEND_PORT 2>/dev/null || echo 8000)"
+  frontend_port="$(env_value VOIP_FRONTEND_PORT 2>/dev/null || echo 8080)"
+  wait_http "http://127.0.0.1:${backend_port}/health/ready" "$timeout"
+  wait_http "http://127.0.0.1:${frontend_port}/" "$timeout"
+  verify_stack
+}
+
+verify_stack() {
+  require_docker
+  mkdir -p validation
+  compose run --rm -e PRODUCTION_RUNTIME_EVIDENCE=/workspace/validation/production_runtime_result.json release-runner \
+    python deploy/production_runtime_verify.py
+  echo "Runtime evidence: validation/production_runtime_result.json"
+}
+
+frontend_docker_gate() {
+  require_docker
+  [[ -f frontend/package-lock.json ]] || { echo "ERROR: frontend/package-lock.json missing" >&2; return 3; }
+  local tag tmp cid
+  tag="voip-ai-frontend-release:${PROJECT}-$(python3 - <<'PY'
+import json
+from pathlib import Path
+print(json.loads(Path('release/source_manifest.json').read_text())['aggregate_sha256'][:12])
+PY
+)"
+  docker build -t "$tag" --build-arg VITE_API_BASE_URL=/api/v1 frontend
+  tmp="$(mktemp -d)"
+  cid="$(docker create "$tag")"
+  trap 'docker rm -f "$cid" >/dev/null 2>&1 || true; rm -rf "$tmp"' RETURN
+  docker cp "$cid:/usr/share/nginx/html/index.html" "$tmp/index.html"
+  python3 - "$tmp/index.html" <<'PY'
+import hashlib,json,sys
+from pathlib import Path
+sys.path.insert(0,str(Path.cwd()/'tools'))
+from release_evidence import evidence_envelope
+p=Path(sys.argv[1])
+out=Path('validation/frontend_build_runtime.json')
+payload=evidence_envelope(evidence_type='FRONTEND_PRODUCTION_BUILD',payload={
+ 'passed':True,'build_executor':'docker','lockfile':'frontend/package-lock.json',
+ 'index_path':'/usr/share/nginx/html/index.html','index_size_bytes':p.stat().st_size,
+ 'index_sha256':hashlib.sha256(p.read_bytes()).hexdigest(),
+})
+out.write_text(json.dumps(payload,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+print(json.dumps(payload,ensure_ascii=False,indent=2))
+PY
+  docker rm -f "$cid" >/dev/null 2>&1 || true
+  rm -rf "$tmp"
+  trap - RETURN
+}
+
+run_fullstack_e2e() {
+  require_docker
+  if [[ "$KEEP_STACK" == "1" ]]; then export KEEP_E2E_STACK=1; fi
+  if [[ -n "$FIELD_PCAP" ]]; then
+    FIELD_PCAP="$FIELD_PCAP" ./tools/fullstack_e2e.sh
+  else
+    ./tools/fullstack_e2e.sh
+  fi
+}
+
+release_all() {
+  # Release preflight is stricter than deploy preflight and intentionally blocks EC-02/mock.
+  host_preflight
+  python3 deploy/deployment_preflight.py --env-file "$ENV_FILE" --mode release --out validation/phase_f3_release_preflight.json || true
+  deploy_stack
+  echo "Running exact-source F3 static release gates inside the release-runner image..."
+  compose run --rm release-runner sh tools/phase_f3_static_gate.sh
+  frontend_docker_gate
+  run_fullstack_e2e
+  if [[ -n "$FIELD_PCAP" ]]; then
+    mkdir -p validation/field-evidence-input
+    rm -f validation/field-evidence-input/*
+    python3 - "$FIELD_PCAP" <<'PYFIELD'
+import hashlib,sys
+from pathlib import Path
+import yaml
+root=Path.cwd(); src=Path(sys.argv[1]).resolve(); digest=hashlib.sha256(src.read_bytes()).hexdigest(); matched=0
+for mp in sorted((root/'golden_cases').glob('*/manifest.yaml')):
+    m=yaml.safe_load(mp.read_text(encoding='utf-8')) or {}; source=m.get('source') or {}
+    if source.get('sha256')==digest and source.get('filename'):
+        dst=root/'validation/field-evidence-input'/source['filename']; dst.write_bytes(src.read_bytes()); matched+=1
+if matched==0:
+    raise SystemExit(f'FIELD_PCAP sha256 {digest} does not match any registered Field Golden manifest')
+print(f'staged field evidence for {matched} registered manifest(s): {digest}')
+PYFIELD
+    compose run --rm release-runner python tools/field_golden_batch.py --evidence-dir /workspace/validation/field-evidence-input --out /workspace/validation/phase_f3_field_golden.json --require-all
+  fi
+  # Evaluate all exact-source evidence with the exact production environment/secrets.
+  compose run --rm release-runner python tools/release_readiness_gate.py --strict \
+    ${FIELD_PCAP:+--field-evidence-dir /workspace/validation/field-evidence-input} \
+    --out /workspace/validation/phase_f3_release_readiness.json \
+    --markdown /workspace/validation/phase_f3_release_readiness.md
+}
+
+status_cmd() {
+  require_docker
+  compose ps
+  local bp fp
+  bp="$(env_value VOIP_BACKEND_PORT 2>/dev/null || echo 8000)"
+  fp="$(env_value VOIP_FRONTEND_PORT 2>/dev/null || echo 8080)"
+  echo
+  curl -fsS "http://127.0.0.1:${bp}/health/ready" || true
+  echo
+  curl -fsSI "http://127.0.0.1:${fp}/" | head || true
+}
+
+case "$COMMAND" in
+  help) usage ;;
+  preflight) host_preflight ;;
+  prepare-host) require_docker; prepare_host ;;
+  build) build_images ;;
+  deploy) deploy_stack ;;
+  verify) verify_stack ;;
+  release) release_all ;;
+  status) status_cmd ;;
+  logs) require_docker; compose logs -f backend collector-worker packet-worker pcm-worker media-worker diagnosis-worker reproduction-worker ;;
+  backup-db) backup_db ;;
+  down) require_docker; compose down --remove-orphans ;;
+  *) echo "ERROR: unknown command: $COMMAND" >&2; usage >&2; exit 2 ;;
+esac

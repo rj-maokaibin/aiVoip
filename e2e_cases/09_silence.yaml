@@ -1,0 +1,12 @@
+id: E2E_UNEXPECTED_SILENCE
+name: 活跃媒体窗口350ms异常静音
+fixture: silence
+symptom: 通话卡顿断音
+expected:
+  contains:
+    hypothesis_codes: PCM_UNEXPECTED_SILENCE
+    matched_rules: ACTIVE_MEDIA_UNEXPECTED_SILENCE
+  hypothesis_status:
+    PCM_UNEXPECTED_SILENCE: SUPPORTED
+  not_contains:
+    confirmed_hypotheses: PCM_UNEXPECTED_SILENCE

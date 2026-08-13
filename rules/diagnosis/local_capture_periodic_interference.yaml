@@ -1,0 +1,27 @@
+key: LOCAL_CAPTURE_PERIODIC_INTERFERENCE_FOR_AUDIO_NOISE
+version: 1.0.0
+name: 本地采集链路周期性干扰
+fault_domain: Audio/Analog
+priority: 8
+enabled: true
+when:
+  and:
+  - path: symptoms.AUDIO_NOISE
+    op: eq
+    value: true
+  - path: pcm.local_capture_periodic_interference_count
+    op: gte
+    value: 1
+then:
+- action: hypothesis
+  payload:
+    code: LOCAL_CAPTURE_PERIODIC_INTERFERENCE
+    title: 本地音频采集链路存在稳定周期性干扰并进入上行RTP
+    fault_domain: Audio/Analog
+    confidence: 0.96
+    status: SUPPORTED
+    evidence_level: L1
+    confirmable: false
+    rationale: 低能量pcm_rx存在约20ms稳定周期和150/250/350/...Hz奇次谐波梳状结构，且同类周期在上行RTP中明显、反向RTP明显较弱；强支持异常在本地采集链路已形成，但具体电源/接地、话机/线路、FXS/SLIC或PCM接口仍需A/B验证。
+dsl_version: 2
+category: SUPPORT

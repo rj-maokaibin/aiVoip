@@ -1,0 +1,27 @@
+key: DTMF_PCM_SIP_DIAL_MISMATCH
+version: 1.0.0
+name: PCM DTMF 与 SIP 拨号目标不一致
+fault_domain: DTMF/Call-Control
+priority: 12
+enabled: true
+when:
+  and:
+  - path: symptoms.DTMF
+    op: eq
+    value: true
+  - path: media.dtmf_sip_mismatch_count
+    op: gte
+    value: 1
+then:
+- action: hypothesis
+  payload:
+    code: DTMF_DIGIT_ASSEMBLY_MISMATCH
+    title: PCM输入DTMF与随后SIP拨号目标不一致
+    fault_domain: DTMF/Call-Control
+    confidence: 0.94
+    status: SUPPORTED
+    evidence_level: L2
+    confirmable: false
+    rationale: PCM RX识别到的DTMF拨号序列与随后SIP INVITE目标不一致，支持号码在采集/缓存/号码组装链路发生丢失或错配；需结合SLIC驱动与aimd上报时序定位具体层。
+dsl_version: 2
+category: SUPPORT

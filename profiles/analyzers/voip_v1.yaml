@@ -1,0 +1,137 @@
+schema_version: 1
+id: voip_analyzer_v1
+version: 1.0.0
+status: GOLDEN_CALIBRATED
+description: >-
+  Deterministic analyzer thresholds frozen for VOIP AI V1.0 Phase B. Values mirror the
+  previously validated M6.1 behavior unless a contract correction explicitly changed semantics.
+rtp:
+  ptime_min_ms: 1.0
+  ptime_max_ms: 200.0
+  high_delta_multiplier: 2.5
+  high_delta_additive_ms: 40.0
+  burst_high_lost_packets: 3
+  jitter_filter_divisor: 16.0
+  call_scope_tolerance_seconds: 1.0
+  one_way_min_packets: 20
+silence:
+  frame_ms: 20
+  min_duration_ms: 200
+  noise_floor_percentile: 15.0
+  speech_percentile: 70.0
+  threshold_min_dbfs: -68.0
+  threshold_max_dbfs: -42.0
+  noise_floor_margin_db: 7.0
+  speech_margin_db: 18.0
+  context_ms: 120
+  context_voice_margin_db: 8.0
+  active_media_min_seconds: 0.5
+click_pop:
+  min_jump: 5500.0
+  mad_multiplier: 16.0
+  min_energy_rise_db: 7.0
+  min_highband_ratio: 0.08
+  merge_ms: 6.0
+  short_window_ms: 6.0
+  guard_ms: 25.0
+  highband_min_hz: 1000.0
+  max_events: 200
+  confidence:
+    base: 0.35
+    jump_weight: 0.25
+    rise_weight: 0.25
+    highband_weight: 0.15
+    rise_full_scale_db: 18.0
+    highband_full_scale_ratio: 0.35
+echo:
+  min_delay_ms: 20
+  max_delay_ms: 500
+  min_correlation: 0.55
+  high_correlation: 0.75
+  downsample_rate: 2000
+  max_seconds: 20.0
+  min_signal_seconds: 1.0
+  min_overlap_seconds: 2.0
+periodic:
+  window_seconds: 1.0
+  min_window_seconds: 0.5
+  hop_seconds: 0.1
+  low_energy_quantile: 0.30
+  low_energy_quantile_min: 0.05
+  low_energy_quantile_max: 0.80
+  max_candidates: 12
+  ac_lags_ms: [10.0, 20.0, 40.0]
+  period_search_min_ms: 15.0
+  period_search_max_ms: 25.0
+  period_search_step_ms: 0.25
+  comb_start_hz: 150
+  comb_end_hz: 950
+  comb_step_hz: 100
+  comb_target_tolerance_hz: 2.0
+  comb_exclusion_hz: 4.0
+  comb_background_hz: 20.0
+  comb_prominence_db: 10.0
+  comb_detect_min_hits: 5
+  strong:
+    ac10_max: -0.50
+    ac20_min: 0.80
+    ac40_min: 0.75
+    min_comb_hits: 5
+  medium:
+    ac10_max: -0.35
+    ac20_min: 0.65
+    ac40_min: 0.60
+    min_comb_hits: 4
+  strength:
+    periodicity_weight: 0.65
+    comb_weight: 0.35
+    comb_full_hits: 7.0
+  path:
+    correlation_min: 0.55
+    downstream_margin: 0.20
+    medium_pcm_strength: 0.70
+    medium_upstream_strength: 0.55
+    min_scope_seconds: 1.0
+spectral:
+  max_seconds: 30.0
+  min_frequency_hz: 30.0
+  max_frequency_hz: 3800.0
+  peak_merge_hz: 8.0
+  max_peaks: 12
+  candidate_peaks: 30
+  narrowband_energy_ratio: 0.015
+  comb_spacing_min_hz: 30
+  comb_spacing_max_hz: 400
+  comb_spacing_step_hz: 5
+  comb_min_members: 3
+  comb_error_min_hz: 6.0
+  comb_error_ratio: 0.04
+dtmf:
+  frame_ms: 40
+  hop_ms: 20
+  min_rms: 100.0
+  min_row_dominance: 8.0
+  min_col_dominance: 8.0
+  min_row_energy: 0.05
+  min_col_energy: 0.05
+  max_abs_twist_db: 8.0
+  min_duration_ms: 60.0
+  dominance_confidence_full_scale: 20.0
+  energy_confidence_full_scale: 0.15
+  max_interdigit_gap_ms: 1500.0
+basic_metrics:
+  clipping_abs_threshold: 32760.0
+hum:
+  frequencies_hz: [50, 60, 100, 120, 150, 180, 200, 240, 250, 300, 360]
+  family_50_hz: [50, 100, 150, 200, 250, 300]
+  family_60_hz: [60, 120, 180, 240, 300, 360]
+  high_score: 0.15
+  medium_score: 0.04
+correlation:
+  target_rate: 1000
+  max_lag_ms: 1000
+  max_seconds: 25.0
+  high_quality: 0.80
+  medium_quality: 0.55
+  emit_min_correlation: 0.35
+  min_overlap_seconds: 1.0

@@ -1,0 +1,23 @@
+# Phase B1 changed source/config files
+
+ADDED	backend/app/analyzers/profile.py
+ADDED	backend/tests/test_phase_b_semantic_hardening.py
+ADDED	profiles/analyzers/voip_v1.yaml
+MODIFIED	Makefile
+MODIFIED	backend/app/analyzers/audio/features.py
+MODIFIED	backend/app/analyzers/audio/periodic.py
+MODIFIED	backend/app/analyzers/audio/quality.py
+MODIFIED	backend/app/analyzers/media/correlation.py
+MODIFIED	backend/app/analyzers/media/engine.py
+MODIFIED	backend/app/analyzers/media/periodic.py
+MODIFIED	backend/app/analyzers/packet/engine.py
+MODIFIED	backend/app/analyzers/packet/rtcp.py
+MODIFIED	backend/app/analyzers/packet/rtp.py
+MODIFIED	backend/app/analyzers/pcm/engine.py
+MODIFIED	backend/app/analyzers/pcm/profile.py
+MODIFIED	backend/app/analyzers/pcm/signal.py
+MODIFIED	backend/app/workers/media_tasks.py
+MODIFIED	backend/app/workers/packet_tasks.py
+MODIFIED	backend/app/workers/pcm_tasks.py
+MODIFIED	profiles/pcm/ruijie_aim_diag_v1.yaml
+MODIFIED	tools/check_profiles.py

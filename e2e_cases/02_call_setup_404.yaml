@@ -1,0 +1,13 @@
+id: E2E_CALL_SETUP_404
+name: INVITE 404 呼叫建立失败
+fixture: sip_call_404
+symptom: 呼叫失败打不通
+expected:
+  contains:
+    anomaly_types: SIP_CALL_FAILED
+    call_states: FAILED
+    hypothesis_codes: SIP_CALL_SETUP_FAILURE
+  hypothesis_status:
+    SIP_CALL_SETUP_FAILURE: SUPPORTED
+  not_contains:
+    confirmed_hypotheses: SIP_CALL_SETUP_FAILURE

@@ -1,0 +1,55 @@
+{
+  "increment": "Phase A2 Contract Normalization",
+  "contract_scope": [
+    "EC-00",
+    "EC-01",
+    "EC-10",
+    "EC-11",
+    "EC-13"
+  ],
+  "backend_tests": {
+    "passed": 84,
+    "total": 84
+  },
+  "rule_validation": {
+    "passed": 11,
+    "total": 11
+  },
+  "synthetic_golden": {
+    "passed": true,
+    "case_count": 5,
+    "checks_passed": 21,
+    "checks_total": 21
+  },
+  "synthetic_e2e": {
+    "passed": true,
+    "case_count": 10,
+    "checks_passed": 53,
+    "checks_total": 53
+  },
+  "baseline_diff": {
+    "regressions": 0,
+    "changes": 0
+  },
+  "field_golden": {
+    "passed": true,
+    "failed": 0,
+    "skipped": 0,
+    "case_count": 1,
+    "checks_passed": 15,
+    "checks_total": 15,
+    "analysis_status": "PARTIAL_SUCCESS"
+  },
+  "python_compile": "PASS",
+  "docker_fullstack": {
+    "status": "UNVERIFIED",
+    "reason": "DOCKER_CLI_UNAVAILABLE"
+  },
+  "openapi_runtime_snapshot": {
+    "status": "UNVERIFIED",
+    "reason": "HOST_CELERY_DEPENDENCY_UNAVAILABLE"
+  },
+  "ec02_platform_contract": "RESERVED_PENDING_PLATFORM_CONTRACT",
+  "m62": "NOT_IMPLEMENTED_YET",
+  "next_phase": "PHASE_B_SEMANTIC_HARDENING"
+}

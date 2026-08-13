@@ -1,0 +1,140 @@
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: voip
+      POSTGRES_USER: voip
+      POSTGRES_PASSWORD: voip
+    volumes:
+      - voip_e2e_postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U voip -d voip"]
+      interval: 3s
+      timeout: 3s
+      retries: 40
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - voip_e2e_redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 40
+
+  minio:
+    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: voipminio
+      MINIO_ROOT_PASSWORD: voipminiosecret
+    volumes:
+      - voip_e2e_minio:/data
+
+  backend:
+    build:
+      context: ./backend
+    environment: &backend-env
+      APP_ENV: e2e
+      DATABASE_URL: postgresql+psycopg://voip:voip@postgres:5432/voip
+      REDIS_URL: redis://redis:6379/0
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: voipminio
+      MINIO_SECRET_KEY: voipminiosecret
+      MINIO_SECURE: "false"
+      MINIO_BUCKET: voip-evidence-e2e
+      DIAGNOSIS_REASONER: deterministic
+      TSHARK_BINARY: tshark
+      TSHARK_TIMEOUT_SECONDS: "180"
+      RULE_ROOT: /app/rules/diagnosis
+      KNOWLEDGE_ROOT: /app/knowledge/seed
+      PROFILE_ROOT: /app/profiles
+      LOG_LEVEL: INFO
+    command: >-
+      sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    volumes:
+      - ./profiles:/app/profiles:ro
+      - ./rules:/app/rules:ro
+      - ./knowledge:/app/knowledge:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health/ready"]
+      interval: 3s
+      timeout: 3s
+      retries: 40
+      start_period: 5s
+
+  media-worker:
+    build:
+      context: ./backend
+    environment: *backend-env
+    command: celery -A app.workers.celery_app:celery_app worker -Q media --loglevel=INFO --concurrency=1 --hostname=media@%h
+    volumes:
+      - ./profiles:/app/profiles:ro
+      - ./rules:/app/rules:ro
+      - ./knowledge:/app/knowledge:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_started
+
+  diagnosis-worker:
+    build:
+      context: ./backend
+    environment: *backend-env
+    command: celery -A app.workers.celery_app:celery_app worker -Q diagnosis --loglevel=INFO --concurrency=1 --hostname=diagnosis@%h
+    volumes:
+      - ./profiles:/app/profiles:ro
+      - ./rules:/app/rules:ro
+      - ./knowledge:/app/knowledge:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_started
+
+  e2e-runner:
+    build:
+      context: ./backend
+    environment:
+      <<: *backend-env
+      E2E_API_BASE: http://backend:8000
+      E2E_TIMEOUT_SECONDS: ${E2E_TIMEOUT_SECONDS:-420}
+      E2E_POLL_SECONDS: "1"
+      E2E_RESULT_PATH: /e2e/results/fullstack_result.json
+      E2E_EVIDENCE_PATH: ${E2E_EVIDENCE_PATH:-}
+      E2E_FIXTURE_MODE: ${E2E_FIXTURE_MODE:-synthetic-periodic}
+      E2E_TOOLS_ROOT: /e2e-tools
+      E2E_REQUIRED_QUEUES: media,diagnosis
+      SOURCE_MANIFEST_SHA256: ${SOURCE_MANIFEST_SHA256:?SOURCE_MANIFEST_SHA256 is required}
+      EXPECTED_ALEMBIC_HEAD: ${EXPECTED_ALEMBIC_HEAD:?EXPECTED_ALEMBIC_HEAD is required}
+    volumes:
+      - ./tools:/e2e-tools:ro
+      - ./e2e_runtime/evidence:/e2e/evidence:ro
+      - ./e2e_runtime/results:/e2e/results
+    depends_on:
+      backend:
+        condition: service_healthy
+      media-worker:
+        condition: service_started
+      diagnosis-worker:
+        condition: service_started
+    command: python /e2e-tools/fullstack_e2e.py
+
+volumes:
+  voip_e2e_postgres:
+  voip_e2e_redis:
+  voip_e2e_minio:

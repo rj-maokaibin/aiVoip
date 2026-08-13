@@ -1,0 +1,196 @@
+profiles:
+  - id: REGISTER_FAILURE
+    name: SIP注册失败自动复现
+    version: "1.0.0"
+    status: ACTIVE
+    symptom_classes: [REGISTER_FAILURE, SIP_REGISTER_FAILURE]
+    description: 注册类故障，不要求真实通话，优先捕获REGISTER发送与响应。
+    primary_start_anchor: SIP_REGISTER_TX
+    call_binding_event: SIP_REGISTER_TX
+    media_binding_event: RTP_STREAM_START
+    primary_end_anchor: SIP_REGISTER_TERMINAL
+    secondary_end_anchor: REGISTER_TIMEOUT
+    fallback_end_anchor: SESSION_WINDOW
+    end_policy: EVIDENCE_SUFFICIENCY
+    max_calls: 1
+    target_count: 1
+    stages:
+      - stage: BASE
+        auto_arm_actions: [CAPTURE_PRE_SNAPSHOT, START_VOICE_PCAP, ENABLE_BASIC_VOIP_DEBUG, ENABLE_SIP_PACKET_LOG]
+        required_channels: [PCAP, DEBUG]
+        live_analyzers: [SIP_REGISTER_LIVE]
+        quick_analyzers: [SIP_REGISTER_FULL]
+    cleanup_actions: [DISABLE_SIP_PACKET_LOG, DISABLE_BASIC_VOIP_DEBUG, CAPTURE_POST_SNAPSHOT, STOP_VOICE_PCAP]
+    sufficiency:
+      question_key: REGISTER_PATH_FAILURE_DOMAIN
+      require_target_match: true
+      must_channels: [PCAP, DEBUG]
+      must_findings: [REGISTER_ATTEMPT]
+    retry: {max_sessions: 2, interval_seconds: 30, retryable_reasons: [WATCH_TIMEOUT, TRANSIENT_DEVICE_LOST]}
+
+  - id: CALL_SETUP_FAILURE
+    name: 呼叫建立失败自动复现
+    version: "1.0.0"
+    status: ACTIVE
+    symptom_classes: [CALL_SETUP_FAILURE, CALL_FAILURE]
+    primary_start_anchor: FXS_OFFHOOK
+    end_policy: EVIDENCE_SUFFICIENCY
+    max_calls: 3
+    target_count: 1
+    stages:
+      - stage: BASE
+        auto_arm_actions: [CAPTURE_PRE_SNAPSHOT, START_VOICE_PCAP, START_PCM_RX, START_PCM_TX, ENABLE_BASIC_VOIP_DEBUG, ENABLE_SIP_PACKET_LOG]
+        required_channels: [PCAP, PCM_RX, PCM_TX, DEBUG]
+        live_analyzers: [SIP_CALL_LIVE]
+        quick_analyzers: [SIP_CALL_FULL, RTP_BASIC]
+    cleanup_actions: [STOP_PCM_RX, STOP_PCM_TX, DISABLE_SIP_PACKET_LOG, DISABLE_BASIC_VOIP_DEBUG, CAPTURE_POST_SNAPSHOT, STOP_VOICE_PCAP]
+    sufficiency:
+      question_key: CALL_SETUP_FAILURE_LAYER
+      require_target_match: true
+      must_channels: [PCAP, PCM_RX, PCM_TX, DEBUG]
+      must_findings: [SIP_CALL_ATTEMPT]
+
+  - id: ONE_WAY_AUDIO
+    name: 单通自动复现
+    version: "1.0.0"
+    status: ACTIVE
+    symptom_classes: [ONE_WAY_AUDIO]
+    primary_start_anchor: FXS_OFFHOOK
+    end_policy: EVIDENCE_SUFFICIENCY
+    max_calls: 4
+    target_count: 1
+    stages:
+      - stage: BASE
+        auto_arm_actions: [CAPTURE_PRE_SNAPSHOT, START_VOICE_PCAP, START_PCM_RX, START_PCM_TX, ENABLE_BASIC_VOIP_DEBUG]
+        required_channels: [PCAP, PCM_RX, PCM_TX, DEBUG]
+        live_analyzers: [RTP_DIRECTION_LIVE, PCM_STREAM_HEALTH]
+        quick_analyzers: [ONE_WAY_AUDIO_FULL, PCM_RTP_CORRELATION]
+    cleanup_actions: [STOP_PCM_RX, STOP_PCM_TX, DISABLE_BASIC_VOIP_DEBUG, CAPTURE_POST_SNAPSHOT, STOP_VOICE_PCAP]
+    sufficiency:
+      question_key: ONE_WAY_FAULT_LAYER
+      require_target_match: true
+      must_channels: [PCAP, PCM_RX, PCM_TX, DEBUG]
+      must_findings: [CALL_MEDIA_DIRECTION]
+
+  - id: AUDIO_STUTTER
+    name: 卡顿自动复现
+    version: "1.0.0"
+    status: ACTIVE
+    symptom_classes: [AUDIO_STUTTER, STUTTER]
+    primary_start_anchor: FXS_OFFHOOK
+    end_policy: EVIDENCE_SUFFICIENCY
+    max_calls: 5
+    target_count: 1
+    stages:
+      - stage: BASE
+        auto_arm_actions: [CAPTURE_PRE_SNAPSHOT, START_VOICE_PCAP, START_PCM_RX, START_PCM_TX, ENABLE_BASIC_VOIP_DEBUG]
+        required_channels: [PCAP, PCM_RX, PCM_TX, DEBUG]
+        live_analyzers: [RTP_SEQUENCE_LIVE, PCM_ENERGY_LIVE]
+        quick_analyzers: [RTP_RFC3550_FULL, AUDIO_STUTTER_FULL, PCM_RTP_CORRELATION]
+    cleanup_actions: [STOP_PCM_RX, STOP_PCM_TX, DISABLE_BASIC_VOIP_DEBUG, CAPTURE_POST_SNAPSHOT, STOP_VOICE_PCAP]
+    sufficiency:
+      question_key: STUTTER_FAULT_LAYER
+      require_target_match: true
+      must_channels: [PCAP, PCM_RX, PCM_TX, DEBUG]
+      must_findings: [ACTIVE_MEDIA_WINDOW]
+
+  - id: AUDIO_NOISE
+    name: 电流音/噪声自动复现
+    version: "1.0.0"
+    status: ACTIVE
+    symptom_classes: [AUDIO_NOISE, CURRENT_NOISE, HUM_NOISE]
+    primary_start_anchor: FXS_OFFHOOK
+    end_policy: EVIDENCE_SUFFICIENCY
+    max_calls: 5
+    target_count: 1
+    stages:
+      - stage: BASE
+        auto_arm_actions: [CAPTURE_PRE_SNAPSHOT, START_VOICE_PCAP, START_PCM_RX, START_PCM_TX, ENABLE_BASIC_VOIP_DEBUG]
+        required_channels: [PCAP, PCM_RX, PCM_TX, DEBUG]
+        live_analyzers: [PCM_PERIODIC_LIVE, RTP_BASIC_LIVE]
+        quick_analyzers: [PERIODIC_INTERFERENCE, PCM_RTP_CORRELATION, RTP_RFC3550_FULL]
+      - stage: ENHANCED
+        auto_arm_actions: [CAPTURE_PRE_SNAPSHOT, START_VOICE_PCAP, START_PCM_RX, START_PCM_TX, ENABLE_BASIC_VOIP_DEBUG, ENABLE_DSP_DEBUG]
+        required_channels: [PCAP, PCM_RX, PCM_TX, DEBUG]
+        live_analyzers: [PCM_PERIODIC_LIVE, RTP_BASIC_LIVE]
+        quick_analyzers: [PERIODIC_INTERFERENCE, PCM_RTP_CORRELATION, RTP_RFC3550_FULL]
+    cleanup_actions: [STOP_PCM_RX, STOP_PCM_TX, DISABLE_DSP_DEBUG, DISABLE_BASIC_VOIP_DEBUG, CAPTURE_POST_SNAPSHOT, STOP_VOICE_PCAP]
+    sufficiency:
+      question_key: AUDIO_NOISE_FAULT_LAYER
+      require_target_match: true
+      must_channels: [PCAP, PCM_RX, PCM_TX, DEBUG]
+      must_findings: [ACTIVE_MEDIA_WINDOW, PERIODIC_INTERFERENCE]
+      should_findings: [PCM_RTP_CORRELATION]
+
+  - id: DTMF_LOSS
+    name: DTMF丢号自动复现
+    version: "1.0.0"
+    status: ACTIVE
+    symptom_classes: [DTMF_LOSS, FIRST_DIGIT_LOSS]
+    primary_start_anchor: FXS_OFFHOOK
+    end_policy: FIRST_TARGET
+    max_calls: 1
+    target_count: 1
+    stages:
+      - stage: BASE
+        auto_arm_actions: [CAPTURE_PRE_SNAPSHOT, START_VOICE_PCAP, START_PCM_RX, START_PCM_TX, ENABLE_BASIC_VOIP_DEBUG, ENABLE_DTMF_DEBUG, ENABLE_SIP_PACKET_LOG]
+        required_channels: [PCAP, PCM_RX, PCM_TX, DEBUG]
+        live_analyzers: [DTMF_EVENT_LIVE, SIP_CALL_LIVE]
+        quick_analyzers: [DTMF_PATH_FULL, SIP_CALL_FULL]
+    cleanup_actions: [STOP_PCM_RX, STOP_PCM_TX, DISABLE_SIP_PACKET_LOG, DISABLE_DTMF_DEBUG, DISABLE_BASIC_VOIP_DEBUG, CAPTURE_POST_SNAPSHOT, STOP_VOICE_PCAP]
+    sufficiency:
+      question_key: DTMF_FIRST_MISMATCH_LAYER
+      require_target_match: true
+      must_channels: [PCAP, PCM_RX, PCM_TX, DEBUG]
+      must_findings: [DTMF_PATH]
+
+  - id: ECHO
+    name: 回声自动复现
+    version: "1.0.0"
+    status: ACTIVE
+    symptom_classes: [ECHO]
+    primary_start_anchor: FXS_OFFHOOK
+    end_policy: EVIDENCE_SUFFICIENCY
+    max_calls: 4
+    target_count: 1
+    stages:
+      - stage: BASE
+        auto_arm_actions: [CAPTURE_PRE_SNAPSHOT, START_VOICE_PCAP, START_PCM_RX, START_PCM_TX, ENABLE_BASIC_VOIP_DEBUG]
+        required_channels: [PCAP, PCM_RX, PCM_TX, DEBUG]
+        live_analyzers: [PCM_STREAM_HEALTH]
+        quick_analyzers: [ECHO_PATH_FULL, PCM_RTP_CORRELATION]
+    cleanup_actions: [STOP_PCM_RX, STOP_PCM_TX, DISABLE_BASIC_VOIP_DEBUG, CAPTURE_POST_SNAPSHOT, STOP_VOICE_PCAP]
+    sufficiency:
+      question_key: ECHO_FAULT_LAYER
+      require_target_match: true
+      must_channels: [PCAP, PCM_RX, PCM_TX, DEBUG]
+      must_findings: [ECHO_PATH]
+
+  - id: VOIP_GENERIC_FULL_CAPTURE
+    name: VOIP通用完整采集
+    version: "1.0.0"
+    status: ACTIVE
+    symptom_classes: [UNKNOWN, GENERIC]
+    description: 无法可靠分类时的安全兜底Profile；允许能力缺失降级，但缺失必须显式标记UNAVAILABLE/PARTIAL。
+    primary_start_anchor: FXS_OFFHOOK
+    end_policy: EVIDENCE_SUFFICIENCY
+    max_calls: 5
+    target_count: 1
+    allow_partial_capability_downgrade: true
+    stages:
+      - stage: BASE
+        auto_arm_actions: [CAPTURE_PRE_SNAPSHOT, START_VOICE_PCAP, START_PCM_RX, START_PCM_TX, ENABLE_BASIC_VOIP_DEBUG]
+        required_channels: [PCAP, PCM_RX, PCM_TX, DEBUG]
+        live_analyzers: [SIP_CALL_LIVE, RTP_BASIC_LIVE, PCM_STREAM_HEALTH, DTMF_EVENT_LIVE]
+        quick_analyzers: [SIP_CALL_FULL, RTP_RFC3550_FULL, AUDIO_GENERIC_FULL, DTMF_PATH_FULL]
+      - stage: ENHANCED
+        auto_arm_actions: [CAPTURE_PRE_SNAPSHOT, START_VOICE_PCAP, START_PCM_RX, START_PCM_TX, ENABLE_BASIC_VOIP_DEBUG, ENABLE_DTMF_DEBUG, ENABLE_DSP_DEBUG]
+        required_channels: [PCAP, PCM_RX, PCM_TX, DEBUG]
+        live_analyzers: [SIP_CALL_LIVE, RTP_BASIC_LIVE, PCM_STREAM_HEALTH, DTMF_EVENT_LIVE]
+        quick_analyzers: [SIP_CALL_FULL, RTP_RFC3550_FULL, AUDIO_GENERIC_FULL, DTMF_PATH_FULL]
+    cleanup_actions: [STOP_PCM_RX, STOP_PCM_TX, DISABLE_DSP_DEBUG, DISABLE_DTMF_DEBUG, DISABLE_BASIC_VOIP_DEBUG, CAPTURE_POST_SNAPSHOT, STOP_VOICE_PCAP]
+    sufficiency:
+      question_key: GENERIC_SYMPTOM_CLASSIFICATION
+      require_target_match: false
+      must_channels: [PCAP]
+      should_findings: [CALL_CLASSIFICATION]

@@ -1,0 +1,13 @@
+id: E2E_CODEC_MISMATCH
+name: SDP协商PCMA但实际RTP为PCMU
+fixture: codec_mismatch
+symptom: 通话音频异常
+expected:
+  contains:
+    anomaly_types: CODEC_NEGOTIATION_MISMATCH
+    hypothesis_codes: CODEC_NEGOTIATION_MISMATCH
+    matched_rules: CODEC_NEGOTIATION_MISMATCH
+  hypothesis_status:
+    CODEC_NEGOTIATION_MISMATCH: SUPPORTED
+  not_contains:
+    confirmed_hypotheses: CODEC_NEGOTIATION_MISMATCH

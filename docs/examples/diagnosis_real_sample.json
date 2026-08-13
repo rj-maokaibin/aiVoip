@@ -1,0 +1,195 @@
+{
+  "hypotheses": [
+    {
+      "code": "RTP_ARRIVAL_JITTER",
+      "title": "RTP媒体到包存在瞬时抖动/高Delta",
+      "fault_domain": "RTP/Network",
+      "confidence": 0.684,
+      "status": "ACTIVE",
+      "rationale": "无明确Sequence丢包根因时，检测到 HIGH_DELTA=8、HIGH_JITTER=0。 用户描述偏向杂音/电流音，RTP到包抖动更能解释卡顿/断音，不能单独解释稳定音色类异常。",
+      "confirmable": false,
+      "confirm_rule": "HIGH_DELTA",
+      "evidence": [
+        {
+          "ref_type": "ANALYZER_RUN",
+          "ref_id": "offline-run",
+          "level": "L1",
+          "direction": "SUPPORT",
+          "weight": 1.0,
+          "rationale": "无明确Sequence丢包根因时，检测到 HIGH_DELTA=8、HIGH_JITTER=0。 用户描述偏向杂音/电流音，RTP到包抖动更能解释卡顿/断音，不能单独解释稳定音色类异常。",
+          "details": {
+            "event_type": "HIGH_DELTA"
+          }
+        }
+      ]
+    },
+    {
+      "code": "MEDIA_PATH_CORRELATED_PCM_RX",
+      "title": "pcm_rx 与对应RTP媒体路径内容高度一致",
+      "fault_domain": "Media/Correlation",
+      "confidence": 0.95,
+      "status": "WEAKENED",
+      "rationale": "相关系数 0.950241，lag -29.0ms；用于排除/缩小链路边界，不单独作为硬件根因。",
+      "confirmable": false,
+      "confirm_rule": null,
+      "evidence": [
+        {
+          "ref_type": "ANALYZER_RUN",
+          "ref_id": "offline-run",
+          "level": "L1",
+          "direction": "CONTEXT",
+          "weight": 1.0,
+          "rationale": "PCM与RTP内容高相关",
+          "details": {
+            "pcm_tap": "pcm_rx",
+            "rtp_direction": "192.168.0.12:10000->192.168.0.253:17074",
+            "correlation": {
+              "correlation": 0.950241,
+              "absolute_correlation": 0.950241,
+              "lag_ms": -29.0,
+              "target_rate": 1000,
+              "quality": "HIGH"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "code": "MEDIA_PATH_CORRELATED_PCM_TX",
+      "title": "pcm_tx 与对应RTP媒体路径内容高度一致",
+      "fault_domain": "Media/Correlation",
+      "confidence": 0.8313,
+      "status": "WEAKENED",
+      "rationale": "相关系数 0.831275，lag 45.0ms；用于排除/缩小链路边界，不单独作为硬件根因。",
+      "confirmable": false,
+      "confirm_rule": null,
+      "evidence": [
+        {
+          "ref_type": "ANALYZER_RUN",
+          "ref_id": "offline-run",
+          "level": "L1",
+          "direction": "CONTEXT",
+          "weight": 1.0,
+          "rationale": "PCM与RTP内容高相关",
+          "details": {
+            "pcm_tap": "pcm_tx",
+            "rtp_direction": "192.168.0.253:17066->192.168.0.12:10000",
+            "correlation": {
+              "correlation": 0.831275,
+              "absolute_correlation": 0.831275,
+              "lag_ms": 45.0,
+              "target_rate": 1000,
+              "quality": "HIGH"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "code": "PCM_CLICK_POP",
+      "title": "PCM音频存在Click/Pop候选",
+      "fault_domain": "Audio/DSP",
+      "confidence": 0.68,
+      "status": "ACTIVE",
+      "rationale": "检测到 248 个Click/Pop候选；未与用户感知时刻对齐，暂不作为确认根因。",
+      "confirmable": false,
+      "confirm_rule": null,
+      "evidence": [
+        {
+          "ref_type": "ANALYZER_RUN",
+          "ref_id": "offline-run",
+          "level": "L3",
+          "direction": "SUPPORT",
+          "weight": 0.5,
+          "rationale": "启发式Click/Pop候选",
+          "details": {
+            "count": 248
+          }
+        }
+      ]
+    },
+    {
+      "code": "PCM_UNEXPECTED_SILENCE",
+      "title": "PCM音频存在持续静音候选",
+      "fault_domain": "Audio/Media",
+      "confidence": 0.68,
+      "status": "ACTIVE",
+      "rationale": "检测到 84 个≥200ms静音候选；需要结合通话阶段和用户异常时间判断是否为真实异常。",
+      "confirmable": false,
+      "confirm_rule": null,
+      "evidence": [
+        {
+          "ref_type": "ANALYZER_RUN",
+          "ref_id": "offline-run",
+          "level": "L3",
+          "direction": "SUPPORT",
+          "weight": 0.5,
+          "rationale": "启发式Silence候选",
+          "details": {
+            "count": 84
+          }
+        }
+      ]
+    }
+  ],
+  "plan": [
+    {
+      "action_type": "REQUEST_USER_EVIDENCE",
+      "reason": "用户现象为杂音/电流音，但当前没有与听感时刻直接对齐的音频根因证据；请提供异常发生时间点或现场录音用于频谱/PCM时间关联。",
+      "risk_level": "USER",
+      "auto_execute": false,
+      "params": {
+        "need": [
+          "anomaly_timestamp_or_field_recording"
+        ]
+      },
+      "priority": 55
+    },
+    {
+      "action_type": "REQUEST_MULTI_POINT_PCAP",
+      "reason": "若需要定位抖动产生的具体网络区间，需要增加PBX侧/中间链路抓包做同包相关。",
+      "risk_level": "USER",
+      "auto_execute": false,
+      "params": {
+        "purpose": "locate_jitter_segment"
+      },
+      "priority": 65
+    }
+  ],
+  "conclusion_state": "WAITING_USER",
+  "summary": {
+    "headline": "候选方向，需补证：RTP媒体到包存在瞬时抖动/高Delta",
+    "top_hypotheses": [
+      {
+        "code": "RTP_ARRIVAL_JITTER",
+        "title": "RTP媒体到包存在瞬时抖动/高Delta",
+        "confidence": 0.684,
+        "status": "ACTIVE"
+      },
+      {
+        "code": "PCM_CLICK_POP",
+        "title": "PCM音频存在Click/Pop候选",
+        "confidence": 0.68,
+        "status": "ACTIVE"
+      },
+      {
+        "code": "PCM_UNEXPECTED_SILENCE",
+        "title": "PCM音频存在持续静音候选",
+        "confidence": 0.68,
+        "status": "ACTIVE"
+      }
+    ],
+    "auto_action_count": 0,
+    "planned_action_count": 2
+  },
+  "known": [
+    "识别到 5 路RTP媒体流。",
+    "当前RTP异常以到包间隔/抖动为主，不应自动等同于Sequence丢包。",
+    "检测到 2 组 PCM↔RTP 高相关媒体映射。"
+  ],
+  "unknown": [
+    "尚不能仅凭单点抓包确定瞬时RTP到达抖动产生在哪一段链路。",
+    "当前尚未把PCM频谱/Click/Silence候选与用户实际听到电流音的时间点直接对齐。"
+  ],
+  "excluded": []
+}

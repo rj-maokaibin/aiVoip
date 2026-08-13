@@ -1,0 +1,151 @@
+profiles:
+  - id: RUIJIE_VOIP_AIM_V1
+    name: Ruijie OpenWrt + aimd/AIM VOIP Platform
+    version: 0.1.0
+    status: PARTIAL
+    family: RUIJIE_OPENWRT_AIM
+    description: >-
+      EC-02 Phase D1 partial platform contract extracted only from the supplied VOIP
+      troubleshooting material and previously confirmed PCM diagnostic syntax. Read-only
+      commands are executable. Autonomous reproduction remains blocked until runtime-context
+      parsers, cleanup commands and realtime hook source are explicitly confirmed.
+    transport:
+      ssh_username: admin
+      aim_executable: aim
+      aim_root_prompt: "AIM>"
+      aim_session: PERSISTENT_PTY
+    source_refs:
+      - "voip 排障案例_思路整理。(1).md"
+      - "M6.2 confirmed PCM destination semantics: voice gateway IP; DUT is the only SSH target"
+
+    readonly_actions:
+      - CHECK_AIMD_PROCESS
+      - GET_VOIP_LOG
+      - GET_NETWORK_CONFIG
+      - GET_VOICE_VLAN_REF
+      - GET_BRIDGE_INFO
+      - GET_ROUTE
+      - GET_DNS
+      - GET_NETWORK_VOIP_LOG
+      - GET_PCM_COUNTER
+      - GET_AIM_BIND
+      - GET_AIM_SIP_CONFIG
+      - GET_SIP_REGISTER
+      - GET_DSP_RUNNING
+
+    # Empty by design. No real write/diagnostic action is production-activatable in D1.
+    autonomous_reproduction_actions: []
+
+    voice_runtime_context:
+      voice_vlan:
+        command_action_id: GET_VOICE_VLAN_REF
+        parser_id: null
+        parser_status: RESERVED
+        cardinality: EXACTLY_ONE
+        notes: "Source confirms /etc/config/vlan_ref contains a voip vlan entry, but the exact field grammar is not available in text form."
+      voice_interface:
+        command_action_id: GET_BRIDGE_INFO
+        parser_id: null
+        parser_status: RESERVED
+        cardinality: EXACTLY_ONE
+        derive: "br-lan_<voice_vlan_id>"
+        notes: "Naming relationship br-lan_xxx is documented; exact resolver/parser still requires real text samples."
+      voice_gateway:
+        command_action_id: null
+        parser_id: null
+        parser_status: RESERVED
+        cardinality: EXACTLY_ONE
+        notes: "User confirmed the gateway IP can be obtained from DUT configuration, but command/path/field is not yet frozen."
+
+    realtime_event_sources:
+      hook:
+        command_action_id: null
+        parser_id: null
+        parser_status: RESERVED
+        notes: "debug p on is documented to print hook/key input logs, but OFF command and exact event grammar are not yet confirmed."
+      dtmf:
+        command_action_id: null
+        parser_id: null
+        parser_status: RESERVED
+        notes: "Debug family exists but exact production-safe enable/disable pair and parser grammar remain unresolved."
+
+    known_diagnostic_templates:
+      - template_id: PCM_RX_ON_KNOWN_SYNTAX
+        executor: AIM_PTY
+        command_template: "voip dsp diag set {voice_gateway_ip} 40000 1 pcm_rx on"
+        status: DOCUMENTED_ONLY
+        reason_not_activatable: "Cleanup command and reverse validation contract are not yet confirmed."
+        source_refs:
+          - "User-confirmed APF1250 diagnostic command semantics"
+      - template_id: PCM_TX_ON_KNOWN_SYNTAX
+        executor: AIM_PTY
+        command_template: "voip dsp diag set {voice_gateway_ip} 50000 1 pcm_tx on"
+        status: DOCUMENTED_ONLY
+        reason_not_activatable: "Cleanup command and reverse validation contract are not yet confirmed."
+        source_refs:
+          - "User-confirmed APF1250 diagnostic command semantics"
+      - template_id: HOOK_DEBUG_ON_KNOWN_SYNTAX
+        executor: AIM_PTY
+        command_template: "debug p on"
+        status: DOCUMENTED_ONLY
+        reason_not_activatable: "Reliable disable command and exact hook event parser are not yet confirmed."
+        source_refs:
+          - "voip 排障案例_思路整理。(1).md#二-2-debug"
+      - template_id: SIP_DEBUG_ON_KNOWN_SYNTAX
+        executor: AIM_PTY
+        command_template: "de sip de"
+        status: DOCUMENTED_ONLY
+        reason_not_activatable: "Reliable disable command is not yet confirmed."
+        source_refs:
+          - "voip 排障案例_思路整理。(1).md#二-2-debug"
+      - template_id: IPC_DEBUG_ON_KNOWN_SYNTAX
+        executor: AIM_PTY
+        command_template: "de ipc de"
+        status: DOCUMENTED_ONLY
+        reason_not_activatable: "Reliable disable command is not yet confirmed."
+        source_refs:
+          - "voip 排障案例_思路整理。(1).md#二-2-debug"
+      - template_id: DSP_DEBUG_ON_KNOWN_SYNTAX
+        executor: AIM_PTY
+        command_template: "de dsp de"
+        status: DOCUMENTED_ONLY
+        reason_not_activatable: "Reliable disable command is not yet confirmed."
+        source_refs:
+          - "voip 排障案例_思路整理。(1).md#debug"
+
+    gaps:
+      - key: VOICE_VLAN_PARSER
+        severity: BLOCKING
+        blocking_capabilities: [AUTONOMOUS_REPRODUCTION]
+        description: "Need exact text grammar/parser for the single Voice VLAN from DUT configuration."
+        required_confirmation: "Provide representative textual output for /etc/config/vlan_ref and /etc/config/network with Voice VLAN configured."
+      - key: VOICE_GATEWAY_RESOLVER
+        severity: BLOCKING
+        blocking_capabilities: [AUTONOMOUS_REPRODUCTION]
+        description: "Need exact command/path/field that yields the Voice Gateway IP."
+        required_confirmation: "Provide the command and representative output containing the Voice Gateway IP."
+      - key: VOICE_INTERFACE_VERIFICATION
+        severity: BLOCKING
+        blocking_capabilities: [AUTONOMOUS_REPRODUCTION]
+        description: "Need parser/verification rule for br-lan_xx existence and UP state."
+        required_confirmation: "Provide representative brctl/ip-link output for the active Voice VLAN interface."
+      - key: PCM_CLEANUP_COMMANDS
+        severity: BLOCKING
+        blocking_capabilities: [AUTONOMOUS_REPRODUCTION]
+        description: "PCM RX/TX start syntax is known, but OFF commands are not source-confirmed."
+        required_confirmation: "Confirm exact pcm_rx off and pcm_tx off AIM commands and expected output."
+      - key: DEBUG_CLEANUP_COMMANDS
+        severity: BLOCKING
+        blocking_capabilities: [AUTONOMOUS_REPRODUCTION]
+        description: "Hook/SIP/IPC/DSP debug enable syntax is known, but disable commands are not source-confirmed."
+        required_confirmation: "Confirm exact disable commands and whether enable/disable is idempotent."
+      - key: REALTIME_HOOK_EVENT_SOURCE
+        severity: BLOCKING
+        blocking_capabilities: [AUTONOMOUS_REPRODUCTION]
+        description: "Need exact OFFHOOK/ONHOOK realtime line grammar and timestamp source."
+        required_confirmation: "Provide a short AIM/debug log covering onhook -> offhook -> onhook."
+      - key: FXS_SUBMODE_PROMPT
+        severity: NON_BLOCKING
+        blocking_capabilities: []
+        description: "show information is documented under `voip fxs 1`, but submode prompt is not available in the text source."
+        required_confirmation: "Provide an interactive AIM transcript for `voip fxs 1` and `show information`."

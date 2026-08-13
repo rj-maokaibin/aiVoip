@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "evidence_type": "FIELD_GOLDEN",
+  "generated_at": "2026-08-13T05:25:17.599787Z",
+  "source_manifest_aggregate_sha256": "802cd44ff31326eb71b7e37304a3f691832038bdbd522a9b53cdf08ba204b976",
+  "passed": true,
+  "failed": 0,
+  "skipped": 0,
+  "case_count": 1,
+  "cases": [
+    {
+      "id": "APF1250_CS20260807_6886043_PERIODIC_NOISE",
+      "manifest": "golden_cases/APF1250_CS20260807_6886043/manifest.yaml",
+      "source": "8b72929e-8a06-4f1e-a922-1d3779ebbd6f.pcap",
+      "status": "PASSED",
+      "checks_passed": 15,
+      "checks_total": 15,
+      "analysis_status": "PARTIAL_SUCCESS"
+    }
+  ]
+}

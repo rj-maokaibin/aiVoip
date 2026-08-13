@@ -1,0 +1,1 @@
+{"status": "PASS", "scenarios": [{"scenario": "CONTROL_TARGET_AUDIO_NOISE", "status": "PASS", "session_state": "COMPLETED"}, {"scenario": "GENERIC_PARTIAL_CAPTURE", "status": "PASS", "session_state": "WATCHING"}, {"scenario": "CLEANUP_REVERSE_VALIDATION", "status": "PASS", "session_state": "CLEANUP_FAILED"}], "passed": 3, "total": 3}

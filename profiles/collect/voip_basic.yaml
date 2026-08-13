@@ -1,0 +1,18 @@
+profiles:
+  - id: voip_basic
+    description: VOIP基础只读采集。仅执行已注册L0/L1动作，不包含EC-02尚未冻结的真实诊断写动作。
+    actions:
+      - GET_DEVICE_INFO
+      - CHECK_AIMD_PROCESS
+      - GET_VOIP_LOG
+      - GET_NETWORK_CONFIG
+      - GET_VOICE_VLAN_REF
+      - GET_BRIDGE_INFO
+      - GET_ROUTE
+      - GET_DNS
+      - GET_NETWORK_VOIP_LOG
+      - GET_PCM_COUNTER
+      - GET_AIM_BIND
+      - GET_AIM_SIP_CONFIG
+      - GET_SIP_REGISTER
+      - GET_DSP_RUNNING

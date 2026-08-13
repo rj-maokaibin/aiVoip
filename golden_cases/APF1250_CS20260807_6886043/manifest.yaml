@@ -1,0 +1,29 @@
+id: APF1250_CS20260807_6886043_PERIODIC_NOISE
+name: APF1250 现场持续电流音/周期底噪
+source:
+  filename: 8b72929e-8a06-4f1e-a922-1d3779ebbd6f.pcap
+  sha256: 3af13c0142b5cb86a60dc0642b572261735d6af770806dcb05e70e2c574f8fbc
+  pcm_profile: ruijie_aim_diag_v1
+symptom: 持续电流音/周期底噪
+expected:
+  periodic_interference_count_min: 2
+  paths:
+    - pcm_session_index: 6
+      pcm_rx_ac20_min: 0.95
+      pcm_rx_ac10_max: -0.80
+      upstream_ac20_min: 0.75
+      downstream_ac20_max: 0.50
+      odd_50hz_comb_hits_min: 7
+    - pcm_session_index: 7
+      pcm_rx_ac20_min: 0.95
+      pcm_rx_ac10_max: -0.80
+      upstream_ac20_min: 0.75
+      downstream_ac20_max: 0.55
+      odd_50hz_comb_hits_min: 7
+  hypothesis_code: LOCAL_CAPTURE_PERIODIC_INTERFERENCE
+  hypothesis_status: SUPPORTED
+  must_not_confirm_specific_hardware_root: true
+notes:
+  - 该Golden Case验证“20ms周期 + 150/250/350/...Hz奇次谐波梳状谱 + 上行传播 + 下行弱化”。
+  - 不把具体根因自动确认成电源、接地、电话机或FXS/SLIC；这些必须通过A/B实验闭环。
+  - RTP High Delta可作为并存异常，但不能替代持续周期底噪的本地采集链路证据。

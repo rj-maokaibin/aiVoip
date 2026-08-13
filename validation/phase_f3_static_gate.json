@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+  "status": "PASS",
+  "source_manifest_aggregate_sha256": "8c4f6e503e3a9ce8d1aa28bac3ab9659b319ae789642dda22401e613a76289db",
+  "backend_tests": {
+    "passed": 148
+  },
+  "reproduction_mock_e2e": {
+    "passed": 3,
+    "total": 3
+  },
+  "reproduction_evidence_e2e": {
+    "passed": 5,
+    "total": 5
+  },
+  "reproduction_c3_e2e": {
+    "passed": 4,
+    "total": 4
+  },
+  "synthetic_golden": {
+    "passed": 21,
+    "total": 21
+  },
+  "synthetic_e2e": {
+    "passed": 53,
+    "total": 53
+  },
+  "baseline_diff": {
+    "regressions": 0,
+    "changes": 0
+  },
+  "field_golden": {
+    "passed": true,
+    "failed": 0,
+    "skipped": 0
+  },
+  "gates": [
+    "PYTHON_COMPILE",
+    "SHELL_SYNTAX",
+    "BACKEND_TESTS",
+    "MIGRATION_CONTRACT",
+    "OPENAPI_CONTRACT",
+    "COMPOSE_CONTRACT",
+    "SECURITY_CONTRACT",
+    "PRODUCTION_HARDENING",
+    "DEPLOYMENT_CONTRACT",
+    "PROFILES",
+    "PLATFORM_CONTRACT",
+    "REPRODUCTION_PROFILES",
+    "DIAGNOSTIC_EXPERIMENT_PROFILES",
+    "REPRODUCTION_MOCK_E2E",
+    "REPRODUCTION_EVIDENCE_E2E",
+    "REPRODUCTION_C3_E2E",
+    "RULES",
+    "SYNTHETIC_GOLDEN",
+    "SYNTHETIC_E2E",
+    "BASELINE_DIFF",
+    "WORKBENCH_CONTRACT",
+    "SOURCE_MANIFEST"
+  ]
+}

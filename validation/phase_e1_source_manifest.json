@@ -1,0 +1,100 @@
+{
+  "phase": "E1",
+  "files": [
+    {
+      "path": "Makefile",
+      "sha256": "1535d4602bbfe36ece3f8f0093e5404d474b4c57d60915c8dadbcf6997b68d27",
+      "size": 3619
+    },
+    {
+      "path": "README.md",
+      "sha256": "9d301fef32d6558cb37086f8ab55f06713d1296e44a845ae46721aa092c43c56",
+      "size": 12373
+    },
+    {
+      "path": "backend/app/api/v1/reproduction.py",
+      "sha256": "20dfda1b46d10dc2dbd91c59e739afffa7b383bfd0dd812b48c801c770ca97a9",
+      "size": 5384
+    },
+    {
+      "path": "backend/app/api/v1/experiments.py",
+      "sha256": "1b150756f718b21d0b84a3925eab9fd823a40d9f3b1971dcb985e4b74313dcf4",
+      "size": 13852
+    },
+    {
+      "path": "backend/app/api/v1/feishu.py",
+      "sha256": "656435ba8a874d56e877a65e4858e6088f26c08449ab95126f2fffe31cd58de9",
+      "size": 785
+    },
+    {
+      "path": "backend/app/integrations/feishu/__init__.py",
+      "sha256": "30ef43c6b6bb1ba33879675ffac0795f1dac8d4c60357cf5a8bffbe28346c764",
+      "size": 224
+    },
+    {
+      "path": "backend/app/integrations/feishu/cards.py",
+      "sha256": "b57aba7b143d80aa5128385d31a9897310354bfe06984fee8f0c864a5d6acbb6",
+      "size": 6665
+    },
+    {
+      "path": "backend/app/integrations/feishu/policy.py",
+      "sha256": "abce3bbf90557084733da25ee076ade02fb42c250f8d2c197413b43a0b52f4a9",
+      "size": 2627
+    },
+    {
+      "path": "backend/app/schemas/feishu.py",
+      "sha256": "18f66b5a0ed5790d63838a1b022ecbb8dfeee8983accfb95adbb3f49ae725016",
+      "size": 168
+    },
+    {
+      "path": "backend/app/main.py",
+      "sha256": "2fb2ab5e0934cf43119ac89cecc092abbb5ec33cf3a735f4366e6d709466ed9c",
+      "size": 3583
+    },
+    {
+      "path": "backend/tests/test_phase_e1_workbench_feishu.py",
+      "sha256": "85550f94ba03019761c3cc330e15b8a66a2391b051f8a7da97be8afce08d5d6f",
+      "size": 3556
+    },
+    {
+      "path": "frontend/src/api.ts",
+      "sha256": "aea446ffe33bc602bcc1e9bb0d60fc98bf5992404f6ceeb96c0fc683b78e513c",
+      "size": 789
+    },
+    {
+      "path": "frontend/src/types.ts",
+      "sha256": "b9eedf14c36900b918533c6455e539e50e76385b33067d673ba208b8b7cdeaaf",
+      "size": 4019
+    },
+    {
+      "path": "frontend/src/main.tsx",
+      "sha256": "6d906a45eb7c090bd79772b496b80725d985082b599eb9e9bfb2c709324c8f42",
+      "size": 32999
+    },
+    {
+      "path": "frontend/src/style.css",
+      "sha256": "443858a61c6cc2da0100681f3f644844668208e0c777227469ff7e9dac4b46d3",
+      "size": 9060
+    },
+    {
+      "path": "tools/workbench_contract_gate.py",
+      "sha256": "36ecf60d7cfc9faa095d3eae765036cab4f679a34a23c7af475dd72e92ef6116",
+      "size": 1762
+    },
+    {
+      "path": "docs/PHASE_E1_WEB_FEISHU_PRODUCTIZATION.md",
+      "sha256": "f3e7d2d87509bed4cf463b938fd798f8908cd0a5d5e7f8a9052126ef41acebcb",
+      "size": 3849
+    },
+    {
+      "path": "validation/phase_e1_validation.json",
+      "sha256": "9eaf5b9b09fd9f7009c8cae52a17acdf8671ecb795b062cac87952fc3606bb8b",
+      "size": 1652
+    },
+    {
+      "path": "validation/phase_e1_changed_files.txt",
+      "sha256": "01a8b296f07587ddc8aa5e230ad3affd34cad78940282a1b18e0bb4bbcea125e",
+      "size": 620
+    }
+  ]
+}

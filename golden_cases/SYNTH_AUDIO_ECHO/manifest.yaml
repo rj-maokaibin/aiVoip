@@ -1,0 +1,12 @@
+id: SYNTH_AUDIO_ECHO_86MS
+name: 86ms稳定回声路径
+kind: synthetic_audio_echo
+symptom: 通话中有明显回声/回音
+expected:
+  event_type: ECHO_PATH_DETECTED
+  delay_ms: 86
+  delay_tolerance_ms: 2
+  correlation_min: 0.75
+  hypothesis_code: AUDIO_ECHO_PATH
+  hypothesis_status: SUPPORTED
+  must_not_confirm_specific_root: true

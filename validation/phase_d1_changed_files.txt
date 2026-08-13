@@ -1,0 +1,14 @@
+Makefile
+README.md
+backend/app/actions/registry.py
+backend/app/collectors/asyncssh_adapter.py
+backend/app/platforms/__init__.py
+backend/app/platforms/contracts.py
+backend/app/platforms/registry.py
+backend/tests/test_phase_d1_platform_contract.py
+docs/PHASE_D1_EC02_PLATFORM_CONTRACT.md
+profiles/actions/voip_basic.yaml
+profiles/collect/voip_basic.yaml
+profiles/platforms/ruijie_voip_aim_v1.yaml
+tools/check_profiles.py
+tools/platform_contract_gate.py

@@ -1,0 +1,16 @@
+{
+  "status": "PASS",
+  "checks": {
+    "tabs": true,
+    "packet_media_views": true,
+    "sse": true,
+    "safe_stop": true,
+    "ec02_pending_banner": true,
+    "case_reproduction_list_api": true,
+    "case_experiment_list_api": true,
+    "case_fix_read_api": true,
+    "single_feishu_card": true,
+    "no_live_feishu_transport": true,
+    "no_real_dut_commands_in_workbench": true
+  }
+}

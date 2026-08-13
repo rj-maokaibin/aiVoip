@@ -1,0 +1,27 @@
+key: AUDIO_ECHO_PATH_DETECTED
+version: 1.0.0
+name: PCM RX/TX 延迟回声路径
+fault_domain: Audio/Echo
+priority: 20
+enabled: true
+when:
+  and:
+  - path: symptoms.ECHO
+    op: eq
+    value: true
+  - path: media.echo_path_count
+    op: gte
+    value: 1
+then:
+- action: hypothesis
+  payload:
+    code: AUDIO_ECHO_PATH
+    title: PCM RX/TX之间存在稳定延迟回声路径
+    fault_domain: Audio/Echo
+    confidence: 0.9
+    status: SUPPORTED
+    evidence_level: L2
+    confirmable: false
+    rationale: PCM播放参考与采集方向之间存在稳定延迟相关峰，支持回声路径存在；但不能单独确认声学耦合、SLIC/混合电路或AEC失效中的具体根因。
+dsl_version: 2
+category: SUPPORT

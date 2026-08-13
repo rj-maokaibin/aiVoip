@@ -1,0 +1,10 @@
+id: SYNTH_ACTIVE_MEDIA_SILENCE_350MS
+name: 活跃媒体窗口350ms异常静音
+kind: synthetic_audio_silence
+symptom: 通话过程中短暂无声/断音
+expected:
+  event_type: UNEXPECTED_SILENCE
+  event_count: 1
+  duration_ms_min: 300
+  duration_ms_max: 400
+  all_silence_false_positive_count: 0

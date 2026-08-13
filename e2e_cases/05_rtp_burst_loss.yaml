@@ -1,0 +1,14 @@
+id: E2E_RTP_BURST_LOSS
+name: RTP连续4包丢失导致80ms媒体缺口
+fixture: rtp_burst_loss
+symptom: 通话卡顿断音
+expected:
+  contains:
+    anomaly_types: BURST_LOSS
+    hypothesis_codes: RTP_PACKET_LOSS_PATH
+    matched_rules: RTP_BURST_LOSS_STUTTER
+    plan_actions: REQUEST_MULTI_POINT_PCAP
+  hypothesis_status:
+    RTP_PACKET_LOSS_PATH: SUPPORTED
+  not_contains:
+    confirmed_hypotheses: RTP_PACKET_LOSS_PATH

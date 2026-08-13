@@ -1,0 +1,88 @@
+{
+  "schema_version": 1,
+  "phase": "F1_RELEASE_READINESS",
+  "status": "STATIC_PASS_PRODUCTION_BLOCKED",
+  "source_manifest_aggregate_sha256": "d138d697c358e77bd7a1cae7bb34148d937487dea694f22f9686c9bce1220097",
+  "static": {
+    "status": "PASS",
+    "gates": 19,
+    "backend_tests": 137,
+    "c1_e2e": {
+      "passed": 3,
+      "total": 3
+    },
+    "c2_e2e": {
+      "passed": 5,
+      "total": 5
+    },
+    "c3_e2e": {
+      "passed": 4,
+      "total": 4
+    },
+    "synthetic_golden": {
+      "passed": 21,
+      "total": 21
+    },
+    "synthetic_e2e": {
+      "passed": 53,
+      "total": 53
+    },
+    "baseline_diff": {
+      "regressions": 0,
+      "changes": 0
+    }
+  },
+  "field_golden": {
+    "passed": true,
+    "case_count": 1,
+    "checks_passed": 15,
+    "checks_total": 15,
+    "source_bound": true
+  },
+  "release_readiness": {
+    "static_status": "PASS",
+    "production_status": "BLOCKED",
+    "counts": {
+      "PASS": 20,
+      "BLOCKED": 12,
+      "UNVERIFIED": 3
+    },
+    "blocking_keys": [
+      "EC02_PLATFORM_PRODUCTION_READY",
+      "REAL_REPRODUCTION_PLATFORM",
+      "PRODUCTION_ENVIRONMENT",
+      "BUILD_REVISION_PINNED",
+      "PRODUCTION_CREDENTIAL_PROVIDER",
+      "PRODUCTION_REPRODUCTION_STORAGE",
+      "PRODUCTION_DEFAULT_SECRETS_REPLACED",
+      "PRODUCTION_AUTH_PROVIDER",
+      "ANONYMOUS_DEV_AUTH_DISABLED",
+      "PRODUCTION_CORS_RESTRICTED",
+      "FEISHU_LIVE_TRANSPORT",
+      "DOCKER_FULLSTACK_RUNTIME",
+      "POSTGRES_MIGRATION_RUNTIME",
+      "FRONTEND_LOCKFILE",
+      "FRONTEND_PRODUCTION_BUILD"
+    ]
+  },
+  "expected_blocked_gates": {
+    "frontend_build_gate_exit_code": 3,
+    "strict_release_gate_exit_code": 2,
+    "frontend_build_reason": "frontend/package-lock.json missing; reproducible npm ci build intentionally blocked",
+    "strict_gate_reason": "production blockers/unverified runtime evidence remain"
+  },
+  "runtime_unverified": [
+    "DOCKER_FULLSTACK_RUNTIME",
+    "POSTGRES_MIGRATION_RUNTIME",
+    "FRONTEND_PRODUCTION_BUILD"
+  ],
+  "deferred_by_user": [
+    "EC02_PLATFORM_PRODUCTION_READY",
+    "REAL_REPRODUCTION_PLATFORM"
+  ],
+  "notes": [
+    "Field Golden evidence is exact-source bound.",
+    "Stale runtime evidence is rejected as UNVERIFIED.",
+    "No real DUT commands were invented while EC-02 is deferred."
+  ]
+}

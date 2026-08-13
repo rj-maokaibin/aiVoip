@@ -1,0 +1,86 @@
+{
+  "phase": "C1",
+  "component": "M6.2 Reproduction Intelligence Mock Platform Core",
+  "validated_at": "2026-08-13",
+  "status": "PASS",
+  "contract_boundary": {
+    "ec02": "RESERVED / PENDING_PLATFORM_CONTRACT",
+    "real_dut_commands_implemented": false,
+    "mock_platform_only": true
+  },
+  "validation": {
+    "backend_tests": {
+      "passed": 106,
+      "total": 106
+    },
+    "reproduction_profiles": {
+      "passed": 8,
+      "total": 8,
+      "status": "PASS"
+    },
+    "reproduction_mock_e2e": {
+      "passed": 3,
+      "total": 3,
+      "status": "PASS"
+    },
+    "rule_validation": {
+      "passed": 11,
+      "total": 11
+    },
+    "synthetic_golden": {
+      "cases_passed": 5,
+      "cases_total": 5,
+      "checks_passed": 21,
+      "checks_total": 21
+    },
+    "synthetic_e2e": {
+      "cases_passed": 10,
+      "cases_total": 10,
+      "checks_passed": 53,
+      "checks_total": 53
+    },
+    "baseline_regression": {
+      "regressions": 0,
+      "changes": 0
+    },
+    "field_golden": {
+      "cases": 1,
+      "checks_passed": 15,
+      "checks_total": 15,
+      "status": "PASSED"
+    },
+    "python_compile": "PASS",
+    "compose_yaml": {
+      "docker-compose.yml": "PASS",
+      "docker-compose.e2e.yml": "PASS"
+    },
+    "docker_runtime": "UNVERIFIED_DOCKER_NOT_AVAILABLE"
+  },
+  "mock_e2e_scenarios": [
+    {
+      "scenario": "CONTROL_TARGET_AUDIO_NOISE",
+      "status": "PASS",
+      "session_state": "COMPLETED"
+    },
+    {
+      "scenario": "GENERIC_PARTIAL_CAPTURE",
+      "status": "PASS",
+      "session_state": "WATCHING"
+    },
+    {
+      "scenario": "CLEANUP_REVERSE_VALIDATION",
+      "status": "PASS",
+      "session_state": "CLEANUP_FAILED"
+    }
+  ],
+  "known_deferred": [
+    "Real segmented PCAP/PCM/log file I/O and MinIO finalization",
+    "Existing analyzer LIVE/CALL_QUICK runtime integration",
+    "Full DiagnosticQuestion DAG",
+    "ExperimentProfile and A/B/A-B-A execution",
+    "EnvironmentComparator",
+    "Fix Verification end-to-end",
+    "Feishu/Web reproduction UI",
+    "EC-02 real DUT PlatformProfile/Action mapping"
+  ]
+}

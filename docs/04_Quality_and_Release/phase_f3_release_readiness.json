@@ -1,0 +1,376 @@
+{
+  "schema_version": 1,
+  "release_id": "VOIP_AI_V1.0",
+  "status": "STATIC_PASS_PRODUCTION_BLOCKED",
+  "static_status": "PASS",
+  "production_status": "BLOCKED",
+  "counts": {
+    "PASS": 27,
+    "BLOCKED": 12,
+    "UNVERIFIED": 4
+  },
+  "gates": [
+    {
+      "key": "PYTHON_COMPILE",
+      "status": "PASS",
+      "blocking": true,
+      "category": "STATIC",
+      "detail": "Validated by the exact-source Phase F2 static-gate artifact.",
+      "command": null
+    },
+    {
+      "key": "SHELL_SYNTAX",
+      "status": "PASS",
+      "blocking": true,
+      "category": "STATIC",
+      "detail": "Validated by the exact-source Phase F2 static-gate artifact.",
+      "command": null
+    },
+    {
+      "key": "BACKEND_TESTS",
+      "status": "PASS",
+      "blocking": true,
+      "category": "STATIC",
+      "detail": "Validated by the exact-source Phase F2 static-gate artifact.",
+      "command": null
+    },
+    {
+      "key": "MIGRATION_CONTRACT",
+      "status": "PASS",
+      "blocking": true,
+      "category": "STATIC",
+      "detail": "Validated by the exact-source Phase F2 static-gate artifact.",
+      "command": null
+    },
+    {
+      "key": "OPENAPI_CONTRACT",
+      "status": "PASS",
+      "blocking": true,
+      "category": "STATIC",
+      "detail": "Validated by the exact-source Phase F2 static-gate artifact.",
+      "command": null
+    },
+    {
+      "key": "COMPOSE_CONTRACT",
+      "status": "PASS",
+      "blocking": true,
+      "category": "STATIC",
+      "detail": "Validated by the exact-source Phase F2 static-gate artifact.",
+      "command": null
+    },
+    {
+      "key": "SECURITY_CONTRACT",
+      "status": "PASS",
+      "blocking": true,
+      "category": "STATIC",
+      "detail": "Validated by the exact-source Phase F2 static-gate artifact.",
+      "command": null
+    },
+    {
+      "key": "PRODUCTION_HARDENING",
+      "status": "PASS",
+      "blocking": true,
+      "category": "STATIC",
+      "detail": "Validated by the exact-source Phase F2 static-gate artifact.",
+      "command": null
+    },
+    {
+      "key": "DEPLOYMENT_CONTRACT",
+      "status": "PASS",
+      "blocking": true,
+      "category": "STATIC",
+      "detail": "Validated by the exact-source Phase F2 static-gate artifact.",
+      "command": null
+    },
+    {
+      "key": "PROFILES",
+      "status": "PASS",
+      "blocking": true,
+      "category": "STATIC",
+      "detail": "Validated by the exact-source Phase F2 static-gate artifact.",
+      "command": null
+    },
+    {
+      "key": "PLATFORM_CONTRACT",
+      "status": "PASS",
+      "blocking": true,
+      "category": "STATIC",
+      "detail": "Validated by the exact-source Phase F2 static-gate artifact.",
+      "command": null
+    },
+    {
+      "key": "REPRODUCTION_PROFILES",
+      "status": "PASS",
+      "blocking": true,
+      "category": "STATIC",
+      "detail": "Validated by the exact-source Phase F2 static-gate artifact.",
+      "command": null
+    },
+    {
+      "key": "DIAGNOSTIC_EXPERIMENT_PROFILES",
+      "status": "PASS",
+      "blocking": true,
+      "category": "STATIC",
+      "detail": "Validated by the exact-source Phase F2 static-gate artifact.",
+      "command": null
+    },
+    {
+      "key": "REPRODUCTION_MOCK_E2E",
+      "status": "PASS",
+      "blocking": true,
+      "category": "STATIC",
+      "detail": "Validated by the exact-source Phase F2 static-gate artifact.",
+      "command": null
+    },
+    {
+      "key": "REPRODUCTION_EVIDENCE_E2E",
+      "status": "PASS",
+      "blocking": true,
+      "category": "STATIC",
+      "detail": "Validated by the exact-source Phase F2 static-gate artifact.",
+      "command": null
+    },
+    {
+      "key": "REPRODUCTION_C3_E2E",
+      "status": "PASS",
+      "blocking": true,
+      "category": "STATIC",
+      "detail": "Validated by the exact-source Phase F2 static-gate artifact.",
+      "command": null
+    },
+    {
+      "key": "RULES",
+      "status": "PASS",
+      "blocking": true,
+      "category": "STATIC",
+      "detail": "Validated by the exact-source Phase F2 static-gate artifact.",
+      "command": null
+    },
+    {
+      "key": "SYNTHETIC_GOLDEN",
+      "status": "PASS",
+      "blocking": true,
+      "category": "STATIC",
+      "detail": "Validated by the exact-source Phase F2 static-gate artifact.",
+      "command": null
+    },
+    {
+      "key": "SYNTHETIC_E2E",
+      "status": "PASS",
+      "blocking": true,
+      "category": "STATIC",
+      "detail": "Validated by the exact-source Phase F2 static-gate artifact.",
+      "command": null
+    },
+    {
+      "key": "BASELINE_DIFF",
+      "status": "PASS",
+      "blocking": true,
+      "category": "STATIC",
+      "detail": "Validated by the exact-source Phase F2 static-gate artifact.",
+      "command": null
+    },
+    {
+      "key": "WORKBENCH_CONTRACT",
+      "status": "PASS",
+      "blocking": true,
+      "category": "STATIC",
+      "detail": "Validated by the exact-source Phase F2 static-gate artifact.",
+      "command": null
+    },
+    {
+      "key": "SOURCE_MANIFEST",
+      "status": "PASS",
+      "blocking": true,
+      "category": "STATIC",
+      "detail": "Validated by the exact-source Phase F2 static-gate artifact.",
+      "command": null
+    },
+    {
+      "key": "PRODUCTION_AUTH_IMPLEMENTATION",
+      "status": "PASS",
+      "blocking": true,
+      "category": "SECURITY",
+      "detail": "gateway_hmac provider validates signed actor/role/timestamp assertions and rejects unsigned production headers.",
+      "command": null
+    },
+    {
+      "key": "SECRET_PROVIDER_IMPLEMENTATION",
+      "status": "PASS",
+      "blocking": true,
+      "category": "SECURITY",
+      "detail": "SecretResolver supports mounted file, named environment and direct dev/e2e values without logging resolved secrets.",
+      "command": null
+    },
+    {
+      "key": "PRODUCTION_STORAGE_IMPLEMENTATION",
+      "status": "PASS",
+      "blocking": true,
+      "category": "STORAGE",
+      "detail": "MinIO evidence backend supports immutable writes plus read/write probe and cleanup.",
+      "command": null
+    },
+    {
+      "key": "FEISHU_TRANSPORT_IMPLEMENTATION",
+      "status": "PASS",
+      "blocking": true,
+      "category": "INTEGRATION",
+      "detail": "Feishu tenant-token send/update transport, persistent Case message binding and callback verification/handlers are implemented.",
+      "command": null
+    },
+    {
+      "key": "EC02_PLATFORM_PRODUCTION_READY",
+      "status": "BLOCKED",
+      "blocking": true,
+      "category": "PLATFORM",
+      "detail": "EC-02 remains partial; real DUT write/cleanup/event contracts are not fully confirmed.",
+      "command": null
+    },
+    {
+      "key": "REAL_REPRODUCTION_PLATFORM",
+      "status": "BLOCKED",
+      "blocking": true,
+      "category": "PLATFORM",
+      "detail": "Production release cannot run with REPRODUCTION_PLATFORM_MODE=mock.",
+      "command": null
+    },
+    {
+      "key": "PRODUCTION_ENVIRONMENT",
+      "status": "BLOCKED",
+      "blocking": true,
+      "category": "RUNTIME",
+      "detail": "APP_ENV=development; production release evidence must be collected with APP_ENV=production.",
+      "command": null
+    },
+    {
+      "key": "BUILD_REVISION_PINNED",
+      "status": "BLOCKED",
+      "blocking": true,
+      "category": "RUNTIME",
+      "detail": "BUILD_REVISION must identify the immutable source/build revision; 'dev' is not release evidence.",
+      "command": null
+    },
+    {
+      "key": "PRODUCTION_CREDENTIAL_PROVIDER",
+      "status": "BLOCKED",
+      "blocking": true,
+      "category": "SECURITY",
+      "detail": "CREDENTIAL_PROVIDER=api and CREDENTIAL_API_URL are required for production DUT access.",
+      "command": null
+    },
+    {
+      "key": "PRODUCTION_REPRODUCTION_STORAGE",
+      "status": "BLOCKED",
+      "blocking": true,
+      "category": "STORAGE",
+      "detail": "REPRODUCTION_STORAGE_MODE must be minio for production; local storage is mock/dev only.",
+      "command": null
+    },
+    {
+      "key": "PRODUCTION_DEFAULT_SECRETS_REPLACED",
+      "status": "BLOCKED",
+      "blocking": true,
+      "category": "SECURITY",
+      "detail": "Default/example MinIO credentials must not be used for production release.",
+      "command": null
+    },
+    {
+      "key": "PRODUCTION_AUTH_PROVIDER",
+      "status": "BLOCKED",
+      "blocking": true,
+      "category": "SECURITY",
+      "detail": "Set PRODUCTION_AUTH_PROVIDER=gateway_hmac and configure its secret before production release.",
+      "command": null
+    },
+    {
+      "key": "ANONYMOUS_DEV_AUTH_DISABLED",
+      "status": "BLOCKED",
+      "blocking": true,
+      "category": "SECURITY",
+      "detail": "AUTH_ALLOW_ANONYMOUS_DEV must be false for production release.",
+      "command": null
+    },
+    {
+      "key": "PRODUCTION_CORS_RESTRICTED",
+      "status": "BLOCKED",
+      "blocking": true,
+      "category": "SECURITY",
+      "detail": "Wildcard/empty CORS is forbidden in production.",
+      "command": null
+    },
+    {
+      "key": "FEISHU_LIVE_TRANSPORT",
+      "status": "BLOCKED",
+      "blocking": true,
+      "category": "INTEGRATION",
+      "detail": "Feishu implementation is present; live app credentials, target and callback security still require production configuration.",
+      "command": null
+    },
+    {
+      "key": "DOCKER_FULLSTACK_RUNTIME",
+      "status": "UNVERIFIED",
+      "blocking": true,
+      "category": "RUNTIME",
+      "detail": "Docker full-stack runtime is not verified for this source: evidence artifact missing: /mnt/data/voip-ai-v1-deployment-f3/validation/fullstack_result.json",
+      "command": null
+    },
+    {
+      "key": "POSTGRES_MIGRATION_RUNTIME",
+      "status": "UNVERIFIED",
+      "blocking": true,
+      "category": "RUNTIME",
+      "detail": "Real PostgreSQL migration-to-head has not been verified for the exact current source.",
+      "command": null
+    },
+    {
+      "key": "PRODUCTION_DEPLOYMENT_RUNTIME",
+      "status": "UNVERIFIED",
+      "blocking": true,
+      "category": "RUNTIME",
+      "detail": "Production deployment runtime is not verified for this source: evidence artifact missing: /mnt/data/voip-ai-v1-deployment-f3/validation/production_runtime_result.json",
+      "command": null
+    },
+    {
+      "key": "FRONTEND_LOCKFILE",
+      "status": "BLOCKED",
+      "blocking": true,
+      "category": "BUILD",
+      "detail": "frontend/package-lock.json is missing; a production frontend build is not reproducible and must not be promoted.",
+      "command": null
+    },
+    {
+      "key": "FRONTEND_PRODUCTION_BUILD",
+      "status": "UNVERIFIED",
+      "blocking": true,
+      "category": "BUILD",
+      "detail": "Frontend production build is not verified for this source: evidence artifact missing: /mnt/data/voip-ai-v1-deployment-f3/validation/frontend_build_runtime.json",
+      "command": null
+    },
+    {
+      "key": "FIELD_GOLDEN",
+      "status": "PASS",
+      "blocking": true,
+      "category": "FIELD",
+      "detail": "Exact-source Field Golden passed.",
+      "command": null
+    }
+  ],
+  "blocking_keys": [
+    "EC02_PLATFORM_PRODUCTION_READY",
+    "REAL_REPRODUCTION_PLATFORM",
+    "PRODUCTION_ENVIRONMENT",
+    "BUILD_REVISION_PINNED",
+    "PRODUCTION_CREDENTIAL_PROVIDER",
+    "PRODUCTION_REPRODUCTION_STORAGE",
+    "PRODUCTION_DEFAULT_SECRETS_REPLACED",
+    "PRODUCTION_AUTH_PROVIDER",
+    "ANONYMOUS_DEV_AUTH_DISABLED",
+    "PRODUCTION_CORS_RESTRICTED",
+    "FEISHU_LIVE_TRANSPORT",
+    "DOCKER_FULLSTACK_RUNTIME",
+    "POSTGRES_MIGRATION_RUNTIME",
+    "PRODUCTION_DEPLOYMENT_RUNTIME",
+    "FRONTEND_LOCKFILE",
+    "FRONTEND_PRODUCTION_BUILD"
+  ]
+}

@@ -1,0 +1,144 @@
+{
+  "status": "PASS",
+  "platform_id": "RUIJIE_VOIP_AIM_V1",
+  "version": "0.1.0",
+  "profile_status": "PARTIAL",
+  "checksum": "f1bf70668d06a031d775742359263fa26374ed950a2542b88e903381dc38bc52",
+  "capability": "AUTONOMOUS_REPRODUCTION",
+  "production_ready": false,
+  "readonly_actions": [
+    "CHECK_AIMD_PROCESS",
+    "GET_VOIP_LOG",
+    "GET_NETWORK_CONFIG",
+    "GET_VOICE_VLAN_REF",
+    "GET_BRIDGE_INFO",
+    "GET_ROUTE",
+    "GET_DNS",
+    "GET_NETWORK_VOIP_LOG",
+    "GET_PCM_COUNTER",
+    "GET_AIM_BIND",
+    "GET_AIM_SIP_CONFIG",
+    "GET_SIP_REGISTER",
+    "GET_DSP_RUNNING"
+  ],
+  "autonomous_reproduction_actions": [],
+  "blocking_gaps": [
+    {
+      "key": "VOICE_VLAN_PARSER",
+      "severity": "BLOCKING",
+      "blocking_capabilities": [
+        "AUTONOMOUS_REPRODUCTION"
+      ],
+      "description": "Need exact text grammar/parser for the single Voice VLAN from DUT configuration.",
+      "required_confirmation": "Provide representative textual output for /etc/config/vlan_ref and /etc/config/network with Voice VLAN configured."
+    },
+    {
+      "key": "VOICE_GATEWAY_RESOLVER",
+      "severity": "BLOCKING",
+      "blocking_capabilities": [
+        "AUTONOMOUS_REPRODUCTION"
+      ],
+      "description": "Need exact command/path/field that yields the Voice Gateway IP.",
+      "required_confirmation": "Provide the command and representative output containing the Voice Gateway IP."
+    },
+    {
+      "key": "VOICE_INTERFACE_VERIFICATION",
+      "severity": "BLOCKING",
+      "blocking_capabilities": [
+        "AUTONOMOUS_REPRODUCTION"
+      ],
+      "description": "Need parser/verification rule for br-lan_xx existence and UP state.",
+      "required_confirmation": "Provide representative brctl/ip-link output for the active Voice VLAN interface."
+    },
+    {
+      "key": "PCM_CLEANUP_COMMANDS",
+      "severity": "BLOCKING",
+      "blocking_capabilities": [
+        "AUTONOMOUS_REPRODUCTION"
+      ],
+      "description": "PCM RX/TX start syntax is known, but OFF commands are not source-confirmed.",
+      "required_confirmation": "Confirm exact pcm_rx off and pcm_tx off AIM commands and expected output."
+    },
+    {
+      "key": "DEBUG_CLEANUP_COMMANDS",
+      "severity": "BLOCKING",
+      "blocking_capabilities": [
+        "AUTONOMOUS_REPRODUCTION"
+      ],
+      "description": "Hook/SIP/IPC/DSP debug enable syntax is known, but disable commands are not source-confirmed.",
+      "required_confirmation": "Confirm exact disable commands and whether enable/disable is idempotent."
+    },
+    {
+      "key": "REALTIME_HOOK_EVENT_SOURCE",
+      "severity": "BLOCKING",
+      "blocking_capabilities": [
+        "AUTONOMOUS_REPRODUCTION"
+      ],
+      "description": "Need exact OFFHOOK/ONHOOK realtime line grammar and timestamp source.",
+      "required_confirmation": "Provide a short AIM/debug log covering onhook -> offhook -> onhook."
+    }
+  ],
+  "all_gaps": [
+    {
+      "key": "VOICE_VLAN_PARSER",
+      "severity": "BLOCKING",
+      "blocking_capabilities": [
+        "AUTONOMOUS_REPRODUCTION"
+      ],
+      "description": "Need exact text grammar/parser for the single Voice VLAN from DUT configuration.",
+      "required_confirmation": "Provide representative textual output for /etc/config/vlan_ref and /etc/config/network with Voice VLAN configured."
+    },
+    {
+      "key": "VOICE_GATEWAY_RESOLVER",
+      "severity": "BLOCKING",
+      "blocking_capabilities": [
+        "AUTONOMOUS_REPRODUCTION"
+      ],
+      "description": "Need exact command/path/field that yields the Voice Gateway IP.",
+      "required_confirmation": "Provide the command and representative output containing the Voice Gateway IP."
+    },
+    {
+      "key": "VOICE_INTERFACE_VERIFICATION",
+      "severity": "BLOCKING",
+      "blocking_capabilities": [
+        "AUTONOMOUS_REPRODUCTION"
+      ],
+      "description": "Need parser/verification rule for br-lan_xx existence and UP state.",
+      "required_confirmation": "Provide representative brctl/ip-link output for the active Voice VLAN interface."
+    },
+    {
+      "key": "PCM_CLEANUP_COMMANDS",
+      "severity": "BLOCKING",
+      "blocking_capabilities": [
+        "AUTONOMOUS_REPRODUCTION"
+      ],
+      "description": "PCM RX/TX start syntax is known, but OFF commands are not source-confirmed.",
+      "required_confirmation": "Confirm exact pcm_rx off and pcm_tx off AIM commands and expected output."
+    },
+    {
+      "key": "DEBUG_CLEANUP_COMMANDS",
+      "severity": "BLOCKING",
+      "blocking_capabilities": [
+        "AUTONOMOUS_REPRODUCTION"
+      ],
+      "description": "Hook/SIP/IPC/DSP debug enable syntax is known, but disable commands are not source-confirmed.",
+      "required_confirmation": "Confirm exact disable commands and whether enable/disable is idempotent."
+    },
+    {
+      "key": "REALTIME_HOOK_EVENT_SOURCE",
+      "severity": "BLOCKING",
+      "blocking_capabilities": [
+        "AUTONOMOUS_REPRODUCTION"
+      ],
+      "description": "Need exact OFFHOOK/ONHOOK realtime line grammar and timestamp source.",
+      "required_confirmation": "Provide a short AIM/debug log covering onhook -> offhook -> onhook."
+    },
+    {
+      "key": "FXS_SUBMODE_PROMPT",
+      "severity": "NON_BLOCKING",
+      "blocking_capabilities": [],
+      "description": "show information is documented under `voip fxs 1`, but submode prompt is not available in the text source.",
+      "required_confirmation": "Provide an interactive AIM transcript for `voip fxs 1` and `show information`."
+    }
+  ]
+}

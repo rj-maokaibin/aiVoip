@@ -1,0 +1,13 @@
+id: E2E_DTMF_FIRST_DIGIT_LOSS
+name: PCM识别8803但SIP仅拨803
+fixture: dtmf_first_digit_loss
+symptom: 重启后首次拨号丢第一位号码
+expected:
+  contains:
+    hypothesis_codes: DTMF_DIGIT_ASSEMBLY_MISMATCH
+    matched_rules: DTMF_PCM_SIP_DIAL_MISMATCH
+    plan_actions: COLLECT_PROFILE
+  hypothesis_status:
+    DTMF_DIGIT_ASSEMBLY_MISMATCH: SUPPORTED
+  not_contains:
+    confirmed_hypotheses: DTMF_DIGIT_ASSEMBLY_MISMATCH

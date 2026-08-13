@@ -1,0 +1,68 @@
+{
+  "phase": "D1_EC02_PLATFORM_CONTRACT_FOUNDATION",
+  "status": "PASS_PARTIAL_PLATFORM_CONTRACT",
+  "backend_tests": {
+    "passed": 128,
+    "total": 128
+  },
+  "reproduction_profiles": {
+    "passed": 8,
+    "total": 8
+  },
+  "diagnostic_questions": {
+    "passed": 17,
+    "total": 17
+  },
+  "experiment_profiles": {
+    "passed": 6,
+    "total": 6
+  },
+  "c1_mock_reproduction_e2e": {
+    "passed": 3,
+    "total": 3
+  },
+  "c2_evidence_e2e": {
+    "passed": 5,
+    "total": 5
+  },
+  "c3_experiment_e2e": {
+    "passed": 4,
+    "total": 4
+  },
+  "rules": {
+    "passed": 11,
+    "total": 11
+  },
+  "synthetic_golden": {
+    "passed": 21,
+    "total": 21
+  },
+  "synthetic_e2e": {
+    "passed": 53,
+    "total": 53
+  },
+  "baseline_diff": {
+    "regressions": 0,
+    "changes": 0
+  },
+  "apf1250_field_golden": {
+    "passed": 15,
+    "total": 15
+  },
+  "platform_contract": {
+    "id": "RUIJIE_VOIP_AIM_V1",
+    "version": "0.1.0",
+    "status": "PARTIAL",
+    "readonly_actions": 13,
+    "autonomous_reproduction_actions": 0,
+    "blocking_autonomous_reproduction_gaps": 6,
+    "audit_gate": "PASS",
+    "production_gate": "BLOCKED_BY_DESIGN"
+  },
+  "ec02_boundary": "PASS_NO_UNCONFIRMED_REAL_WRITE_COMMANDS",
+  "runtime_notes": [
+    "No real DUT was available in this execution environment; source-backed read-only mappings were not live-executed.",
+    "The execution image does not contain asyncssh; the persistent AIM PTY behavior is unit-tested with an injected fake connection. asyncssh remains declared in backend/requirements.txt.",
+    "Docker full-stack runtime is not re-verified in this phase."
+  ]
+}

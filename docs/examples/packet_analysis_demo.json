@@ -1,0 +1,269 @@
+{
+  "analyzer": "packet_intelligence",
+  "version": "0.2.0",
+  "status": "SUCCEEDED",
+  "summary": {
+    "packet_count": 8,
+    "sip_message_count": 4,
+    "registration_count": 0,
+    "call_count": 1,
+    "rtp_stream_count": 1,
+    "rtcp_report_count": 0,
+    "anomaly_count": 2
+  },
+  "registrations": [],
+  "calls": [
+    {
+      "call_id": "demo-call",
+      "caller": "sip:1001@pbx",
+      "callee": "sip:1002@pbx",
+      "state": "ESTABLISHED",
+      "start_time": 1,
+      "end_time": 1.21,
+      "duration_seconds": 0.21,
+      "invite_final_status": 200,
+      "ladder": [
+        {
+          "frame_number": 1,
+          "timestamp": 1,
+          "src": "10.0.0.1:5060",
+          "dst": "10.0.0.2:5060",
+          "label": "INVITE",
+          "method": "INVITE",
+          "status_code": null,
+          "cseq": 1,
+          "cseq_method": "INVITE",
+          "semantic": {
+            "what_it_is": "发起或更新一条 SIP 会话/语音呼叫",
+            "why_it_appears": "当前端正在执行 INVITE 协议动作",
+            "is_expected": true,
+            "expected_next": "等待 100/180/183/最终响应",
+            "possible_problem": null,
+            "case_specific_explanation": "发起或更新一条 SIP 会话/语音呼叫"
+          }
+        },
+        {
+          "frame_number": 2,
+          "timestamp": 1.1,
+          "src": "10.0.0.2:5060",
+          "dst": "10.0.0.1:5060",
+          "label": "180",
+          "method": null,
+          "status_code": 180,
+          "cseq": 1,
+          "cseq_method": "INVITE",
+          "semantic": {
+            "what_it_is": "被叫侧已经进入振铃阶段",
+            "why_it_appears": "这是 INVITE Transaction 的 SIP 响应",
+            "is_expected": true,
+            "expected_next": "被叫接听后通常返回 200 OK",
+            "possible_problem": null,
+            "case_specific_explanation": "被叫侧已经进入振铃阶段"
+          }
+        },
+        {
+          "frame_number": 3,
+          "timestamp": 1.2,
+          "src": "10.0.0.2:5060",
+          "dst": "10.0.0.1:5060",
+          "label": "200",
+          "method": null,
+          "status_code": 200,
+          "cseq": 1,
+          "cseq_method": "INVITE",
+          "semantic": {
+            "what_it_is": "当前 SIP 请求处理成功",
+            "why_it_appears": "这是 INVITE Transaction 的 SIP 响应",
+            "is_expected": true,
+            "expected_next": "INVITE 的 200 OK 后应看到 ACK",
+            "possible_problem": null,
+            "case_specific_explanation": "当前 SIP 请求处理成功"
+          }
+        },
+        {
+          "frame_number": 4,
+          "timestamp": 1.21,
+          "src": "10.0.0.1:5060",
+          "dst": "10.0.0.2:5060",
+          "label": "ACK",
+          "method": "ACK",
+          "status_code": null,
+          "cseq": 1,
+          "cseq_method": "INVITE",
+          "semantic": {
+            "what_it_is": "确认 INVITE 的最终成功响应",
+            "why_it_appears": "当前端正在执行 ACK 协议动作",
+            "is_expected": true,
+            "expected_next": "呼叫建立后开始/继续媒体传输",
+            "possible_problem": null,
+            "case_specific_explanation": "确认 INVITE 的最终成功响应"
+          }
+        }
+      ],
+      "sdp": {
+        "offer": {
+          "connection_address": "10.0.0.1",
+          "media": [
+            {
+              "media": "audio",
+              "port": 4000,
+              "protocol": "RTP/AVP",
+              "payload_types": [
+                8,
+                0
+              ],
+              "codecs": [
+                {
+                  "payload_type": 8,
+                  "name": "PCMA",
+                  "clock_rate": 8000,
+                  "channels": 1,
+                  "fmtp": null
+                },
+                {
+                  "payload_type": 0,
+                  "name": "PCMU",
+                  "clock_rate": 8000,
+                  "channels": 1,
+                  "fmtp": null
+                }
+              ],
+              "direction": "sendrecv",
+              "ptime_ms": 20.0,
+              "connection_address": "10.0.0.1",
+              "telephone_event_payloads": []
+            }
+          ]
+        },
+        "answer": {
+          "connection_address": "10.0.0.2",
+          "media": [
+            {
+              "media": "audio",
+              "port": 5000,
+              "protocol": "RTP/AVP",
+              "payload_types": [
+                8
+              ],
+              "codecs": [
+                {
+                  "payload_type": 8,
+                  "name": "PCMA",
+                  "clock_rate": 8000,
+                  "channels": 1,
+                  "fmtp": null
+                }
+              ],
+              "direction": "sendrecv",
+              "ptime_ms": 20.0,
+              "connection_address": "10.0.0.2",
+              "telephone_event_payloads": []
+            }
+          ]
+        },
+        "negotiated_codecs": [
+          {
+            "payload_type": 8,
+            "name": "PCMA",
+            "clock_rate": 8000,
+            "channels": 1,
+            "fmtp": null
+          }
+        ],
+        "actual_rtp_codecs": [
+          "PCMA"
+        ],
+        "codec_mismatch": false,
+        "unexpected_actual_codecs": []
+      },
+      "rtp_stream_ids": [
+        "10.0.0.1:4000>10.0.0.2:5000/ssrc=1234"
+      ]
+    }
+  ],
+  "rtp_streams": [
+    {
+      "stream_id": "10.0.0.1:4000>10.0.0.2:5000/ssrc=1234",
+      "src_ip": "10.0.0.1",
+      "src_port": 4000,
+      "dst_ip": "10.0.0.2",
+      "dst_port": 5000,
+      "ssrc": 1234,
+      "packet_count": 4,
+      "unique_packet_count": 4,
+      "duration_seconds": 0.14,
+      "start_time": 1.3,
+      "end_time": 1.44,
+      "first_sequence_ext": 100,
+      "last_sequence_ext": 107,
+      "expected_packets": 8,
+      "lost_packets": 4,
+      "loss_rate_percent": 50.0,
+      "duplicate_packets": 0,
+      "out_of_order_packets": 0,
+      "max_consecutive_loss": 4,
+      "burst_loss_count": 1,
+      "avg_delta_ms": 46.666667,
+      "max_delta_ms": 100.0,
+      "avg_jitter_ms": 0.0,
+      "max_jitter_ms": 0.0,
+      "payload_type": 8,
+      "payload_types": [
+        8
+      ],
+      "payload_change_count": 0,
+      "codec": "PCMA",
+      "clock_rate": 8000,
+      "ptime_ms": 20.0,
+      "events": [
+        {
+          "type": "BURST_LOSS",
+          "start_time": 1.42,
+          "severity": "HIGH",
+          "details": {
+            "previous_sequence_ext": 101,
+            "next_sequence_ext": 106,
+            "lost_packets": 4,
+            "ptime_ms": 20.0,
+            "estimated_audio_loss_ms": 80.0
+          }
+        },
+        {
+          "type": "HIGH_DELTA",
+          "start_time": 1.42,
+          "severity": "MEDIUM",
+          "details": {
+            "delta_ms": 100.0,
+            "expected_ptime_ms": 20.0
+          }
+        }
+      ]
+    }
+  ],
+  "rtcp_reports": [],
+  "anomalies": [
+    {
+      "type": "BURST_LOSS",
+      "severity": "HIGH",
+      "time": 1.42,
+      "evidence": {
+        "stream_id": "10.0.0.1:4000>10.0.0.2:5000/ssrc=1234",
+        "previous_sequence_ext": 101,
+        "next_sequence_ext": 106,
+        "lost_packets": 4,
+        "ptime_ms": 20.0,
+        "estimated_audio_loss_ms": 80.0
+      }
+    },
+    {
+      "type": "HIGH_DELTA",
+      "severity": "MEDIUM",
+      "time": 1.42,
+      "evidence": {
+        "stream_id": "10.0.0.1:4000>10.0.0.2:5000/ssrc=1234",
+        "delta_ms": 100.0,
+        "expected_ptime_ms": 20.0
+      }
+    }
+  ]
+}

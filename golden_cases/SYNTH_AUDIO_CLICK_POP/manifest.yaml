@@ -1,0 +1,11 @@
+id: SYNTH_AUDIO_CLICK_POP_IMPULSE
+name: 活跃媒体窗口单次Click/Pop脉冲
+kind: synthetic_audio_click_pop
+symptom: 通话中出现一次明显爆音/啪声
+expected:
+  event_type: CLICK_POP
+  event_count_min: 1
+  event_time_seconds: 1.0
+  event_time_tolerance_ms: 20
+  clean_tone_false_positive_count: 0
+  min_energy_rise_db: 7.0

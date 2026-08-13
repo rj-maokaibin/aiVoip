@@ -1,0 +1,167 @@
+questions:
+  - id: GENERIC_SYMPTOM_CLASSIFICATION
+    version: "1.0.0"
+    level: SYMPTOM_CONFIRM
+    title: 识别当前VOIP故障现象类型
+    priority: 10
+    information_gain: 100
+    required_evidence: {must_findings: [], min_level: L1}
+    next_by_route:
+      REGISTER_FAILURE: [REGISTER_PATH_FAILURE_DOMAIN]
+      CALL_SETUP_FAILURE: [CALL_SETUP_FAILURE_LAYER]
+      ONE_WAY_AUDIO: [ONE_WAY_FAULT_LAYER]
+      AUDIO_STUTTER: [STUTTER_FAULT_LAYER]
+      AUDIO_NOISE: [AUDIO_NOISE_FAULT_LAYER]
+      DTMF_LOSS: [DTMF_FIRST_MISMATCH_LAYER]
+      ECHO: [ECHO_FAULT_LAYER]
+
+  - id: REGISTER_PATH_FAILURE_DOMAIN
+    version: "1.0.0"
+    level: FAULT_DOMAIN
+    title: SIP注册失败发生在哪个域
+    priority: 20
+    information_gain: 90
+    required_evidence: {must_findings: [REGISTER_ATTEMPT], min_level: L1}
+    next_questions: [REGISTER_ROOT_CAUSE]
+
+  - id: REGISTER_ROOT_CAUSE
+    version: "1.0.0"
+    level: ROOT_CAUSE
+    title: SIP注册失败的具体根因是什么
+    priority: 30
+    information_gain: 70
+    required_evidence: {must_findings: [], min_level: L1}
+    experiment_profiles: []
+    next_questions: [FIX_VERIFICATION]
+
+  - id: CALL_SETUP_FAILURE_LAYER
+    version: "1.0.0"
+    level: FAULT_LAYER
+    title: 呼叫建立失败发生在哪一层
+    priority: 20
+    information_gain: 90
+    required_evidence: {must_findings: [SIP_CALL_ATTEMPT], min_level: L1}
+    next_questions: [CALL_SETUP_ROOT_CAUSE]
+
+  - id: CALL_SETUP_ROOT_CAUSE
+    version: "1.0.0"
+    level: ROOT_CAUSE
+    title: 呼叫建立失败的具体根因是什么
+    priority: 30
+    information_gain: 70
+    required_evidence: {must_findings: [], min_level: L1}
+    experiment_profiles: []
+    next_questions: [FIX_VERIFICATION]
+
+  - id: ONE_WAY_FAULT_LAYER
+    version: "1.0.0"
+    level: FAULT_LAYER
+    title: 单通问题首次出现在哪个媒体层
+    priority: 20
+    information_gain: 90
+    required_evidence: {must_findings: [CALL_MEDIA_DIRECTION], min_level: L1}
+    next_questions: [ONE_WAY_ROOT_CAUSE]
+
+  - id: ONE_WAY_ROOT_CAUSE
+    version: "1.0.0"
+    level: ROOT_CAUSE
+    title: 单通问题的具体根因是什么
+    priority: 30
+    information_gain: 70
+    required_evidence: {must_findings: [ONE_WAY_RTP_MEDIA], min_level: L1}
+    experiment_profiles: []
+    next_questions: [FIX_VERIFICATION]
+
+  - id: STUTTER_FAULT_LAYER
+    version: "1.0.0"
+    level: FAULT_LAYER
+    title: 卡顿问题发生在网络、媒体还是本地音频层
+    priority: 20
+    information_gain: 90
+    required_evidence: {must_findings: [ACTIVE_MEDIA_WINDOW], min_level: L1}
+    next_questions: [STUTTER_ROOT_CAUSE]
+
+  - id: STUTTER_ROOT_CAUSE
+    version: "1.0.0"
+    level: ROOT_CAUSE
+    title: 卡顿问题的具体根因是什么
+    priority: 30
+    information_gain: 70
+    required_evidence: {must_findings: [], min_level: L1}
+    experiment_profiles: []
+    next_questions: [FIX_VERIFICATION]
+
+  - id: AUDIO_NOISE_FAULT_LAYER
+    version: "1.0.0"
+    level: FAULT_LAYER
+    title: 电流音/噪声首先形成在哪个音频路径
+    priority: 20
+    information_gain: 100
+    required_evidence: {must_findings: [ACTIVE_MEDIA_WINDOW, PERIODIC_INTERFERENCE], min_level: L1}
+    next_questions: [AUDIO_NOISE_ROOT_CAUSE]
+
+  - id: AUDIO_NOISE_ROOT_CAUSE
+    version: "1.0.0"
+    level: ROOT_CAUSE
+    title: 本地周期干扰的具体物理根因是什么
+    priority: 30
+    information_gain: 100
+    required_evidence: {must_findings: [PERIODIC_INTERFERENCE], min_level: L1}
+    experiment_profiles: [POWER_SUPPLY_AB, PHONE_SWAP_AB, LINE_SWAP_AB, FXS_PORT_SWAP_AB, DEVICE_SWAP_AB]
+    next_questions: [FIX_VERIFICATION]
+
+  - id: DTMF_FIRST_MISMATCH_LAYER
+    version: "1.0.0"
+    level: FAULT_LAYER
+    title: DTMF号码在哪一层首次出现不一致
+    priority: 20
+    information_gain: 100
+    required_evidence: {must_findings: [DTMF_PATH], min_level: L1}
+    next_questions: [DTMF_ROOT_CAUSE]
+
+  - id: DTMF_ROOT_CAUSE
+    version: "1.0.0"
+    level: ROOT_CAUSE
+    title: DTMF丢号具体根因是什么
+    priority: 30
+    information_gain: 90
+    required_evidence: {must_findings: [DTMF_PATH], min_level: L1}
+    experiment_profiles: [POST_REBOOT_FIRST_CALL]
+    next_questions: [FIX_VERIFICATION]
+
+  - id: ECHO_FAULT_LAYER
+    version: "1.0.0"
+    level: FAULT_LAYER
+    title: 回声路径首先形成在哪一层
+    priority: 20
+    information_gain: 90
+    required_evidence: {must_findings: [ECHO_PATH], min_level: L1}
+    next_questions: [ECHO_ROOT_CAUSE]
+
+  - id: ECHO_ROOT_CAUSE
+    version: "1.0.0"
+    level: ROOT_CAUSE
+    title: 回声的具体来源是什么
+    priority: 30
+    information_gain: 80
+    required_evidence: {must_findings: [ECHO_PATH], min_level: L1}
+    experiment_profiles: []
+    next_questions: [FIX_VERIFICATION]
+
+  - id: VOIP_FAULT_DOMAIN
+    version: "1.0.0"
+    level: FAULT_DOMAIN
+    title: 未分类VOIP故障属于哪个故障域
+    priority: 20
+    information_gain: 80
+    required_evidence: {must_findings: [], min_level: L1}
+    next_questions: []
+
+  - id: FIX_VERIFICATION
+    version: "1.0.0"
+    level: FIX_VERIFICATION
+    title: 修复是否真正消除了原Target Finding且无新回归
+    priority: 100
+    information_gain: 100
+    required_evidence: {must_findings: [], min_level: L1}
+    next_questions: []

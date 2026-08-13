@@ -1,0 +1,131 @@
+{
+  "phase": "C1",
+  "files": [
+    {
+      "path": "backend/app/api/v1/reproduction.py",
+      "sha256": "c223fd1cc869e31df5b46d8fb96b8b9022fe234e76fedc56a4aa50a419574f28",
+      "size": 4932
+    },
+    {
+      "path": "backend/app/reproduction/__init__.py",
+      "sha256": "f77c9bf362ea302bcae6dc8f6c5e2352d9f998b854a30d61143ca790eec882b9",
+      "size": 43
+    },
+    {
+      "path": "backend/app/reproduction/barriers.py",
+      "sha256": "29df05bc52312fea7d1491c9044edf691334a2de2d957256be0d2d5600c3bf58",
+      "size": 6734
+    },
+    {
+      "path": "backend/app/reproduction/bundle.py",
+      "sha256": "27b3432c72619ea602c8947fbf56584b3a975e9d8da72e37ca62c26f3f86a7cb",
+      "size": 3133
+    },
+    {
+      "path": "backend/app/reproduction/contracts.py",
+      "sha256": "84a20795b2d73281f0ebf3980851677e510bb01fa7da51922c06941a4e3a6250",
+      "size": 1480
+    },
+    {
+      "path": "backend/app/reproduction/health.py",
+      "sha256": "d1a3492a7bf8fe9495338d686a2de3e2c76715a082db04bc8b9c1681a6eb0d91",
+      "size": 1746
+    },
+    {
+      "path": "backend/app/reproduction/locks.py",
+      "sha256": "5ef5ed030a09254a3787e3f5c952bb0df0087d541f337355ee2bc9b3539c7b2b",
+      "size": 4012
+    },
+    {
+      "path": "backend/app/reproduction/mock_platform.py",
+      "sha256": "1c2fd5fb6912f0632bd9a636f159e54754412a88ab9d1d67f602ebbf1de61f16",
+      "size": 8911
+    },
+    {
+      "path": "backend/app/reproduction/orchestrator.py",
+      "sha256": "b985934e5fab2a412a71cdf4a5fb7eb8cc8a8e2cc0d717a6b1bb3c0baa2784d6",
+      "size": 32688
+    },
+    {
+      "path": "backend/app/reproduction/profile.py",
+      "sha256": "fb08c431553cd2febfbfbf88f6f572d4dedf29f599988b791c54956bae353fdb",
+      "size": 8628
+    },
+    {
+      "path": "backend/app/reproduction/quick.py",
+      "sha256": "4eb20168c781e753cd82b708a234a326de3af3be85d35ce78d82f306ae174c79",
+      "size": 2548
+    },
+    {
+      "path": "backend/app/reproduction/recovery.py",
+      "sha256": "c2b9514d75894f3784a0d3227f39c66173fb2c6f7932bba48c8bffe8b2027bd0",
+      "size": 2482
+    },
+    {
+      "path": "backend/app/reproduction/ring.py",
+      "sha256": "1d14ac78acbb592a94b12f230315af1efa39536e9a40465ca29893ebe7cb50ea",
+      "size": 2181
+    },
+    {
+      "path": "backend/app/reproduction/state_machine.py",
+      "sha256": "a73979025c84c29492328ef8350c6832172f7aa5aaa810f7564ef43fc47ad911",
+      "size": 10253
+    },
+    {
+      "path": "backend/app/reproduction/sufficiency.py",
+      "sha256": "7042e868d0560f352fe20bc98e979cfdf7cc512fda84cc36a9b60524dde7d239",
+      "size": 3308
+    },
+    {
+      "path": "backend/app/schemas/reproduction.py",
+      "sha256": "947ed950c4c0ce5aeaffe850d7ae0c7eed61bab051bcc2546914656f343f2b3d",
+      "size": 2117
+    },
+    {
+      "path": "backend/app/workers/reproduction_tasks.py",
+      "sha256": "cd5272f0532653bbf4943d512ea7792a72f37ea98c63e9492a95d6b6d33db2bf",
+      "size": 1725
+    },
+    {
+      "path": "backend/migrations/versions/0008_reproduction_core.py",
+      "sha256": "77280cfa058093097f94d7fe83d2b4d02cca6ecdd0b2c3ecdf2f136156f1665b",
+      "size": 14464
+    },
+    {
+      "path": "backend/tests/test_reproduction_phase_c1.py",
+      "sha256": "405877416a163ef9ec98f2c57ded194124e5b8aedab208a6c3ee64632a268fa8",
+      "size": 13939
+    },
+    {
+      "path": "docs/PHASE_C1_REPRODUCTION_MOCK_CORE.md",
+      "sha256": "493f06b040c82bae8e46a07e04aca7b7b43ca62e9497ee83b2364f7d045c9bf9",
+      "size": 6300
+    },
+    {
+      "path": "profiles/actions/reproduction_mock.yaml",
+      "sha256": "490d4b5e21ae65e651f95e0d0cbed80d8572f9c8f24da748c4d4d1f8af0b1688",
+      "size": 2835
+    },
+    {
+      "path": "profiles/reproduction/voip_v1.yaml",
+      "sha256": "fea6b3a08f8e61360936cc42edd6e0abe8ffe4610e944e5318dafb9d7c80c5a8",
+      "size": 8735
+    },
+    {
+      "path": "tools/reproduction_mock_e2e.py",
+      "sha256": "a6512e90bc6a8ffdafce1a61e1d097f8c01abacf8f7c0f73ec9f63bbf44fd4e9",
+      "size": 3675
+    },
+    {
+      "path": "tools/reproduction_profile_gate.py",
+      "sha256": "d33f51ce0dd3fee1fa8c4ab2493e2b403f5c8565d2c589c472aa5fa4641ac179",
+      "size": 823
+    },
+    {
+      "path": "validation/phase_c1_validation.json",
+      "sha256": "6c00610d0ee638031192150be3967036b31386e17afa476a623ddd6289cdce4f",
+      "size": 2097
+    }
+  ],
+  "file_count": 25
+}

@@ -1,0 +1,12 @@
+id: E2E_AUDIO_ECHO
+name: 86ms稳定回声路径
+fixture: echo
+symptom: 通话有明显回声
+expected:
+  contains:
+    hypothesis_codes: AUDIO_ECHO_PATH
+    matched_rules: AUDIO_ECHO_PATH_DETECTED
+  hypothesis_status:
+    AUDIO_ECHO_PATH: SUPPORTED
+  not_contains:
+    confirmed_hypotheses: AUDIO_ECHO_PATH

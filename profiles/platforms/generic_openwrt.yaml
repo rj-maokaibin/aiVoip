@@ -1,0 +1,10 @@
+platform: generic_openwrt
+aim:
+  executable: aim
+  prompt: "AIM>"
+ssh:
+  username: admin
+pcm:
+  parser: unknown
+  sample_rate: null
+  bit_depth: null

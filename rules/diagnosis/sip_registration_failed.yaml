@@ -1,0 +1,23 @@
+key: SIP_REGISTRATION_FAILED
+version: 1.0.0
+name: SIP注册失败
+fault_domain: SIP/Register
+priority: 20
+enabled: true
+when:
+  and:
+  - path: anomaly_counts.SIP_REGISTRATION_FAILED
+    op: gte
+    value: 1
+then:
+- action: hypothesis
+  payload:
+    code: SIP_REGISTRATION_PATH_FAILURE
+    title: SIP注册路径异常
+    fault_domain: SIP/Register
+    confidence: 0.95
+    status: SUPPORTED
+    evidence_level: L1
+    rationale: SIP状态机识别到确定性的注册失败事件；具体是认证、网络还是PBX原因需继续结合响应码和设备状态。
+dsl_version: 2
+category: SUPPORT

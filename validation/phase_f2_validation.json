@@ -1,0 +1,165 @@
+{
+  "schema_version": 1,
+  "phase": "F2_PRODUCTION_HARDENING",
+  "status": "PASS_WITH_PRODUCTION_BLOCKERS",
+  "source_manifest_aggregate_sha256": "802cd44ff31326eb71b7e37304a3f691832038bdbd522a9b53cdf08ba204b976",
+  "implementation_validation": {
+    "backend_tests": {
+      "passed": 143,
+      "total": 143
+    },
+    "static_gates": {
+      "passed": 20,
+      "total": 20
+    },
+    "migration": {
+      "status": "PASS",
+      "count": 11,
+      "head": "0011_phase_f2_production_hardening"
+    },
+    "openapi": {
+      "status": "PASS",
+      "paths": 78,
+      "operations": 84,
+      "sha256": "8a4f9726435bb939aad3b0cf9a73978f4e3bff21695191137d313ee3833aea81"
+    },
+    "c1_reproduction_e2e": {
+      "passed": 3,
+      "total": 3
+    },
+    "c2_evidence_e2e": {
+      "passed": 5,
+      "total": 5
+    },
+    "c3_experiment_e2e": {
+      "passed": 4,
+      "total": 4
+    },
+    "synthetic_golden": {
+      "passed": 21,
+      "total": 21
+    },
+    "synthetic_e2e": {
+      "passed": 53,
+      "total": 53
+    },
+    "baseline_diff": {
+      "regressions": 0,
+      "changes": 0
+    },
+    "field_golden": {
+      "passed": true,
+      "checks_passed": 15,
+      "checks_total": 15,
+      "source_bound": true
+    }
+  },
+  "release_readiness": {
+    "status": "STATIC_PASS_PRODUCTION_BLOCKED",
+    "static_status": "PASS",
+    "production_status": "BLOCKED",
+    "counts": {
+      "PASS": 25,
+      "BLOCKED": 12,
+      "UNVERIFIED": 3
+    },
+    "strict_gate_expected_blocked": true
+  },
+  "remaining_blockers": [
+    {
+      "key": "EC02_PLATFORM_PRODUCTION_READY",
+      "status": "BLOCKED",
+      "category": "PLATFORM",
+      "detail": "EC-02 remains partial; real DUT write/cleanup/event contracts are not fully confirmed."
+    },
+    {
+      "key": "REAL_REPRODUCTION_PLATFORM",
+      "status": "BLOCKED",
+      "category": "PLATFORM",
+      "detail": "Production release cannot run with REPRODUCTION_PLATFORM_MODE=mock."
+    },
+    {
+      "key": "PRODUCTION_ENVIRONMENT",
+      "status": "BLOCKED",
+      "category": "RUNTIME",
+      "detail": "APP_ENV=development; production release evidence must be collected with APP_ENV=production."
+    },
+    {
+      "key": "BUILD_REVISION_PINNED",
+      "status": "BLOCKED",
+      "category": "RUNTIME",
+      "detail": "BUILD_REVISION must identify the immutable source/build revision; 'dev' is not release evidence."
+    },
+    {
+      "key": "PRODUCTION_CREDENTIAL_PROVIDER",
+      "status": "BLOCKED",
+      "category": "SECURITY",
+      "detail": "CREDENTIAL_PROVIDER=api and CREDENTIAL_API_URL are required for production DUT access."
+    },
+    {
+      "key": "PRODUCTION_REPRODUCTION_STORAGE",
+      "status": "BLOCKED",
+      "category": "STORAGE",
+      "detail": "REPRODUCTION_STORAGE_MODE must be minio for production; local storage is mock/dev only."
+    },
+    {
+      "key": "PRODUCTION_DEFAULT_SECRETS_REPLACED",
+      "status": "BLOCKED",
+      "category": "SECURITY",
+      "detail": "Default/example MinIO credentials must not be used for production release."
+    },
+    {
+      "key": "PRODUCTION_AUTH_PROVIDER",
+      "status": "BLOCKED",
+      "category": "SECURITY",
+      "detail": "Set PRODUCTION_AUTH_PROVIDER=gateway_hmac and configure its secret before production release."
+    },
+    {
+      "key": "ANONYMOUS_DEV_AUTH_DISABLED",
+      "status": "BLOCKED",
+      "category": "SECURITY",
+      "detail": "AUTH_ALLOW_ANONYMOUS_DEV must be false for production release."
+    },
+    {
+      "key": "PRODUCTION_CORS_RESTRICTED",
+      "status": "BLOCKED",
+      "category": "SECURITY",
+      "detail": "Wildcard/empty CORS is forbidden in production."
+    },
+    {
+      "key": "FEISHU_LIVE_TRANSPORT",
+      "status": "BLOCKED",
+      "category": "INTEGRATION",
+      "detail": "Feishu implementation is present; live app credentials, target and callback security still require production configuration."
+    },
+    {
+      "key": "DOCKER_FULLSTACK_RUNTIME",
+      "status": "UNVERIFIED",
+      "category": "RUNTIME",
+      "detail": "Docker full-stack runtime is not verified for this source: evidence artifact missing: /mnt/data/voip-ai-v1-production-hardening-f2/validation/fullstack_result.json"
+    },
+    {
+      "key": "POSTGRES_MIGRATION_RUNTIME",
+      "status": "UNVERIFIED",
+      "category": "RUNTIME",
+      "detail": "Real PostgreSQL migration-to-head has not been verified for the exact current source."
+    },
+    {
+      "key": "FRONTEND_LOCKFILE",
+      "status": "BLOCKED",
+      "category": "BUILD",
+      "detail": "frontend/package-lock.json is missing; a production frontend build is not reproducible and must not be promoted."
+    },
+    {
+      "key": "FRONTEND_PRODUCTION_BUILD",
+      "status": "UNVERIFIED",
+      "category": "BUILD",
+      "detail": "Frontend production build is not verified for this source: evidence artifact missing: /mnt/data/voip-ai-v1-production-hardening-f2/validation/frontend_build_runtime.json"
+    }
+  ],
+  "environment_limitations": [
+    "Docker/Podman unavailable in current execution environment.",
+    "Real PostgreSQL/MinIO/Celery runtime not available for exact-source full-stack validation.",
+    "npm dependency acquisition timed out; frontend package-lock.json was not fabricated."
+  ]
+}

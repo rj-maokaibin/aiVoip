@@ -1,0 +1,1 @@
+ERROR: frontend/package-lock.json is required for a reproducible release build

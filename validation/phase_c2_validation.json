@@ -1,0 +1,66 @@
+{
+  "phase": "C2",
+  "component": "M6.2 Reproduction Evidence Capture Pipeline",
+  "validated_at": "2026-08-13",
+  "status": "PASS",
+  "contract_boundary": {
+    "ec02": "RESERVED / PENDING_PLATFORM_CONTRACT",
+    "real_dut_commands_implemented": false,
+    "mock_platform_only": true,
+    "capture_note": "Canonical segmented PCAP contains SIP/RTP and diagnostic PCM UDP 40000/50000; debug logs are separate segmented files."
+  },
+  "validation": {
+    "backend_tests": {"passed": 114, "total": 114, "status": "PASS"},
+    "reproduction_profiles": {"passed": 8, "total": 8, "status": "PASS"},
+    "reproduction_mock_e2e_regression": {"passed": 3, "total": 3, "status": "PASS"},
+    "reproduction_evidence_e2e": {"passed": 5, "total": 5, "status": "PASS"},
+    "rule_validation": {"passed": 11, "total": 11, "status": "PASS"},
+    "synthetic_golden": {"cases_passed": 5, "cases_total": 5, "checks_passed": 21, "checks_total": 21, "status": "PASS"},
+    "synthetic_e2e": {"cases_passed": 10, "cases_total": 10, "checks_passed": 53, "checks_total": 53, "status": "PASS"},
+    "baseline_regression": {"regressions": 0, "changes": 0, "status": "PASS"},
+    "field_golden": {
+      "case": "APF1250_CS20260807_6886043_PERIODIC_NOISE",
+      "source_sha256": "3af13c0142b5cb86a60dc0642b572261735d6af770806dcb05e70e2c574f8fbc",
+      "checks_passed": 15,
+      "checks_total": 15,
+      "analysis_status": "PARTIAL_SUCCESS",
+      "status": "PASS"
+    },
+    "python_compile": "PASS",
+    "compose_yaml": {"docker-compose.yml": "PASS", "docker-compose.e2e.yml": "PASS"},
+    "docker_runtime": "UNVERIFIED_DOCKER_NOT_AVAILABLE"
+  },
+  "evidence_e2e_scenarios": [
+    {"scenario": "AUDIO_NOISE", "expected_finding": "PERIODIC_INTERFERENCE", "status": "PASS"},
+    {"scenario": "AUDIO_STUTTER", "expected_finding": "RTP_BURST_LOSS", "status": "PASS"},
+    {"scenario": "ONE_WAY_AUDIO", "expected_finding": "ONE_WAY_RTP_MEDIA", "status": "PASS"},
+    {"scenario": "ECHO", "expected_finding": "ECHO_PATH", "status": "PASS"},
+    {"scenario": "DTMF_LOSS", "expected_finding": "DTMF_PATH", "status": "PASS"}
+  ],
+  "implemented": [
+    "File-backed segmented PCAP/debug ring",
+    "Freeze-on-earliest-anchor with immutable RAW Evidence retention",
+    "Physical ring eviction for unfrozen TEMP_RING files",
+    "Call/session DERIVED PCAP Evidence with parent lineage",
+    "SHA256 object persistence and idempotent evidence manifest finalization",
+    "Filesystem object storage for deterministic mock/dev execution",
+    "Mock real-PCAP generator including PCM UDP 40000/50000",
+    "LIVE analyzer mode backed by capture Evidence",
+    "CALL_QUICK analyzer mode backed by merged Call PCAP Evidence",
+    "Existing semantic analyzer detection of periodic noise, burst loss, one-way RTP, echo and DTMF",
+    "Capture bundle schema v2 and persisted capture/finalization metadata",
+    "Migration 0009_reproduction_evidence_capture",
+    "Multi-Call capture isolation by call_id"
+  ],
+  "known_deferred": [
+    "EC-02 real DUT PlatformProfile/Action mapping",
+    "Real SSH/tcpdump stream transport and DUT log readers",
+    "Full DiagnosticQuestion DAG",
+    "ExperimentProfile and A/B/A-B-A execution",
+    "EnvironmentComparator",
+    "Causal root-cause confirmation implementation",
+    "Fix Verification end-to-end",
+    "Feishu/Web reproduction UI",
+    "Docker full-stack runtime verification"
+  ]
+}

@@ -1,0 +1,1241 @@
+{
+  "passed": true,
+  "case_count": 10,
+  "checks_total": 53,
+  "checks_passed": 53,
+  "cases": [
+    {
+      "id": "E2E_SIP_REGISTRATION_FAILED",
+      "name": "SIP注册认证后仍失败",
+      "passed": true,
+      "checks": [
+        {
+          "name": "anomaly_types contains SIP_REGISTRATION_FAILED",
+          "passed": true,
+          "actual": [
+            "SIP_REGISTRATION_FAILED"
+          ],
+          "expected": "SIP_REGISTRATION_FAILED"
+        },
+        {
+          "name": "registration_states contains FAILED",
+          "passed": true,
+          "actual": [
+            "FAILED"
+          ],
+          "expected": "FAILED"
+        },
+        {
+          "name": "hypothesis_codes contains SIP_REGISTRATION_PATH_FAILURE",
+          "passed": true,
+          "actual": [
+            "SIP_REGISTRATION_PATH_FAILURE"
+          ],
+          "expected": "SIP_REGISTRATION_PATH_FAILURE"
+        },
+        {
+          "name": "matched_rules contains SIP_REGISTRATION_FAILED",
+          "passed": true,
+          "actual": [
+            "SIP_REGISTRATION_FAILED"
+          ],
+          "expected": "SIP_REGISTRATION_FAILED"
+        },
+        {
+          "name": "confirmed_hypotheses excludes SIP_REGISTRATION_PATH_FAILURE",
+          "passed": true,
+          "actual": [],
+          "expected": "not SIP_REGISTRATION_PATH_FAILURE"
+        },
+        {
+          "name": "hypothesis SIP_REGISTRATION_PATH_FAILURE",
+          "passed": true,
+          "actual": "SUPPORTED",
+          "expected": "SUPPORTED"
+        }
+      ],
+      "observed": {
+        "anomaly_types": [
+          "SIP_REGISTRATION_FAILED"
+        ],
+        "call_states": [],
+        "registration_states": [
+          "FAILED"
+        ],
+        "media_direction_statuses": [],
+        "hypothesis_codes": [
+          "SIP_REGISTRATION_PATH_FAILURE"
+        ],
+        "hypothesis_statuses": {
+          "SIP_REGISTRATION_PATH_FAILURE": "SUPPORTED"
+        },
+        "confirmed_hypotheses": [],
+        "matched_rules": [
+          "SIP_REGISTRATION_FAILED"
+        ],
+        "plan_actions": [],
+        "conclusion_state": "DIAGNOSED",
+        "rtp_stream_count": 0,
+        "facts": {
+          "case": {
+            "has_evidence": true,
+            "device_count": 0
+          },
+          "symptoms": {
+            "REGISTER": true
+          },
+          "anomaly_counts": {
+            "SIP_REGISTRATION_FAILED": 1
+          },
+          "cross_event_counts": {},
+          "sip": {
+            "available": true,
+            "registration_count": 1,
+            "registration_failed_count": 1,
+            "call_count": 0,
+            "call_failed_count": 0
+          },
+          "rtp": {
+            "stream_count": 0,
+            "has_loss": false,
+            "has_jitter": false,
+            "one_way_media_count": 0
+          },
+          "pcm": {
+            "hum_high_count": 0,
+            "click_count": 0,
+            "long_silence_count": 0,
+            "local_capture_periodic_interference_count": 0
+          },
+          "media": {
+            "high_correlation_count": 0,
+            "dtmf_sip_match_count": 0,
+            "dtmf_sip_mismatch_count": 0,
+            "periodic_interference_path_count": 0,
+            "unexpected_silence_count": 0,
+            "click_pop_count": 0,
+            "echo_path_count": 0
+          },
+          "capture": {
+            "multi_point": false
+          }
+        },
+        "diagnosis_summary": {
+          "headline": "SIP注册路径异常",
+          "top_hypotheses": [
+            {
+              "code": "SIP_REGISTRATION_PATH_FAILURE",
+              "title": "SIP注册路径异常",
+              "confidence": 0.94,
+              "status": "SUPPORTED"
+            }
+          ],
+          "auto_action_count": 0,
+          "planned_action_count": 0
+        }
+      }
+    },
+    {
+      "id": "E2E_CALL_SETUP_404",
+      "name": "INVITE 404 呼叫建立失败",
+      "passed": true,
+      "checks": [
+        {
+          "name": "anomaly_types contains SIP_CALL_FAILED",
+          "passed": true,
+          "actual": [
+            "SIP_CALL_FAILED"
+          ],
+          "expected": "SIP_CALL_FAILED"
+        },
+        {
+          "name": "call_states contains FAILED",
+          "passed": true,
+          "actual": [
+            "FAILED"
+          ],
+          "expected": "FAILED"
+        },
+        {
+          "name": "hypothesis_codes contains SIP_CALL_SETUP_FAILURE",
+          "passed": true,
+          "actual": [
+            "SIP_CALL_SETUP_FAILURE"
+          ],
+          "expected": "SIP_CALL_SETUP_FAILURE"
+        },
+        {
+          "name": "confirmed_hypotheses excludes SIP_CALL_SETUP_FAILURE",
+          "passed": true,
+          "actual": [],
+          "expected": "not SIP_CALL_SETUP_FAILURE"
+        },
+        {
+          "name": "hypothesis SIP_CALL_SETUP_FAILURE",
+          "passed": true,
+          "actual": "SUPPORTED",
+          "expected": "SUPPORTED"
+        }
+      ],
+      "observed": {
+        "anomaly_types": [
+          "SIP_CALL_FAILED"
+        ],
+        "call_states": [
+          "FAILED"
+        ],
+        "registration_states": [],
+        "media_direction_statuses": [
+          "UNKNOWN"
+        ],
+        "hypothesis_codes": [
+          "SIP_CALL_SETUP_FAILURE"
+        ],
+        "hypothesis_statuses": {
+          "SIP_CALL_SETUP_FAILURE": "SUPPORTED"
+        },
+        "confirmed_hypotheses": [],
+        "matched_rules": [],
+        "plan_actions": [],
+        "conclusion_state": "DIAGNOSED",
+        "rtp_stream_count": 0,
+        "facts": {
+          "case": {
+            "has_evidence": true,
+            "device_count": 0
+          },
+          "symptoms": {
+            "CALL_SETUP": true
+          },
+          "anomaly_counts": {
+            "SIP_CALL_FAILED": 1
+          },
+          "cross_event_counts": {},
+          "sip": {
+            "available": true,
+            "registration_count": 0,
+            "registration_failed_count": 0,
+            "call_count": 1,
+            "call_failed_count": 1
+          },
+          "rtp": {
+            "stream_count": 0,
+            "has_loss": false,
+            "has_jitter": false,
+            "one_way_media_count": 0
+          },
+          "pcm": {
+            "hum_high_count": 0,
+            "click_count": 0,
+            "long_silence_count": 0,
+            "local_capture_periodic_interference_count": 0
+          },
+          "media": {
+            "high_correlation_count": 0,
+            "dtmf_sip_match_count": 0,
+            "dtmf_sip_mismatch_count": 0,
+            "periodic_interference_path_count": 0,
+            "unexpected_silence_count": 0,
+            "click_pop_count": 0,
+            "echo_path_count": 0
+          },
+          "capture": {
+            "multi_point": false
+          }
+        },
+        "diagnosis_summary": {
+          "headline": "SIP呼叫建立异常",
+          "top_hypotheses": [
+            {
+              "code": "SIP_CALL_SETUP_FAILURE",
+              "title": "SIP呼叫建立异常",
+              "confidence": 0.93,
+              "status": "SUPPORTED"
+            }
+          ],
+          "auto_action_count": 0,
+          "planned_action_count": 0
+        }
+      }
+    },
+    {
+      "id": "E2E_ONE_WAY_AUDIO",
+      "name": "SIP已建立但只有单方向RTP",
+      "passed": true,
+      "checks": [
+        {
+          "name": "anomaly_types contains ONE_WAY_RTP_MEDIA",
+          "passed": true,
+          "actual": [
+            "ONE_WAY_RTP_MEDIA"
+          ],
+          "expected": "ONE_WAY_RTP_MEDIA"
+        },
+        {
+          "name": "media_direction_statuses contains ONE_WAY_A_TO_B",
+          "passed": true,
+          "actual": [
+            "ONE_WAY_A_TO_B"
+          ],
+          "expected": "ONE_WAY_A_TO_B"
+        },
+        {
+          "name": "hypothesis_codes contains ONE_WAY_AUDIO_PATH",
+          "passed": true,
+          "actual": [
+            "ONE_WAY_AUDIO_PATH"
+          ],
+          "expected": "ONE_WAY_AUDIO_PATH"
+        },
+        {
+          "name": "matched_rules contains ONE_WAY_RTP_MEDIA",
+          "passed": true,
+          "actual": [
+            "ONE_WAY_RTP_MEDIA"
+          ],
+          "expected": "ONE_WAY_RTP_MEDIA"
+        },
+        {
+          "name": "plan_actions contains REQUEST_MULTI_POINT_PCAP",
+          "passed": true,
+          "actual": [
+            "REQUEST_MULTI_POINT_PCAP"
+          ],
+          "expected": "REQUEST_MULTI_POINT_PCAP"
+        },
+        {
+          "name": "confirmed_hypotheses excludes ONE_WAY_AUDIO_PATH",
+          "passed": true,
+          "actual": [],
+          "expected": "not ONE_WAY_AUDIO_PATH"
+        },
+        {
+          "name": "hypothesis ONE_WAY_AUDIO_PATH",
+          "passed": true,
+          "actual": "SUPPORTED",
+          "expected": "SUPPORTED"
+        }
+      ],
+      "observed": {
+        "anomaly_types": [
+          "ONE_WAY_RTP_MEDIA"
+        ],
+        "call_states": [
+          "ESTABLISHED"
+        ],
+        "registration_states": [],
+        "media_direction_statuses": [
+          "ONE_WAY_A_TO_B"
+        ],
+        "hypothesis_codes": [
+          "ONE_WAY_AUDIO_PATH"
+        ],
+        "hypothesis_statuses": {
+          "ONE_WAY_AUDIO_PATH": "SUPPORTED"
+        },
+        "confirmed_hypotheses": [],
+        "matched_rules": [
+          "ONE_WAY_RTP_MEDIA"
+        ],
+        "plan_actions": [
+          "REQUEST_MULTI_POINT_PCAP"
+        ],
+        "conclusion_state": "DIAGNOSED",
+        "rtp_stream_count": 1,
+        "facts": {
+          "case": {
+            "has_evidence": true,
+            "device_count": 0
+          },
+          "symptoms": {
+            "ONE_WAY_AUDIO": true
+          },
+          "anomaly_counts": {
+            "ONE_WAY_RTP_MEDIA": 1
+          },
+          "cross_event_counts": {},
+          "sip": {
+            "available": true,
+            "registration_count": 0,
+            "registration_failed_count": 0,
+            "call_count": 1,
+            "call_failed_count": 0
+          },
+          "rtp": {
+            "stream_count": 1,
+            "has_loss": false,
+            "has_jitter": false,
+            "one_way_media_count": 1
+          },
+          "pcm": {
+            "hum_high_count": 0,
+            "click_count": 0,
+            "long_silence_count": 0,
+            "local_capture_periodic_interference_count": 0
+          },
+          "media": {
+            "high_correlation_count": 0,
+            "dtmf_sip_match_count": 0,
+            "dtmf_sip_mismatch_count": 0,
+            "periodic_interference_path_count": 0,
+            "unexpected_silence_count": 0,
+            "click_pop_count": 0,
+            "echo_path_count": 0
+          },
+          "capture": {
+            "multi_point": false
+          }
+        },
+        "diagnosis_summary": {
+          "headline": "SIP已建立但RTP媒体仅单方向存在",
+          "top_hypotheses": [
+            {
+              "code": "ONE_WAY_AUDIO_PATH",
+              "title": "SIP已建立但RTP媒体仅单方向存在",
+              "confidence": 0.95,
+              "status": "SUPPORTED"
+            }
+          ],
+          "auto_action_count": 0,
+          "planned_action_count": 1
+        }
+      }
+    },
+    {
+      "id": "E2E_CODEC_MISMATCH",
+      "name": "SDP协商PCMA但实际RTP为PCMU",
+      "passed": true,
+      "checks": [
+        {
+          "name": "anomaly_types contains CODEC_NEGOTIATION_MISMATCH",
+          "passed": true,
+          "actual": [
+            "CODEC_NEGOTIATION_MISMATCH"
+          ],
+          "expected": "CODEC_NEGOTIATION_MISMATCH"
+        },
+        {
+          "name": "hypothesis_codes contains CODEC_NEGOTIATION_MISMATCH",
+          "passed": true,
+          "actual": [
+            "CODEC_NEGOTIATION_MISMATCH"
+          ],
+          "expected": "CODEC_NEGOTIATION_MISMATCH"
+        },
+        {
+          "name": "matched_rules contains CODEC_NEGOTIATION_MISMATCH",
+          "passed": true,
+          "actual": [
+            "CODEC_NEGOTIATION_MISMATCH"
+          ],
+          "expected": "CODEC_NEGOTIATION_MISMATCH"
+        },
+        {
+          "name": "confirmed_hypotheses excludes CODEC_NEGOTIATION_MISMATCH",
+          "passed": true,
+          "actual": [],
+          "expected": "not CODEC_NEGOTIATION_MISMATCH"
+        },
+        {
+          "name": "hypothesis CODEC_NEGOTIATION_MISMATCH",
+          "passed": true,
+          "actual": "SUPPORTED",
+          "expected": "SUPPORTED"
+        }
+      ],
+      "observed": {
+        "anomaly_types": [
+          "CODEC_NEGOTIATION_MISMATCH"
+        ],
+        "call_states": [
+          "ESTABLISHED"
+        ],
+        "registration_states": [],
+        "media_direction_statuses": [
+          "BIDIRECTIONAL"
+        ],
+        "hypothesis_codes": [
+          "CODEC_NEGOTIATION_MISMATCH"
+        ],
+        "hypothesis_statuses": {
+          "CODEC_NEGOTIATION_MISMATCH": "SUPPORTED"
+        },
+        "confirmed_hypotheses": [],
+        "matched_rules": [
+          "CODEC_NEGOTIATION_MISMATCH"
+        ],
+        "plan_actions": [],
+        "conclusion_state": "DIAGNOSED",
+        "rtp_stream_count": 2,
+        "facts": {
+          "case": {
+            "has_evidence": true,
+            "device_count": 0
+          },
+          "symptoms": {},
+          "anomaly_counts": {
+            "CODEC_NEGOTIATION_MISMATCH": 1
+          },
+          "cross_event_counts": {},
+          "sip": {
+            "available": true,
+            "registration_count": 0,
+            "registration_failed_count": 0,
+            "call_count": 1,
+            "call_failed_count": 0
+          },
+          "rtp": {
+            "stream_count": 2,
+            "has_loss": false,
+            "has_jitter": false,
+            "one_way_media_count": 0
+          },
+          "pcm": {
+            "hum_high_count": 0,
+            "click_count": 0,
+            "long_silence_count": 0,
+            "local_capture_periodic_interference_count": 0
+          },
+          "media": {
+            "high_correlation_count": 0,
+            "dtmf_sip_match_count": 0,
+            "dtmf_sip_mismatch_count": 0,
+            "periodic_interference_path_count": 0,
+            "unexpected_silence_count": 0,
+            "click_pop_count": 0,
+            "echo_path_count": 0
+          },
+          "capture": {
+            "multi_point": false
+          }
+        },
+        "diagnosis_summary": {
+          "headline": "SDP协商与实际RTP Codec不一致",
+          "top_hypotheses": [
+            {
+              "code": "CODEC_NEGOTIATION_MISMATCH",
+              "title": "SDP协商与实际RTP Codec不一致",
+              "confidence": 0.97,
+              "status": "SUPPORTED"
+            }
+          ],
+          "auto_action_count": 0,
+          "planned_action_count": 0
+        }
+      }
+    },
+    {
+      "id": "E2E_RTP_BURST_LOSS",
+      "name": "RTP连续4包丢失导致80ms媒体缺口",
+      "passed": true,
+      "checks": [
+        {
+          "name": "anomaly_types contains BURST_LOSS",
+          "passed": true,
+          "actual": [
+            "BURST_LOSS"
+          ],
+          "expected": "BURST_LOSS"
+        },
+        {
+          "name": "hypothesis_codes contains RTP_PACKET_LOSS_PATH",
+          "passed": true,
+          "actual": [
+            "RTP_PACKET_LOSS_PATH"
+          ],
+          "expected": "RTP_PACKET_LOSS_PATH"
+        },
+        {
+          "name": "matched_rules contains RTP_BURST_LOSS_STUTTER",
+          "passed": true,
+          "actual": [
+            "RTP_BURST_LOSS_STUTTER"
+          ],
+          "expected": "RTP_BURST_LOSS_STUTTER"
+        },
+        {
+          "name": "plan_actions contains REQUEST_MULTI_POINT_PCAP",
+          "passed": true,
+          "actual": [
+            "REQUEST_MULTI_POINT_PCAP"
+          ],
+          "expected": "REQUEST_MULTI_POINT_PCAP"
+        },
+        {
+          "name": "confirmed_hypotheses excludes RTP_PACKET_LOSS_PATH",
+          "passed": true,
+          "actual": [],
+          "expected": "not RTP_PACKET_LOSS_PATH"
+        },
+        {
+          "name": "hypothesis RTP_PACKET_LOSS_PATH",
+          "passed": true,
+          "actual": "SUPPORTED",
+          "expected": "SUPPORTED"
+        }
+      ],
+      "observed": {
+        "anomaly_types": [
+          "BURST_LOSS"
+        ],
+        "call_states": [
+          "ESTABLISHED"
+        ],
+        "registration_states": [],
+        "media_direction_statuses": [
+          "BIDIRECTIONAL"
+        ],
+        "hypothesis_codes": [
+          "RTP_PACKET_LOSS_PATH"
+        ],
+        "hypothesis_statuses": {
+          "RTP_PACKET_LOSS_PATH": "SUPPORTED"
+        },
+        "confirmed_hypotheses": [],
+        "matched_rules": [
+          "RTP_BURST_LOSS_STUTTER"
+        ],
+        "plan_actions": [
+          "REQUEST_MULTI_POINT_PCAP"
+        ],
+        "conclusion_state": "WAITING_USER",
+        "rtp_stream_count": 2,
+        "facts": {
+          "case": {
+            "has_evidence": true,
+            "device_count": 0
+          },
+          "symptoms": {
+            "AUDIO_STUTTER": true
+          },
+          "anomaly_counts": {
+            "BURST_LOSS": 1
+          },
+          "cross_event_counts": {},
+          "sip": {
+            "available": true,
+            "registration_count": 0,
+            "registration_failed_count": 0,
+            "call_count": 1,
+            "call_failed_count": 0
+          },
+          "rtp": {
+            "stream_count": 2,
+            "has_loss": true,
+            "has_jitter": false,
+            "one_way_media_count": 0
+          },
+          "pcm": {
+            "hum_high_count": 0,
+            "click_count": 0,
+            "long_silence_count": 0,
+            "local_capture_periodic_interference_count": 0
+          },
+          "media": {
+            "high_correlation_count": 0,
+            "dtmf_sip_match_count": 0,
+            "dtmf_sip_mismatch_count": 0,
+            "periodic_interference_path_count": 0,
+            "unexpected_silence_count": 0,
+            "click_pop_count": 0,
+            "echo_path_count": 0
+          },
+          "capture": {
+            "multi_point": false
+          }
+        },
+        "diagnosis_summary": {
+          "headline": "RTP媒体链路存在丢包/突发丢包",
+          "top_hypotheses": [
+            {
+              "code": "RTP_PACKET_LOSS_PATH",
+              "title": "RTP媒体链路存在丢包/突发丢包",
+              "confidence": 0.83,
+              "status": "SUPPORTED"
+            }
+          ],
+          "auto_action_count": 0,
+          "planned_action_count": 1
+        }
+      }
+    },
+    {
+      "id": "E2E_DTMF_FIRST_DIGIT_LOSS",
+      "name": "PCM识别8803但SIP仅拨803",
+      "passed": true,
+      "checks": [
+        {
+          "name": "hypothesis_codes contains DTMF_DIGIT_ASSEMBLY_MISMATCH",
+          "passed": true,
+          "actual": [
+            "DTMF_DIGIT_ASSEMBLY_MISMATCH"
+          ],
+          "expected": "DTMF_DIGIT_ASSEMBLY_MISMATCH"
+        },
+        {
+          "name": "matched_rules contains DTMF_PCM_SIP_DIAL_MISMATCH",
+          "passed": true,
+          "actual": [
+            "DTMF_PCM_SIP_DIAL_MISMATCH"
+          ],
+          "expected": "DTMF_PCM_SIP_DIAL_MISMATCH"
+        },
+        {
+          "name": "plan_actions contains COLLECT_PROFILE",
+          "passed": true,
+          "actual": [
+            "COLLECT_PROFILE"
+          ],
+          "expected": "COLLECT_PROFILE"
+        },
+        {
+          "name": "confirmed_hypotheses excludes DTMF_DIGIT_ASSEMBLY_MISMATCH",
+          "passed": true,
+          "actual": [],
+          "expected": "not DTMF_DIGIT_ASSEMBLY_MISMATCH"
+        },
+        {
+          "name": "hypothesis DTMF_DIGIT_ASSEMBLY_MISMATCH",
+          "passed": true,
+          "actual": "SUPPORTED",
+          "expected": "SUPPORTED"
+        }
+      ],
+      "observed": {
+        "anomaly_types": [],
+        "call_states": [
+          null
+        ],
+        "registration_states": [],
+        "media_direction_statuses": [
+          null
+        ],
+        "hypothesis_codes": [
+          "DTMF_DIGIT_ASSEMBLY_MISMATCH"
+        ],
+        "hypothesis_statuses": {
+          "DTMF_DIGIT_ASSEMBLY_MISMATCH": "SUPPORTED"
+        },
+        "confirmed_hypotheses": [],
+        "matched_rules": [
+          "DTMF_PCM_SIP_DIAL_MISMATCH"
+        ],
+        "plan_actions": [
+          "COLLECT_PROFILE"
+        ],
+        "conclusion_state": "NEED_MORE_EVIDENCE",
+        "rtp_stream_count": 0,
+        "facts": {
+          "case": {
+            "has_evidence": true,
+            "device_count": 0
+          },
+          "symptoms": {
+            "DTMF": true
+          },
+          "anomaly_counts": {},
+          "cross_event_counts": {
+            "DTMF_SIP_DIAL_MISMATCH": 1
+          },
+          "sip": {
+            "available": true,
+            "registration_count": 0,
+            "registration_failed_count": 0,
+            "call_count": 1,
+            "call_failed_count": 0
+          },
+          "rtp": {
+            "stream_count": 0,
+            "has_loss": false,
+            "has_jitter": false,
+            "one_way_media_count": 0
+          },
+          "pcm": {
+            "hum_high_count": 0,
+            "click_count": 0,
+            "long_silence_count": 0,
+            "local_capture_periodic_interference_count": 0
+          },
+          "media": {
+            "high_correlation_count": 0,
+            "dtmf_sip_match_count": 0,
+            "dtmf_sip_mismatch_count": 1,
+            "periodic_interference_path_count": 0,
+            "unexpected_silence_count": 0,
+            "click_pop_count": 0,
+            "echo_path_count": 0
+          },
+          "capture": {
+            "multi_point": false
+          }
+        },
+        "diagnosis_summary": {
+          "headline": "PCM输入DTMF与随后SIP拨号目标不一致",
+          "top_hypotheses": [
+            {
+              "code": "DTMF_DIGIT_ASSEMBLY_MISMATCH",
+              "title": "PCM输入DTMF与随后SIP拨号目标不一致",
+              "confidence": 0.94,
+              "status": "SUPPORTED"
+            }
+          ],
+          "auto_action_count": 1,
+          "planned_action_count": 1
+        }
+      }
+    },
+    {
+      "id": "E2E_AUDIO_ECHO",
+      "name": "86ms稳定回声路径",
+      "passed": true,
+      "checks": [
+        {
+          "name": "hypothesis_codes contains AUDIO_ECHO_PATH",
+          "passed": true,
+          "actual": [
+            "AUDIO_ECHO_PATH"
+          ],
+          "expected": "AUDIO_ECHO_PATH"
+        },
+        {
+          "name": "matched_rules contains AUDIO_ECHO_PATH_DETECTED",
+          "passed": true,
+          "actual": [
+            "AUDIO_ECHO_PATH_DETECTED"
+          ],
+          "expected": "AUDIO_ECHO_PATH_DETECTED"
+        },
+        {
+          "name": "confirmed_hypotheses excludes AUDIO_ECHO_PATH",
+          "passed": true,
+          "actual": [],
+          "expected": "not AUDIO_ECHO_PATH"
+        },
+        {
+          "name": "hypothesis AUDIO_ECHO_PATH",
+          "passed": true,
+          "actual": "SUPPORTED",
+          "expected": "SUPPORTED"
+        }
+      ],
+      "observed": {
+        "anomaly_types": [],
+        "call_states": [],
+        "registration_states": [],
+        "media_direction_statuses": [],
+        "hypothesis_codes": [
+          "AUDIO_ECHO_PATH"
+        ],
+        "hypothesis_statuses": {
+          "AUDIO_ECHO_PATH": "SUPPORTED"
+        },
+        "confirmed_hypotheses": [],
+        "matched_rules": [
+          "AUDIO_ECHO_PATH_DETECTED"
+        ],
+        "plan_actions": [],
+        "conclusion_state": "DIAGNOSED",
+        "rtp_stream_count": 0,
+        "facts": {
+          "case": {
+            "has_evidence": true,
+            "device_count": 0
+          },
+          "symptoms": {
+            "ECHO": true
+          },
+          "anomaly_counts": {},
+          "cross_event_counts": {
+            "ECHO_PATH_DETECTED": 1
+          },
+          "sip": {
+            "available": true,
+            "registration_count": 0,
+            "registration_failed_count": 0,
+            "call_count": 0,
+            "call_failed_count": 0
+          },
+          "rtp": {
+            "stream_count": 0,
+            "has_loss": false,
+            "has_jitter": false,
+            "one_way_media_count": 0
+          },
+          "pcm": {
+            "hum_high_count": 0,
+            "click_count": 0,
+            "long_silence_count": 0,
+            "local_capture_periodic_interference_count": 0
+          },
+          "media": {
+            "high_correlation_count": 0,
+            "dtmf_sip_match_count": 0,
+            "dtmf_sip_mismatch_count": 0,
+            "periodic_interference_path_count": 0,
+            "unexpected_silence_count": 0,
+            "click_pop_count": 0,
+            "echo_path_count": 1
+          },
+          "capture": {
+            "multi_point": false
+          }
+        },
+        "diagnosis_summary": {
+          "headline": "PCM RX/TX之间检测到稳定延迟回声路径",
+          "top_hypotheses": [
+            {
+              "code": "AUDIO_ECHO_PATH",
+              "title": "PCM RX/TX之间检测到稳定延迟回声路径",
+              "confidence": 0.93,
+              "status": "SUPPORTED"
+            }
+          ],
+          "auto_action_count": 0,
+          "planned_action_count": 0
+        }
+      }
+    },
+    {
+      "id": "E2E_CLICK_POP",
+      "name": "活跃媒体窗口Click/Pop",
+      "passed": true,
+      "checks": [
+        {
+          "name": "hypothesis_codes contains PCM_CLICK_POP",
+          "passed": true,
+          "actual": [
+            "PCM_CLICK_POP"
+          ],
+          "expected": "PCM_CLICK_POP"
+        },
+        {
+          "name": "matched_rules contains ACTIVE_MEDIA_CLICK_POP",
+          "passed": true,
+          "actual": [
+            "ACTIVE_MEDIA_CLICK_POP"
+          ],
+          "expected": "ACTIVE_MEDIA_CLICK_POP"
+        },
+        {
+          "name": "confirmed_hypotheses excludes PCM_CLICK_POP",
+          "passed": true,
+          "actual": [],
+          "expected": "not PCM_CLICK_POP"
+        }
+      ],
+      "observed": {
+        "anomaly_types": [],
+        "call_states": [],
+        "registration_states": [],
+        "media_direction_statuses": [],
+        "hypothesis_codes": [
+          "PCM_CLICK_POP"
+        ],
+        "hypothesis_statuses": {
+          "PCM_CLICK_POP": "ACTIVE"
+        },
+        "confirmed_hypotheses": [],
+        "matched_rules": [
+          "ACTIVE_MEDIA_CLICK_POP"
+        ],
+        "plan_actions": [
+          "REQUEST_USER_EVIDENCE"
+        ],
+        "conclusion_state": "WAITING_USER",
+        "rtp_stream_count": 0,
+        "facts": {
+          "case": {
+            "has_evidence": true,
+            "device_count": 0
+          },
+          "symptoms": {},
+          "anomaly_counts": {},
+          "cross_event_counts": {
+            "CLICK_POP": 1
+          },
+          "sip": {
+            "available": true,
+            "registration_count": 0,
+            "registration_failed_count": 0,
+            "call_count": 0,
+            "call_failed_count": 0
+          },
+          "rtp": {
+            "stream_count": 0,
+            "has_loss": false,
+            "has_jitter": false,
+            "one_way_media_count": 0
+          },
+          "pcm": {
+            "hum_high_count": 0,
+            "click_count": 0,
+            "long_silence_count": 0,
+            "local_capture_periodic_interference_count": 0
+          },
+          "media": {
+            "high_correlation_count": 0,
+            "dtmf_sip_match_count": 0,
+            "dtmf_sip_mismatch_count": 0,
+            "periodic_interference_path_count": 0,
+            "unexpected_silence_count": 0,
+            "click_pop_count": 1,
+            "echo_path_count": 0
+          },
+          "capture": {
+            "multi_point": false
+          }
+        },
+        "diagnosis_summary": {
+          "headline": "候选方向，需补证：活跃通话媒体窗口内存在Click/Pop候选",
+          "top_hypotheses": [
+            {
+              "code": "PCM_CLICK_POP",
+              "title": "活跃通话媒体窗口内存在Click/Pop候选",
+              "confidence": 0.64,
+              "status": "ACTIVE"
+            }
+          ],
+          "auto_action_count": 0,
+          "planned_action_count": 1
+        }
+      }
+    },
+    {
+      "id": "E2E_UNEXPECTED_SILENCE",
+      "name": "活跃媒体窗口350ms异常静音",
+      "passed": true,
+      "checks": [
+        {
+          "name": "hypothesis_codes contains PCM_UNEXPECTED_SILENCE",
+          "passed": true,
+          "actual": [
+            "PCM_UNEXPECTED_SILENCE"
+          ],
+          "expected": "PCM_UNEXPECTED_SILENCE"
+        },
+        {
+          "name": "matched_rules contains ACTIVE_MEDIA_UNEXPECTED_SILENCE",
+          "passed": true,
+          "actual": [
+            "ACTIVE_MEDIA_UNEXPECTED_SILENCE"
+          ],
+          "expected": "ACTIVE_MEDIA_UNEXPECTED_SILENCE"
+        },
+        {
+          "name": "confirmed_hypotheses excludes PCM_UNEXPECTED_SILENCE",
+          "passed": true,
+          "actual": [],
+          "expected": "not PCM_UNEXPECTED_SILENCE"
+        },
+        {
+          "name": "hypothesis PCM_UNEXPECTED_SILENCE",
+          "passed": true,
+          "actual": "SUPPORTED",
+          "expected": "SUPPORTED"
+        }
+      ],
+      "observed": {
+        "anomaly_types": [],
+        "call_states": [],
+        "registration_states": [],
+        "media_direction_statuses": [],
+        "hypothesis_codes": [
+          "PCM_UNEXPECTED_SILENCE"
+        ],
+        "hypothesis_statuses": {
+          "PCM_UNEXPECTED_SILENCE": "SUPPORTED"
+        },
+        "confirmed_hypotheses": [],
+        "matched_rules": [
+          "ACTIVE_MEDIA_UNEXPECTED_SILENCE"
+        ],
+        "plan_actions": [
+          "REQUEST_USER_EVIDENCE"
+        ],
+        "conclusion_state": "WAITING_USER",
+        "rtp_stream_count": 0,
+        "facts": {
+          "case": {
+            "has_evidence": true,
+            "device_count": 0
+          },
+          "symptoms": {
+            "AUDIO_STUTTER": true
+          },
+          "anomaly_counts": {},
+          "cross_event_counts": {
+            "UNEXPECTED_SILENCE": 1
+          },
+          "sip": {
+            "available": true,
+            "registration_count": 0,
+            "registration_failed_count": 0,
+            "call_count": 0,
+            "call_failed_count": 0
+          },
+          "rtp": {
+            "stream_count": 0,
+            "has_loss": false,
+            "has_jitter": false,
+            "one_way_media_count": 0
+          },
+          "pcm": {
+            "hum_high_count": 0,
+            "click_count": 0,
+            "long_silence_count": 0,
+            "local_capture_periodic_interference_count": 0
+          },
+          "media": {
+            "high_correlation_count": 0,
+            "dtmf_sip_match_count": 0,
+            "dtmf_sip_mismatch_count": 0,
+            "periodic_interference_path_count": 0,
+            "unexpected_silence_count": 1,
+            "click_pop_count": 0,
+            "echo_path_count": 0
+          },
+          "capture": {
+            "multi_point": false
+          }
+        },
+        "diagnosis_summary": {
+          "headline": "活跃通话媒体窗口内存在异常静音/中断候选",
+          "top_hypotheses": [
+            {
+              "code": "PCM_UNEXPECTED_SILENCE",
+              "title": "活跃通话媒体窗口内存在异常静音/中断候选",
+              "confidence": 0.73,
+              "status": "SUPPORTED"
+            }
+          ],
+          "auto_action_count": 0,
+          "planned_action_count": 1
+        }
+      }
+    },
+    {
+      "id": "E2E_NORMAL_CALL_NEGATIVE_CONTROL",
+      "name": "正常双向PCMA通话负对照",
+      "passed": true,
+      "checks": [
+        {
+          "name": "call_states contains ESTABLISHED",
+          "passed": true,
+          "actual": [
+            "ESTABLISHED"
+          ],
+          "expected": "ESTABLISHED"
+        },
+        {
+          "name": "media_direction_statuses contains BIDIRECTIONAL",
+          "passed": true,
+          "actual": [
+            "BIDIRECTIONAL"
+          ],
+          "expected": "BIDIRECTIONAL"
+        },
+        {
+          "name": "anomaly_types excludes ONE_WAY_RTP_MEDIA",
+          "passed": true,
+          "actual": [],
+          "expected": "not ONE_WAY_RTP_MEDIA"
+        },
+        {
+          "name": "anomaly_types excludes CODEC_NEGOTIATION_MISMATCH",
+          "passed": true,
+          "actual": [],
+          "expected": "not CODEC_NEGOTIATION_MISMATCH"
+        },
+        {
+          "name": "anomaly_types excludes BURST_LOSS",
+          "passed": true,
+          "actual": [],
+          "expected": "not BURST_LOSS"
+        },
+        {
+          "name": "confirmed_hypotheses excludes ONE_WAY_AUDIO_PATH",
+          "passed": true,
+          "actual": [],
+          "expected": "not ONE_WAY_AUDIO_PATH"
+        },
+        {
+          "name": "confirmed_hypotheses excludes CODEC_NEGOTIATION_MISMATCH",
+          "passed": true,
+          "actual": [],
+          "expected": "not CODEC_NEGOTIATION_MISMATCH"
+        },
+        {
+          "name": "confirmed_hypotheses excludes RTP_PACKET_LOSS_PATH",
+          "passed": true,
+          "actual": [],
+          "expected": "not RTP_PACKET_LOSS_PATH"
+        }
+      ],
+      "observed": {
+        "anomaly_types": [],
+        "call_states": [
+          "ESTABLISHED"
+        ],
+        "registration_states": [],
+        "media_direction_statuses": [
+          "BIDIRECTIONAL"
+        ],
+        "hypothesis_codes": [],
+        "hypothesis_statuses": {},
+        "confirmed_hypotheses": [],
+        "matched_rules": [],
+        "plan_actions": [
+          "REQUEST_USER_EVIDENCE"
+        ],
+        "conclusion_state": "WAITING_USER",
+        "rtp_stream_count": 2,
+        "facts": {
+          "case": {
+            "has_evidence": true,
+            "device_count": 0
+          },
+          "symptoms": {},
+          "anomaly_counts": {},
+          "cross_event_counts": {},
+          "sip": {
+            "available": true,
+            "registration_count": 0,
+            "registration_failed_count": 0,
+            "call_count": 1,
+            "call_failed_count": 0
+          },
+          "rtp": {
+            "stream_count": 2,
+            "has_loss": false,
+            "has_jitter": false,
+            "one_way_media_count": 0
+          },
+          "pcm": {
+            "hum_high_count": 0,
+            "click_count": 0,
+            "long_silence_count": 0,
+            "local_capture_periodic_interference_count": 0
+          },
+          "media": {
+            "high_correlation_count": 0,
+            "dtmf_sip_match_count": 0,
+            "dtmf_sip_mismatch_count": 0,
+            "periodic_interference_path_count": 0,
+            "unexpected_silence_count": 0,
+            "click_pop_count": 0,
+            "echo_path_count": 0
+          },
+          "capture": {
+            "multi_point": false
+          }
+        },
+        "diagnosis_summary": {
+          "headline": "需要补充证据",
+          "top_hypotheses": [],
+          "auto_action_count": 0,
+          "planned_action_count": 1
+        }
+      }
+    }
+  ]
+}

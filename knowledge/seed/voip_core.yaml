@@ -1,0 +1,26 @@
+items:
+  - type: PROTOCOL_GUIDE
+    title: SIP 401/407认证挑战的正常判定
+    summary: REGISTER或INVITE出现401/407后，如果同一事务上下文中随后携带认证信息重试并最终收到2xx，则该挑战属于正常Digest Authentication流程，不应直接判定为账号密码错误。
+    tags: [SIP, REGISTER, 401, 407, Digest]
+    verified: true
+  - type: DIAGNOSIS_GUIDE
+    title: RTP突发丢包与到包抖动必须分开诊断
+    summary: Sequence缺口/Burst Loss表示媒体包真实缺失；HIGH_DELTA或RFC3550 Jitter表示到达时序异常。没有Sequence缺口时不能把卡顿统一归因成packet loss。
+    tags: [RTP, packet-loss, burst-loss, jitter, delta]
+    verified: true
+  - type: DIAGNOSIS_GUIDE
+    title: PCM与RTP跨层关联用于定位媒体异常边界
+    summary: PCM tap与对应RTP解码音频高相关时，可以建立媒体方向和时延映射。若PCM RX正常而RTP TX异常，应优先调查PCM tap之后到RTP发送之间的DSP/Codec处理链；相关性本身不是根因。
+    tags: [PCM, RTP, correlation, DSP, Codec]
+    verified: true
+  - type: DIAGNOSIS_GUIDE
+    title: DTMF应做PCM与SIP/RFC2833跨层比对
+    summary: PCM Goertzel检测到的号码序列应与RFC2833/SIP INFO/aimd/SIP Request-URI按时间关联。某层序列完整而下一层缺号时，异常边界可以收敛到两层之间。
+    tags: [DTMF, PCM, RFC2833, SIP, Goertzel]
+    verified: true
+  - type: EVIDENCE_POLICY
+    title: AI根因确认的证据纪律
+    summary: 历史Case和大模型推断只能作为L4/L5证据提高调查优先级；ROOT_CAUSE_CONFIRMED必须存在当前Case的直接证据、无关键反证，并由授权人员确认。
+    tags: [AI, Evidence, RootCause, L1, L4, L5]
+    verified: true

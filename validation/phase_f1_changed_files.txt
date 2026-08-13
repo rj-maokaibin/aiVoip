@@ -1,0 +1,36 @@
+# Phase F1 changed files vs Phase E1
+
+## Added
+A backend/app/api/v1/system.py
+A backend/app/release_readiness.py
+A backend/tests/test_phase_f1_release_readiness.py
+A contracts/openapi_v1.json
+A contracts/openapi_v1.sha256
+A docs/PHASE_F1_RELEASE_READINESS.md
+A release/release_policy.yaml
+A release/source_manifest.json
+A tools/compose_contract_gate.py
+A tools/frontend_build_gate.sh
+A tools/migration_contract_gate.py
+A tools/offline_import_bootstrap.py
+A tools/openapi_contract_gate.py
+A tools/phase_f1_static_gate.sh
+A tools/release_evidence.py
+A tools/release_readiness_gate.py
+A tools/security_release_gate.py
+A tools/source_manifest_gate.py
+
+## Modified
+M .env.example
+M Makefile
+M backend/app/api/health.py
+M backend/app/core/config.py
+M backend/app/main.py
+M backend/tests/test_reproduction_phase_c1.py
+M docker-compose.e2e.yml
+M tools/field_golden_batch.py
+M tools/fullstack_e2e.py
+M tools/fullstack_e2e.sh
+M tools/reproduction_mock_e2e.py
+
+## Removed

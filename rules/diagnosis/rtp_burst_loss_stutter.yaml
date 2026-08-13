@@ -1,0 +1,30 @@
+key: RTP_BURST_LOSS_STUTTER
+version: 1.0.0
+name: RTP突发丢包解释卡顿
+fault_domain: RTP/Network
+priority: 10
+enabled: true
+when:
+  and:
+  - path: symptoms.AUDIO_STUTTER
+    op: eq
+    value: true
+  - path: anomaly_counts.BURST_LOSS
+    op: gte
+    value: 1
+then:
+- action: hypothesis
+  payload:
+    code: RTP_PACKET_LOSS_PATH
+    title: RTP媒体链路存在突发丢包，可解释卡顿/断音
+    fault_domain: RTP/Network
+    confidence: 0.95
+    status: SUPPORTED
+    confirmable: true
+    evidence_level: L1
+    rationale: 用户现象为卡顿，且存在确定性BURST_LOSS事件；可确认媒体缺失现象，但具体丢包区间仍需多点抓包。
+- action: unknown
+  payload:
+    text: 单点抓包只能确认RTP突发丢包现象，不能确认具体丢包网络区间。
+dsl_version: 2
+category: SUPPORT

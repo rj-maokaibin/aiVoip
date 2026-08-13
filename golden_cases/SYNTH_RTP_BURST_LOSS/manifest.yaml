@@ -1,0 +1,10 @@
+id: SYNTH_RTP_BURST_LOSS_4X20MS
+name: RTP连续4包丢失/80ms媒体缺口
+kind: synthetic_rtp_burst_loss
+symptom: 通话明显卡顿/短暂断音
+expected:
+  lost_packets: 4
+  max_consecutive_loss: 4
+  event_type: BURST_LOSS
+  estimated_audio_loss_ms: 80.0
+  ptime_ms: 20.0

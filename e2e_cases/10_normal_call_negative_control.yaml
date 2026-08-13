@@ -1,0 +1,17 @@
+id: E2E_NORMAL_CALL_NEGATIVE_CONTROL
+name: 正常双向PCMA通话负对照
+fixture: normal_call
+symptom: 正常通话基线
+expected:
+  contains:
+    call_states: ESTABLISHED
+    media_direction_statuses: BIDIRECTIONAL
+  not_contains:
+    anomaly_types:
+      - ONE_WAY_RTP_MEDIA
+      - CODEC_NEGOTIATION_MISMATCH
+      - BURST_LOSS
+    confirmed_hypotheses:
+      - ONE_WAY_AUDIO_PATH
+      - CODEC_NEGOTIATION_MISMATCH
+      - RTP_PACKET_LOSS_PATH

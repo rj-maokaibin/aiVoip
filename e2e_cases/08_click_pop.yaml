@@ -1,0 +1,10 @@
+id: E2E_CLICK_POP
+name: 活跃媒体窗口Click/Pop
+fixture: click_pop
+symptom: 通话偶发爆音咔哒声
+expected:
+  contains:
+    hypothesis_codes: PCM_CLICK_POP
+    matched_rules: ACTIVE_MEDIA_CLICK_POP
+  not_contains:
+    confirmed_hypotheses: PCM_CLICK_POP

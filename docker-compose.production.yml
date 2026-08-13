@@ -1,0 +1,91 @@
+services:
+  postgres:
+    restart: unless-stopped
+
+  redis:
+    restart: unless-stopped
+
+  minio:
+    restart: unless-stopped
+
+  backend:
+    restart: unless-stopped
+    environment:
+      REPRODUCTION_CAPTURE_ROOT: /var/lib/voip/reproduction/capture
+      REPRODUCTION_OBJECT_ROOT: /var/lib/voip/reproduction/objects
+    volumes:
+      - ${VOIP_DATA_ROOT:-/data/voip}/reproduction:/var/lib/voip/reproduction
+    secrets:
+      - auth_gateway_hmac
+      - minio_access_key
+      - minio_secret_key
+      - credential_api_token
+      - feishu_app_secret
+      - feishu_verification_token
+
+  collector-worker:
+    restart: unless-stopped
+    secrets: &app_secrets
+      - auth_gateway_hmac
+      - minio_access_key
+      - minio_secret_key
+      - credential_api_token
+      - feishu_app_secret
+      - feishu_verification_token
+
+  packet-worker:
+    restart: unless-stopped
+    secrets: *app_secrets
+
+  pcm-worker:
+    restart: unless-stopped
+    secrets: *app_secrets
+
+  media-worker:
+    restart: unless-stopped
+    secrets: *app_secrets
+
+  diagnosis-worker:
+    restart: unless-stopped
+    secrets: *app_secrets
+
+  reproduction-worker:
+    restart: unless-stopped
+    environment:
+      REPRODUCTION_CAPTURE_ROOT: /var/lib/voip/reproduction/capture
+      REPRODUCTION_OBJECT_ROOT: /var/lib/voip/reproduction/objects
+    volumes:
+      - ${VOIP_DATA_ROOT:-/data/voip}/reproduction:/var/lib/voip/reproduction
+    secrets: *app_secrets
+
+  release-runner:
+    build:
+      context: ./backend
+    env_file: ${VOIP_APP_ENV_FILE:-.env}
+    working_dir: /workspace
+    environment:
+      PYTHONPATH: /workspace/backend
+    volumes:
+      - .:/workspace
+      - ./profiles:/app/profiles:ro
+      - ./rules:/app/rules:ro
+      - ./knowledge:/app/knowledge:ro
+    secrets: *app_secrets
+    command: ["python", "-c", "print('release-runner-ready')"]
+
+  frontend:
+    restart: unless-stopped
+
+secrets:
+  auth_gateway_hmac:
+    file: ${AUTH_GATEWAY_HMAC_SECRET_HOST_FILE:?AUTH_GATEWAY_HMAC_SECRET_HOST_FILE is required}
+  minio_access_key:
+    file: ${MINIO_ACCESS_KEY_SECRET_HOST_FILE:?MINIO_ACCESS_KEY_SECRET_HOST_FILE is required}
+  minio_secret_key:
+    file: ${MINIO_SECRET_KEY_SECRET_HOST_FILE:?MINIO_SECRET_KEY_SECRET_HOST_FILE is required}
+  credential_api_token:
+    file: ${CREDENTIAL_API_TOKEN_SECRET_HOST_FILE:?CREDENTIAL_API_TOKEN_SECRET_HOST_FILE is required}
+  feishu_app_secret:
+    file: ${FEISHU_APP_SECRET_HOST_FILE:?FEISHU_APP_SECRET_HOST_FILE is required}
+  feishu_verification_token:
+    file: ${FEISHU_VERIFICATION_TOKEN_HOST_FILE:?FEISHU_VERIFICATION_TOKEN_HOST_FILE is required}

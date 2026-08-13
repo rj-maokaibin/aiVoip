@@ -1,0 +1,139 @@
+{
+  "phase": "C2",
+  "base": "Phase C1 Mock Platform Core",
+  "files": [
+    {
+      "path": "Makefile",
+      "change": "MODIFIED",
+      "sha256": "e8d93a0be6d1e06c0c32978f1de8d87f4bbda73a4a11c40ebf56234443d88875",
+      "size": 2637
+    },
+    {
+      "path": "README.md",
+      "change": "MODIFIED",
+      "sha256": "01685bf8ca60d7beada55e1f59ce637f24828d6b9384726219b884628d2f93eb",
+      "size": 10374
+    },
+    {
+      "path": "backend/app/contracts/enums.py",
+      "change": "MODIFIED",
+      "sha256": "b401d44ef727b8b44a6a034e3b9bd7d4b61214ba96ef9b8626fd04252b00a9d1",
+      "size": 13916
+    },
+    {
+      "path": "backend/app/core/config.py",
+      "change": "MODIFIED",
+      "sha256": "af7ce8216aa4339456e89f573540c7eec21eaf5b9fb97c894aba042d0b7b0e51",
+      "size": 2317
+    },
+    {
+      "path": "backend/app/db/models.py",
+      "change": "MODIFIED",
+      "sha256": "b5bfa6832779fb0aba8ccc165ae5368653536c9c509a578b68f732deef995570",
+      "size": 46593
+    },
+    {
+      "path": "backend/app/integrations/storage.py",
+      "change": "MODIFIED",
+      "sha256": "0c3e62d6dfe4a6c0201bde6d5f3c4b77d0dd1910aa56001b23c5dda17a8fc487",
+      "size": 4900
+    },
+    {
+      "path": "backend/app/main.py",
+      "change": "MODIFIED",
+      "sha256": "92d532a215e99b5e802cd356df578e1f9e7b7b4b0b73d25628d296145243f357",
+      "size": 3304
+    },
+    {
+      "path": "backend/app/reproduction/bundle.py",
+      "change": "MODIFIED",
+      "sha256": "7e775372c9f7221347684304a538ea925027756472428953fe5585c7d68f7531",
+      "size": 4823
+    },
+    {
+      "path": "backend/app/reproduction/capture_pipeline.py",
+      "change": "ADDED",
+      "sha256": "5b3a00b1ffe525b7408c4645ef2b4909bde67adfc48109c67183878e4a436752",
+      "size": 16587
+    },
+    {
+      "path": "backend/app/reproduction/live.py",
+      "change": "ADDED",
+      "sha256": "795a4ee1f10002edbb59e9794ad2eae05f1df175583ee2797c31df85bec89b94",
+      "size": 3508
+    },
+    {
+      "path": "backend/app/reproduction/mock_platform.py",
+      "change": "MODIFIED",
+      "sha256": "677fc2742995032141390c8df2b8ac7338a73175523a1895558a90bf792e129e",
+      "size": 10015
+    },
+    {
+      "path": "backend/app/reproduction/mock_signal.py",
+      "change": "ADDED",
+      "sha256": "3f2d92db02ea7f4db78f0e11af9535f5c5b7dedf8fbf13b17c35c02c85caa794",
+      "size": 10398
+    },
+    {
+      "path": "backend/app/reproduction/orchestrator.py",
+      "change": "MODIFIED",
+      "sha256": "37bf4455664a486a0d894c9fee5c2eddd58a6a5892d2b56136a1d700a611c6eb",
+      "size": 38013
+    },
+    {
+      "path": "backend/app/reproduction/pcap_codec.py",
+      "change": "ADDED",
+      "sha256": "74c3aeabf687ca25f2a5014cef65ee3b5b5241d1fc15ebcb061a27b1dc387979",
+      "size": 7041
+    },
+    {
+      "path": "backend/app/reproduction/quick.py",
+      "change": "MODIFIED",
+      "sha256": "444196ace1b395e7de5834b61c85523392bdc77fea084b56919929f6699da40a",
+      "size": 9575
+    },
+    {
+      "path": "backend/app/schemas/reproduction.py",
+      "change": "MODIFIED",
+      "sha256": "1e4dfa5de7be785e2e88b32de982e69c0ce43755c637d9fcfc8da7681b45c08f",
+      "size": 2154
+    },
+    {
+      "path": "backend/migrations/versions/0009_reproduction_evidence_capture.py",
+      "change": "ADDED",
+      "sha256": "1b365887bfdf31fa178f0c850d84ee241128e4290fb4ec1b090f10e52aa31391",
+      "size": 4112
+    },
+    {
+      "path": "backend/tests/test_reproduction_phase_c2.py",
+      "change": "ADDED",
+      "sha256": "cafce09aae906f219110667befe112499e3001aa20b527779ab87bd6373df018",
+      "size": 7132
+    },
+    {
+      "path": "docs/PHASE_C2_REPRODUCTION_EVIDENCE_PIPELINE.md",
+      "change": "ADDED",
+      "sha256": "42d5a8cc2cbe18a5bed05c74a0c1ecab3719ab27212c9c4c8f85d984dbc0328a",
+      "size": 7038
+    },
+    {
+      "path": "tools/reproduction_evidence_e2e.py",
+      "change": "ADDED",
+      "sha256": "64b1f089fbe2f2815412156f00451ebc77a706dd8d05ea06d809e24981a4a906",
+      "size": 4035
+    },
+    {
+      "path": "validation/phase_c2_changed_files.txt",
+      "change": "ADDED",
+      "sha256": "4fa38dfdf14338f2c0a45f40a8942dde1e6fedeb6946c77665963e9986b85460",
+      "size": 985
+    },
+    {
+      "path": "validation/phase_c2_validation.json",
+      "change": "ADDED",
+      "sha256": "b74fa1e9e8ac1d2be1b873d7a6b2764ae2de496d26dbc9adf9f1e5ee4eb648f5",
+      "size": 3390
+    }
+  ],
+  "file_count": 22
+}

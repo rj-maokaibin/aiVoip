@@ -1,0 +1,181 @@
+{
+  "phase": "C3",
+  "base": "Phase C2 Reproduction Evidence Capture Pipeline",
+  "files": [
+    {
+      "path": "Makefile",
+      "change": "MODIFIED",
+      "sha256": "a1e6cb52f83a5f03bd73d259ec6246f73928031053c0782e73163638cce70a59",
+      "size": 3186
+    },
+    {
+      "path": "README.md",
+      "change": "MODIFIED",
+      "sha256": "4d8819129328d78ef27949459150ca65a6773eae61f7ebcb4bcc3a867e6b304b",
+      "size": 11275
+    },
+    {
+      "path": "backend/app/api/deps.py",
+      "change": "MODIFIED",
+      "sha256": "68c9559d5bac6b4c0ef8a6e0fc3611d27bbf820f8907959bca56a7d2a51df924",
+      "size": 5729
+    },
+    {
+      "path": "backend/app/api/v1/experiments.py",
+      "change": "ADDED",
+      "sha256": "ce1482ab9e03026d2ff082bec80f08cbb802af499ee318b42181a5b6b6d5bfb2",
+      "size": 12769
+    },
+    {
+      "path": "backend/app/contracts/enums.py",
+      "change": "MODIFIED",
+      "sha256": "db5ad8bff8d638ad524d08d7d3f5a10e81474a66d8d7546c4f2d7654697a5730",
+      "size": 17130
+    },
+    {
+      "path": "backend/app/core/errors.py",
+      "change": "MODIFIED",
+      "sha256": "1f0e460f8c77537d07c65da100e3c78948dee413e91d1fed767917e1b00306df",
+      "size": 11490
+    },
+    {
+      "path": "backend/app/db/models.py",
+      "change": "MODIFIED",
+      "sha256": "4c06846f977c412ddfe86aa3f3b6751b18ed69ca0e69afd15bf9af89bc2033a1",
+      "size": 56628
+    },
+    {
+      "path": "backend/app/experiments/__init__.py",
+      "change": "ADDED",
+      "sha256": "ef3b316aff4798bd179a7d4156e1f9ce0e529d79b62fdd4f2069a4119526f750",
+      "size": 101
+    },
+    {
+      "path": "backend/app/experiments/causal.py",
+      "change": "ADDED",
+      "sha256": "08b7da8e8fb963158537056c04a54b7c7df39f633c72ff3cd85c713f5a1f5bb0",
+      "size": 13883
+    },
+    {
+      "path": "backend/app/experiments/environment.py",
+      "change": "ADDED",
+      "sha256": "4d49adf3f3f96f201127aed88532548dae9ae0ef87fa6c5bf66b41b708a0a980",
+      "size": 9776
+    },
+    {
+      "path": "backend/app/experiments/fix_verification.py",
+      "change": "ADDED",
+      "sha256": "45a571e2c6a3fb61379a86466a2fa9965bc7351fb1f099271c356f2469f0c0e6",
+      "size": 17449
+    },
+    {
+      "path": "backend/app/experiments/orchestrator.py",
+      "change": "ADDED",
+      "sha256": "e0ebfa9ad1521b6c488967eb9412bdf3b303bad4630f1bd658dcb1a02452aafe",
+      "size": 17353
+    },
+    {
+      "path": "backend/app/experiments/profile.py",
+      "change": "ADDED",
+      "sha256": "8c8d762128a33bc2d011ad6751f3da021355d69b3d45f6b3ba8d7da8c7337f5d",
+      "size": 4305
+    },
+    {
+      "path": "backend/app/main.py",
+      "change": "MODIFIED",
+      "sha256": "90db659ccba80afebe550fb79cb847f38674be7be7371d93a72f77b397ee5d46",
+      "size": 3465
+    },
+    {
+      "path": "backend/app/reproduction/orchestrator.py",
+      "change": "MODIFIED",
+      "sha256": "0a5a532be85b1428e95df67b0420eda0671d84d56dd500e236a79533fd7f10b8",
+      "size": 38602
+    },
+    {
+      "path": "backend/app/reproduction/question_graph.py",
+      "change": "ADDED",
+      "sha256": "0c68414511d0b108e6b7e8fe52862dd1ba00ce1defa56229b988cc0bb2f05fea",
+      "size": 13303
+    },
+    {
+      "path": "backend/app/reproduction/state_machine.py",
+      "change": "MODIFIED",
+      "sha256": "be95969e4e3e58be858987303ce2a589e7102a7ecbad3da1c48192c0e4cff3ed",
+      "size": 10434
+    },
+    {
+      "path": "backend/app/schemas/experiments.py",
+      "change": "ADDED",
+      "sha256": "b7420700f146f3fbe537079a50c795cbce5dbac03ab67888e379b926b3dc28aa",
+      "size": 6081
+    },
+    {
+      "path": "backend/app/services/case_transitions.py",
+      "change": "MODIFIED",
+      "sha256": "3a574364c38d2f1296cf7592ef0452ab4be8a939177a4717709dafe0eb5803bf",
+      "size": 5470
+    },
+    {
+      "path": "backend/migrations/versions/0009_reproduction_evidence_capture.py",
+      "change": "MODIFIED",
+      "sha256": "2fedfa0232f01c9e69812191918f765bd8f99e1d9a07aca2a9c5404e938ccaf5",
+      "size": 4094
+    },
+    {
+      "path": "backend/migrations/versions/0010_phase_c3_diagnostic_experiments.py",
+      "change": "ADDED",
+      "sha256": "e0013d4163ed641d79a0d085b52b36d2df7221918be786985c67bd561df79f4c",
+      "size": 11095
+    },
+    {
+      "path": "backend/tests/test_reproduction_phase_c3.py",
+      "change": "ADDED",
+      "sha256": "3363ab092a8c3ff1e66ba9f4c017d7dfb0d64b324a0d5d76bd163e847ca49683",
+      "size": 24550
+    },
+    {
+      "path": "docs/PHASE_C3_DIAGNOSTIC_EXPERIMENTS.md",
+      "change": "ADDED",
+      "sha256": "745eb697a0f3e473be63278f57cd71f6ce4bbf3a35592b554742cd38e95ac3ba",
+      "size": 9770
+    },
+    {
+      "path": "profiles/experiments/voip_v1.yaml",
+      "change": "ADDED",
+      "sha256": "f95611d34a0eeedbe4da30d98db1bf2ad6ca9ffca78f296de9e576d52e42f3ea",
+      "size": 4777
+    },
+    {
+      "path": "profiles/questions/voip_v1.yaml",
+      "change": "ADDED",
+      "sha256": "54a0585d071e365349ca52507d7f97c98c59fe1df5884ca0bbc68a3f9fca9d28",
+      "size": 5303
+    },
+    {
+      "path": "tools/phase_c3_profile_gate.py",
+      "change": "ADDED",
+      "sha256": "90adb4e00754a66eaf42ff1008479a0a0a874f2db02bfbde35c97ad7564bd835",
+      "size": 3496
+    },
+    {
+      "path": "tools/reproduction_c3_e2e.py",
+      "change": "ADDED",
+      "sha256": "5e48a6317df9d89a9b5f2f92cd4433e34c1e59ec3e5efb3b54c254e5cb120bfc",
+      "size": 11436
+    },
+    {
+      "path": "validation/phase_c3_validation.json",
+      "change": "ADDED",
+      "sha256": "95681a6ef6572b0d22b1c5c34c65888eff6cc3eab524d70dce8681968ddb33bd",
+      "size": 4471
+    },
+    {
+      "path": "validation/phase_c3_changed_files.txt",
+      "change": "ADDED",
+      "sha256": "558b63feebf527b7ca4e04d6019dcac8b8ba076b593d9346225e81f53428475e",
+      "size": 1282
+    }
+  ],
+  "note": "The manifest file itself is intentionally excluded from its own checksum set."
+}

@@ -1,0 +1,26 @@
+key: PCM_HUM_FOR_AUDIO_NOISE
+version: 1.0.0
+name: PCM工频谐波解释杂音
+fault_domain: Audio/Analog
+priority: 15
+enabled: true
+when:
+  and:
+  - path: symptoms.AUDIO_NOISE
+    op: eq
+    value: true
+  - path: pcm.hum_high_count
+    op: gte
+    value: 1
+then:
+- action: hypothesis
+  payload:
+    code: PCM_HUM_INTERFERENCE
+    title: PCM音频存在明显工频/谐波干扰
+    fault_domain: Audio/Analog
+    confidence: 0.93
+    status: SUPPORTED
+    evidence_level: L2
+    rationale: 用户描述为杂音/电流音且PCM Hum Score达到HIGH；仍需结合tap点判断干扰首次进入链路的位置。
+dsl_version: 2
+category: SUPPORT

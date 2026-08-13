@@ -1,0 +1,14 @@
+{
+  "status": "PASS",
+  "checks": {
+    "required_files": true,
+    "safe_no_volume_destroy": true,
+    "cli_executable": true,
+    "release_runner_service": true,
+    "docker_secret_mounts": true,
+    "same_origin_api_proxy": true,
+    "frontend_relative_api_default": true,
+    "host_secret_contract": true
+  },
+  "errors": []
+}

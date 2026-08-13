@@ -1,0 +1,14 @@
+id: E2E_SIP_REGISTRATION_FAILED
+name: SIP注册认证后仍失败
+fixture: sip_registration_failed
+symptom: 设备注册失败
+expected:
+  contains:
+    anomaly_types: SIP_REGISTRATION_FAILED
+    registration_states: FAILED
+    hypothesis_codes: SIP_REGISTRATION_PATH_FAILURE
+    matched_rules: SIP_REGISTRATION_FAILED
+  hypothesis_status:
+    SIP_REGISTRATION_PATH_FAILURE: SUPPORTED
+  not_contains:
+    confirmed_hypotheses: SIP_REGISTRATION_PATH_FAILURE

@@ -1,0 +1,71 @@
+{
+  "phase": "B1",
+  "name": "SIP/RTP/PCM/Audio Semantic Hardening",
+  "validated_at_utc": "2026-08-13T01:37:13Z",
+  "baseline": "Phase A2 Contract Normalization",
+  "results": {
+    "python_compile": "PASS",
+    "profile_validation": {
+      "status": "PASS",
+      "analyzer_profile": {
+        "id": "voip_analyzer_v1",
+        "version": "1.0.0",
+        "status": "GOLDEN_CALIBRATED",
+        "sha256": "baf916148dbee95f685c735f40f226832b46256020b2af3b395d96a44bb61463"
+      },
+      "pcm_profile": {
+        "id": "ruijie_aim_diag_v1",
+        "version": "1.0.0",
+        "format_status": "VERIFIED",
+        "sha256": "61a751570c89c6f979a642ad94840b84227b1cd8e726f45561081e8cc24a26cf"
+      }
+    },
+    "backend_tests": {
+      "status": "PASS",
+      "passed": 90,
+      "total": 90
+    },
+    "rules": {
+      "status": "PASS",
+      "passed": 11,
+      "total": 11
+    },
+    "synthetic_golden": {
+      "status": "PASS",
+      "cases_passed": 5,
+      "cases_total": 5,
+      "checks_passed": 21,
+      "checks_total": 21
+    },
+    "synthetic_e2e": {
+      "status": "PASS",
+      "cases_passed": 10,
+      "cases_total": 10,
+      "checks_passed": 53,
+      "checks_total": 53
+    },
+    "baseline_diff": {
+      "status": "PASS",
+      "regressions": 0,
+      "changes": 0
+    },
+    "field_golden": {
+      "status": "PASS",
+      "case": "APF1250_CS20260807_6886043_PERIODIC_NOISE",
+      "checks_passed": 15,
+      "checks_total": 15,
+      "analysis_status": "PARTIAL_SUCCESS"
+    },
+    "docker_fullstack": {
+      "status": "UNVERIFIED",
+      "reason": "Docker CLI/daemon is unavailable in the execution environment"
+    }
+  },
+  "boundaries": {
+    "ec_02": "RESERVED / PENDING_PLATFORM_CONTRACT; no real DUT commands invented",
+    "m6_2": "NOT_IMPLEMENTED",
+    "rtcp_rtp_contradiction_rule": "PARTIAL / deferred",
+    "full_call_scoped_rtcp": "AS_BUILT_M6_1 / not newly claimed",
+    "clipping_root_cause_classifier": "NOT_INTRODUCED_WITHOUT_GOLDEN_CALIBRATION"
+  }
+}

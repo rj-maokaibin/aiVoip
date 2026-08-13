@@ -1,0 +1,24 @@
+schema_version: 1
+id: ruijie_aim_diag_v1
+version: 1.0.0
+format_status: VERIFIED
+transport:
+  payload_bytes: 160
+  header_length: 0
+  payload_offset: 0
+  pcm_payload_bytes: 160
+  expected_interval_ms: 10
+  session_gap_ms: 100
+format:
+  sample_rate: 8000
+  bit_depth: 16
+  signed: true
+  endian: little
+  channels: 1
+taps:
+  - name: pcm_rx
+    direction: RX
+    dst_port: 40000
+  - name: pcm_tx
+    direction: TX
+    dst_port: 50000

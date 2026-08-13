@@ -1,0 +1,96 @@
+experiments:
+  - id: PHONE_SWAP_AB
+    name: 话机单变量A-B-A实验
+    version: "1.0.0"
+    status: ACTIVE
+    hypothesis_codes: [LOCAL_CAPTURE_PERIODIC_INTERFERENCE, PCM_HUM_INTERFERENCE]
+    reproduction_profile_id: AUDIO_NOISE
+    independent_variable: external.phone_id
+    target_finding: PERIODIC_INTERFERENCE
+    confirmation_policy: ABA_REQUIRED
+    sequence: [A1, B, A2]
+    external_action_required: true
+    external_action_instructions: 更换为标准测试话机；A2时恢复原话机。
+    expected_change_paths: [external.phone_id]
+    must_equal_paths: [device.serial, software.version, voice.voice_vlan_id, voice.gateway_ip, voice.fxs_port, call.codec, call.called_number]
+    soft_drift_paths: [boot.uptime_seconds, call.remote_endpoint]
+
+  - id: LINE_SWAP_AB
+    name: 线路单变量A-B-A实验
+    version: "1.0.0"
+    status: ACTIVE
+    hypothesis_codes: [LOCAL_CAPTURE_PERIODIC_INTERFERENCE, PCM_HUM_INTERFERENCE]
+    reproduction_profile_id: AUDIO_NOISE
+    independent_variable: external.line_id
+    target_finding: PERIODIC_INTERFERENCE
+    confirmation_policy: ABA_REQUIRED
+    sequence: [A1, B, A2]
+    external_action_required: true
+    external_action_instructions: 更换电话线/线路；A2时恢复原线路。
+    expected_change_paths: [external.line_id]
+    must_equal_paths: [device.serial, software.version, voice.voice_vlan_id, voice.gateway_ip, voice.fxs_port, call.codec, call.called_number]
+    soft_drift_paths: [boot.uptime_seconds, call.remote_endpoint]
+
+  - id: FXS_PORT_SWAP_AB
+    name: FXS端口单变量A-B-A实验
+    version: "1.0.0"
+    status: ACTIVE
+    hypothesis_codes: [LOCAL_CAPTURE_PERIODIC_INTERFERENCE, PCM_HUM_INTERFERENCE]
+    reproduction_profile_id: AUDIO_NOISE
+    independent_variable: voice.fxs_port
+    target_finding: PERIODIC_INTERFERENCE
+    confirmation_policy: ABA_REQUIRED
+    sequence: [A1, B, A2]
+    external_action_required: true
+    external_action_instructions: 将同一话机/线路切换到另一个FXS端口；A2时恢复原端口。
+    expected_change_paths: [voice.fxs_port]
+    must_equal_paths: [device.serial, software.version, voice.voice_vlan_id, voice.gateway_ip, external.phone_id, external.line_id, call.codec, call.called_number]
+    soft_drift_paths: [boot.uptime_seconds, call.remote_endpoint]
+
+  - id: POWER_SUPPLY_AB
+    name: 电源单变量A-B-A实验
+    version: "1.0.0"
+    status: ACTIVE
+    hypothesis_codes: [LOCAL_CAPTURE_PERIODIC_INTERFERENCE, PCM_HUM_INTERFERENCE]
+    reproduction_profile_id: AUDIO_NOISE
+    independent_variable: external.power_supply_id
+    target_finding: PERIODIC_INTERFERENCE
+    confirmation_policy: ABA_REQUIRED
+    sequence: [A1, B, A2]
+    external_action_required: true
+    external_action_instructions: 更换已知良好的同规格电源；A2时恢复原电源。
+    expected_change_paths: [external.power_supply_id]
+    must_equal_paths: [device.serial, software.version, voice.voice_vlan_id, voice.gateway_ip, voice.fxs_port, external.phone_id, external.line_id, call.codec, call.called_number]
+    soft_drift_paths: [boot.uptime_seconds, call.remote_endpoint]
+
+  - id: DEVICE_SWAP_AB
+    name: 设备单变量A-B实验/可选回切
+    version: "1.0.0"
+    status: ACTIVE
+    hypothesis_codes: [LOCAL_CAPTURE_PERIODIC_INTERFERENCE, PCM_HUM_INTERFERENCE]
+    reproduction_profile_id: AUDIO_NOISE
+    independent_variable: device.serial
+    target_finding: PERIODIC_INTERFERENCE
+    confirmation_policy: ABA_PREFERRED
+    sequence: [A1, B, A2]
+    external_action_required: true
+    external_action_instructions: 保持软件/语音配置/话机/线路一致，仅替换DUT；条件允许时A2恢复原DUT。
+    expected_change_paths: [device.serial]
+    must_equal_paths: [software.version, voice.voice_vlan_id, voice.gateway_ip, voice.fxs_port, external.phone_id, external.line_id, call.codec, call.called_number]
+    soft_drift_paths: [boot.boot_id, boot.uptime_seconds, call.remote_endpoint]
+
+  - id: POST_REBOOT_FIRST_CALL
+    name: 重启后首次呼叫重复性实验
+    version: "1.0.0"
+    status: ACTIVE
+    hypothesis_codes: [DTMF_DIGIT_ASSEMBLY_MISMATCH]
+    reproduction_profile_id: DTMF_LOSS
+    independent_variable: boot.boot_id
+    target_finding: DTMF_PATH
+    confirmation_policy: REPEAT_MATCH
+    sequence: [A1, B, REPEAT]
+    external_action_required: true
+    external_action_instructions: A1记录稳定态；B重启后立即首拨；REPEAT再次重启并首拨。重启属于L3，不由系统自动执行。
+    expected_change_paths: [boot.boot_id]
+    must_equal_paths: [device.serial, software.version, voice.voice_vlan_id, voice.gateway_ip, voice.fxs_port, external.phone_id, external.line_id, call.codec, call.called_number]
+    soft_drift_paths: [boot.uptime_seconds, call.remote_endpoint]

@@ -1,0 +1,8 @@
+{
+  "status": "PASS",
+  "app_version": "1.0.0-rc1-f1",
+  "path_count": 75,
+  "operation_count": 81,
+  "sha256": "17af6b5c7047bc0d40891b69891b0c199f75f4bdc1f10426dda4b84d6878d75b",
+  "errors": []
+}

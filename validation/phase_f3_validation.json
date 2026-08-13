@@ -1,0 +1,73 @@
+{
+  "schema_version": 1,
+  "phase": "F3_PRODUCTION_DEPLOYMENT_RUNNER",
+  "status": "IMPLEMENTED_STATIC_VALIDATED_RUNTIME_PENDING",
+  "source_manifest_aggregate_sha256": "8c4f6e503e3a9ce8d1aa28bac3ab9659b319ae789642dda22401e613a76289db",
+  "backend_tests": 148,
+  "static_gate_count": 22,
+  "reproduction_mock_e2e": {
+    "passed": 3,
+    "total": 3
+  },
+  "reproduction_evidence_e2e": {
+    "passed": 5,
+    "total": 5
+  },
+  "reproduction_c3_e2e": {
+    "passed": 4,
+    "total": 4
+  },
+  "synthetic_golden": {
+    "passed": 21,
+    "total": 21
+  },
+  "synthetic_e2e": {
+    "passed": 53,
+    "total": 53
+  },
+  "baseline_diff": {
+    "regressions": 0,
+    "changes": 0
+  },
+  "field_golden": {
+    "passed": true,
+    "failed": 0,
+    "skipped": 0,
+    "source_bound": true
+  },
+  "release_readiness": {
+    "status": "STATIC_PASS_PRODUCTION_BLOCKED",
+    "static_status": "PASS",
+    "production_status": "BLOCKED",
+    "counts": {
+      "PASS": 27,
+      "BLOCKED": 12,
+      "UNVERIFIED": 4
+    },
+    "blocking_keys": [
+      "EC02_PLATFORM_PRODUCTION_READY",
+      "REAL_REPRODUCTION_PLATFORM",
+      "PRODUCTION_ENVIRONMENT",
+      "BUILD_REVISION_PINNED",
+      "PRODUCTION_CREDENTIAL_PROVIDER",
+      "PRODUCTION_REPRODUCTION_STORAGE",
+      "PRODUCTION_DEFAULT_SECRETS_REPLACED",
+      "PRODUCTION_AUTH_PROVIDER",
+      "ANONYMOUS_DEV_AUTH_DISABLED",
+      "PRODUCTION_CORS_RESTRICTED",
+      "FEISHU_LIVE_TRANSPORT",
+      "DOCKER_FULLSTACK_RUNTIME",
+      "POSTGRES_MIGRATION_RUNTIME",
+      "PRODUCTION_DEPLOYMENT_RUNTIME",
+      "FRONTEND_LOCKFILE",
+      "FRONTEND_PRODUCTION_BUILD"
+    ]
+  },
+  "docker_runtime_on_current_execution_host": "UNAVAILABLE",
+  "explicit_boundaries": [
+    "EC-02 real DUT Platform Contract remains pending and is not bypassed.",
+    "frontend/package-lock.json is still missing; reproducible frontend production build remains blocked.",
+    "Docker/PostgreSQL/Redis/MinIO runtime cannot be executed on the current assistant host because Docker/Podman is unavailable.",
+    "production credentials and Feishu live credentials are not fabricated."
+  ]
+}

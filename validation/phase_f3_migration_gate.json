@@ -1,0 +1,12 @@
+{
+  "status": "PASS",
+  "migration_count": 11,
+  "roots": [
+    "0001"
+  ],
+  "heads": [
+    "0011_phase_f2_production_hardening"
+  ],
+  "head": "0011_phase_f2_production_hardening",
+  "errors": []
+}

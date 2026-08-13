@@ -1,0 +1,17 @@
+key: DTMF_PCM_SIP_MATCH
+version: 1.0.0
+name: PCM DTMF与SIP拨号目标一致
+fault_domain: DTMF
+priority: 30
+enabled: true
+when:
+  and:
+  - path: media.dtmf_sip_match_count
+    op: gte
+    value: 1
+then:
+- action: excluded
+  payload:
+    text: 已匹配号码的PCM DTMF与SIP拨号目标一致，当前证据不支持该号码在PCM输入→SIP建呼之间发生丢失。
+dsl_version: 2
+category: SUPPORT

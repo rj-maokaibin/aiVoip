@@ -1,0 +1,24 @@
+key: ACTIVE_MEDIA_CLICK_POP
+version: 1.0.0
+name: 活跃通话窗口 Click/Pop 候选
+fault_domain: Audio/DSP
+priority: 35
+enabled: true
+when:
+  and:
+  - path: media.click_pop_count
+    op: gte
+    value: 1
+then:
+- action: hypothesis
+  payload:
+    code: PCM_CLICK_POP
+    title: 活跃通话媒体窗口存在Click/Pop候选
+    fault_domain: Audio/DSP
+    confidence: 0.75
+    status: OPEN
+    evidence_level: L3
+    confirmable: false
+    rationale: 事件同时满足波形突变、短时能量抬升和宽带频谱特征；仍需与用户异常时刻或多层媒体链路对齐，不能单独确认根因。
+dsl_version: 2
+category: SUPPORT

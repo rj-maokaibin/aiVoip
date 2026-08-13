@@ -1,0 +1,17 @@
+actions:
+  - {id: CAPTURE_PRE_SNAPSHOT, risk_level: L1, executor: mock, command: MOCK_ONLY, evidence_type: REPRO_PRE_SNAPSHOT, cleanup_required: false, cleanup_idempotent: true}
+  - {id: START_VOICE_PCAP, risk_level: L1, executor: mock, command: MOCK_ONLY, evidence_type: REPRO_PCAP, cleanup_action: STOP_VOICE_PCAP, cleanup_required: true, cleanup_idempotent: true}
+  - {id: START_PCM_RX, risk_level: L2, executor: mock, command: MOCK_ONLY, evidence_type: REPRO_PCM_RX, cleanup_action: STOP_PCM_RX, cleanup_required: true, cleanup_idempotent: true}
+  - {id: START_PCM_TX, risk_level: L2, executor: mock, command: MOCK_ONLY, evidence_type: REPRO_PCM_TX, cleanup_action: STOP_PCM_TX, cleanup_required: true, cleanup_idempotent: true}
+  - {id: ENABLE_BASIC_VOIP_DEBUG, risk_level: L2, executor: mock, command: MOCK_ONLY, evidence_type: REPRO_DEBUG, cleanup_action: DISABLE_BASIC_VOIP_DEBUG, cleanup_required: true, cleanup_idempotent: true}
+  - {id: ENABLE_DTMF_DEBUG, risk_level: L2, executor: mock, command: MOCK_ONLY, evidence_type: REPRO_DTMF_DEBUG, cleanup_action: DISABLE_DTMF_DEBUG, cleanup_required: true, cleanup_idempotent: true}
+  - {id: ENABLE_DSP_DEBUG, risk_level: L2, executor: mock, command: MOCK_ONLY, evidence_type: REPRO_DSP_DEBUG, cleanup_action: DISABLE_DSP_DEBUG, cleanup_required: true, cleanup_idempotent: true}
+  - {id: ENABLE_SIP_PACKET_LOG, risk_level: L2, executor: mock, command: MOCK_ONLY, evidence_type: REPRO_SIP_LOG, cleanup_action: DISABLE_SIP_PACKET_LOG, cleanup_required: true, cleanup_idempotent: true}
+  - {id: STOP_PCM_RX, risk_level: L2, executor: mock, command: MOCK_ONLY, evidence_type: REPRO_CLEANUP, cleanup_required: false, cleanup_idempotent: true}
+  - {id: STOP_PCM_TX, risk_level: L2, executor: mock, command: MOCK_ONLY, evidence_type: REPRO_CLEANUP, cleanup_required: false, cleanup_idempotent: true}
+  - {id: DISABLE_BASIC_VOIP_DEBUG, risk_level: L2, executor: mock, command: MOCK_ONLY, evidence_type: REPRO_CLEANUP, cleanup_required: false, cleanup_idempotent: true}
+  - {id: DISABLE_DTMF_DEBUG, risk_level: L2, executor: mock, command: MOCK_ONLY, evidence_type: REPRO_CLEANUP, cleanup_required: false, cleanup_idempotent: true}
+  - {id: DISABLE_DSP_DEBUG, risk_level: L2, executor: mock, command: MOCK_ONLY, evidence_type: REPRO_CLEANUP, cleanup_required: false, cleanup_idempotent: true}
+  - {id: DISABLE_SIP_PACKET_LOG, risk_level: L2, executor: mock, command: MOCK_ONLY, evidence_type: REPRO_CLEANUP, cleanup_required: false, cleanup_idempotent: true}
+  - {id: CAPTURE_POST_SNAPSHOT, risk_level: L1, executor: mock, command: MOCK_ONLY, evidence_type: REPRO_POST_SNAPSHOT, cleanup_required: false, cleanup_idempotent: true}
+  - {id: STOP_VOICE_PCAP, risk_level: L1, executor: mock, command: MOCK_ONLY, evidence_type: REPRO_CLEANUP, cleanup_required: false, cleanup_idempotent: true}

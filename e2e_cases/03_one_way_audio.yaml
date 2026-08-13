@@ -1,0 +1,15 @@
+id: E2E_ONE_WAY_AUDIO
+name: SIP已建立但只有单方向RTP
+fixture: one_way_audio
+symptom: 通话单通，对方听不到我
+expected:
+  contains:
+    anomaly_types: ONE_WAY_RTP_MEDIA
+    media_direction_statuses: ONE_WAY_A_TO_B
+    hypothesis_codes: ONE_WAY_AUDIO_PATH
+    matched_rules: ONE_WAY_RTP_MEDIA
+    plan_actions: REQUEST_MULTI_POINT_PCAP
+  hypothesis_status:
+    ONE_WAY_AUDIO_PATH: SUPPORTED
+  not_contains:
+    confirmed_hypotheses: ONE_WAY_AUDIO_PATH

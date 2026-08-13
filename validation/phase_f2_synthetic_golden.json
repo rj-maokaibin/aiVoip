@@ -1,0 +1,377 @@
+{
+  "passed": true,
+  "case_count": 5,
+  "checks_total": 21,
+  "checks_passed": 21,
+  "cases": [
+    {
+      "id": "SYNTH_AUDIO_CLICK_POP_IMPULSE",
+      "name": "活跃媒体窗口单次Click/Pop脉冲",
+      "kind": "synthetic_audio_click_pop",
+      "passed": true,
+      "checks": [
+        {
+          "name": "event_count_min",
+          "passed": true,
+          "actual": 1,
+          "expected": ">=1"
+        },
+        {
+          "name": "event_time",
+          "passed": true,
+          "actual": 1.0,
+          "expected": 1.0
+        },
+        {
+          "name": "clean_false_positive",
+          "passed": true,
+          "actual": 0,
+          "expected": 0
+        },
+        {
+          "name": "energy_rise",
+          "passed": true,
+          "actual": 7.251,
+          "expected": ">=7.0"
+        }
+      ],
+      "payload": {
+        "events": [
+          {
+            "type": "CLICK_POP",
+            "time_seconds": 1.0,
+            "jump": 31693.0,
+            "jump_threshold": 8003.0,
+            "energy_rise_db": 7.251,
+            "highband_energy_ratio": 0.878814,
+            "confidence": 0.85071,
+            "classification": "CLICK_POP_CANDIDATE",
+            "evidence_level": "L3"
+          }
+        ],
+        "clean_false_positive_events": []
+      }
+    },
+    {
+      "id": "SYNTH_AUDIO_ECHO_86MS",
+      "name": "86ms稳定回声路径",
+      "kind": "synthetic_audio_echo",
+      "passed": true,
+      "checks": [
+        {
+          "name": "echo_detected",
+          "passed": true,
+          "actual": true,
+          "expected": true
+        },
+        {
+          "name": "delay",
+          "passed": true,
+          "actual": 86.0,
+          "expected": 86
+        },
+        {
+          "name": "correlation",
+          "passed": true,
+          "actual": 0.97019,
+          "expected": ">=0.75"
+        },
+        {
+          "name": "hypothesis",
+          "passed": true,
+          "actual": {
+            "code": "AUDIO_ECHO_PATH",
+            "status": "SUPPORTED",
+            "confidence": 0.93
+          },
+          "expected": {
+            "code": "AUDIO_ECHO_PATH",
+            "status": "SUPPORTED"
+          }
+        },
+        {
+          "name": "not_confirmed",
+          "passed": true,
+          "actual": [
+            {
+              "code": "AUDIO_ECHO_PATH",
+              "status": "SUPPORTED"
+            }
+          ],
+          "expected": "no CONFIRMED"
+        }
+      ],
+      "payload": {
+        "echo": {
+          "detected": true,
+          "status": "OK",
+          "delay_ms": 86.0,
+          "absolute_correlation": 0.97019,
+          "quality": "HIGH",
+          "observed_to_reference_level_db": -3.908,
+          "evidence_level": "L2",
+          "interpretation": "检测到参考音频的延迟副本，支持存在回声路径；不单独确认AEC、SLIC、声学耦合或线路混合电路中的具体根因。"
+        },
+        "diagnosis": {
+          "headline": "PCM RX/TX之间检测到稳定延迟回声路径",
+          "top_hypotheses": [
+            {
+              "code": "AUDIO_ECHO_PATH",
+              "title": "PCM RX/TX之间检测到稳定延迟回声路径",
+              "confidence": 0.93,
+              "status": "SUPPORTED"
+            }
+          ],
+          "auto_action_count": 0,
+          "planned_action_count": 0
+        }
+      }
+    },
+    {
+      "id": "SYNTH_ACTIVE_MEDIA_SILENCE_350MS",
+      "name": "活跃媒体窗口350ms异常静音",
+      "kind": "synthetic_audio_silence",
+      "passed": true,
+      "checks": [
+        {
+          "name": "event_count",
+          "passed": true,
+          "actual": 1,
+          "expected": 1
+        },
+        {
+          "name": "duration_range",
+          "passed": true,
+          "actual": 340,
+          "expected": [
+            300,
+            400
+          ]
+        },
+        {
+          "name": "all_silence_false_positive",
+          "passed": true,
+          "actual": 0,
+          "expected": 0
+        }
+      ],
+      "payload": {
+        "events": [
+          {
+            "type": "UNEXPECTED_SILENCE",
+            "start_seconds": 1.2,
+            "end_seconds": 1.54,
+            "duration_ms": 340,
+            "threshold_dbfs": -43.241,
+            "median_dbfs": -120.0,
+            "pre_context_dbfs": -24.075,
+            "post_context_dbfs": -23.555,
+            "evidence_level": "L2"
+          }
+        ]
+      }
+    },
+    {
+      "id": "SYNTH_DTMF_8803_TO_SIP_803",
+      "name": "PCM拨号8803但SIP目标803/首位丢失",
+      "kind": "synthetic_dtmf_mismatch",
+      "passed": true,
+      "checks": [
+        {
+          "name": "pcm_digits",
+          "passed": true,
+          "actual": "8803",
+          "expected": "8803"
+        },
+        {
+          "name": "cross_event",
+          "passed": true,
+          "actual": "DTMF_SIP_DIAL_MISMATCH",
+          "expected": "DTMF_SIP_DIAL_MISMATCH"
+        },
+        {
+          "name": "hypothesis",
+          "passed": true,
+          "actual": {
+            "code": "DTMF_DIGIT_ASSEMBLY_MISMATCH",
+            "status": "SUPPORTED",
+            "confidence": 0.94
+          },
+          "expected": {
+            "code": "DTMF_DIGIT_ASSEMBLY_MISMATCH",
+            "status": "SUPPORTED"
+          }
+        },
+        {
+          "name": "not_confirmed",
+          "passed": true,
+          "actual": [
+            {
+              "code": "DTMF_DIGIT_ASSEMBLY_MISMATCH",
+              "status": "SUPPORTED"
+            }
+          ],
+          "expected": "no CONFIRMED"
+        }
+      ],
+      "payload": {
+        "pcm_sequences": [
+          {
+            "digits": "8803",
+            "start_seconds": 0.0,
+            "end_seconds": 0.72,
+            "event_count": 4,
+            "min_confidence": 0.860002
+          }
+        ],
+        "cross": [
+          {
+            "type": "DTMF_SIP_DIAL_MISMATCH",
+            "severity": "MEDIUM",
+            "time": 100.0,
+            "evidence_level": "L2",
+            "details": {
+              "call_id": "c1",
+              "sip_target": "803",
+              "pcm_digits": "8803",
+              "pcm_tap": "pcm_rx",
+              "pcm_session_index": 0,
+              "pcm_min_confidence": 0.860002,
+              "lead_time_ms": 280.0,
+              "interpretation": "PCM RX检测到的拨号序列与随后SIP目标不一致，需要检查DTMF采集/号码组装链路"
+            }
+          }
+        ],
+        "diagnosis": {
+          "headline": "PCM输入DTMF与随后SIP拨号目标不一致",
+          "top_hypotheses": [
+            {
+              "code": "DTMF_DIGIT_ASSEMBLY_MISMATCH",
+              "title": "PCM输入DTMF与随后SIP拨号目标不一致",
+              "confidence": 0.94,
+              "status": "SUPPORTED"
+            }
+          ],
+          "auto_action_count": 1,
+          "planned_action_count": 1
+        }
+      }
+    },
+    {
+      "id": "SYNTH_RTP_BURST_LOSS_4X20MS",
+      "name": "RTP连续4包丢失/80ms媒体缺口",
+      "kind": "synthetic_rtp_burst_loss",
+      "passed": true,
+      "checks": [
+        {
+          "name": "lost_packets",
+          "passed": true,
+          "actual": 4,
+          "expected": 4
+        },
+        {
+          "name": "max_consecutive_loss",
+          "passed": true,
+          "actual": 4,
+          "expected": 4
+        },
+        {
+          "name": "burst_event",
+          "passed": true,
+          "actual": 1,
+          "expected": 1
+        },
+        {
+          "name": "audio_loss_ms",
+          "passed": true,
+          "actual": 80.0,
+          "expected": 80.0
+        },
+        {
+          "name": "ptime_ms",
+          "passed": true,
+          "actual": 20.0,
+          "expected": 20.0
+        }
+      ],
+      "payload": {
+        "rtp": {
+          "stream_id": "1.1.1.1:10000>2.2.2.2:20000/ssrc=1",
+          "src_ip": "1.1.1.1",
+          "src_port": 10000,
+          "dst_ip": "2.2.2.2",
+          "dst_port": 20000,
+          "ssrc": 1,
+          "packet_count": 4,
+          "unique_packet_count": 4,
+          "duration_seconds": 0.14,
+          "start_time": 1.0,
+          "end_time": 1.14,
+          "first_sequence_ext": 100,
+          "last_sequence_ext": 107,
+          "expected_packets": 8,
+          "lost_packets": 4,
+          "loss_rate_percent": 50.0,
+          "duplicate_packets": 0,
+          "out_of_order_packets": 0,
+          "max_consecutive_loss": 4,
+          "burst_loss_count": 1,
+          "avg_delta_ms": 46.666667,
+          "p95_delta_ms": 92.0,
+          "max_delta_ms": 100.0,
+          "high_delta_count": 1,
+          "max_excess_delay_ms": 80.0,
+          "avg_jitter_ms": 0.0,
+          "p95_jitter_ms": 0.0,
+          "max_jitter_ms": 0.0,
+          "payload_type": 8,
+          "payload_types": [
+            8
+          ],
+          "payload_change_count": 0,
+          "codec": "PCMA",
+          "clock_rate": 8000,
+          "ptime_ms": 20.0,
+          "ptime_source": "RTP_TIMESTAMP_INFERRED",
+          "availability": {
+            "codec_mapping": "AVAILABLE",
+            "clock_rate": "AVAILABLE",
+            "ptime": "AVAILABLE",
+            "rfc3550_jitter": "AVAILABLE",
+            "estimated_audio_loss": "AVAILABLE"
+          },
+          "analyzer_profile": {
+            "profile_id": "voip_analyzer_v1",
+            "profile_version": "1.0.0",
+            "profile_status": "GOLDEN_CALIBRATED",
+            "profile_checksum": "baf916148dbee95f685c735f40f226832b46256020b2af3b395d96a44bb61463"
+          },
+          "events": [
+            {
+              "type": "BURST_LOSS",
+              "start_time": 1.12,
+              "severity": "HIGH",
+              "details": {
+                "previous_sequence_ext": 101,
+                "next_sequence_ext": 106,
+                "lost_packets": 4,
+                "ptime_ms": 20.0,
+                "estimated_audio_loss_ms": 80.0
+              }
+            },
+            {
+              "type": "HIGH_DELTA",
+              "start_time": 1.12,
+              "severity": "MEDIUM",
+              "details": {
+                "delta_ms": 100.0,
+                "expected_ptime_ms": 20.0,
+                "excess_delay_ms": 80.0
+              }
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

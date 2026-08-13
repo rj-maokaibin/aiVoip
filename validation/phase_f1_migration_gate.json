@@ -1,0 +1,12 @@
+{
+  "status": "PASS",
+  "migration_count": 10,
+  "roots": [
+    "0001"
+  ],
+  "heads": [
+    "0010_phase_c3_diagnostic_experiments"
+  ],
+  "head": "0010_phase_c3_diagnostic_experiments",
+  "errors": []
+}

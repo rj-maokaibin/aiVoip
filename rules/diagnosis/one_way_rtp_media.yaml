@@ -1,0 +1,26 @@
+key: ONE_WAY_RTP_MEDIA
+version: 1.0.0
+name: SIP已建立但RTP仅单方向存在
+fault_domain: RTP/Media
+priority: 24
+enabled: true
+when:
+  and:
+  - path: anomaly_counts.ONE_WAY_RTP_MEDIA
+    op: gte
+    value: 1
+then:
+- action: hypothesis
+  payload:
+    code: ONE_WAY_AUDIO_PATH
+    title: SIP已建立但RTP媒体仅单方向存在
+    fault_domain: RTP/Media
+    confidence: 0.95
+    status: SUPPORTED
+    evidence_level: L1
+    rationale: SDP期望双向sendrecv且SIP事务完整，但当前Call只检测到一个方向的持续RTP；可确认单向RTP现象，具体故障节点仍需多点证据定位。
+- action: unknown
+  payload:
+    text: 单点抓包不能唯一确定单向媒体发生在终端发送、网络/NAT、PBX转发还是接收端处理层。
+dsl_version: 2
+category: SUPPORT

@@ -1,0 +1,80 @@
+{
+  "phase": "E1_WEB_FEISHU_PRODUCTIZATION",
+  "status": "PASS_WITH_RUNTIME_LIMITATIONS",
+  "backend_tests": {
+    "passed": 132,
+    "total": 132
+  },
+  "workbench_contract_gate": {
+    "passed": 11,
+    "total": 11
+  },
+  "reproduction_profiles": {
+    "passed": 8,
+    "total": 8
+  },
+  "diagnostic_questions": {
+    "passed": 17,
+    "total": 17
+  },
+  "experiment_profiles": {
+    "passed": 6,
+    "total": 6
+  },
+  "c1_reproduction_e2e": {
+    "passed": 3,
+    "total": 3
+  },
+  "c2_evidence_e2e": {
+    "passed": 5,
+    "total": 5
+  },
+  "c3_experiment_e2e": {
+    "passed": 4,
+    "total": 4
+  },
+  "rules": {
+    "passed": 11,
+    "total": 11
+  },
+  "synthetic_golden": {
+    "checks_passed": 21,
+    "checks_total": 21
+  },
+  "synthetic_e2e": {
+    "checks_passed": 53,
+    "checks_total": 53
+  },
+  "baseline_diff": {
+    "regressions": 0,
+    "changes": 0
+  },
+  "field_golden": {
+    "cases_passed": 1,
+    "cases_total": 1,
+    "checks_passed": 15,
+    "checks_total": 15
+  },
+  "frontend": {
+    "typescript_syntax": "PASS",
+    "vite_production_build": "UNVERIFIED_PACKAGE_INSTALL_TIMEOUT"
+  },
+  "docker_fullstack_runtime": "UNVERIFIED_NO_DOCKER_RUNTIME",
+  "ec02": {
+    "status": "RESERVED",
+    "platform_contract_audit": "PASS",
+    "production_ready": false,
+    "blocking_gaps": 6
+  },
+  "feishu": {
+    "card_contract": "IMPLEMENTED",
+    "notification_policy": "IMPLEMENTED",
+    "preview_api": "IMPLEMENTED",
+    "live_transport": "NOT_CONFIGURED",
+    "callback_security": "NOT_CONFIGURED"
+  },
+  "notes": [
+    "No real DUT command added in Phase E1.",
+    "No live Feishu network request is implemented in Phase E1."
+  ]
+}

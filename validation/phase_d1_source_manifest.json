@@ -1,0 +1,75 @@
+{
+  "files": [
+    {
+      "path": "Makefile",
+      "sha256": "15bbf56f220862b5e57afb7a61a5b8157563c54937a478b6dd02edf45109a3e6",
+      "size": 3431
+    },
+    {
+      "path": "README.md",
+      "sha256": "a333ce16b40afda725833f3583e16f03aa87ed22a5cf8fd09a95c3d628ec2622",
+      "size": 11956
+    },
+    {
+      "path": "backend/app/actions/registry.py",
+      "sha256": "97239470887bb1cd45825543a0420506886ab8b514ed46b9265b1956de6b86a2",
+      "size": 3855
+    },
+    {
+      "path": "backend/app/collectors/asyncssh_adapter.py",
+      "sha256": "bc963a663206fb9c8abea599cf695d171757e1956dd85bd515c566176327e1f0",
+      "size": 5251
+    },
+    {
+      "path": "backend/app/platforms/__init__.py",
+      "sha256": "d817c8a8e7d973117d3608f8723d4fde615765c009270766bcb78e8cc22d597d",
+      "size": 439
+    },
+    {
+      "path": "backend/app/platforms/contracts.py",
+      "sha256": "1214ffb0440a1ae9a3dfaea4d4c156be8cd48d860db3f54191b7d4f805b7fe39",
+      "size": 3905
+    },
+    {
+      "path": "backend/app/platforms/registry.py",
+      "sha256": "49f993a499a25696eb0c8e0d8c34f026c796cea39d70416cd8f99e77c3720164",
+      "size": 3355
+    },
+    {
+      "path": "backend/tests/test_phase_d1_platform_contract.py",
+      "sha256": "153a560d5ba35a7689e5ec1224f1883008fe7817f7ae60fb1daa8d99c909ea18",
+      "size": 5079
+    },
+    {
+      "path": "docs/PHASE_D1_EC02_PLATFORM_CONTRACT.md",
+      "sha256": "d4bc0cd2a86682ac63ceda609d28ca0237548f1e65d0c82e074bacf31ca45abb",
+      "size": 3625
+    },
+    {
+      "path": "profiles/actions/voip_basic.yaml",
+      "sha256": "8a81c0b24304a8e8629d91ed2b505b8a455bb831d91885dd0984ab5c33ab6256",
+      "size": 5543
+    },
+    {
+      "path": "profiles/collect/voip_basic.yaml",
+      "sha256": "a6a442fe8107a9253a2fbf8482af96d0cb496e00fbb858aef23a526b7fcbd5b1",
+      "size": 504
+    },
+    {
+      "path": "profiles/platforms/ruijie_voip_aim_v1.yaml",
+      "sha256": "2af6f44793e5c67aa45fec7735776d8b89d61797139680c581c485ec852af906",
+      "size": 7085
+    },
+    {
+      "path": "tools/check_profiles.py",
+      "sha256": "2588d2bca6735898a8070bcb840a18425e60559c67b8948165c794b9caff8de6",
+      "size": 1080
+    },
+    {
+      "path": "tools/platform_contract_gate.py",
+      "sha256": "066386a05d67ee6574dc4809b8c4e3b96303e9a2d3bcdf50a04b5bbbaf668a51",
+      "size": 1693
+    }
+  ],
+  "count": 14
+}

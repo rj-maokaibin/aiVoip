@@ -1,0 +1,27 @@
+key: ACTIVE_MEDIA_UNEXPECTED_SILENCE
+version: 1.0.0
+name: 活跃通话窗口异常静音
+fault_domain: Audio/Media
+priority: 25
+enabled: true
+when:
+  and:
+  - path: symptoms.AUDIO_STUTTER
+    op: eq
+    value: true
+  - path: media.unexpected_silence_count
+    op: gte
+    value: 1
+then:
+- action: hypothesis
+  payload:
+    code: PCM_UNEXPECTED_SILENCE
+    title: 活跃通话媒体窗口存在持续静音/中断
+    fault_domain: Audio/Media
+    confidence: 0.86
+    status: SUPPORTED
+    evidence_level: L2
+    confirmable: false
+    rationale: SIP Active Media Window内检测到被有效音频上下文包围的持续静音，支持媒体中断候选；需与RTP/PCM多层时间轴进一步定位异常首次出现层。
+dsl_version: 2
+category: SUPPORT

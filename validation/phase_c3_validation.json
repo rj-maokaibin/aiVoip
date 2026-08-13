@@ -1,0 +1,72 @@
+{
+  "phase": "C3",
+  "component": "M6.2 DiagnosticQuestion DAG / Experiments / Causal Confirmation / Fix Verification",
+  "validated_at": "2026-08-13",
+  "status": "PASS_WITH_RUNTIME_GAPS",
+  "contract_boundary": {
+    "ec02": "RESERVED / PENDING_PLATFORM_CONTRACT",
+    "real_dut_commands_implemented": false,
+    "real_reboot_command_implemented": false,
+    "mock_platform_only_for_device_execution": true,
+    "note": "Diagnostic experiments coordinate approved external physical actions and Mock reproduction; C3 does not invent or execute real DUT platform commands."
+  },
+  "validation": {
+    "backend_tests": {"passed": 124, "total": 124, "status": "PASS"},
+    "reproduction_profiles": {"passed": 8, "total": 8, "status": "PASS"},
+    "diagnostic_question_templates": {"passed": 17, "total": 17, "status": "PASS"},
+    "experiment_profiles": {"passed": 6, "total": 6, "status": "PASS"},
+    "question_experiment_references": {"count": 6, "status": "PASS"},
+    "reproduction_mock_e2e_regression": {"passed": 3, "total": 3, "status": "PASS"},
+    "reproduction_evidence_e2e_regression": {"passed": 5, "total": 5, "status": "PASS"},
+    "reproduction_c3_e2e": {"passed": 4, "total": 4, "status": "PASS"},
+    "rule_validation": {"passed": 11, "total": 11, "status": "PASS"},
+    "synthetic_golden": {"cases_passed": 5, "cases_total": 5, "checks_passed": 21, "checks_total": 21, "status": "PASS"},
+    "synthetic_e2e": {"cases_passed": 10, "cases_total": 10, "checks_passed": 53, "checks_total": 53, "status": "PASS"},
+    "baseline_regression": {"regressions": 0, "changes": 0, "status": "PASS"},
+    "field_golden": {
+      "case": "APF1250_CS20260807_6886043_PERIODIC_NOISE",
+      "source_sha256": "3af13c0142b5cb86a60dc0642b572261735d6af770806dcb05e70e2c574f8fbc",
+      "checks_passed": 15,
+      "checks_total": 15,
+      "analysis_status": "PARTIAL_SUCCESS",
+      "status": "PASS"
+    },
+    "python_compile": "PASS",
+    "alembic_graph": {"head": "0010_phase_c3_diagnostic_experiments", "single_head": true, "status": "PASS"},
+    "docker_runtime": "UNVERIFIED_DOCKER_NOT_AVAILABLE",
+    "postgresql_migration_runtime": "UNVERIFIED_POSTGRES_RUNTIME_NOT_AVAILABLE",
+    "sqlite_full_upgrade": "NOT_APPLICABLE_OLD_POSTGRES_ORIENTED_0006_MIGRATION_USES_UNSUPPORTED_ALTER_CONSTRAINT"
+  },
+  "c3_e2e_scenarios": [
+    {"scenario": "POWER_SUPPLY_ABA_CAUSAL_CONFIRM", "status": "PASS", "result": "ROOT_CAUSE_CONFIRMED"},
+    {"scenario": "HARD_DRIFT_RETRY_RECOVERY", "status": "PASS", "invalid_variant_retry_run_no": 3, "result": "STRONGLY_SUPPORTED"},
+    {"scenario": "POST_REBOOT_REPEAT_MATCH", "status": "PASS", "result": "ROOT_CAUSE_CONFIRMED", "real_reboot_command_executed": false},
+    {"scenario": "FIX_VERIFICATION_TWO_CALLS", "status": "PASS", "fix_status": "FIX_VERIFIED", "case_status": "RESOLVED"}
+  ],
+  "implemented": [
+    "Versioned deterministic DiagnosticQuestion DAG with evidence requirements and information-gain metadata",
+    "Six approved versioned single-variable ExperimentProfiles",
+    "PRE/POST ExperimentEnvironmentSnapshot persistence",
+    "EnvironmentComparator with EXPECTED_CHANGE / SOFT_DRIFT / HARD_DRIFT and A2 reversion check",
+    "A/B, A-B-A, repeat-match and direct-evidence causal confirmation policies",
+    "Immutable CausalAssessment L1 Evidence and append-only Hypothesis revisions",
+    "DiagnosticExperiment orchestration with invalid-variant retry and bounded call cleanup",
+    "Root-cause question completion only after deterministic causal confirmation",
+    "FixAction and multi-call FixVerification with required_calls/max_calls",
+    "FIX_VERIFIED -> RESOLVED gate; FIX_FAILED/FIX_INCONCLUSIVE reopen diagnosis; FIX_REGRESSION never resolves",
+    "Immutable FIX_COMPARISON L1 evidence with lineage",
+    "Migration 0010_phase_c3_diagnostic_experiments",
+    "C2 Alembic down_revision chain correction",
+    "Experiment/Fix RBAC permissions and idempotent API operations",
+    "C3 profile/security/E2E Makefile gates"
+  ],
+  "known_deferred": [
+    "EC-02 real DUT PlatformProfile/Action command mapping",
+    "Real DUT execution of Voice Gateway resolver, AIM debug, hook event and PCM control",
+    "Real reboot execution (L3 remains external/approval-bound)",
+    "Web/Feishu experiment and Fix Verification interaction surfaces",
+    "Docker full-stack runtime verification",
+    "PostgreSQL migration runtime verification",
+    "Real DUT field A/B and A-B-A validation after EC-02 is frozen"
+  ]
+}

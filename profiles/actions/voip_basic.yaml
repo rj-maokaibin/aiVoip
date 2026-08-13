@@ -1,0 +1,169 @@
+actions:
+  - id: GET_DEVICE_INFO
+    version: 1.0.0
+    contract_status: LEGACY
+    risk_level: L0
+    executor: shell
+    command: "ubus call system board 2>/dev/null || (cat /etc/openwrt_release 2>/dev/null; uname -a)"
+    evidence_type: DEVICE_INFO
+    timeout: 8
+    description: 获取设备基础系统信息；通用OpenWrt能力，不作为EC-02源材料中的平台特定命令。
+
+  - id: CHECK_AIMD_PROCESS
+    version: 1.0.0
+    contract_status: VERIFIED
+    risk_level: L0
+    executor: shell
+    command: "ps | grep -nr aimd"
+    evidence_type: PROCESS_STATUS
+    timeout: 5
+    description: 检查 aimd.s 核心进程。
+    success: {type: OUTPUT_OBSERVED}
+    source_refs: ["voip 排障案例_思路整理。(1).md#一-馈电/aimd进程"]
+    supported_platforms: [RUIJIE_VOIP_AIM_V1]
+
+  - id: GET_VOIP_LOG
+    version: 1.0.0
+    contract_status: VERIFIED
+    risk_level: L0
+    executor: shell
+    command: "cat /tmp/voip_log.txt"
+    evidence_type: VOIP_LOG
+    timeout: 8
+    description: 获取 VOIP 适配层日志。
+    source_refs: ["voip 排障案例_思路整理。(1).md#二-1-voip适配层基本排障"]
+    supported_platforms: [RUIJIE_VOIP_AIM_V1]
+
+  - id: GET_NETWORK_CONFIG
+    version: 1.0.0
+    contract_status: VERIFIED
+    risk_level: L0
+    executor: shell
+    command: "cat /etc/config/network"
+    evidence_type: NETWORK_CONFIG
+    timeout: 8
+    description: 获取网络配置，用于观察 Voice VLAN 是否创建。
+    source_refs: ["voip 排障案例_思路整理。(1).md#三-1-Voice-VLAN"]
+    supported_platforms: [RUIJIE_VOIP_AIM_V1]
+
+  - id: GET_ROUTE
+    version: 1.0.0
+    contract_status: VERIFIED
+    risk_level: L0
+    executor: shell
+    command: "route"
+    evidence_type: ROUTE
+    timeout: 5
+    description: 获取路由，核对 Voice VLAN 出口/目的地址路径。
+    source_refs: ["voip 排障案例_思路整理。(1).md#三-1-路由"]
+    supported_platforms: [RUIJIE_VOIP_AIM_V1]
+
+  - id: GET_DNS
+    version: 1.0.0
+    contract_status: VERIFIED
+    risk_level: L0
+    executor: shell
+    command: "cat /tmp/voip/resolv.conf"
+    evidence_type: DNS
+    timeout: 5
+    description: 获取 VOIP DNS 配置。
+    source_refs: ["voip 排障案例_思路整理。(1).md#三-1-DNS"]
+    supported_platforms: [RUIJIE_VOIP_AIM_V1]
+
+  - id: GET_PCM_COUNTER
+    version: 1.0.0
+    contract_status: VERIFIED
+    risk_level: L0
+    executor: shell
+    command: "cat /proc/ralink_pcm/cfg | grep -E 'rff_cnt|tfe_cnt'"
+    evidence_type: PCM_COUNTER
+    timeout: 5
+    description: 获取 PCM 驱动 RX/TX 异常计数器。
+    source_refs:
+      - "voip 排障案例_思路整理。(1).md#音质-rff_cnt"
+      - "voip 排障案例_思路整理。(1).md#音质-tfe_cnt"
+    supported_platforms: [RUIJIE_VOIP_AIM_V1]
+
+  - id: GET_AIM_BIND
+    version: 1.0.0
+    contract_status: VERIFIED
+    risk_level: L0
+    executor: aim
+    command: "sys show bind-if"
+    evidence_type: AIM_BIND
+    timeout: 8
+    description: 获取 AIM 绑定接口。
+    source_refs: ["voip 排障案例_思路整理。(1).md#二-2-a.2"]
+    supported_platforms: [RUIJIE_VOIP_AIM_V1]
+
+  - id: GET_SIP_REGISTER
+    version: 1.0.0
+    contract_status: VERIFIED
+    risk_level: L0
+    executor: aim
+    command: "voip sip regc show running RC1"
+    evidence_type: SIP_REGISTER_STATUS
+    timeout: 8
+    description: 获取 SIP 注册运行状态。
+    source_refs: ["voip 排障案例_思路整理。(1).md#二-2-a.3"]
+    supported_platforms: [RUIJIE_VOIP_AIM_V1]
+
+  - id: GET_VOICE_VLAN_REF
+    version: 1.0.0
+    contract_status: VERIFIED
+    risk_level: L0
+    executor: shell
+    command: "cat /etc/config/vlan_ref"
+    evidence_type: VOICE_VLAN_REF
+    timeout: 5
+    description: 获取 VLAN 引用统计；原始输出可用于后续 Voice VLAN Resolver，但字段解析仍待EC-02确认。
+    source_refs: ["voip 排障案例_思路整理。(1).md#三-1-Voice-VLAN"]
+    supported_platforms: [RUIJIE_VOIP_AIM_V1]
+
+  - id: GET_BRIDGE_INFO
+    version: 1.0.0
+    contract_status: VERIFIED
+    risk_level: L0
+    executor: shell
+    command: "brctl show"
+    evidence_type: BRIDGE_INFO
+    timeout: 5
+    description: 获取桥接信息，观察 br-lan_xxx 与上联接口关系。
+    source_refs: ["voip 排障案例_思路整理。(1).md#三-1-Voice-VLAN桥接"]
+    supported_platforms: [RUIJIE_VOIP_AIM_V1]
+
+  - id: GET_NETWORK_VOIP_LOG
+    version: 1.0.0
+    contract_status: VERIFIED
+    risk_level: L0
+    executor: shell
+    command: "cat /tmp/networkapi/networkvoip.log"
+    evidence_type: NETWORK_VOIP_LOG
+    timeout: 8
+    description: 获取 networkapi 的 VOIP VLAN 配置调用日志。
+    source_refs: ["voip 排障案例_思路整理。(1).md#三-1-networkvoip.log"]
+    supported_platforms: [RUIJIE_VOIP_AIM_V1]
+
+  - id: GET_AIM_SIP_CONFIG
+    version: 1.0.0
+    contract_status: VERIFIED
+    risk_level: L0
+    executor: aim
+    command: "voip sip regc show config RC1"
+    evidence_type: AIM_SIP_CONFIG
+    timeout: 8
+    description: 获取 AIM SIP 用户/注册配置。
+    source_refs: ["voip 排障案例_思路整理。(1).md#二-2-a.1"]
+    supported_platforms: [RUIJIE_VOIP_AIM_V1]
+
+  - id: GET_DSP_RUNNING
+    version: 1.0.0
+    contract_status: VERIFIED
+    risk_level: L0
+    executor: aim
+    command: "voip dsp show running 1"
+    evidence_type: DSP_RUNNING
+    timeout: 8
+    description: 获取 DSP 运行信息/时延抖动相关状态。
+    source_refs: ["voip 排障案例_思路整理。(1).md#五-抖动时延"]
+    supported_platforms: [RUIJIE_VOIP_AIM_V1]

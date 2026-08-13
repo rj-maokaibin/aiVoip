@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "status": "PASS",
+  "source_manifest_aggregate_sha256": "d138d697c358e77bd7a1cae7bb34148d937487dea694f22f9686c9bce1220097",
+  "backend_tests": {
+    "passed": 137
+  },
+  "reproduction_mock_e2e": {
+    "passed": 3,
+    "total": 3
+  },
+  "reproduction_evidence_e2e": {
+    "passed": 5,
+    "total": 5
+  },
+  "reproduction_c3_e2e": {
+    "passed": 4,
+    "total": 4
+  },
+  "synthetic_golden": {
+    "passed": 21,
+    "total": 21
+  },
+  "synthetic_e2e": {
+    "passed": 53,
+    "total": 53
+  },
+  "baseline_diff": {
+    "regressions": 0,
+    "changes": 0
+  },
+  "gates": [
+    "PYTHON_COMPILE",
+    "BACKEND_TESTS",
+    "MIGRATION_CONTRACT",
+    "OPENAPI_CONTRACT",
+    "COMPOSE_CONTRACT",
+    "SECURITY_CONTRACT",
+    "SOURCE_MANIFEST",
+    "PROFILES",
+    "PLATFORM_CONTRACT",
+    "REPRODUCTION_PROFILES",
+    "DIAGNOSTIC_EXPERIMENT_PROFILES",
+    "REPRODUCTION_MOCK_E2E",
+    "REPRODUCTION_EVIDENCE_E2E",
+    "REPRODUCTION_C3_E2E",
+    "RULES",
+    "SYNTHETIC_GOLDEN",
+    "SYNTHETIC_E2E",
+    "BASELINE_DIFF",
+    "WORKBENCH_CONTRACT"
+  ]
+}

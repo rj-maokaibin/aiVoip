@@ -1,0 +1,1 @@
+{"status": "PASS", "diagnostic_questions": 17, "experiment_profiles": 6, "question_experiment_references": 6, "ec02_boundary": "PASS_NO_REAL_COMMANDS", "experiment_ids": ["DEVICE_SWAP_AB", "FXS_PORT_SWAP_AB", "LINE_SWAP_AB", "PHONE_SWAP_AB", "POST_REBOOT_FIRST_CALL", "POWER_SUPPLY_AB"]}

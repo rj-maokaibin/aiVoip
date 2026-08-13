@@ -1,0 +1,11 @@
+id: SYNTH_DTMF_8803_TO_SIP_803
+name: PCM拨号8803但SIP目标803/首位丢失
+kind: synthetic_dtmf_mismatch
+symptom: 重启后首次拨号丢第一位号码
+expected:
+  pcm_digits: "8803"
+  sip_target: "803"
+  cross_event_type: DTMF_SIP_DIAL_MISMATCH
+  hypothesis_code: DTMF_DIGIT_ASSEMBLY_MISMATCH
+  hypothesis_status: SUPPORTED
+  must_not_confirm_root: true

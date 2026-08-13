@@ -1,0 +1,39 @@
+schema_version: 1
+release_id: VOIP_AI_V1.0
+policy_version: 1.2.0
+required_static_gates:
+  - python_compile
+  - backend_tests
+  - migration_contract
+  - openapi_contract
+  - compose_contract
+  - security_contract
+  - production_hardening_contract
+  - deployment_contract
+  - source_manifest
+  - reproduction_profiles
+  - diagnostic_questions
+  - experiment_profiles
+  - rules
+  - synthetic_golden
+  - synthetic_e2e
+  - baseline_diff
+  - workbench_contract
+  - platform_contract
+  - reproduction_e2e_suite
+required_production_evidence:
+  ec02_platform_production_ready: true
+  docker_fullstack_runtime: true
+  postgres_migration_runtime: true
+  production_deployment_runtime: true
+  frontend_lockfile: true
+  frontend_production_build: true
+  production_auth_provider: true
+  feishu_live_transport: true
+  field_golden: true
+notes:
+  - EC-02 is intentionally pending and must not be bypassed by a mock platform.
+  - Runtime evidence is distinct from static source validation; UNVERIFIED never means PASS.
+  - Field Golden, Docker full-stack, PostgreSQL migration, and frontend build evidence must carry the exact current source-manifest SHA256; stale evidence is rejected.
+  - Frontend release builds require a source-controlled package-lock.json and npm ci; package.json alone is not a reproducible release contract.
+  - Production deployment runtime evidence must verify backend/frontend proxy, PostgreSQL head, Redis, MinIO read/write, Celery queues, and production configuration on the exact source.
