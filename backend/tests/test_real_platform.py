@@ -139,10 +139,11 @@ def test_cleanup_quiet_channel_skips_off(fake):
     # All probes report 0 packets -> guard treats channels as quiet -> no OFF command.
     p = RealReproductionPlatform(adapter=fake)
     snap = p.cleanup(session_id='s1', device=_Device(), actions=['STOP_PCM_RX', 'STOP_PCM_TX'])
-    assert snap['PCM_RX']['status'] == 'STOPPED'
-    assert snap['PCM_RX']['quiet_verified'] is True
-    assert snap['PCM_RX']['off_executed'] is False
-    assert snap['PCM_TX']['status'] == 'STOPPED'
+    reverse = snap['reverse_validation']
+    assert reverse['PCM_RX']['status'] == 'STOPPED'
+    assert reverse['PCM_RX']['quiet_verified'] is True
+    assert reverse['PCM_RX']['off_executed'] is False
+    assert reverse['PCM_TX']['status'] == 'STOPPED'
     # No pcm_* off command was issued.
     assert not any(' off' in c for c in fake.cli_calls)
 
@@ -150,8 +151,9 @@ def test_cleanup_quiet_channel_skips_off(fake):
 def test_cleanup_debug_off_sequence(fake):
     p = RealReproductionPlatform(adapter=fake)
     snap = p.cleanup(session_id='s1', device=_Device(), actions=['DISABLE_BASIC_VOIP_DEBUG', 'DISABLE_DSP_DEBUG'])
-    assert snap['DEBUG']['status'] == 'STOPPED'
-    assert snap['DEBUG']['off_verified'] is True
+    reverse = snap['reverse_validation']
+    assert reverse['DEBUG']['status'] == 'STOPPED'
+    assert reverse['DEBUG']['off_verified'] is True
     assert any('voip sip log-pkt off' in c for c in fake.cli_calls)
 
 

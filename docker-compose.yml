@@ -40,7 +40,8 @@ services:
       context: ./backend
     env_file: ${VOIP_APP_ENV_FILE:-.env}
     command: >-
-      sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+      sh -c "ln -sfn /app/profiles /profiles &&
+      alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"
     ports:
       - "${VOIP_BACKEND_BIND:-0.0.0.0}:${VOIP_BACKEND_PORT:-8000}:8000"
     volumes:

@@ -48,7 +48,7 @@ def _utcnow():
 @dataclass(frozen=True)
 class RealCapture:
     pcap: bytes = b''
-    debug_log: str = ''
+    debug_log: bytes = b''
     pcap_path: Path | None = None
 
 
@@ -206,6 +206,11 @@ class RealReproductionPlatform:
         return out
 
     def cleanup(self, *, session_id: str, device: CaseDevice, actions: list[str]) -> dict[str, dict[str, Any]]:
+        # Contract mirrors MockReproductionPlatform.cleanup: return
+        # {'reverse_validation': <snapshot before PCAP stop>, 'final': <snapshot after>}
+        # so CleanupReadinessBarrier can verify DEBUG off (reverse) and PCAP closed (final).
+        # PCM channels are populated by the orchestrator's injected PcmCleanupGuard; if this
+        # method is used standalone (no guard), clean PCM here too.
         result: dict[str, dict[str, Any]] = {}
         # PCM STOP is normally handled by the orchestrator's injected PcmCleanupGuard
         # before this method is called. If it was not (standalone use), fall back to the
@@ -234,10 +239,15 @@ class RealReproductionPlatform:
                 self._cli(cmd)
             result['DEBUG'] = {'status': ChannelHealth.STOPPED.value, 'packet_count': 0,
                                'advancing': False, 'enabled': False, 'off_verified': True}
+        # Reverse-validation snapshot is taken before PCAP stops: DEBUG is already off,
+        # PCAP is still the pre-stop state (closed_verified false here; the final snapshot
+        # after STOP_VOICE_PCAP carries the verified closed state).
+        reverse = dict(self._normalize_snapshot(result))
         if 'STOP_VOICE_PCAP' in actions:
             result['PCAP'] = {'status': ChannelHealth.STOPPED.value, 'packet_count': 0,
                               'advancing': False, 'enabled': False, 'closed_verified': True}
-        return self._normalize_snapshot(result)
+        final = dict(self._normalize_snapshot(result))
+        return {'reverse_validation': reverse, 'final': final}
 
     def _channel_result_to_snapshot(self, ch: PcmCleanupChannelResult) -> dict[str, Any]:
         return {
@@ -268,7 +278,7 @@ class RealReproductionPlatform:
         return RealCapture(pcap=base64.b64decode(b64.strip()), pcap_path=None)
 
     def build_live_probe(self, *, context: VoiceRuntimeContext, start_ms: int, call_id: str) -> RealCapture:
-        return RealCapture(pcap=b'', debug_log='')
+        return RealCapture(pcap=b'', debug_log=b'')
 
     def build_call_capture(self, *, context: VoiceRuntimeContext, start_ms: int, end_ms: int, call_id: str, profile_id: str, signal) -> RealCapture:
-        return RealCapture(pcap=b'', debug_log='')
+        return RealCapture(pcap=b'', debug_log=b'')

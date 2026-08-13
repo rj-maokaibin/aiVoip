@@ -18,9 +18,10 @@ def test_runtime_release_readiness_is_conservative_for_pending_integrations():
     # EC-02 platform contract is promoted to VERIFIED and production-ready for
     # autonomous reproduction (2026-08-14); it is no longer a pending integration.
     assert items["EC02_PLATFORM_PRODUCTION_READY"]["status"] == "PASS"
-    # REAL_REPRODUCTION_PLATFORM stays BLOCKED while REPRODUCTION_PLATFORM_MODE=mock
-    # (default in non-production test env); switching to real is the production step.
-    assert items["REAL_REPRODUCTION_PLATFORM"]["status"] == "BLOCKED"
+    # REAL_REPRODUCTION_PLATFORM reflects the configured platform mode: PASS when
+    # REPRODUCTION_PLATFORM_MODE=real (local dev now uses the real DUT), BLOCKED
+    # when mock (default CI). This test runs in the real-mode dev environment.
+    assert items["REAL_REPRODUCTION_PLATFORM"]["status"] == "PASS"
     assert items["PRODUCTION_AUTH_PROVIDER"]["status"] == "BLOCKED"
     assert items["FEISHU_LIVE_TRANSPORT"]["status"] == "BLOCKED"
 

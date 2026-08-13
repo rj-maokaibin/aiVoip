@@ -38,8 +38,11 @@ def mode(monkeypatch):
     return _set
 
 
-def test_resolve_platform_mode_defaults_to_mock():
+def test_resolve_platform_mode_reflects_setting(mode):
+    mode('mock')
     assert resolve_platform_mode() == 'mock'
+    mode('real')
+    assert resolve_platform_mode() == 'real'
 
 
 def test_mock_mode_returns_mock_platform(mode):
