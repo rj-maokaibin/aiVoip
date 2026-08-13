@@ -57,13 +57,15 @@ def active_compiled_rules(db:Session):
     return [load_rule_yaml(path.read_text(encoding='utf-8')) for path in sorted(root.glob('*.yaml'))]
 
 
-def bootstrap_rules(db:Session, *, actor:str='system', activate:bool=True):
+def bootstrap_rules(db:Session, *, actor:str='system', approver:str|None=None, activate:bool=True):
     root=Path(settings.rule_root)
     count=0; items=[]
     if not root.exists(): return {'count':0,'items':[]}
     for path in sorted(root.glob('*.yaml')):
         compiled=load_rule_yaml(path.read_text(encoding='utf-8'))
-        d,v=upsert_rule_version(db,compiled.source,actor=actor,change_note=f'bootstrap:{path.name}',activate=activate)
+        d,v=upsert_rule_version(db,compiled.source,actor=actor,change_note=f'bootstrap:{path.name}',activate=False)
+        if activate:
+            activate_rule_version(db,d,v,actor=approver or actor)
         count+=1; items.append({'key':d.rule_key,'version':v.version,'checksum':v.checksum})
     db.commit(); return {'count':count,'items':items}
 

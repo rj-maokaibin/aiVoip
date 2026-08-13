@@ -13,6 +13,9 @@ depends_on=None
 
 
 def upgrade():
+    # 0009's revision identifier is longer than the legacy VARCHAR(32) created in 0001.
+    # Alembic writes this identifier after upgrade(), so expand its metadata column first.
+    op.alter_column('alembic_version', 'version_num', existing_type=sa.String(32), type_=sa.String(128), existing_nullable=False)
     op.create_table('reproduction_capture_states',
         sa.Column('id',sa.String(36),primary_key=True),
         sa.Column('session_id',sa.String(36),sa.ForeignKey('reproduction_sessions.id',ondelete='CASCADE'),nullable=False),

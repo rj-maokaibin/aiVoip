@@ -120,6 +120,42 @@ actions:
     source_refs: ["voip 排障案例_思路整理。(1).md#三-1-Voice-VLAN"]
     supported_platforms: [RUIJIE_VOIP_AIM_V1]
 
+  - id: GET_VOIP_SERVICE_INFO
+    version: 1.0.0
+    contract_status: VERIFIED
+    risk_level: L0
+    executor: shell
+    command: "dev_config get -m voipServInfo"
+    evidence_type: VOIP_SERVICE_INFO
+    timeout: 5
+    description: 获取 VOIP 服务配置；data 中唯一对象的 svrName 是 Voice Gateway。
+    source_refs: ["User device transcript 2026-08-13: dev_config get -m voipServInfo"]
+    supported_platforms: [RUIJIE_VOIP_AIM_V1]
+
+  - id: GET_VOICE_VLAN_CONFIG
+    version: 1.0.0
+    contract_status: VERIFIED
+    risk_level: L0
+    executor: shell
+    command: "dev_config get -m voice_vlan"
+    evidence_type: VOICE_VLAN_CONFIG
+    timeout: 5
+    description: 获取 Voice VLAN 配置；enable 为 1 时 vlanid 是 Voice VLAN ID。
+    source_refs: ["User device transcript 2026-08-13: dev_config get -m voice_vlan"]
+    supported_platforms: [RUIJIE_VOIP_AIM_V1]
+
+  - id: GET_INTERFACE_LINKS
+    version: 1.0.0
+    contract_status: VERIFIED
+    risk_level: L0
+    executor: shell
+    command: "ip -o link show"
+    evidence_type: INTERFACE_LINK_STATE
+    timeout: 5
+    description: 获取全部接口链路状态；Resolver 按 Voice VLAN 动态选择 br-lan_<vlanid>。
+    source_refs: ["User device transcript 2026-08-13: ip link show br-lan_400"]
+    supported_platforms: [RUIJIE_VOIP_AIM_V1]
+
   - id: GET_BRIDGE_INFO
     version: 1.0.0
     contract_status: VERIFIED

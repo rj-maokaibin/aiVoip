@@ -24,6 +24,7 @@ from app.reproduction.health import CaptureHealthMonitor
 from app.reproduction.capture_pipeline import ReproductionCapturePipeline
 from app.reproduction.live import LiveReproductionAnalyzer
 from app.reproduction.mock_platform import MockReproductionPlatform, VoiceRuntimeContext
+from app.reproduction.pcm_cleanup import PcmCleanupChannelResult, PcmCleanupGuard
 from app.reproduction.profile import LoadedReproductionProfile, ReproductionProfileDefinition, ReproductionProfileRegistry
 from app.reproduction.quick import MockCallQuickAnalyzer, QuickAnalysisInput, QuickAnalysisResult
 from app.reproduction.state_machine import TERMINAL_STATES, transition_session
@@ -31,6 +32,30 @@ from app.reproduction.sufficiency import EvidenceSufficiencyEvaluator, Sufficien
 from app.reproduction.question_graph import DiagnosticQuestionGraph
 from app.services.audit import audit
 from app.services.events import emit_event
+
+
+_PCM_CHANNEL_TO_STOP_ACTION = {
+    'PCM_RX': 'STOP_PCM_RX',
+    'PCM_TX': 'STOP_PCM_TX',
+}
+
+
+def _pcm_guard_channel_snapshot(result: PcmCleanupChannelResult) -> dict:
+    """Translate a PCM guard result into the reverse-validation snapshot shape.
+
+    The guard decides the observed PCM channel state on the real device, so the
+    result fully replaces the channel entry that a Mock platform would produce.
+    """
+    return {
+        'status': 'STOPPED' if result.quiet_verified else 'DEGRADED',
+        'packet_count': result.packets_after,
+        'advancing': not result.quiet_verified,
+        'enabled': not result.quiet_verified,
+        'quiet_verified': result.quiet_verified,
+        'off_executed': result.off_executed,
+        'retry_blocked': result.retry_blocked,
+        'guard': 'PCM_GUARD',
+    }
 
 
 def _utcnow():
@@ -43,7 +68,7 @@ class ReproductionOrchestrator:
     No real device command exists in this class. Production platform integration is blocked on EC-02.
     """
 
-    def __init__(self, *, registry: ReproductionProfileRegistry | None = None, platform: MockReproductionPlatform | None = None, capture_pipeline: ReproductionCapturePipeline | None = None):
+    def __init__(self, *, registry: ReproductionProfileRegistry | None = None, platform: MockReproductionPlatform | None = None, capture_pipeline: ReproductionCapturePipeline | None = None, pcm_cleanup_guard: PcmCleanupGuard | None = None):
         self.registry=registry or ReproductionProfileRegistry()
         self.platform=platform or MockReproductionPlatform()
         self.capture= capture_pipeline or ReproductionCapturePipeline()
@@ -51,6 +76,9 @@ class ReproductionOrchestrator:
         self.live_analyzer=LiveReproductionAnalyzer(storage=self.capture.storage)
         self.sufficiency=EvidenceSufficiencyEvaluator()
         self.questions=DiagnosticQuestionGraph()
+        # Optional transport-injected PCM cleanup guard. When present, PCM channels are
+        # cleaned via verify-quiet-then-execute-once instead of a blind non-idempotent OFF.
+        self.pcm_cleanup_guard=pcm_cleanup_guard
 
     def _persist_profile(self, db: Session, loaded: LoadedReproductionProfile) -> None:
         d=loaded.definition
@@ -468,8 +496,19 @@ class ReproductionOrchestrator:
         run_no=(db.scalar(select(func.count(CleanupRun.id)).where(CleanupRun.session_id==session.id)) or 0)+1
         run=CleanupRun(session_id=session.id,run_no=run_no,status=CleanupRunStatus.RUNNING.value,started_at=_utcnow())
         db.add(run); db.flush()
-        snapshot=self.platform.cleanup(session_id=session.id,device=device,actions=profile.cleanup_actions)
-        run.action_results_json={'actions':profile.cleanup_actions,'mock_platform':True}
+        actions=list(profile.cleanup_actions)
+        guard_snapshot={}; guard_meta={}
+        if self.pcm_cleanup_guard is not None:
+            actions, guard_snapshot, guard_meta=self._run_pcm_guard(db,session=session,actions=actions)
+        snapshot=self.platform.cleanup(session_id=session.id,device=device,actions=actions)
+        if guard_snapshot:
+            reverse=dict(snapshot.get('reverse_validation') or {})
+            reverse.update(guard_snapshot)
+            snapshot['reverse_validation']=reverse
+            final=dict(snapshot.get('final') or {})
+            final.update(guard_snapshot)
+            snapshot['final']=final
+        run.action_results_json={'actions':actions,'mock_platform':True,'pcm_guard':guard_meta or None}
         decision=CleanupReadinessBarrier.persist(db,session=session,run=run,snapshot=snapshot)
         if decision.verified:
             release_device_lock(db,session=session,cleanup_verified=True)
@@ -482,6 +521,54 @@ class ReproductionOrchestrator:
         transition_session(db,session,ReproductionEvent.CLEANUP_FAILED,actor=actor,reason='cleanup_reverse_validation_failed',
                            payload={'failures':list(decision.failures)})
         return session
+
+    def _prior_pcm_off_state(self, db: Session, *, session: ReproductionSession) -> dict[str, bool]:
+        """Restore per-channel OFF history from the most recent completed CleanupRun.
+
+        A watchdog retry after a worker restart must never issue a second PCM OFF for a
+        channel that already executed its only permitted OFF. The current RUNNING run is
+        excluded because its action_results_json is not populated yet.
+        """
+        prior=db.scalar(
+            select(CleanupRun)
+            .where(CleanupRun.session_id==session.id, CleanupRun.status != CleanupRunStatus.RUNNING.value)
+            .order_by(CleanupRun.run_no.desc())
+        )
+        if not prior or not prior.action_results_json:
+            return {}
+        guard_meta=prior.action_results_json.get('pcm_guard') or {}
+        return {channel: bool(v.get('off_already_executed', False)) for channel, v in guard_meta.items()}
+
+    def _run_pcm_guard(self, db: Session, *, session: ReproductionSession, actions: list[str]):
+        """Clean PCM channels through the injected guard instead of a blind OFF.
+
+        The guard probes each PCM UDP stream; a quiet stream skips the non-idempotent OFF,
+        and a stream that already executed its single OFF is never sent a second one. The
+        remaining actions are delegated to the platform adapter.
+        """
+        ctx=self._runtime_context(session)
+        if not ctx.voice_interface or not ctx.voice_gateway_ip:
+            raise AppError('PCM_GUARD_RUNTIME_CONTEXT_MISSING', details={'session_id':session.id})
+        prior_off=self._prior_pcm_off_state(db, session=session)
+        remaining: list[str] = []
+        guard_snapshot: dict[str, dict] = {}
+        guard_meta: dict[str, dict] = {}
+        for action in actions:
+            channel=next((ch for ch, a in _PCM_CHANNEL_TO_STOP_ACTION.items() if a == action), None)
+            if channel is None:
+                remaining.append(action)
+                continue
+            off_already=bool(prior_off.get(channel, False))
+            result=self.pcm_cleanup_guard.cleanup_channel(
+                channel=channel,
+                voice_interface=ctx.voice_interface,
+                voice_gateway_ip=ctx.voice_gateway_ip,
+                off_already_executed=off_already,
+            )
+            guard_snapshot[channel]=_pcm_guard_channel_snapshot(result)
+            guard_meta[channel]=result.as_dict()
+            guard_meta[channel]['off_already_executed']=off_already or result.off_executed or result.retry_blocked
+        return remaining, guard_snapshot, guard_meta
 
     def retry_cleanup(self, db: Session, *, session: ReproductionSession, actor: str|None=None):
         if ReproductionState(session.state) not in {ReproductionState.CLEANUP_FAILED,ReproductionState.CLEANUP_DEGRADED,ReproductionState.ORPHANED}:

@@ -8,6 +8,7 @@ import yaml
 from app.actions.registry import ActionRegistry, RegistryError
 from app.core.config import settings
 from app.platforms.contracts import PlatformProfileDefinition
+from app.platforms.resolvers import PARSERS
 
 
 @dataclass(frozen=True)
@@ -55,6 +56,10 @@ class PlatformProfileRegistry:
                     **definition.voice_runtime_context,
                     **definition.realtime_event_sources,
                 }.items():
+                    if resolver.parser_status == 'VERIFIED' and resolver.parser_id not in PARSERS:
+                        raise PlatformProfileRegistryError(
+                            f'PLATFORM_RESOLVER_UNKNOWN_PARSER:{definition.id}:{resolver_name}:{resolver.parser_id}'
+                        )
                     for action_id in [resolver.command_action_id, resolver.verification_action_id]:
                         if not action_id:
                             continue

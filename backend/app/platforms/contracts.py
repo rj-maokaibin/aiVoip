@@ -68,6 +68,11 @@ class KnownDiagnosticTemplate(BaseModel):
     command_template: str
     status: str = 'DOCUMENTED_ONLY'
     reason_not_activatable: str
+    cleanup_command_template: str | None = None
+    cleanup_status: str = 'UNCONFIRMED'
+    cleanup_idempotent: bool | None = None
+    cleanup_retry_strategy: str = 'UNSPECIFIED'
+    cleanup_guard: str | None = None
     source_refs: list[str] = Field(default_factory=list)
 
 

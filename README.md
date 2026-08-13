@@ -279,7 +279,7 @@ See `docs/PHASE_C3_DIAGNOSTIC_EXPERIMENTS.md` and `validation/phase_c3_validatio
 
 ## Phase D1 — EC-02 Platform Contract Foundation
 
-Real-device platform integration has started in a contract-first mode. `RUIJIE_VOIP_AIM_V1@0.1.0` contains only source-backed read-only DUT/AIM actions plus explicit contract gaps. The AIM adapter now keeps a persistent root PTY session. Known PCM/debug start syntax that lacks confirmed cleanup remains `DOCUMENTED_ONLY` and cannot be executed by autonomous reproduction.
+Real-device platform integration is proceeding in contract-first mode. `RUIJIE_VOIP_AIM_V1@0.5.0` includes verified resolvers for Voice Gateway, enabled Voice VLAN, dynamic `br-lan_<vlanid>` readiness, and timestamped per-line OFFHOOK/DTMF/ONHOOK events. PCM RX/TX command pairs and stream-stop effects are confirmed, but PCM OFF is non-idempotent: a second OFF exits AIM. Real autonomous reproduction remains blocked until recovery implements `VERIFY_QUIET_THEN_EXECUTE_ONCE` rather than blindly retrying cleanup.
 
 Audit the platform contract with:
 

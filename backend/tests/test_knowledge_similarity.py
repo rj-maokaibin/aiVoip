@@ -1,4 +1,24 @@
+from types import SimpleNamespace
+
+from app.knowledge.service import search_knowledge_items
 from app.knowledge.similarity import CaseSignature, CaseSimilarity, tokenize
+
+
+class _KnowledgeRows:
+    def __init__(self, rows): self.rows=rows
+    def scalars(self, _statement): return self.rows
+
+
+def test_knowledge_search_accepts_numeric_seed_tags():
+    row=SimpleNamespace(
+        id='knowledge-1', type='GUIDE', title='VOIP 50Hz noise', summary='Periodic audio issue',
+        tags_json=['voip', 50], status='ACTIVE', verified=1, source_ref='seed', updated_at=None,
+    )
+
+    results=search_knowledge_items(_KnowledgeRows([row]), 'voip')
+
+    assert len(results)==1
+    assert results[0]['id']=='knowledge-1'
 from app.diagnosis.types import DiagnosisDecision, HypothesisProposal
 from app.knowledge.service import enrich_decision_with_history
 

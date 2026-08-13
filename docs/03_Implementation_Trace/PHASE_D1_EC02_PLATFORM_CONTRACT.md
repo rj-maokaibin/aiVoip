@@ -2,15 +2,22 @@
 
 ## Status
 
-`PARTIAL / SAFE-READONLY-READY / AUTONOMOUS-REPRODUCTION-BLOCKED`
+`PARTIAL / RUNTIME-CONTEXT-VERIFIED / AUTONOMOUS-REPRODUCTION-BLOCKED`
 
-Phase D1 starts the real-device EC-02 work without guessing any unresolved DUT behavior. It extracts only source-backed commands from `voip 排障案例_思路整理。(1).md` and preserves previously confirmed PCM destination semantics. The resulting platform profile is intentionally **not production-ready for autonomous reproduction**.
+Phase D1 starts the real-device EC-02 work without guessing any unresolved DUT behavior. The
+2026-08-13 device transcripts additionally confirm the structured Voice Gateway and Voice VLAN
+sources, dynamic `br-lan_<vlanid>` state, timestamped FXS events, symmetric PCM cleanup and debug
+log cleanup. PCM OFF is non-idempotent: issuing either OFF twice exits AIM. A 2026-08-13 live RX
+experiment also showed that `pcm_rx on` can be accepted while UDP 40000 remains quiet on an idle
+device, so quiet UDP cannot yet prove the diagnostic setting is disabled. The resulting platform
+profile is intentionally **not production-ready for autonomous reproduction** until recovery uses
+verify-before-execute cleanup.
 
 ## Implemented
 
 - Added versioned `PlatformProfileDefinition` and `PlatformProfileRegistry`.
 - Added explicit `ContractGap` and production-readiness evaluation.
-- Added `RUIJIE_VOIP_AIM_V1@0.1.0` with checksum and PARTIAL status.
+- Updated `RUIJIE_VOIP_AIM_V1@0.5.1` with checksum and PARTIAL status.
 - Registered source-backed L0 read-only actions:
   - aimd process
   - VOIP adapter log
@@ -26,6 +33,18 @@ Phase D1 starts the real-device EC-02 work without guessing any unresolved DUT b
   - DSP running state
 - Upgraded Action Registry with duplicate detection and contract metadata.
 - Added persistent AIM PTY root session. Root-level AIM commands reuse one PTY; prompt failure invalidates the session so the next command starts from a clean root state.
+- Added verified L0 `dev_config get -m voipServInfo` and `dev_config get -m voice_vlan` actions.
+- Added strict JSON resolvers for `data[0].svrName` and enabled `voice_vlan.vlanid`.
+- Added dynamic `br-lan_<voice_vlan_id>` verification requiring `UP` and `LOWER_UP`.
+- Added timestamped per-line `OFFHOOK`, `DTMF<digit>` and `ONHOOK` parsing.
+- Recorded PCM RX/TX commands as `CONFIRMED_REVERSIBLE`; both OFF commands stop UDP 40000/50000.
+- Marked both PCM OFF commands `CONFIRMED_NON_IDEMPOTENT`; a second OFF exits AIM.
+- Added the required `VERIFY_QUIET_THEN_EXECUTE_ONCE` recovery strategy.
+- Added `app/reproduction/pcm_cleanup.py`: a transport-injected guard that parses the APF1250
+  BusyBox `timeout -t`/`tcpdump` probe result and blocks a second PCM OFF when a previous cleanup
+  run already executed it.
+- Confirmed debug cleanup through `debug p off`, `de p off` and `voip sip log-pkt off`; other debug-level commands need no dedicated cleanup.
+- Confirmed idempotent `pcm_rx off` and `debug p off`; remaining cleanup retries are pending.
 - Added `platform_contract_gate.py`:
   - audit mode passes and reports explicit gaps;
   - `--require-production-ready` intentionally blocks until EC-02 is complete.
@@ -34,26 +53,30 @@ Phase D1 starts the real-device EC-02 work without guessing any unresolved DUT b
 
 The following are **not guessed** and remain blockers:
 
-1. exact Voice VLAN parser/field grammar;
-2. exact Voice Gateway IP resolver command/path/field;
-3. exact `br-lan_xx` UP-state verification parser;
-4. PCM RX/TX OFF commands and their output semantics;
-5. debug OFF commands and idempotency;
-6. realtime OFFHOOK/ONHOOK event grammar and timestamp source;
-7. FXS AIM submode prompt contract.
+1. real platform-adapter binding plus active-call DUT validation of the implemented PCM probe and
+  guard;
+2. a diagnostic-state query or active-call proof that one OFF prevents later PCM traffic; idle
+  UDP quietness was observed even after RX ON;
+3. retry idempotency for `de p off` and `voip sip log-pkt off`;
+4. FXS AIM submode prompt contract.
 
-Known PCM start forms are stored only as `DOCUMENTED_ONLY` templates:
+Known PCM start forms are stored as `CONFIRMED_REVERSIBLE` templates:
 
 - `voip dsp diag set {voice_gateway_ip} 40000 1 pcm_rx on`
 - `voip dsp diag set {voice_gateway_ip} 50000 1 pcm_tx on`
 
-They are **not** registered as production-executable platform actions because cleanup has not been confirmed.
+They are **not** registered as production-executable platform actions until every cleanup command is retry-safe.
 
 ## Safety rule
 
 `RUIJIE_VOIP_AIM_V1.autonomous_reproduction_actions` is empty. The Mock Platform remains the only executable M6.2 reproduction platform. A future Phase D2 may promote real actions only after each blocking gap is closed and the production platform gate passes.
 
 ## Validation
+
+- PCM cleanup guard: 5/5 focused tests PASS
+- Controlled DUT RX idle experiment, 2026-08-13: AIM accepted `pcm_rx on`; UDP 40000 stayed quiet
+  while idle. One `pcm_rx off` returned normally and the final idle probe was also quiet. This is
+  restoration evidence only, not active-call cleanup proof.
 
 - Backend tests: 128/128 PASS
 - M6.2 C1 Mock E2E: 3/3 PASS
@@ -74,10 +97,7 @@ They are **not** registered as production-executable platform actions because cl
 
 Provide representative textual outputs / confirmed commands for:
 
-1. `/etc/config/vlan_ref` and `/etc/config/network` with Voice VLAN configured;
-2. command and output containing the Voice Gateway IP;
-3. `brctl show` plus interface-state output for the active `br-lan_xx`;
-4. exact `pcm_rx off` and `pcm_tx off` commands plus observed output;
-5. exact debug disable commands for hook/SIP/IPC/DSP debug;
-6. a short realtime debug transcript covering `onhook -> offhook -> onhook`;
-7. interactive AIM transcript for `voip fxs 1` and `show information` if FXS snapshot support is desired.
+1. provide or implement a non-mutating UDP 40000/50000 active/quiet probe; do not repeat PCM OFF;
+2. run `de p off` twice and confirm logs remain stopped;
+3. run `voip sip log-pkt off` twice and confirm it is harmless;
+4. interactive AIM transcript for `voip fxs 1` and `show information` if FXS snapshot support is desired.

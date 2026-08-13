@@ -47,6 +47,9 @@ services:
       - ./profiles:/app/profiles:ro
       - ./rules:/app/rules:ro
       - ./knowledge:/app/knowledge:ro
+      - ./tools:/tools:ro
+      - ${REPRODUCTION_CAPTURE_ROOT:-/tmp/voip-reproduction-capture}:/tmp/voip-reproduction-capture
+      - ${REPRODUCTION_OBJECT_ROOT:-/tmp/voip-reproduction-objects}:/tmp/voip-reproduction-objects
     depends_on:
       postgres:
         condition: service_healthy

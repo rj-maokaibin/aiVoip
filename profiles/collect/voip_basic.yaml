@@ -7,6 +7,9 @@ profiles:
       - GET_VOIP_LOG
       - GET_NETWORK_CONFIG
       - GET_VOICE_VLAN_REF
+      - GET_VOIP_SERVICE_INFO
+      - GET_VOICE_VLAN_CONFIG
+      - GET_INTERFACE_LINKS
       - GET_BRIDGE_INFO
       - GET_ROUTE
       - GET_DNS

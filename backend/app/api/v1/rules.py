@@ -15,7 +15,8 @@ def bootstrap(actor:str='system',db:Session=Depends(get_db),idempotency_key:str|
     handle=begin_idempotent(db,scope='POST:/api/v1/rules/bootstrap',key=idempotency_key,payload={'activate':True})
     if handle.replay is not None: return handle.replay
     try:
-        result=bootstrap_rules(db,actor=actual_actor,activate=True)
+        # Seed content is system-authored; the authenticated reviewer performs its activation.
+        result=bootstrap_rules(db,actor='system',approver=actual_actor,activate=True)
         complete_idempotent(db,handle,response=result,status_code=200,resource_type='rule_bootstrap'); db.commit(); return result
     except Exception as exc: db.rollback(); raise HTTPException(400,str(exc))
 

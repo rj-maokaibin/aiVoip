@@ -1,0 +1,28 @@
+# Local-only secrets and config (never commit)
+.env
+.env.*
+!.env.example
+*.secret.yaml
+secret.yaml
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Node / frontend build artifacts
+node_modules/
+frontend/node_modules/
+frontend/dist/
+frontend/tsconfig.tsbuildinfo
+# Stray root lockfile; the real frontend lockfile is frontend/package-lock.json
+/package-lock.json
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+*.swp

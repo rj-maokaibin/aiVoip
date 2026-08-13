@@ -58,7 +58,8 @@ def search_knowledge_items(db:Session,query:str,*,limit:int=10):
     qtokens=tokenize(query); rows=list(db.scalars(select(KnowledgeItem).where(KnowledgeItem.status==KnowledgeStatus.ACTIVE.value,KnowledgeItem.verified==1).order_by(KnowledgeItem.updated_at.desc()).limit(500)))
     scored=[]
     for row in rows:
-        tokens=tokenize(row.title+' '+row.summary+' '+' '.join(row.tags_json or [])); overlap=len(qtokens&tokens)/max(1,len(qtokens|tokens))
+        tags=' '.join(str(tag) for tag in (row.tags_json or []))
+        tokens=tokenize(row.title+' '+row.summary+' '+tags); overlap=len(qtokens&tokens)/max(1,len(qtokens|tokens))
         if overlap>0: scored.append((overlap,row))
     scored.sort(key=lambda x:x[0],reverse=True)
     return [{'id':r.id,'type':r.type,'title':r.title,'summary':r.summary,'verified':bool(r.verified),'score':round(s,4),'source_ref':r.source_ref,'tags':r.tags_json or []} for s,r in scored[:limit]]

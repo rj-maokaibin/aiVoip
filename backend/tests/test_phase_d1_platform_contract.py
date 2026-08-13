@@ -18,6 +18,7 @@ from app.actions.registry import ActionRegistry, RegistryError
 from app.collectors.asyncssh_adapter import AsyncSSHDeviceAdapter
 from app.platforms.contracts import PlatformProfileStatus
 from app.platforms.registry import PlatformProfileRegistry
+from app.platforms.resolvers import PlatformResolverError, resolve_platform_value
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -35,13 +36,14 @@ def test_ruijie_partial_platform_contract_is_source_backed_and_blocked_for_auton
     assert not p.production_ready_for('AUTONOMOUS_REPRODUCTION')
     gap_keys = {g.key for g in p.blocking_gaps_for('AUTONOMOUS_REPRODUCTION')}
     assert {
-        'VOICE_VLAN_PARSER',
-        'VOICE_GATEWAY_RESOLVER',
-        'VOICE_INTERFACE_VERIFICATION',
         'PCM_CLEANUP_COMMANDS',
+        'PCM_IDLE_ARM_STATE',
         'DEBUG_CLEANUP_COMMANDS',
-        'REALTIME_HOOK_EVENT_SOURCE',
     } <= gap_keys
+    assert 'VOICE_VLAN_PARSER' not in gap_keys
+    assert 'VOICE_GATEWAY_RESOLVER' not in gap_keys
+    assert 'VOICE_INTERFACE_VERIFICATION' not in gap_keys
+    assert 'REALTIME_HOOK_EVENT_SOURCE' not in gap_keys
 
     for action_id in p.readonly_actions:
         action = actions.action(action_id)
@@ -51,14 +53,96 @@ def test_ruijie_partial_platform_contract_is_source_backed_and_blocked_for_auton
         assert 'RUIJIE_VOIP_AIM_V1' in action.supported_platforms
 
 
-def test_known_pcm_start_syntax_is_documented_but_not_activatable():
+def test_confirmed_reversible_syntax_is_not_activatable_without_retry_safe_cleanup():
     p = PlatformProfileRegistry(ROOT / 'profiles').get('RUIJIE_VOIP_AIM_V1').definition
     templates = {x.template_id: x for x in p.known_diagnostic_templates}
     assert templates['PCM_RX_ON_KNOWN_SYNTAX'].command_template == 'voip dsp diag set {voice_gateway_ip} 40000 1 pcm_rx on'
     assert templates['PCM_TX_ON_KNOWN_SYNTAX'].command_template == 'voip dsp diag set {voice_gateway_ip} 50000 1 pcm_tx on'
-    assert all(x.status == 'DOCUMENTED_ONLY' for x in [templates['PCM_RX_ON_KNOWN_SYNTAX'], templates['PCM_TX_ON_KNOWN_SYNTAX']])
+    assert templates['PCM_RX_ON_KNOWN_SYNTAX'].status == 'CONFIRMED_REVERSIBLE'
+    assert templates['PCM_TX_ON_KNOWN_SYNTAX'].status == 'CONFIRMED_REVERSIBLE'
+    assert templates['DEBUG_SYSTEM_ON_KNOWN_SYNTAX'].command_template == 'debug sys debug'
+    assert templates['DEBUG_EVENT_ON_KNOWN_SYNTAX'].command_template == 'de p on'
+    assert templates['CM_DEBUG_ON_KNOWN_SYNTAX'].command_template == 'de cm de'
+    assert templates['SYSTEM_EVENT_DEBUG_ON_KNOWN_SYNTAX'].command_template == 'de sys de'
+    assert templates['SIP_PACKET_LOG_ON_KNOWN_SYNTAX'].command_template == 'voip sip log-pkt on'
+    assert templates['PCM_RX_ON_KNOWN_SYNTAX'].cleanup_command_template == 'voip dsp diag set {voice_gateway_ip} 40000 1 pcm_rx off'
+    assert templates['PCM_RX_ON_KNOWN_SYNTAX'].cleanup_status == 'CONFIRMED_NON_IDEMPOTENT'
+    assert templates['PCM_RX_ON_KNOWN_SYNTAX'].cleanup_idempotent is False
+    assert templates['PCM_RX_ON_KNOWN_SYNTAX'].cleanup_retry_strategy == 'VERIFY_QUIET_THEN_EXECUTE_ONCE'
+    assert 'UDP 40000' in templates['PCM_RX_ON_KNOWN_SYNTAX'].cleanup_guard
+    assert templates['PCM_TX_ON_KNOWN_SYNTAX'].cleanup_command_template == 'voip dsp diag set {voice_gateway_ip} 50000 1 pcm_tx off'
+    assert templates['PCM_TX_ON_KNOWN_SYNTAX'].cleanup_status == 'CONFIRMED_NON_IDEMPOTENT'
+    assert templates['PCM_TX_ON_KNOWN_SYNTAX'].cleanup_idempotent is False
+    assert templates['PCM_TX_ON_KNOWN_SYNTAX'].cleanup_retry_strategy == 'VERIFY_QUIET_THEN_EXECUTE_ONCE'
+    assert 'UDP 50000' in templates['PCM_TX_ON_KNOWN_SYNTAX'].cleanup_guard
+    assert templates['HOOK_DEBUG_ON_KNOWN_SYNTAX'].cleanup_command_template == 'debug p off'
+    assert templates['HOOK_DEBUG_ON_KNOWN_SYNTAX'].cleanup_idempotent is True
+    assert templates['DEBUG_EVENT_ON_KNOWN_SYNTAX'].cleanup_command_template == 'de p off'
+    assert templates['DEBUG_EVENT_ON_KNOWN_SYNTAX'].cleanup_status == 'CONFIRMED_EFFECTIVE'
+    assert templates['DEBUG_EVENT_ON_KNOWN_SYNTAX'].cleanup_idempotent is None
+    assert templates['SIP_PACKET_LOG_ON_KNOWN_SYNTAX'].cleanup_command_template == 'voip sip log-pkt off'
+    assert templates['DEBUG_SYSTEM_ON_KNOWN_SYNTAX'].status == 'CONFIRMED_NO_DEDICATED_CLEANUP'
+    assert templates['SIP_DEBUG_ON_KNOWN_SYNTAX'].status == 'CONFIRMED_NO_DEDICATED_CLEANUP'
     assert 'START_PCM_RX' not in p.autonomous_reproduction_actions
     assert 'START_PCM_TX' not in p.autonomous_reproduction_actions
+
+
+def test_dev_config_runtime_context_resolvers():
+    gateway = resolve_platform_value('DEV_CONFIG_VOIP_SERVICE_GATEWAY_V1', '''{
+      "data": [{"hdl": 0, "svrName": "192.168.3.200", "svrPort": 5060}],
+      "version": "1.0.0"
+    }''')
+    vlan_id = resolve_platform_value('DEV_CONFIG_VOICE_VLAN_ID_V1', '''{
+      "enable": "1", "vlanid": 400, "version": "1.0.0"
+    }''')
+    assert gateway == '192.168.3.200'
+    assert vlan_id == '400'
+
+
+def test_dynamic_voice_interface_resolver_requires_vlan_specific_ready_link():
+    output = '''
+22: br-lan_400: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue
+23: br-lan_500: <BROADCAST,MULTICAST,UP> mtu 1500 qdisc noqueue
+'''
+    assert resolve_platform_value(
+        'IP_LINK_VOICE_INTERFACE_V1', output, voice_vlan_id='400'
+    ) == 'br-lan_400'
+    with pytest.raises(PlatformResolverError, match='INTERFACE_NOT_READY'):
+        resolve_platform_value('IP_LINK_VOICE_INTERFACE_V1', output, voice_vlan_id='500')
+
+
+def test_aim_fxs_event_resolver_extracts_timestamp_line_hook_and_dtmf():
+    output = '''
+2026-08-03 17:03:25.539000 [0] D:: [D]OFFHOOK
+2026-08-03 17:03:26.735000 [0] D:: [D]DTMF<8>
+2026-08-03 17:03:43.635000 [0] D:: [D]ONHOOK
+'''
+    assert resolve_platform_value('AIM_FXS_EVENT_V1', output) == [
+        {'timestamp': '2026-08-03 17:03:25.539000', 'line': 0, 'event': 'OFFHOOK', 'digit': None},
+        {'timestamp': '2026-08-03 17:03:26.735000', 'line': 0, 'event': 'DTMF', 'digit': '8'},
+        {'timestamp': '2026-08-03 17:03:43.635000', 'line': 0, 'event': 'ONHOOK', 'digit': None},
+    ]
+
+
+@pytest.mark.parametrize('payload', [
+    '{"data": []}',
+    '{"data": [{"svrName": "192.168.3.200"}, {"svrName": "192.168.3.201"}]}',
+    '{"data": [{"svrName": "not-an-ip"}]}',
+])
+def test_gateway_resolver_rejects_ambiguous_or_invalid_values(payload: str):
+    with pytest.raises(PlatformResolverError):
+        resolve_platform_value('DEV_CONFIG_VOIP_SERVICE_GATEWAY_V1', payload)
+
+
+@pytest.mark.parametrize('payload', [
+    '{"enable": "0", "vlanid": 400}',
+    '{"enable": "1", "vlanid": 0}',
+    '{"enable": "1", "vlanid": 4095}',
+    '{"enable": "1", "vlanid": "bad"}',
+])
+def test_vlan_resolver_rejects_disabled_or_invalid_values(payload: str):
+    with pytest.raises(PlatformResolverError):
+        resolve_platform_value('DEV_CONFIG_VOICE_VLAN_ID_V1', payload)
 
 
 def test_action_registry_rejects_duplicate_action_ids(tmp_path: Path):
