@@ -69,7 +69,7 @@ class ReproductionOrchestrator:
     No real device command exists in this class. Production platform integration is blocked on EC-02.
     """
 
-    def __init__(self, *, registry: ReproductionProfileRegistry | None = None, platform: MockReproductionPlatform | None = None, capture_pipeline: ReproductionCapturePipeline | None = None, pcm_cleanup_guard: PcmCleanupGuard | None = None, fxs_event_monitor: FxsEventMonitor | None = None):
+    def __init__(self, *, registry: ReproductionProfileRegistry | None = None, platform=None, capture_pipeline: ReproductionCapturePipeline | None = None, pcm_cleanup_guard: PcmCleanupGuard | None = None, fxs_event_monitor: FxsEventMonitor | None = None):
         self.registry=registry or ReproductionProfileRegistry()
         self.platform=platform or MockReproductionPlatform()
         self.capture= capture_pipeline or ReproductionCapturePipeline()

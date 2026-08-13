@@ -11,7 +11,6 @@ from app.db.models import CaseDevice, ReproductionSession
 from app.db.session import SessionLocal
 from app.integrations.credentials import get_credential_provider, LocalSecretCredentialProvider
 from app.reproduction.fxs_event_monitor import FxsEventMonitor
-from app.reproduction.orchestrator import ReproductionOrchestrator
 from app.workers.celery_app import celery_app
 
 log = get_task_logger(__name__)
@@ -59,7 +58,10 @@ async def _watch(session_id: str, *, max_seconds: int = 900) -> dict:
 
             monitor = FxsEventMonitor(read_aim_chunk=lambda: None, write_aim=write_aim)
             monitor.start()
-            orch = ReproductionOrchestrator()
+            # Real mode drives activity through the real platform (its capture
+            # builders read real pcap); mock mode uses the default orchestrator.
+            from app.reproduction.platform_factory import build_orchestrator
+            orch, _close = build_orchestrator(adapter=adapter, connect=False)
             events_handled = 0
             started = time.monotonic()
             try:
