@@ -50,14 +50,12 @@ def build_orchestrator(*, adapter=None, password: str | None = None, connect: bo
     )
     orch = ReproductionOrchestrator(platform=platform, pcm_cleanup_guard=guard)
     if connect:
-        # The adapter is async; connecting happens on the platform's bridge loop.
-        platform._bridge.run(adapter.connect())
+        # The adapter must connect on the platform's bridge loop so the asyncssh
+        # connection and all transport calls share one loop.
+        platform.connect()
 
     def _close():
         # Best-effort disconnect on the same bridge loop.
-        try:
-            platform._bridge.run(adapter.disconnect())
-        except Exception:
-            pass
+        platform.disconnect()
 
     return orch, _close

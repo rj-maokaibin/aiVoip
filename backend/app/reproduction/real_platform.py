@@ -98,7 +98,19 @@ class RealReproductionPlatform:
             probe_packets=self._probe_packets,
             execute_aim=self._execute_aim,
         )
+    def connect(self):
+        """Connect the injected adapter on the platform's bridge loop.
 
+        The adapter's async primitives must all run on the same loop that owns the
+        asyncssh connection, so connect/disconnect/shell/cli all go through the bridge.
+        """
+        self._bridge.run(self._adapter.connect())
+
+    def disconnect(self):
+        try:
+            self._bridge.run(self._adapter.disconnect())
+        except Exception:
+            pass
     # -- transport helpers (injected) -------------------------------------------------
 
     def _shell(self, cmd: str, timeout: float | None = None) -> str:
