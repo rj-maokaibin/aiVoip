@@ -72,9 +72,11 @@ async def main():
             d = snap.get(ch) or {}
             print(f'      {ch}: status={d.get("status")} enabled={d.get("enabled")} '
                   f'advancing={d.get("advancing")} pcap_header_valid={d.get("pcap_header_valid")}')
-        check('arm PCM_RX STARTING/enabled', snap.get('PCM_RX', {}).get('enabled') is True,
+        check('arm PCM_RX HEALTHY/enabled', snap.get('PCM_RX', {}).get('status') == 'HEALTHY'
+              and snap.get('PCM_RX', {}).get('enabled') is True,
               snap.get('PCM_RX', {}).get('status'))
-        check('arm PCM_TX STARTING/enabled', snap.get('PCM_TX', {}).get('enabled') is True,
+        check('arm PCM_TX HEALTHY/enabled', snap.get('PCM_TX', {}).get('status') == 'HEALTHY'
+              and snap.get('PCM_TX', {}).get('enabled') is True,
               snap.get('PCM_TX', {}).get('status'))
         check('arm DEBUG enabled', snap.get('DEBUG', {}).get('enabled') is True)
         check('arm PCAP header valid', snap.get('PCAP', {}).get('pcap_header_valid') is True,

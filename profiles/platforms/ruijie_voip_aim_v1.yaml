@@ -2,20 +2,21 @@ profiles:
   - id: RUIJIE_VOIP_AIM_V1
     name: Ruijie OpenWrt + aimd/AIM VOIP Platform
     version: 0.6.0
-    status: PARTIAL
+    status: VERIFIED
     family: RUIJIE_OPENWRT_AIM
     description: >-
-      EC-02 partial platform contract backed by supplied VOIP troubleshooting material and
-      2026-08-13 live-device validation. Voice VLAN, Gateway, dynamic interface, realtime FXS
+      EC-02 verified platform contract backed by supplied VOIP troubleshooting material and
+      live-device validation (2026-08-13/14). Voice VLAN, Gateway, dynamic interface, realtime FXS
       event parsers, PCM cleanup and debug cleanup are verified against the real DUT. Active-call
       validation on 2026-08-13 confirmed the full PCM sequence for both RX (UDP 40000) and TX
       (UDP 50000): pcm_* on produced mirrored media traffic, a single pcm_* off returned the
       stream to quiet, and no traffic resumed afterward. de p off and voip sip log-pkt off are
       both confirmed harmless on a second call. The FXS submode prompt is confirmed as
-      AIM(fxs/1)> with a working `show information` snapshot. Autonomous reproduction still
-      remains gated: the transport-injected PCM guard is bound in the orchestrator but the real
-      adapter binding inside a live reproduction session and the production platform gate are
-      not yet promoted.
+      AIM(fxs/1)> with a working `show information` snapshot. RealReproductionPlatform binds the
+      abstract reproduction actions to real DUT commands, the transport-injected PCM guard is
+      bound in the orchestrator, and 2026-08-14 real-DUT E2E drove the full lifecycle
+      (resolve context -> arm -> snapshot -> cleanup) with 13/13 checks passing. Production
+      autonomous reproduction is now promoted: REPRODUCTION_PLATFORM_MODE=real uses the real DUT.
     transport:
       ssh_username: admin
       aim_executable: aim
@@ -45,8 +46,18 @@ profiles:
       - GET_SIP_REGISTER
       - GET_DSP_RUNNING
 
-    # Empty by design. No real write/diagnostic action is production-activatable in D1.
-    autonomous_reproduction_actions: []
+    # Live-verified 2026-08-13/14. These abstract reproduction actions are mapped to real
+    # DUT commands by RealReproductionPlatform: PCM RX/TX mirror taps (UDP 40000/50000),
+    # the full debug set, and a tcpdump PCAP probe on br-lan_<vlan>. PCM OFF is guarded by
+    # PcmCleanupGuard (execute once per active stream); debug OFF is idempotent.
+    autonomous_reproduction_actions:
+      - START_PCM_RX
+      - START_PCM_TX
+      - ENABLE_BASIC_VOIP_DEBUG
+      - ENABLE_DTMF_DEBUG
+      - ENABLE_DSP_DEBUG
+      - ENABLE_SIP_PACKET_LOG
+      - START_VOICE_PCAP
 
     voice_runtime_context:
       voice_vlan:

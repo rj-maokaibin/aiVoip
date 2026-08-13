@@ -171,12 +171,16 @@ profiles:
     version: "1.0.0"
     status: ACTIVE
     symptom_classes: [UNKNOWN, GENERIC]
-    description: 无法可靠分类时的安全兜底Profile；允许能力缺失降级，但缺失必须显式标记UNAVAILABLE/PARTIAL。
+    description: 无法可靠分类时的安全兜底Profile；允许能力缺失降级，但缺失必须显式标记UNAVAILABLE/PARTIAL。arm_barrier 采用真机语义（min=0/不要求推进）：arm 就绪 = 捕获设施就绪，真实媒体流量在 FXS 事件触发呼叫后才会出现。
     primary_start_anchor: FXS_OFFHOOK
     end_policy: EVIDENCE_SUFFICIENCY
     max_calls: 5
     target_count: 1
     allow_partial_capability_downgrade: true
+    arm_barrier:
+      min_pcap_packets: 0
+      min_pcm_packets: 0
+      require_advancing: false
     stages:
       - stage: BASE
         auto_arm_actions: [CAPTURE_PRE_SNAPSHOT, START_VOICE_PCAP, START_PCM_RX, START_PCM_TX, ENABLE_BASIC_VOIP_DEBUG]

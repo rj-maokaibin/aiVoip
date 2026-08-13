@@ -118,7 +118,7 @@ def test_arm_runs_real_commands_and_returns_snapshot(fake):
     assert any('voip sip log-pkt on' in c for c in fake.cli_calls)
     assert any('debug p on' in c for c in fake.cli_calls)
     # PCAP readiness validated by a listening probe.
-    assert snap['PCM_RX']['status'] == 'STARTING'
+    assert snap['PCM_RX']['status'] == 'HEALTHY'
     assert snap['PCM_RX']['enabled'] is True
     assert snap['PCAP']['pcap_header_valid'] is True
     assert snap['PCAP']['status'] == 'HEALTHY'

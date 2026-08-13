@@ -24,20 +24,25 @@ from app.platforms.resolvers import PlatformResolverError, resolve_platform_valu
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def test_ruijie_partial_platform_contract_is_source_backed_and_blocked_for_autonomous_reproduction():
+def test_ruijie_verified_platform_contract_is_production_ready_for_autonomous_reproduction():
     actions = ActionRegistry(ROOT / 'profiles')
     platforms = PlatformProfileRegistry(ROOT / 'profiles')
     loaded = platforms.get('RUIJIE_VOIP_AIM_V1')
     p = loaded.definition
 
-    assert p.status == PlatformProfileStatus.PARTIAL
+    assert p.status == PlatformProfileStatus.VERIFIED
     assert len(loaded.checksum) == 64
-    assert p.autonomous_reproduction_actions == []
-    assert not p.production_ready_for('AUTONOMOUS_REPRODUCTION')
+    # RealReproductionPlatform (2026-08-13/14) binds the abstract reproduction
+    # actions to real DUT commands; PCM is guarded, debug OFF is idempotent.
+    assert p.autonomous_reproduction_actions == [
+        'START_PCM_RX', 'START_PCM_TX',
+        'ENABLE_BASIC_VOIP_DEBUG', 'ENABLE_DTMF_DEBUG', 'ENABLE_DSP_DEBUG', 'ENABLE_SIP_PACKET_LOG',
+        'START_VOICE_PCAP',
+    ]
+    assert p.production_ready_for('AUTONOMOUS_REPRODUCTION')
     # Live-device validation 2026-08-13 closed all previously blocking gaps:
     # PCM active-call RX/TX sequence, debug cleanup idempotency, and FXS submode
-    # prompt were all confirmed. The profile stays PARTIAL only because the real
-    # adapter binding into a live reproduction session is not yet promoted.
+    # prompt were all confirmed. No blocking gaps remain for the capability.
     gap_keys = {g.key for g in p.blocking_gaps_for('AUTONOMOUS_REPRODUCTION')}
     assert gap_keys == set()
 
@@ -89,8 +94,9 @@ def test_confirmed_reversible_syntax_is_not_activatable_without_retry_safe_clean
     assert templates['FXS_SUBMODE_SNAPSHOT'].submode_prompt == 'AIM(fxs/1)> '
     assert templates['FXS_SUBMODE_SNAPSHOT'].snapshot_command == 'show information'
     assert 'Hook State' in templates['FXS_SUBMODE_SNAPSHOT'].snapshot_fields
-    assert 'START_PCM_RX' not in p.autonomous_reproduction_actions
-    assert 'START_PCM_TX' not in p.autonomous_reproduction_actions
+    # The real platform binds these to actual DUT commands (2026-08-14 E2E).
+    assert 'START_PCM_RX' in p.autonomous_reproduction_actions
+    assert 'START_PCM_TX' in p.autonomous_reproduction_actions
 
 
 def test_dev_config_runtime_context_resolvers():

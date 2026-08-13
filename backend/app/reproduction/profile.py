@@ -47,8 +47,11 @@ class TimeoutsConfig(BaseModel):
 
 class ArmBarrierConfig(BaseModel):
     model_config = ConfigDict(extra='forbid')
-    min_pcap_packets: int = Field(default=2, ge=1, le=10000)
-    min_pcm_packets: int = Field(default=3, ge=1, le=10000)
+    # min_* may be 0 for real DUTs where arm readiness means "capture facility
+    # ready" (channels armed, probes listening) rather than "live traffic already
+    # flowing" ¡ª real media only appears once an FXS event triggers a call.
+    min_pcap_packets: int = Field(default=2, ge=0, le=10000)
+    min_pcm_packets: int = Field(default=3, ge=0, le=10000)
     require_advancing: bool = True
     retry_attempts: int = Field(default=2, ge=1, le=10)
 

@@ -15,7 +15,11 @@ def test_runtime_release_readiness_is_conservative_for_pending_integrations():
     payload = runtime_release_readiness(profile_root=ROOT / "profiles")
     assert payload["status"] == "BLOCKED"
     items = {x["key"]: x for x in payload["items"]}
-    assert items["EC02_PLATFORM_PRODUCTION_READY"]["status"] == "BLOCKED"
+    # EC-02 platform contract is promoted to VERIFIED and production-ready for
+    # autonomous reproduction (2026-08-14); it is no longer a pending integration.
+    assert items["EC02_PLATFORM_PRODUCTION_READY"]["status"] == "PASS"
+    # REAL_REPRODUCTION_PLATFORM stays BLOCKED while REPRODUCTION_PLATFORM_MODE=mock
+    # (default in non-production test env); switching to real is the production step.
     assert items["REAL_REPRODUCTION_PLATFORM"]["status"] == "BLOCKED"
     assert items["PRODUCTION_AUTH_PROVIDER"]["status"] == "BLOCKED"
     assert items["FEISHU_LIVE_TRANSPORT"]["status"] == "BLOCKED"

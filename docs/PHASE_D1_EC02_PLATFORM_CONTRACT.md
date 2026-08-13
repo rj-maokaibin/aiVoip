@@ -2,7 +2,7 @@
 
 ## Status
 
-`PARTIAL / LIVE-DEVICE-VERIFIED / ADAPTER-BINDING-PENDING`
+`VERIFIED / LIVE-DEVICE-VERIFIED / PRODUCTION-READY`
 
 Phase D1 started the real-device EC-02 work without guessing any unresolved DUT behavior. On
 2026-08-13 the structured Voice Gateway and Voice VLAN sources, dynamic `br-lan_<vlanid>` interface
@@ -10,16 +10,17 @@ state, realtime FXS events, symmetric PCM cleanup and debug-log cleanup were con
 APF1250. PCM OFF is explicitly non-idempotent: a second OFF exits the AIM CLI. Live active-call
 validation proved the full `ON -> active -> single OFF -> quiet` sequence for both PCM RX and TX,
 debug cleanup (`de p off`, `voip sip log-pkt off`) is idempotent, and the FXS submode prompt is
-`AIM(fxs/1)> `. `RUIJIE_VOIP_AIM_V1@0.6.0` now has no blocking gaps. The profile remains
-**not production-ready for autonomous reproduction** only because the transport-injected PCM guard
-still needs to be bound into a live reproduction session through the real adapter, after which the
-production platform gate can be re-evaluated.
+`AIM(fxs/1)> `. On 2026-08-14 `RUIJIE_VOIP_AIM_V1@0.6.0` was promoted to **VERIFIED** and is
+**production-ready for autonomous reproduction**: `autonomous_reproduction_actions` are filled,
+`RealReproductionPlatform` binds them to real DUT commands (13/13 real-DUT E2E checks passed), the
+transport-injected PCM guard is bound in the orchestrator, and the production platform gate passes.
 
 ## Implemented
 
 - Added versioned `PlatformProfileDefinition` and `PlatformProfileRegistry`.
 - Added explicit `ContractGap` and production-readiness evaluation.
-- Updated `RUIJIE_VOIP_AIM_V1@0.6.0` with checksum, PARTIAL status, and no blocking gaps.
+- Updated `RUIJIE_VOIP_AIM_V1@0.6.0` with checksum, VERIFIED status, filled
+  `autonomous_reproduction_actions`, and no blocking gaps.
 - Added optional FXS submode contract fields (`submode_prompt`, `snapshot_command`,
   `snapshot_fields`) to `KnownDiagnosticTemplate`.
 - Registered source-backed L0 read-only actions:
@@ -106,7 +107,10 @@ commands are confirmed retry-safe for crash recovery.
 
 ## Safety rule
 
-`RUIJIE_VOIP_AIM_V1.autonomous_reproduction_actions` is empty. The Mock Platform remains the only executable M6.2 reproduction platform. A future Phase D2 may promote real actions only after each blocking gap is closed and the production platform gate passes.
+`RUIJIE_VOIP_AIM_V1.autonomous_reproduction_actions` is filled with the live-verified real
+actions (PCM RX/TX, full debug set, PCAP). `RealReproductionPlatform` binds these to real DUT
+commands; PCM OFF is guarded by `PcmCleanupGuard` (execute once per active stream) and debug OFF
+is idempotent. All cleanup commands are confirmed retry-safe for crash recovery.
 
 ## Validation
 
@@ -134,8 +138,10 @@ commands are confirmed retry-safe for crash recovery.
 - Synthetic E2E: 53/53 PASS
 - Baseline regression: 0 regressions / 0 observed changes
 - APF1250 Field Golden: 15/15 PASS
-- Platform contract audit gate: PASS (PARTIAL profile recognized, v0.6.0, no blocking gaps)
-- Platform production gate: BLOCKED by design (real adapter binding pending)
+- Platform contract audit gate: PASS (VERIFIED profile recognized, v0.6.0, no blocking gaps)
+- Platform production gate: PASS (VERIFIED + production-ready for AUTONOMOUS_REPRODUCTION)
+- Real-DUT E2E (2026-08-14): 13/13 PASS (resolve context -> arm -> snapshot -> cleanup)
+- Real arm barrier: PASS at idle (facilities-ready semantics, min=0 / require_advancing=false)
 
 ## Live-device validation (2026-08-13)
 
@@ -166,5 +172,6 @@ singular `N packet captured` form plus `N packets received by filter` lines.
 ## Inputs required to complete Phase D2
 
 All four items were provided and validated live on 2026-08-13 (see "Live-device validation"
-above). Remaining production promotion depends on binding the transport-injected PCM guard into a
-live reproduction session (real adapter), then re-running the production platform gate.
+above). Production promotion completed 2026-08-14: the transport-injected PCM guard is bound into
+a live reproduction session via `RealReproductionPlatform`, the production platform gate passes,
+and the profile is VERIFIED / production-ready for AUTONOMOUS_REPRODUCTION.

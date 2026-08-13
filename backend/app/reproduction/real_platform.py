@@ -160,18 +160,23 @@ class RealReproductionPlatform:
 
     def arm(self, *, session_id: str, device: CaseDevice, actions: list[str]) -> dict[str, dict[str, Any]]:
         result: dict[str, dict[str, Any]] = {}
+        # Real-device arm readiness means "capture facility ready": the PCM mirror
+        # commands were accepted and the probe path is live. There is intentionally no
+        # real traffic count at arm time ¡ª media only appears after an FXS event starts
+        # a call. The reproduction profile's arm_barrier for the real platform uses
+        # min_pcm_packets=0 / min_pcap_packets=0 / require_advancing=false to encode this.
         if 'START_PCM_RX' in actions:
             self._cli(f'voip dsp diag set {self.DEFAULT_VOICE_GATEWAY} {self.DEFAULT_PCM_RX_PORT} 1 pcm_rx on')
-            result['PCM_RX'] = {'status': ChannelHealth.STARTING.value, 'packet_count': 0,
+            result['PCM_RX'] = {'status': ChannelHealth.HEALTHY.value, 'packet_count': 0,
                                 'advancing': True, 'enabled': True, 'dst_port': self.DEFAULT_PCM_RX_PORT}
         if 'START_PCM_TX' in actions:
             self._cli(f'voip dsp diag set {self.DEFAULT_VOICE_GATEWAY} {self.DEFAULT_PCM_TX_PORT} 1 pcm_tx on')
-            result['PCM_TX'] = {'status': ChannelHealth.STARTING.value, 'packet_count': 0,
+            result['PCM_TX'] = {'status': ChannelHealth.HEALTHY.value, 'packet_count': 0,
                                 'advancing': True, 'enabled': True, 'dst_port': self.DEFAULT_PCM_TX_PORT}
         if any(a in actions for a in ('ENABLE_BASIC_VOIP_DEBUG', 'ENABLE_DTMF_DEBUG', 'ENABLE_DSP_DEBUG', 'ENABLE_SIP_PACKET_LOG')):
             for cmd in FULL_DEBUG_ENABLE:
                 self._cli(cmd)
-            result['DEBUG'] = {'status': ChannelHealth.STARTING.value, 'packet_count': 0,
+            result['DEBUG'] = {'status': ChannelHealth.HEALTHY.value, 'packet_count': 0,
                                'advancing': True, 'enabled': True, 'reader_alive': True, 'heartbeat': True}
         if 'START_VOICE_PCAP' in actions:
             probe = self._shell(f"timeout -t 3 tcpdump -ni {self.DEFAULT_VOICE_INTERFACE} -c 1 'udp' 2>&1")
