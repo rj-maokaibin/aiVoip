@@ -311,6 +311,28 @@ class FeishuCaseBinding(Base):
     updated_at: Mapped[datetime]=mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
 
+class DeviceCredential(Base):
+    """DUT SSH credential resolved from Poseidon and provisioned for background
+    reproduction. Stored in the DB (not in secret.yaml) so the reproduction platform
+    reads host/port/user/password from here. Password is never returned to Feishu and
+    never logged.
+    """
+    __tablename__='device_credentials'
+    __table_args__=(UniqueConstraint('sn', name='uq_device_credential_sn'),)
+    id: Mapped[str]=mapped_column(String(36), primary_key=True, default=new_id)
+    sn: Mapped[str]=mapped_column(String(128), unique=True, index=True)
+    ip: Mapped[str]=mapped_column(String(128))
+    ssh_port: Mapped[int]=mapped_column(Integer, default=22)
+    username: Mapped[str]=mapped_column(String(64), default='root')
+    password: Mapped[str]=mapped_column(Text)
+    mac: Mapped[str|None]=mapped_column(String(64), nullable=True)
+    product: Mapped[str|None]=mapped_column(String(128), nullable=True)
+    web_url: Mapped[str|None]=mapped_column(Text, nullable=True)
+    source: Mapped[str]=mapped_column(String(32), default='poseidon')
+    created_at: Mapped[datetime]=mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime]=mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
 class User(Base):
     __tablename__='users'
     id: Mapped[str]=mapped_column(String(36), primary_key=True, default=new_id)

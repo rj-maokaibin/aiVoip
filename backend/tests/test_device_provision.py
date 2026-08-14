@@ -1,11 +1,8 @@
 from __future__ import annotations
 
 import asyncio
-import tempfile
-from pathlib import Path
 
 import pytest
-import yaml
 
 from app.integrations.credentials import CredentialError
 from app.integrations.feishu.device_provision import DeviceProvisioner
@@ -72,50 +69,88 @@ def test_parse_invalid_port_raises():
         parse_device_request("打开ssh sn=1 ip=10.0.0.1 port=abc")
 
 
-# ---- provisioner ----
+# ---- provisioner (DB storage) ----
 
-def test_provision_opens_ssh_and_upserts_secret():
-    secret = Path(tempfile.mkdtemp(prefix="voip-prov-")) / "secret.yaml"
-    prov = DeviceProvisioner(opener=_FakeOpener(), poseidon=_FakePoseidon(), secret_file=str(secret))
+
+def _mem_factory():
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    from app.db.base import Base
+    import app.db.models  # noqa: F401  (register all tables on Base.metadata)
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    return sessionmaker(bind=engine)
+
+
+def test_provision_opens_ssh_and_stores_in_db():
+    factory = _mem_factory()
+    prov = DeviceProvisioner(opener=_FakeOpener(), poseidon=_FakePoseidon(), session_factory=factory)
     res = asyncio.run(prov.provision(
         web_url="https://x.noc.rj.link/cgi-bin/luci/?stamp=1",
         ssh_ip="10.44.77.254", ssh_port=2222, sn="SN-1", mac="M", product="P",
     ))
     assert res["ssh_opened"] is True
     assert res["password_resolved"] is True
-    # secret.yaml updated for the reproduction provider.
-    data = yaml.safe_load(secret.read_text(encoding="utf-8"))
-    dev = data["device"][0]
-    assert dev["host"] == "10.44.77.254"
-    assert dev["sshport"] == "2222"
-    assert dev["username"] == "root"
-    assert dev["password"] == "v2pw"
+    assert res["stored_in_db"] is True
+    db = factory()
+    try:
+        from app.db.models import DeviceCredential
+        from sqlalchemy import select
+        row = db.scalar(select(DeviceCredential).where(DeviceCredential.sn == "SN-1"))
+        assert row is not None
+        assert row.ip == "10.44.77.254"
+        assert row.ssh_port == 2222
+        assert row.username == "root"
+        assert row.password == "v2pw"
+        assert row.mac == "M"
+        assert row.product == "P"
+    finally:
+        db.close()
 
 
-def test_provision_matches_existing_secret_entry_and_updates_password():
-    secret = Path(tempfile.mkdtemp(prefix="voip-prov-")) / "secret.yaml"
-    secret.write_text(yaml.safe_dump({
-        "device": [{"name": "SN-1", "host": "10.44.77.254", "sshport": "2222",
-                    "username": "root", "password": "old"}]
-    }, allow_unicode=True), encoding="utf-8")
-    prov = DeviceProvisioner(opener=_FakeOpener(), poseidon=_FakePoseidon(), secret_file=str(secret))
-    asyncio.run(prov.provision(
-        web_url="https://x.noc.rj.link/", ssh_ip="10.44.77.254", ssh_port=2222, sn="SN-1",
-    ))
-    data = yaml.safe_load(secret.read_text(encoding="utf-8"))
-    assert len(data["device"]) == 1
-    assert data["device"][0]["password"] == "v2pw"
+def test_provision_upserts_existing_sn_in_db():
+    factory = _mem_factory()
+    db = factory()
+    from app.db.models import DeviceCredential
+    db.add(DeviceCredential(sn="SN-1", ip="10.44.77.254", ssh_port=2222, username="root",
+                            password="old", source="poseidon"))
+    db.commit()
+    db.close()
+    prov = DeviceProvisioner(opener=_FakeOpener(), poseidon=_FakePoseidon(), session_factory=factory)
+    asyncio.run(prov.provision(web_url=None, ssh_ip="10.44.77.254", ssh_port=2222, sn="SN-1"))
+    db = factory()
+    try:
+        from sqlalchemy import select
+        row = db.scalar(select(DeviceCredential).where(DeviceCredential.sn == "SN-1"))
+        assert row.password == "v2pw"
+    finally:
+        db.close()
+
+
+def test_provision_extracts_sn_from_web_url():
+    factory = _mem_factory()
+    prov = DeviceProvisioner(opener=_FakeOpener(), poseidon=_FakePoseidon(), session_factory=factory)
+    # sn not passed; extract_sn_from_web_url would hit the network, so monkeypatch it.
+    import app.integrations.feishu.device_provision as dp
+    async def fake_extract(url):
+        return "SN-FROM-URL"
+    orig = dp.extract_sn_from_web_url
+    dp.extract_sn_from_web_url = fake_extract
+    try:
+        res = asyncio.run(prov.provision(web_url="https://x.noc.rj.link/", ssh_ip=None,
+                                         ssh_port=22, sn=None))
+        assert res["sn"] == "SN-FROM-URL"
+    finally:
+        dp.extract_sn_from_web_url = orig
 
 
 def test_provision_missing_sn_raises():
-    prov = DeviceProvisioner(opener=_FakeOpener(), poseidon=_FakePoseidon(),
-                             secret_file="/tmp/nonexistent-secret.yaml")
+    prov = DeviceProvisioner(opener=_FakeOpener(), poseidon=_FakePoseidon(), session_factory=_mem_factory())
     with pytest.raises(CredentialError):
         asyncio.run(prov.provision(web_url=None, ssh_ip="10.0.0.1", ssh_port=22, sn=""))
 
 
 def test_provision_open_failure_raises():
-    prov = DeviceProvisioner(opener=_FakeOpener(fail=True), poseidon=_FakePoseidon(),
-                             secret_file="/tmp/nonexistent-secret.yaml")
+    prov = DeviceProvisioner(opener=_FakeOpener(fail=True), poseidon=_FakePoseidon(), session_factory=_mem_factory())
     with pytest.raises(CredentialError):
         asyncio.run(prov.provision(web_url="https://x/", ssh_ip="10.0.0.1", ssh_port=22, sn="SN-1"))

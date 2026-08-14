@@ -85,11 +85,36 @@ class LocalSecretCredentialProvider(CredentialProvider):
     provider_id = "local_secret"
     production_capable = False
 
-    def __init__(self, secret_file: str | None = None):
+    def __init__(self, secret_file: str | None = None, session_factory=None):
         # Allow the secret file to be injected (e.g. mounted into a container) or fall
         # back to environment variables so the host secret.yaml never has to be copied
-        # into the container image.
+        # into the container image. session_factory lets tests inject a DB session;
+        # when set, device_credentials (provisioned from Feishu/Poseidon) is preferred.
         self.secret_file = secret_file or os.environ.get("LOCAL_SECRET_FILE", "/home/dev/secret.yaml")
+        self._session_factory = session_factory
+
+    def _db_cred(self, *, ip: str, sn: str | None = None) -> dict | None:
+        """Look up device_credentials (DB) by ip or sn; return dict or None."""
+        if self._session_factory is None:
+            return None
+        try:
+            from app.db.models import DeviceCredential
+            from sqlalchemy import select
+            db = self._session_factory()
+            try:
+                row = None
+                if sn:
+                    row = db.scalar(select(DeviceCredential).where(DeviceCredential.sn == sn))
+                if row is None:
+                    row = db.scalar(select(DeviceCredential).where(DeviceCredential.ip == ip))
+                if row is None:
+                    return None
+                return {"username": row.username or "root", "password": row.password,
+                        "host": row.ip, "sshport": str(row.ssh_port)}
+            finally:
+                db.close()
+        except Exception:
+            return None
 
     def _env_creds(self) -> dict | None:
         user = os.environ.get("DEV_USER")
@@ -131,19 +156,25 @@ class LocalSecretCredentialProvider(CredentialProvider):
         raise CredentialError("LOCAL_SECRET_DEVICE_NOT_FOUND")
 
     async def get_password(self, *, sn: str, ip: str, product: str | None = None) -> str:
-        dev = self._find(ip=ip)
+        dev = self._db_cred(ip=ip, sn=sn) if self._session_factory is not None else None
+        if dev is None:
+            dev = self._find(ip=ip)
         password = str(dev.get("password") or "")
         if not password:
             raise CredentialError("LOCAL_SECRET_DEVICE_MISSING_PASSWORD")
         return password
 
     def resolve_username(self, *, ip: str, fallback: str | None = None) -> str:
-        """Return the device username from the matching secret entry.
+        """Return the device username from the matching DB entry or secret entry.
 
         The Case device may carry a default username (settings.ssh_username); the
-        local secret entry is authoritative so real-device auth does not fail on a
+        DB/secret entry is authoritative so real-device auth does not fail on a
         UI default like 'admin'.
         """
+        if self._session_factory is not None:
+            dev = self._db_cred(ip=ip)
+            if dev and dev.get("username"):
+                return dev["username"]
         try:
             dev = self._find(ip=ip)
             user = str(dev.get("username") or "")
@@ -204,7 +235,10 @@ def get_credential_provider() -> CredentialProvider:
     if provider == "api":
         return ApiCredentialProvider()
     if provider == "local_secret":
-        return LocalSecretCredentialProvider()
+        # Prefer device_credentials (DB, provisioned from Feishu/Poseidon) when
+        # available; fall back to secret.yaml. session_factory enables DB lookup.
+        from app.db.session import SessionLocal
+        return LocalSecretCredentialProvider(session_factory=SessionLocal)
     if provider == "poseidon":
         return PoseidonCredentialProvider()
     if provider == "mock":

@@ -2,70 +2,87 @@
 
 Pipeline:
   1. parse the Feishu message -> DeviceAccessRequest
-  2. open the SSH service on the DUT (via Web/LuCI API) if a web_url was given
-  3. resolve the SSH password from Poseidon (by SN)
-  4. upsert the DUT into ~/secret.yaml so the local_secret credential provider
-     (used by the reproduction platform) picks up host/port/user/password
+  2. extract the SN from the EWEB page JS (var sn = '...') when not provided
+  3. open the SSH service on the DUT (via Web/LuCI API) if a web_url was given
+  4. resolve the SSH password from Poseidon (by SN); Poseidon also yields MAC/product
+  5. upsert host/port/user/password into the device_credentials table (DB), NOT
+     secret.yaml, so the reproduction platform reads credentials from the DB.
 
 The password is never returned to the engineer and never logged.
 """
 from __future__ import annotations
 
-import os
-import threading
-from pathlib import Path
+import re
+from urllib.parse import urlparse
 
-import yaml
+from sqlalchemy import select
+import httpx
 
 from app.integrations.credentials import CredentialError
 from app.integrations.poseidon import PoseidonClient
 from app.integrations.ssh_opener import LuciSshOpener, SshOpenerError
 
-_LOCK = threading.Lock()
+_SN_RE = re.compile(r"var sn = '([^']+)'")
 
 
-def _secret_file() -> Path:
-    return Path(os.environ.get("LOCAL_SECRET_FILE", "/home/dev/secret.yaml"))
+async def extract_sn_from_web_url(web_url: str) -> str | None:
+    """Read the EWEB LuCI page and return its `var sn = '...'` value if present."""
+    async with httpx.AsyncClient(timeout=20, verify=False) as s:
+        page = (await s.get(web_url)).text
+    m = _SN_RE.search(page)
+    return m.group(1) if m else None
 
 
 class DeviceProvisioner:
     def __init__(self, *, opener: LuciSshOpener | None = None,
                  poseidon: PoseidonClient | None = None,
-                 secret_file: str | None = None):
+                 session_factory=None):
         self._opener = opener or LuciSshOpener()
         self._poseidon = poseidon or PoseidonClient()
-        self._secret_file = Path(secret_file) if secret_file else _secret_file()
+        self._session_factory = session_factory
+
+    def _db(self):
+        if self._session_factory is not None:
+            return self._session_factory()
+        from app.db.session import SessionLocal
+        return SessionLocal()
 
     async def provision(self, *, web_url: str | None, ssh_ip: str | None,
-                        ssh_port: int, sn: str, mac: str | None = None,
+                        ssh_port: int, sn: str | None = None, mac: str | None = None,
                         product: str | None = None) -> dict:
-        """Open SSH, resolve the Poseidon password, and upsert into secret.yaml.
+        """Open SSH, resolve the Poseidon password, and upsert into device_credentials.
 
         Returns a status dict (no password included).
         """
+        # 1. Resolve SN: explicit > web url page.
+        if not sn and web_url:
+            sn = await extract_sn_from_web_url(web_url)
         if not sn:
             raise CredentialError("DEVICE_PROVISION_SN_REQUIRED")
 
-        # 1. Open the SSH service when a web_url is available.
+        # 2. Open the SSH service when a web_url is available.
         ssh_opened = False
         if web_url:
             try:
                 await self._opener.set_ssh(web_url=web_url, mode=1)
                 ssh_opened = True
             except SshOpenerError as exc:
-                # Opening the port is best-effort; a password may still be usable if the
-                # device SSH is already open. Surface but do not fail the whole provision.
                 raise CredentialError(f"DEVICE_SSH_OPEN_FAILED:{exc}") from exc
 
-        # 2. Resolve the SSH password from Poseidon.
+        # 3. Resolve the SSH password from Poseidon (also returns MAC/product).
         v1, v2 = await self._poseidon.get_ssh_pass(sn=sn, mac=mac, product=product)
         password = v2 or v1
         if not password:
             raise CredentialError("DEVICE_POSEIDON_PASSWORD_MISSING")
 
-        # 3. Upsert into secret.yaml (host/port/user/password) for the reproduction
-        #    platform's local_secret credential provider.
-        self._upsert_secret(ssh_ip=ssh_ip, ssh_port=ssh_port, sn=sn, password=password)
+        # 4. Upsert into device_credentials (DB), not secret.yaml.
+        # In web_url (EWEB tunnel) mode there is no direct SSH IP; fall back to the
+        # tunnel hostname so the row is addressable and can be updated later with the
+        # real SSH tunnel endpoint.
+        if not ssh_ip and web_url:
+            ssh_ip = urlparse(web_url).hostname
+        self._upsert_db(ssh_ip=ssh_ip, ssh_port=ssh_port, sn=sn, password=password,
+                        mac=mac, product=product, web_url=web_url)
 
         return {
             "sn": sn,
@@ -73,43 +90,34 @@ class DeviceProvisioner:
             "ssh_port": ssh_port,
             "ssh_opened": ssh_opened,
             "password_resolved": True,
-            "secret_updated": True,
+            "stored_in_db": True,
         }
 
-    def _upsert_secret(self, *, ssh_ip: str, ssh_port: int, sn: str, password: str) -> None:
-        path = self._secret_file
-        with _LOCK:
-            data = {}
-            if path.exists():
-                try:
-                    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-                except Exception:
-                    data = {}
-            devices = data.get("device")
-            if not isinstance(devices, list):
-                devices = []
-            # Match by host+port, else by sn; update in place or append.
-            updated = False
-            for dev in devices:
-                if isinstance(dev, dict) and (
-                    (dev.get("host") == ssh_ip and str(dev.get("sshport", "")) == str(ssh_port))
-                    or dev.get("name") == sn
-                ):
-                    dev["host"] = ssh_ip
-                    dev["sshport"] = str(ssh_port)
-                    dev["username"] = "root"
-                    dev["password"] = password
-                    updated = True
-                    break
-            if not updated:
-                devices.append({
-                    "name": sn, "host": ssh_ip, "sshport": str(ssh_port),
-                    "username": "root", "password": password,
-                })
-            data["device"] = devices
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(yaml.safe_dump(data, allow_unicode=True, sort_keys=False), encoding="utf-8")
-            try:
-                os.chmod(path, 0o600)
-            except OSError:
-                pass
+    def _upsert_db(self, *, ssh_ip: str, ssh_port: int, sn: str, password: str,
+                   mac: str | None, product: str | None, web_url: str | None) -> None:
+        from app.db.models import DeviceCredential
+        db = self._db()
+        try:
+            row = db.scalar(select(DeviceCredential).where(DeviceCredential.sn == sn))
+            if row is None:
+                row = DeviceCredential(sn=sn)
+                db.add(row)
+            if ssh_ip:
+                row.ip = ssh_ip
+            if ssh_port:
+                row.ssh_port = ssh_port
+            row.username = "root"
+            row.password = password
+            if mac:
+                row.mac = mac
+            if product:
+                row.product = product
+            if web_url:
+                row.web_url = web_url
+            row.source = "poseidon"
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
+        finally:
+            db.close()
