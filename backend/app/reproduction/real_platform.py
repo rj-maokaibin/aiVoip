@@ -157,7 +157,11 @@ class RealReproductionPlatform:
             return self.fxs_event_monitor
         self._fxs_stop.clear()
         self._fxs_started_ms = int(time.monotonic() * 1000)
-        self._fxs_reader_fut = self._bridge.spawn(self._fxs_reader_loop())
+        # Ensure the persistent AIM PTY session is open BEFORE starting the reader
+        # loop, so the reader and the debug writer never race to spawn `aim` on the
+        # same adapter (the loser's channel would be closed -> BrokenPipeError on
+        # write). Establish the session synchronously through the bridge first.
+        self._bridge.run(self._adapter.ensure_aim_session_ready())
         # Send FULL_DEBUG_ENABLE on THIS connection's AIM PTY. The watcher opens a
         # fresh AIM session (its own adapter connection), so it cannot rely on the
         # arm phase having enabled debug on a different, already-closed session —
@@ -165,6 +169,7 @@ class RealReproductionPlatform:
         # never detected. FULL_DEBUG_ENABLE is idempotent, so re-sending when arm
         # did run on the same session is harmless.
         self.fxs_event_monitor.start(enable_debug=True)
+        self._fxs_reader_fut = self._bridge.spawn(self._fxs_reader_loop())
         return self.fxs_event_monitor
 
     def stop_fxs_monitor(self):

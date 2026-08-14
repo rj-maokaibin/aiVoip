@@ -129,6 +129,16 @@ class AsyncSSHDeviceAdapter(DeviceAdapter):
                 raise DeviceCommandError(f'AIM_SESSION_OPEN_FAILED:{type(exc).__name__}') from exc
         raise DeviceCommandError(f'AIM_SESSION_OPEN_FAILED:{type(last).__name__}') from last
 
+    async def ensure_aim_session_ready(self, timeout: float = 10) -> None:
+        """Synchronously open the persistent AIM PTY session (idempotent).
+
+        Used by the FXS watcher before starting its background reader, so the
+        reader and the debug writer never race to spawn the `aim` process on the
+        same adapter (the loser's channel is closed -> BrokenPipeError). Once open,
+        the session is reused by read_aim_chunk/write_aim/execute_cli.
+        """
+        await self._ensure_aim_session(timeout=timeout)
+
     async def execute_cli(self, command:str, timeout:float|None=None) -> CommandResult:
         if not self.conn:
             raise DeviceConnectionError('SSH_NOT_CONNECTED')
