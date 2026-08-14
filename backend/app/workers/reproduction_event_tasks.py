@@ -196,5 +196,14 @@ def watch_fxs_events(self, session_id: str, max_seconds: int = 900):
     """Watch a reproduction session's DUT for FXS activity and feed it to the
     orchestrator as real activity anchors. Runs until the session leaves the
     watching/activity-detected states or the timeout elapses.
+
+    After the watcher finishes (session reached a terminal state — call captured
+    and cleanup verified, or the watch window elapsed), hand the session to the
+    diagnosis worker automatically, closing the "reproduction done but diagnosis
+    must be clicked by hand" gap.
     """
-    return asyncio.run(_watch(session_id, max_seconds=max_seconds))
+    result = asyncio.run(_watch(session_id, max_seconds=max_seconds))
+    from app.workers.reproduction_tasks import ensure_reproduction_diagnosis
+    diag = ensure_reproduction_diagnosis(session_id)
+    result['diagnosis'] = diag
+    return result
