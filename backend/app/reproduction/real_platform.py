@@ -289,6 +289,12 @@ class RealReproductionPlatform:
 
     def arm(self, *, session_id: str, device: CaseDevice, actions: list[str]) -> dict[str, dict[str, Any]]:
         result: dict[str, dict[str, Any]] = {}
+        # arm issues AIM commands (PCM ON / full debug); stop any lingering FXS reader
+        # so its prompt reads do not compete with execute_cli (idempotent).
+        try:
+            self.stop_fxs_monitor()
+        except Exception:
+            pass
         # Real-device arm readiness means "capture facility ready": the PCM mirror
         # commands were accepted and the probe path is live. There is intentionally no
         # real traffic count at arm time — media only appears after an FXS event starts
@@ -340,6 +346,12 @@ class RealReproductionPlatform:
         # so CleanupReadinessBarrier can verify DEBUG off (reverse) and PCAP closed (final).
         # PCM channels are populated by the orchestrator's injected PcmCleanupGuard; if this
         # method is used standalone (no guard), clean PCM here too.
+        # Cleanup issues AIM commands (PCM OFF / debug OFF) whose prompt reads must NOT
+        # compete with the FXS AIM reader, so stop the reader first (idempotent).
+        try:
+            self.stop_fxs_monitor()
+        except Exception:
+            pass
         result: dict[str, dict[str, Any]] = {}
         # PCM STOP is normally handled by the orchestrator's injected PcmCleanupGuard
         # before this method is called. If it was not (standalone use), fall back to the
@@ -414,7 +426,11 @@ class RealReproductionPlatform:
     def build_pretrigger_capture(self, *, context: VoiceRuntimeContext, start_ms: int, end_ms: int) -> RealCapture:
         # Real tcpdump writes a binary pcap to a temp file on the DUT; read it back as
         # base64 (ASCII-safe over the SSH text channel) and decode to bytes.
-        seconds = max(1, (int(end_ms) - int(start_ms)) // 1000)
+        # The real platform cannot replay history: tcpdump only captures forward from
+        # "now", so a 30s pretrigger window would block the CALL flow for 30s. Cap the
+        # capture at a short forward window (5s) that still yields media evidence while
+        # keeping the watcher responsive.
+        seconds = min(5, max(1, (int(end_ms) - int(start_ms)) // 1000))
         remote = f'/tmp/aiVoip_pretrigger_{int(start_ms)}_{int(end_ms)}.pcap'
         # The tcpdump window runs for ``seconds`` (e.g. the profile's pretrigger),
         # which exceeds the default 10s command timeout; pass a matching timeout.

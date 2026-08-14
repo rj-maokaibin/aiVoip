@@ -102,20 +102,32 @@ class AsyncSSHDeviceAdapter(DeviceAdapter):
         except asyncio.TimeoutError as exc:
             raise DeviceCommandError('SSH_COMMAND_TIMEOUT') from exc
 
-    async def _ensure_aim_session(self, timeout:float):
+    async def _ensure_aim_session(self, timeout:float, retries:int=3):
+        """Ensure the persistent AIM PTY session is open, retrying the initial
+        spawn when the DUT's AIM prompt is not immediately available.
+
+        On the EC-02/APF3260-M the very first `aim` spawn can transiently close the
+        prompt (PromptSessionClosed) right after connect; a short retry recovers it.
+        Once open, the session is reused (execute_cli/read_aim_chunk/write_aim all
+        go through here).
+        """
         if not self.conn:
             raise DeviceConnectionError('SSH_NOT_CONNECTED')
         if self._aim_process is not None:
             return self._aim_process
-        try:
-            process=await self.conn.create_process(self.aim_executable, term_type='xterm')
-            await read_until_prompt(process.stdout, self.aim_prompt, timeout)
-        except (PromptTimeout, PromptSessionClosed) as exc:
-            raise DeviceCommandError(f'AIM_SESSION_OPEN_FAILED:{type(exc).__name__}') from exc
-        except Exception as exc:
-            raise DeviceCommandError(f'AIM_SESSION_OPEN_FAILED:{type(exc).__name__}') from exc
-        self._aim_process=process
-        return process
+        last: Exception | None = None
+        for attempt in range(max(1, retries)):
+            try:
+                process=await self.conn.create_process(self.aim_executable, term_type='xterm')
+                await read_until_prompt(process.stdout, self.aim_prompt, timeout)
+                self._aim_process=process
+                return process
+            except (PromptTimeout, PromptSessionClosed) as exc:
+                last=exc
+                await asyncio.sleep(2.0 * (attempt + 1))
+            except Exception as exc:
+                raise DeviceCommandError(f'AIM_SESSION_OPEN_FAILED:{type(exc).__name__}') from exc
+        raise DeviceCommandError(f'AIM_SESSION_OPEN_FAILED:{type(last).__name__}') from last
 
     async def execute_cli(self, command:str, timeout:float|None=None) -> CommandResult:
         if not self.conn:
