@@ -63,6 +63,16 @@ def _autostart_reproduction(sn: str, product: str | None, chat_id: str | None = 
             device = CaseDevice(case_id=case.id, ip=ip, ssh_port=port, sn=sn,
                                 username='root', device_info={'product': product} if product else {})
             db.add(device); db.flush()
+        else:
+            # Refresh the device's address from device_credentials: a provision
+            # may have opened a NEW tunnel endpoint (IP/port) for this SN, and the
+            # reproduction platform connects using CaseDevice.ip/ssh_port. Stale
+            # values (old tunnel) would make the real platform fail to connect.
+            if ip and (device.ip != ip or (port and device.ssh_port != port)):
+                device.ip = ip
+                if port:
+                    device.ssh_port = port
+                db.flush()
         # Bind the Case to the source Feishu group so the conclusion card returns
         # to the SAME chat (even when different faults come from different groups).
         if chat_id:

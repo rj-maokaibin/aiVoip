@@ -11,6 +11,7 @@ from app.db.models import CaseDevice, ReproductionSession
 from app.db.session import SessionLocal
 from app.integrations.credentials import get_credential_provider, LocalSecretCredentialProvider
 from app.reproduction.fxs_event_monitor import FxsEventMonitor
+from app.reproduction.platform_factory import build_orchestrator, resolve_platform_mode
 from app.workers.celery_app import celery_app
 
 log = get_task_logger(__name__)
@@ -43,7 +44,6 @@ async def _watch(session_id: str, *, max_seconds: int = 900) -> dict:
         if device is None:
             return {'status': 'DEVICE_NOT_FOUND', 'session_id': session_id}
 
-        from app.reproduction.platform_factory import build_orchestrator, resolve_platform_mode
         if resolve_platform_mode() == 'mock':
             return await _watch_mock(db, session, device, max_seconds)
         return await _watch_real(db, session, device, max_seconds)
