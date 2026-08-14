@@ -105,6 +105,8 @@ async def _watch_real(db, session, device, max_seconds: int) -> dict:
         active_call_id: str | None = None
         last_media_probe = 0.0
         media_probe_interval = 3.0
+        last_media_capture = 0.0
+        media_capture_interval = 4.0
         started = time.monotonic()
         try:
             while time.monotonic() - started < max_seconds:
@@ -160,6 +162,19 @@ async def _watch_real(db, session, device, max_seconds: int) -> dict:
                         )
                         active_call_id = call.id
                         calls_bound += 1
+                        db.commit()
+
+                # 3. Periodic media accumulation during the conversation: while a call is
+                #    bound and still capturing, keep appending short PCM segments so the
+                #    merged capture spans the whole call (not just the bind_call window).
+                if active_call_id is not None and (now - last_media_capture) >= media_capture_interval:
+                    last_media_capture = now
+                    cur_state = ReproductionState(_session_listening(db, session.id).state)
+                    if cur_state in {ReproductionState.CAPTURING, ReproductionState.CALL_DETECTED}:
+                        rel = orch.fxs_event_monitor.relative_ms()
+                        orch.platform.build_live_probe(
+                            context=ctx, start_ms=int(rel), call_id=active_call_id,
+                        )
                         db.commit()
 
                 if events_handled == 0:

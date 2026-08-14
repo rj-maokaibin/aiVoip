@@ -21,9 +21,9 @@ from uuid import uuid4
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'backend'))
 
 SN = 'MACC1JZH3260M'
-IP = '47.104.22.0'
-PORT = 64294
-WATCH = 120
+IP = '47.104.155.247'
+PORT = 63314
+WATCH = 180
 
 
 def _line(label, ok, detail=''):
@@ -80,6 +80,8 @@ def main():
             calls_ended = 0
             active_call_id = None
             last_media_probe = 0.0
+            last_media_capture = 0.0
+            media_capture_interval = 4.0
             started = time.monotonic()
             try:
                 while time.monotonic() - started < WATCH:
@@ -134,6 +136,17 @@ def main():
                                 active_call_id = call.id
                                 db.commit()
                                 print(f'      -> bind_call id={call.id[:8]} state={row.state}')
+                    # Periodic media accumulation during the conversation: append
+                    # short PCM segments so the merged capture spans the whole call.
+                    now = time.monotonic()
+                    if active_call_id is not None and (now - last_media_capture) >= media_capture_interval:
+                        last_media_capture = now
+                        cur = ReproductionState(db.get(type(session), session.id).state)
+                        if cur in {ReproductionState.CAPTURING, ReproductionState.CALL_DETECTED}:
+                            ctx = platform.resolve_voice_context(device)
+                            rel = monitor.relative_ms()
+                            platform.build_live_probe(context=ctx, start_ms=int(rel), call_id=active_call_id)
+                            db.commit()
                     if not events:
                         await asyncio.sleep(0.3)
             finally:

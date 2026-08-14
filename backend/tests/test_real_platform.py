@@ -187,12 +187,46 @@ def test_live_probe_and_call_capture_run_tcpdump_and_return_pcap(fake):
     # build_live_probe captures the PCM mirror ports for a 2s window.
     live = p.build_live_probe(context=ctx, start_ms=100, call_id='c1')
     assert live.pcap == _DUMMY_PCAP
-    assert any('aiVoip_live_c1.pcap' in c for c in fake.shell_calls)
+    assert any('aiVoip_live_c1_' in c for c in fake.shell_calls)
     assert any('udp port 40000 or udp port 50000' in c for c in fake.shell_calls)
+    assert any('rm -f /tmp/aiVoip_live_c1_' in c for c in fake.shell_calls)
     # build_call_capture captures the post-call tail window (capped at 8s).
     call = p.build_call_capture(context=ctx, start_ms=100, end_ms=500, call_id='c1', profile_id='P', signal=None)
     assert call.pcap == _DUMMY_PCAP
     assert any('aiVoip_call_c1.pcap' in c for c in fake.shell_calls)
+
+
+def test_live_probe_accumulates_segments_merged_by_call_capture(fake):
+    # Repeated in-call probes append short tcpdump windows; end_call's
+    # build_call_capture merges them (stripping duplicate global headers) so
+    # CALL_QUICK sees media spanning the whole conversation.
+    seg1 = _DUMMY_PCAP + bytes.fromhex(
+        '000000010000000100000001000000010000000000000001'  # 1 packet record
+    )
+    seg2 = _DUMMY_PCAP + bytes.fromhex(
+        '000000020000000200000002000000020000000000000002'  # 1 packet record
+    )
+    fake.shell_responses['rm -f /tmp/aiVoip_live_'] = '____'  # default empty
+    p = RealReproductionPlatform(adapter=fake)
+    ctx = p.resolve_voice_context(_Device())
+
+    # Two different probe results (each a full pcap with its own global header).
+    def make_response(media):
+        fake.shell_responses['rm -f /tmp/aiVoip_live_'] = __import__('base64').b64encode(media).decode()
+        return media
+
+    make_response(seg1)
+    p.build_live_probe(context=ctx, start_ms=100, call_id='m1')
+    make_response(seg2)
+    p.build_live_probe(context=ctx, start_ms=4000, call_id='m1')
+
+    call = p.build_call_capture(context=ctx, start_ms=100, end_ms=6000, call_id='m1', profile_id='P', signal=None)
+    # Merged: first global header + both packet records (one header stripped).
+    assert call.pcap[:24] == _DUMMY_PCAP
+    assert call.pcap[24:48] == seg1[24:]
+    assert call.pcap[48:] == seg2[24:]
+    # No post-call tcpdump was issued for this call (cached merge path).
+    assert not any('aiVoip_call_m1.pcap' in c for c in fake.shell_calls)
 
 
 def test_call_capture_prefers_cached_real_media_from_live_probe(fake):
