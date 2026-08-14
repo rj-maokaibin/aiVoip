@@ -90,14 +90,83 @@ def _on_message_receive(data) -> None:
     _dispatch(payload)
 
 
+
+
+def _card_action_payload(data) -> dict:
+    """Normalize a SDK P2CardActionTrigger into dispatch_event's payload shape."""
+    event = getattr(data, "event", None)
+    action = getattr(event, "action", None) if event is not None else None
+    operator = getattr(event, "operator", None) if event is not None else None
+    context = getattr(event, "context", None) if event is not None else None
+    value = getattr(action, "value", None) if action is not None else None
+    payload = {
+        "header": {"event_type": "card.action.trigger"},
+        "event": {
+            "action": {"value": value if isinstance(value, dict) else {}},
+            "operator": {},
+        },
+        "operator": {},
+    }
+    if operator is not None:
+        for key in ("open_id", "user_id", "union_id"):
+            v = getattr(operator, key, None)
+            if v:
+                payload["event"]["operator"][key] = v
+                payload["operator"][key] = v
+                break
+    if context is not None:
+        chat_id = getattr(context, "open_chat_id", None)
+        if chat_id:
+            payload["event"]["chat_id"] = chat_id
+    return payload
+
+
+def _on_card_action(data):
+    """SDK handler for card.action.trigger: dispatch + return a toast response.
+
+    The SDK needs a P2CardActionTriggerResponse; we build it from dispatch_event's
+    result (which already carries a human-readable toast for card actions).
+    """
+    import lark_oapi as lark
+    from lark_oapi.event.callback.model.p2_card_action_trigger import (
+        CallBackToast,
+        P2CardActionTriggerResponse,
+    )
+    from app.db.session import SessionLocal
+    try:
+        payload = _card_action_payload(data)
+    except Exception:
+        log.exception("feishu long-connection: failed to read card action")
+        return P2CardActionTriggerResponse()
+    actor = callback_actor(payload)
+    result = {}
+    with SessionLocal() as db:
+        try:
+            result = dispatch_event(db, payload=payload, actor=actor)
+            db.commit()
+        except Exception:
+            log.exception("feishu long-connection card action dispatch failed")
+            db.rollback()
+    toast = result.get("toast") or {}
+    resp = P2CardActionTriggerResponse()
+    if toast:
+        t = CallBackToast()
+        t.type = str(toast.get("type") or "info")
+        t.content = str(toast.get("content") or "")
+        resp.toast = t
+    return resp
+
+
 def build_event_handler():
     """Build the SDK EventDispatcherHandler wired to our dispatch_event."""
     import lark_oapi as lark
     return (
         lark.EventDispatcherHandler.builder("", "")
         .register_p2_im_message_receive_v1(_on_message_receive)
+        .register_p2_card_action_trigger(_on_card_action)
         .build()
     )
+
 
 
 class LongConnectionHandle:
