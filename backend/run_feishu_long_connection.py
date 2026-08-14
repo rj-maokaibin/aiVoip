@@ -1,18 +1,22 @@
 """Standalone entrypoint for the Feishu WebSocket long-connection listener.
 
 Runs as its own small container/service (outbound-only -- works from an intranet
-with no public callback URL). Keeps the long connection alive with auto-reconnect
-and dispatches events through the same handler as the HTTP callback.
+with no public callback URL). Uses the official lark-oapi SDK to keep the
+connection alive with auto-reconnect and dispatches events through the same
+handler as the HTTP callback.
 
 Usage:
     python run_feishu_long_connection.py
 """
 from __future__ import annotations
 
-import asyncio
+import time
 
 from app.core.config import settings
-from app.integrations.feishu.long_connection import run_long_connection
+from app.integrations.feishu.long_connection import (
+    FeishuLongConnectionError,
+    run_long_connection,
+)
 
 
 def main() -> None:
@@ -21,8 +25,15 @@ def main() -> None:
         return
     print("Starting Feishu long-connection listener (Ctrl+C to stop)...")
     try:
-        reconnects = asyncio.run(run_long_connection())
-        print(f"listener stopped after {reconnects} reconnects")
+        handle = run_long_connection()
+        print("listener started; keep process alive")
+        while True:
+            time.sleep(1)
+            if not handle.is_alive():
+                print("listener thread exited unexpectedly")
+                break
+    except FeishuLongConnectionError as exc:
+        print(f"listener failed to start: {exc}")
     except KeyboardInterrupt:
         print("listener stopped by user")
 

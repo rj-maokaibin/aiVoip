@@ -1,94 +1,75 @@
-"""Feishu WebSocket long-connection event listener.
+"""Feishu WebSocket long-connection event listener (official lark-oapi SDK).
 
 Used when the deployment has NO public callback URL (company intranet / NAT):
 instead of Feishu POSTing events to a callback, the backend opens an outbound
 WebSocket to Feishu's long-connection endpoint and receives events over it.
 
-Flow (Feishu open platform, long-connection mode):
-  1. GET {feishu_base_url}/event/v1/websocket with Authorization: Bearer
-     <tenant_access_token> -> {"data": {"endpoint": "wss://...", "token": "..."}}
-  2. Open the WebSocket; the server sends frames:
-       - {"type": "challenge", "data": {"challenge": "..."}}  -> reply challenge
-       - {"type": "ping", "data": {...}}                       -> reply pong
-       - {"type": "event", "data": {header, event}}            -> dispatch_event
-  3. Auto-reconnect with backoff; re-fetch endpoint/token on reconnect.
+The bootstrap handshake (POST /callback/ws/endpoint) and the WebSocket frame
+protocol (protobuf-encoded, heartbeat/ping handled internally) are implemented
+by the official lark-oapi SDK (lark.ws.Client). This module only wires the SDK's
+event dispatcher to our shared dispatch_event
+(app.integrations.feishu.events), so a message handled over the long connection
+provisions the DUT and binds the Case to the source chat exactly like the
+webhook path.
 
-This module is transport-only: event handling is delegated to
-app.integrations.feishu.events.dispatch_event (shared with the HTTP callback), so
-a message handled over the long connection provisions the DUT and binds the Case
-to the source chat exactly like the webhook path.
+NOTE: lark.ws.Client.start() is BLOCKING and runs its own auto-reconnect loop,
+so run_long_connection() starts the client on a daemon thread and returns
+immediately with a LongConnectionHandle (the caller keeps the process alive).
 """
 from __future__ import annotations
 
-import asyncio
-import json
 import logging
-from typing import Awaitable, Callable
-
-import httpx
-import websockets
+import threading
+from typing import Optional
 
 from app.core.config import settings
 from app.integrations.feishu.events import callback_actor, dispatch_event
-from app.integrations.feishu.transport import FeishuLiveTransport
 
 log = logging.getLogger(__name__)
 
-# Frame types defined by Feishu's long-connection protocol.
-CHALLENGE = "challenge"
-PING = "ping"
-PONG = "pong"
-EVENT = "event"
-
 
 class FeishuLongConnectionError(RuntimeError):
-    pass
+    """Raised when the long connection cannot be started (config/credential)."""
 
 
-async def fetch_websocket_endpoint(transport: FeishuLiveTransport) -> tuple[str, str]:
-    """Return (endpoint, token) from Feishu's long-connection bootstrap API."""
-    if not settings.feishu_live_enabled:
-        raise FeishuLongConnectionError("FEISHU_LIVE_DISABLED")
-    if not settings.feishu_app_id:
-        raise FeishuLongConnectionError("FEISHU_APP_ID_NOT_CONFIGURED")
-    token = await transport._tenant_token()
-    url = settings.feishu_base_url.rstrip("/") + "/event/v1/websocket"
-    async with httpx.AsyncClient(timeout=settings.feishu_timeout_seconds) as client:
-        response = await client.get(url, headers={"Authorization": f"Bearer {token}"})
-    try:
-        data = response.json()
-    except Exception as exc:
-        raise FeishuLongConnectionError(f"FEISHU_WS_INVALID_RESPONSE:{response.status_code}") from exc
-    if response.status_code >= 400 or int(data.get("code", 0)) != 0:
-        raise FeishuLongConnectionError(f"FEISHU_WS_BOOTSTRAP_FAILED:{data.get('code', response.status_code)}")
-    body = data.get("data") or {}
-    endpoint = str(body.get("endpoint") or "")
-    ws_token = str(body.get("token") or "")
-    if not endpoint:
-        raise FeishuLongConnectionError("FEISHU_WS_ENDPOINT_MISSING")
-    return endpoint, ws_token
+def _sender_operator(sender_id) -> dict:
+    """Map the SDK sender_id object to a minimal operator dict (empty if none)."""
+    if sender_id is None:
+        return {}
+    for key in ("open_id", "user_id", "union_id"):
+        value = getattr(sender_id, key, None)
+        if value:
+            return {key: value}
+    return {}
 
 
-async def _handle_frame(ws, frame: dict, *, on_event: Callable[[dict], Awaitable[None]]) -> str:
-    """Process one frame; reply to challenge/ping. Returns a short tag."""
-    frame_type = str(frame.get("type") or "")
-    if frame_type == CHALLENGE:
-        await ws.send(json.dumps({"type": CHALLENGE, "data": frame.get("data")}, ensure_ascii=False))
-        return "challenge"
-    if frame_type == PING:
-        await ws.send(json.dumps({"type": PONG, "data": frame.get("data")}, ensure_ascii=False))
-        return "pong"
-    if frame_type == EVENT:
-        data = frame.get("data") or {}
-        await on_event(data)
-        return "event"
-    return f"unknown:{frame_type}"
+def _message_payload(data) -> dict:
+    """Normalize a SDK P2ImMessageReceiveV1 into dispatch_event's payload shape.
+
+    Accessor path mirrors the official samples:
+        data.event.message.chat_id
+        data.event.message.content   (JSON text, e.g. {"text": "..."})
+        data.event.sender.sender_id  (open_id / user_id / union_id)
+    """
+    event = getattr(data, "event", None)
+    message = getattr(event, "message", None) if event is not None else None
+    chat_id = str(getattr(message, "chat_id", "") or "")
+    content = str(getattr(message, "content", "") or "")
+    sender = getattr(event, "sender", None) if event is not None else None
+    sender_id = getattr(sender, "sender_id", None) if sender is not None else None
+    payload = {
+        "header": {"event_type": "im.message.receive_v1"},
+        "event": {"chat_id": chat_id, "message": {"content": content, "chat_id": chat_id}},
+    }
+    operator = _sender_operator(sender_id)
+    if operator:
+        payload["operator"] = operator
+    return payload
 
 
-async def _on_event(data: dict) -> None:
-    """Persist-and-dispatch an event frame's data in a dedicated DB session."""
+def _dispatch(payload: dict) -> None:
+    """Persist-and-dispatch an event payload in a dedicated DB session."""
     from app.db.session import SessionLocal
-    payload = data if isinstance(data, dict) else {}
     actor = callback_actor(payload)
     with SessionLocal() as db:
         try:
@@ -99,40 +80,61 @@ async def _on_event(data: dict) -> None:
             db.rollback()
 
 
-async def run_long_connection(*, on_event: Callable[[dict], Awaitable[None]] | None = None,
-                              max_retries: int = -1, backoff_seconds: float = 5.0) -> int:
-    """Run the long-connection listener until stopped or max_retries exhausted.
+def _on_message_receive(data) -> None:
+    """SDK handler for im.message.receive_v1 (runs on the SDK dispatcher thread)."""
+    try:
+        payload = _message_payload(data)
+    except Exception:
+        log.exception("feishu long-connection: failed to read message event")
+        return
+    _dispatch(payload)
 
-    on_event defaults to _on_event. Returns the number of reconnects performed
-    (useful for tests / diagnostics).
+
+def build_event_handler():
+    """Build the SDK EventDispatcherHandler wired to our dispatch_event."""
+    import lark_oapi as lark
+    return (
+        lark.EventDispatcherHandler.builder("", "")
+        .register_p2_im_message_receive_v1(_on_message_receive)
+        .build()
+    )
+
+
+class LongConnectionHandle:
+    """Handle returned by run_long_connection; wraps the SDK client + thread."""
+
+    def __init__(self, client, thread: threading.Thread):
+        self.client = client
+        self.thread = thread
+
+    def is_alive(self) -> bool:
+        return self.thread.is_alive()
+
+
+def run_long_connection(*, log_level=None) -> LongConnectionHandle:
+    """Start the official SDK long-connection listener on a daemon thread.
+
+    Raises FeishuLongConnectionError when the listener cannot start (live
+    disabled or missing app id/secret). Returns immediately; the SDK keeps the
+    connection alive (auto-reconnect) until the process exits.
     """
-    on_event = on_event or _on_event
-    transport = FeishuLiveTransport()
-    attempts = 0
-    reconnects = 0
-    while max_retries < 0 or attempts < max_retries:
-        attempts += 1
-        try:
-            endpoint, ws_token = await fetch_websocket_endpoint(transport)
-            log.info("feishu long-connection connecting: %s", endpoint)
-            # The per-connection token is passed as a query param by the official
-            # client; Feishu's wss endpoint validates it on connect.
-            sep = "&" if "?" in endpoint else "?"
-            url = f"{endpoint}{sep}token={ws_token}"
-            async with websockets.connect(url, max_size=4 * 1024 * 1024) as ws:
-                while True:
-                    raw = await ws.recv()
-                    try:
-                        frame = json.loads(raw)
-                    except Exception:
-                        log.warning("feishu ws non-json frame dropped: %.120s", raw)
-                        continue
-                    tag = await _handle_frame(ws, frame, on_event=on_event)
-                    log.debug("feishu ws frame handled: %s", tag)
-        except Exception as exc:
-            log.warning("feishu long-connection attempt %d failed: %s", attempts, type(exc).__name__)
-        if max_retries >= 0 and attempts >= max_retries:
-            break
-        reconnects += 1
-        await asyncio.sleep(backoff_seconds)
-    return reconnects
+    if not settings.feishu_live_enabled:
+        raise FeishuLongConnectionError("FEISHU_LIVE_DISABLED")
+    if not settings.feishu_app_id:
+        raise FeishuLongConnectionError("FEISHU_APP_ID_NOT_CONFIGURED")
+    if not settings.feishu_app_secret:
+        raise FeishuLongConnectionError("FEISHU_APP_SECRET_NOT_CONFIGURED")
+
+    import lark_oapi as lark
+    event_handler = build_event_handler()
+    client = lark.ws.Client(
+        settings.feishu_app_id,
+        settings.feishu_app_secret,
+        event_handler=event_handler,
+        log_level=log_level or lark.LogLevel.INFO,
+        auto_reconnect=True,
+    )
+    thread = threading.Thread(target=client.start, name="feishu-long-connection", daemon=True)
+    thread.start()
+    log.info("feishu long-connection started on daemon thread (official SDK)")
+    return LongConnectionHandle(client=client, thread=thread)

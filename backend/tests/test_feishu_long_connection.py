@@ -1,13 +1,15 @@
 """Feishu long-connection listener + shared event dispatch tests.
 
-Covers the shared dispatch_event carrying the source chat_id into provision, and
-the WebSocket frame handler replying to challenge/ping and dispatching event
-frames, so an intranet deployment can receive Feishu events without a public
-callback URL.
+Covers the shared dispatch_event carrying the source chat_id into provision, the
+SDK payload normalisation (P2ImMessageReceiveV1 -> dispatch_event shape), and
+card-action toast responses. The official lark-oapi SDK owns the WebSocket frame
+protocol (bootstrap / challenge / ping / protobuf), so the frame-level tests are
+replaced by tests of our message payload adapter.
 """
 from __future__ import annotations
 
 import json
+from types import SimpleNamespace
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
@@ -24,19 +26,6 @@ def _engine():
     )
     Base.metadata.create_all(eng)
     return eng
-
-
-class _FakeWS:
-    """Records sent frames; lets the test push received frames."""
-
-    def __init__(self):
-        self.sent = []
-
-    async def send(self, data: str):
-        self.sent.append(json.loads(data))
-
-    async def recv(self):
-        return ''
 
 
 def test_dispatch_event_passes_chat_id_to_provision(monkeypatch):
@@ -81,34 +70,61 @@ def test_dispatch_event_no_text_does_not_provision(monkeypatch):
         assert called['n'] == 0
 
 
-def test_handle_frame_challenge_and_ping():
-    from app.integrations.feishu.long_connection import _handle_frame
-    ws = _FakeWS()
-    import asyncio
-    async def noop():
-        return None
-    tag = asyncio.run(_handle_frame(ws, {'type': 'challenge', 'data': {'challenge': 'abc'}},
-                                    on_event=lambda d: noop()))
-    assert tag == 'challenge'
-    assert ws.sent == [{'type': 'challenge', 'data': {'challenge': 'abc'}}]
-    tag = asyncio.run(_handle_frame(ws, {'type': 'ping', 'data': {'t': 1}},
-                                    on_event=lambda d: noop()))
-    assert tag == 'pong'
-    assert ws.sent[-1] == {'type': 'pong', 'data': {'t': 1}}
+def _sdk_message(chat_id, text, sender_open_id='ou_1'):
+    """Build a fake P2ImMessageReceiveV1-shaped object (same accessor paths)."""
+    return SimpleNamespace(
+        event=SimpleNamespace(
+            message=SimpleNamespace(
+                chat_id=chat_id,
+                content=json.dumps({'text': text}),
+                message_type='text',
+            ),
+            sender=SimpleNamespace(sender_id=SimpleNamespace(open_id=sender_open_id)),
+        )
+    )
 
 
-def test_handle_frame_event_dispatches():
-    from app.integrations.feishu.long_connection import _handle_frame
-    ws = _FakeWS()
-    got = {}
-    async def on_event(data):
-        got['data'] = data
-    import asyncio
-    frame = {'type': 'event', 'data': {'header': {'event_type': 'im.message.receive_v1'},
-                                       'event': {'chat_id': 'oc_b'}}}
-    tag = asyncio.run(_handle_frame(ws, frame, on_event=on_event))
-    assert tag == 'event'
-    assert got['data']['event']['chat_id'] == 'oc_b'
+def test_message_payload_normalises_sdk_event():
+    from app.integrations.feishu.long_connection import _message_payload
+    data = _sdk_message('oc_group_A', 'OPEN_SSH sn=SN-1 web=https://x.noc.rj.link/')
+    payload = _message_payload(data)
+    assert payload['header']['event_type'] == 'im.message.receive_v1'
+    assert payload['event']['chat_id'] == 'oc_group_A'
+    assert payload['event']['message']['chat_id'] == 'oc_group_A'
+    assert json.loads(payload['event']['message']['content'])['text'].startswith('OPEN_SSH')
+    assert payload['operator']['open_id'] == 'ou_1'
+
+
+def test_message_payload_empty_sender_has_no_operator():
+    from app.integrations.feishu.long_connection import _message_payload
+    data = SimpleNamespace(event=SimpleNamespace(
+        message=SimpleNamespace(chat_id='oc_x', content='{"text":"hi"}'),
+        sender=None,
+    ))
+    payload = _message_payload(data)
+    assert payload['event']['chat_id'] == 'oc_x'
+    assert 'operator' not in payload
+
+
+def test_message_payload_missing_event_is_empty():
+    from app.integrations.feishu.long_connection import _message_payload
+    payload = _message_payload(SimpleNamespace(event=None))
+    assert payload['event']['chat_id'] == ''
+    assert payload['event']['message']['content'] == ''
+
+
+def test_run_long_connection_raises_when_live_disabled(monkeypatch):
+    from app.integrations.feishu.long_connection import (
+        FeishuLongConnectionError,
+        run_long_connection,
+    )
+    from app.core.config import settings
+    monkeypatch.setattr(settings, 'feishu_live_enabled', False)
+    try:
+        run_long_connection()
+        assert False, 'expected FeishuLongConnectionError'
+    except FeishuLongConnectionError as exc:
+        assert str(exc) == 'FEISHU_LIVE_DISABLED'
 
 
 def test_runner_skips_when_live_disabled(monkeypatch):
@@ -120,7 +136,7 @@ def test_runner_skips_when_live_disabled(monkeypatch):
     assert result['reason'] == 'FEISHU_LIVE_DISABLED'
 
 
-# -- card.action.trigger (v2) / card.action.trigger_v1 (legacy) responses -------
+# -- card.action.trigger (v2) / card.action.trigger_v1 (legacy) responses --------
 
 
 def test_card_action_trigger_returns_toast_for_open_case(monkeypatch):

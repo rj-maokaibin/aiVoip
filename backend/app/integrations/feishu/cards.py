@@ -22,7 +22,9 @@ def _plain(text: str) -> dict[str, Any]:
 
 
 def _md(text: str) -> dict[str, Any]:
-    return {"tag": "markdown", "content": text}
+    # Feishu card markdown requires the `lark_md` tag; `markdown` is rejected
+    # with API error 230099 at send time.
+    return {"tag": "lark_md", "content": text}
 
 
 def _kv_line(label: str, value: Any) -> str:
