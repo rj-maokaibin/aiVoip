@@ -122,6 +122,11 @@ class RealReproductionPlatform:
         self._fxs_reader_fut = None
         self._fxs_monitor: FxsEventMonitor | None = None
         self._fxs_started_ms = int(time.monotonic() * 1000)
+        # Real in-call media captured at bind_call (build_live_probe), keyed by
+        # call_id. build_call_capture (end_call) prefers this real media over the
+        # post-hangup window (which is empty because the mirror stream stops on
+        # hangup), so CALL_QUICK analyzes actual RTP/PCM instead of nothing.
+        self._live_pcap_cache: dict[str, bytes] = {}
 
     # -- FXS event streaming -------------------------------------------------------
 
@@ -441,21 +446,26 @@ class RealReproductionPlatform:
         # short window so the LIVE analyzer sees real RTP/PCM packets, not empty data.
         # tcpdump cannot replay history, so this captures the next 2s (the call is
         # still active at bind time). The 40000/50000 ports are the verified PCM RX/TX
-        # mirrors opened during arm.
+        # mirrors opened during arm. The captured media is cached so build_call_capture
+        # can feed the SAME real media into CALL_QUICK later.
         seconds = 2
         remote = f'/tmp/aiVoip_live_{call_id}.pcap'
-        return self._tcpdump_capture(
+        cap = self._tcpdump_capture(
             context=context, seconds=seconds, remote=remote,
             port_filter=f'udp port {self.DEFAULT_PCM_RX_PORT} or udp port {self.DEFAULT_PCM_TX_PORT}',
         )
+        if cap.pcap and len(cap.pcap) > 24:
+            self._live_pcap_cache[call_id] = cap.pcap
+        return cap
 
     def build_call_capture(self, *, context: VoiceRuntimeContext, start_ms: int, end_ms: int, call_id: str, profile_id: str, signal) -> RealCapture:
-        # Called at end_call (call just ended): capture the PCM mirror streams for the
-        # post-capture tail window. A real mirror stream is only present while the call
-        # is active; by the time end_call runs the stream is typically quiet, so this
-        # returns a mostly-empty pcap and the analyzer degrades gracefully (RTP
-        # fallback / PCM UNAVAILABLE). The real media evidence for the LIVE analyzer is
-        # captured at bind time (build_live_probe) while the call is active.
+        # Called at end_call (call just ended). The PCM mirror stream stops on hangup,
+        # so a fresh capture here is empty. Prefer the real in-call media captured at
+        # bind_call (build_live_probe) when available; otherwise fall back to a short
+        # post-call tail capture (may be empty -> analyzer degrades gracefully).
+        cached = self._live_pcap_cache.pop(call_id, None)
+        if cached and len(cached) > 24:
+            return RealCapture(pcap=cached, debug_log=b'')
         seconds = max(1, (int(end_ms) - int(start_ms)) // 1000)
         seconds = min(seconds, 8)  # cap the tail window; media already ended
         remote = f'/tmp/aiVoip_call_{call_id}.pcap'

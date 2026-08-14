@@ -21,8 +21,8 @@ from uuid import uuid4
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'backend'))
 
 SN = 'MACC1JZH3260M'
-IP = '47.104.155.247'
-PORT = 65157
+IP = '47.104.22.0'
+PORT = 64294
 WATCH = 120
 
 

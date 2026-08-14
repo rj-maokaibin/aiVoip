@@ -195,6 +195,24 @@ def test_live_probe_and_call_capture_run_tcpdump_and_return_pcap(fake):
     assert any('aiVoip_call_c1.pcap' in c for c in fake.shell_calls)
 
 
+def test_call_capture_prefers_cached_real_media_from_live_probe(fake):
+    # A real in-call pcap (>24 bytes: header + at least one frame) captured at
+    # bind_call must be reused by end_call's build_call_capture, so CALL_QUICK
+    # analyzes actual media instead of the empty post-hangup window.
+    real_media = _DUMMY_PCAP + bytes.fromhex(
+        '000000010000000100000001000000010000000000000001'  # 1 packet record
+    )
+    fake.shell_responses['rm -f /tmp/aiVoip_live_'] = __import__('base64').b64encode(real_media).decode()
+    p = RealReproductionPlatform(adapter=fake)
+    ctx = p.resolve_voice_context(_Device())
+    p.build_live_probe(context=ctx, start_ms=100, call_id='c9')
+    # end_call: must return the cached real media, NOT run a fresh tail capture.
+    call = p.build_call_capture(context=ctx, start_ms=100, end_ms=500, call_id='c9', profile_id='P', signal=None)
+    assert call.pcap == real_media
+    # No post-call tcpdump was issued for this call (cached path).
+    assert not any('aiVoip_call_c9.pcap' in c for c in fake.shell_calls)
+
+
 # -- FXS event streaming (bridge-loop reader -> queue -> sync poll) -------------------
 
 _FXS_OFFHOOK = '2026-08-14 12:36:01.988000 [0] D:: [D]OFFHOOK\n'

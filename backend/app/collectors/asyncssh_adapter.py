@@ -134,20 +134,25 @@ class AsyncSSHDeviceAdapter(DeviceAdapter):
             raise DeviceConnectionError('SSH_NOT_CONNECTED')
         timeout=timeout or settings.ssh_command_timeout
         async with self._aim_lock:
-            process=await self._ensure_aim_session(timeout)
-            try:
-                process.stdin.write(command+'\n')
-                output=await read_until_prompt(process.stdout, self.aim_prompt, timeout)
-                clean=output.rsplit(self.aim_prompt,1)[0]
-                return CommandResult(stdout=clean, stderr='', exit_status=0)
-            except (PromptTimeout, PromptSessionClosed) as exc:
-                # The prompt contract is no longer trustworthy.  Drop the PTY so the next action
-                # starts from a known root state instead of continuing in an unknown sub-mode.
-                await self._close_aim_session()
-                raise DeviceCommandError(f'AIM_COMMAND_PROMPT_FAILED:{type(exc).__name__}') from exc
-            except Exception as exc:
-                await self._close_aim_session()
-                raise DeviceCommandError(f'AIM_COMMAND_FAILED:{type(exc).__name__}') from exc
+            last: Exception | None = None
+            for attempt in range(3):
+                process=await self._ensure_aim_session(timeout)
+                try:
+                    process.stdin.write(command+'\n')
+                    output=await read_until_prompt(process.stdout, self.aim_prompt, timeout)
+                    clean=output.rsplit(self.aim_prompt,1)[0]
+                    return CommandResult(stdout=clean, stderr='', exit_status=0)
+                except (PromptTimeout, PromptSessionClosed) as exc:
+                    # The prompt contract is no longer trustworthy.  Drop the PTY so the
+                    # next attempt starts from a known root state instead of continuing
+                    # in an unknown sub-mode, then retry (AIM respawn can be transient).
+                    last=exc
+                    await self._close_aim_session()
+                    await asyncio.sleep(1.5 * (attempt + 1))
+                except Exception as exc:
+                    await self._close_aim_session()
+                    raise DeviceCommandError(f'AIM_COMMAND_FAILED:{type(exc).__name__}') from exc
+            raise DeviceCommandError(f'AIM_COMMAND_PROMPT_FAILED:{type(last).__name__}') from last
 
     async def read_aim_chunk(self, timeout: float = 1.0) -> str:
         """Read one raw chunk from the persistent AIM PTY stdout.
