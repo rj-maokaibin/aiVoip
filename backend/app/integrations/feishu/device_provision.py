@@ -76,7 +76,14 @@ class DeviceProvisioner:
         # rejected. Prefer v1, fall back to v2 (matches README_macc_open_ssh).
         password = v1 or v2
         if not password:
-            raise CredentialError("DEVICE_POSEIDON_PASSWORD_MISSING")
+            # Poseidon returned no password (expired/rotated devKey record). Do not
+            # fail the whole provision if we already hold a working password for this
+            # SN in device_credentials: keep it and only refresh address/model.
+            existing = self._existing_password(sn=sn)
+            if existing:
+                password = existing
+            else:
+                raise CredentialError("DEVICE_POSEIDON_PASSWORD_MISSING")
 
         # Backfill MAC/model from the Poseidon record when the engineer did not
         # provide them: the EWEB (MACC relay) page does not expose device identity,
@@ -128,5 +135,15 @@ class DeviceProvisioner:
         except Exception:
             db.rollback()
             raise
+        finally:
+            db.close()
+
+    def _existing_password(self, *, sn: str) -> str:
+        """Return the current device_credentials password for sn, or '' if none."""
+        from app.db.models import DeviceCredential
+        db = self._db()
+        try:
+            row = db.scalar(select(DeviceCredential).where(DeviceCredential.sn == sn))
+            return str(row.password or "") if row else ""
         finally:
             db.close()

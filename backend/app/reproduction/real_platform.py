@@ -158,8 +158,13 @@ class RealReproductionPlatform:
         self._fxs_stop.clear()
         self._fxs_started_ms = int(time.monotonic() * 1000)
         self._fxs_reader_fut = self._bridge.spawn(self._fxs_reader_loop())
-        # arm already issued FULL_DEBUG_ENABLE; do not re-write debug commands.
-        self.fxs_event_monitor.start(enable_debug=False)
+        # Send FULL_DEBUG_ENABLE on THIS connection's AIM PTY. The watcher opens a
+        # fresh AIM session (its own adapter connection), so it cannot rely on the
+        # arm phase having enabled debug on a different, already-closed session —
+        # without it the DUT never emits OFFHOOK/ONHOOK lines and FXS activity is
+        # never detected. FULL_DEBUG_ENABLE is idempotent, so re-sending when arm
+        # did run on the same session is harmless.
+        self.fxs_event_monitor.start(enable_debug=True)
         return self.fxs_event_monitor
 
     def stop_fxs_monitor(self):
