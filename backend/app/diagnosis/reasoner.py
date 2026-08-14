@@ -36,6 +36,14 @@ class DeterministicDiagnosisReasoner:
             result=packet['result']; source_run=packet['run_id']
         if result:
             self._reason_from_result(result,source_run,hypotheses,known,unknown,excluded,plan,symptoms)
+        else:
+            # No classic packet/media analyzer, but a reproduction CALL_QUICK run may
+            # have produced real findings (verdict/role/findings). Feed them into the
+            # same deterministic hypothesis mapping so autonomous-reproduction
+            # evidence reaches the diagnosis.
+            repro = analyzers.get('REPRODUCTION_CALL_QUICK_EVIDENCE')
+            if repro and repro.get('result'):
+                self._reason_from_reproduction(repro, hypotheses, known, plan, symptoms)
 
         # 设备文本证据存在，但没有网络/媒体证据时，提示上传/采集PCAP。
         if not pcap and not result:
@@ -217,6 +225,61 @@ class DeterministicDiagnosisReasoner:
 
     def _h(self,code,title,domain,confidence,status,confirmable,event_type,run_id,rationale):
         return HypothesisProposal(code,title,domain,confidence,status,rationale,confirmable,event_type,[EvidenceRef('ANALYZER_RUN',run_id,'L1','SUPPORT',1.0,rationale,{'event_type':event_type})])
+
+    def _reason_from_reproduction(self, repro: dict, hypotheses: list, known: list, plan: list, symptoms: set):
+        """Interpret an autonomous-reproduction CALL_QUICK run into hypotheses.
+
+        CALL_QUICK summary carries ``verdict``/``role``/``findings`` produced by the
+        deterministic Media/PCM analyzers on the real (or mock) captured call. This
+        maps reproduction findings onto the same diagnostic hypotheses the reasoner
+        already uses, so reproduction evidence reaches the diagnosis (previously it
+        was collected in the snapshot but never reasoned over).
+        """
+        run_id = repro.get('run_id')
+        result = repro.get('result') or {}
+        summary = result.get('summary') or {}
+        findings = set(summary.get('findings') or [])
+        verdict = summary.get('verdict')
+        role = summary.get('role')
+        media_summary = summary.get('media_summary') or {}
+        if not findings and not verdict:
+            return
+        known.append(
+            f'自动复现CALL_QUICK：verdict={verdict} role={role} findings={sorted(findings) if findings else "-"}'
+        )
+        # Mapping from reproduction finding -> (code,title,domain,event) mirroring the
+        # deterministic media/packet analyzer semantics used in _reason_from_result.
+        mapping = {
+            'SIP_REGISTRATION_FAILED': ('SIP_REGISTRATION_PATH_FAILURE', 'SIP注册路径异常', 'SIP/Register', 'SIP_REGISTRATION_FAILED', 0.94),
+            'SIP_CALL_FAILED': ('SIP_CALL_SETUP_FAILURE', 'SIP呼叫建立异常', 'SIP/Call', 'SIP_CALL_FAILED', 0.93),
+            'ONE_WAY_RTP_MEDIA': ('ONE_WAY_AUDIO_PATH', 'SIP已建立但RTP媒体仅单方向存在', 'RTP/Media', 'ONE_WAY_RTP_MEDIA', 0.95),
+            'RTP_BURST_LOSS': ('RTP_PACKET_LOSS_PATH', 'RTP媒体链路存在丢包/突发丢包', 'RTP/Network', 'BURST_LOSS', 0.97),
+            'PACKET_LOSS': ('RTP_PACKET_LOSS_PATH', 'RTP媒体链路存在丢包', 'RTP/Network', 'PACKET_LOSS', 0.90),
+            'ECHO_PATH': ('ECHO_PATH_ISSUE', '通话存在回声路径', 'Audio/Echo', 'ECHO_PATH', 0.88),
+            'PERIODIC_INTERFERENCE': ('LOCAL_CAPTURE_PERIODIC_INTERFERENCE', '本地采集存在周期干扰（电流音特征）', 'Audio/Analog', 'PERIODIC_INTERFERENCE', 0.90),
+            'DTMF_PATH': ('DTMF_DIGIT_ASSEMBLY_MISMATCH', 'DTMF拨号/收号链路异常', 'DSP/DTMF', 'DTMF_PATH', 0.85),
+            'CODEC_NEGOTIATION_MISMATCH': ('CODEC_NEGOTIATION_MISMATCH', 'SDP协商与实际RTP Codec不一致', 'DSP/Codec', 'CODEC_NEGOTIATION_MISMATCH', 0.97),
+        }
+        for finding, (code, title, domain, event, base_conf) in mapping.items():
+            if finding not in findings:
+                continue
+            conf = base_conf
+            if finding == 'PERIODIC_INTERFERENCE' and 'AUDIO_NOISE' not in symptoms:
+                conf = 0.82
+            if finding == 'RTP_BURST_LOSS' and 'AUDIO_STUTTER' not in symptoms:
+                conf = 0.82
+            hypotheses.append(self._h(code, title, domain, conf, 'SUPPORTED', False, event, run_id,
+                                      f'自动复现检出 finding={finding}（verdict={verdict} role={role}）。'))
+        # Any active media window + call classification strengthen "symptom reproduced".
+        if 'ACTIVE_MEDIA_WINDOW' in findings and 'CALL_CLASSIFICATION' in findings:
+            known.append('自动复现捕获到活跃媒体窗口并完成呼叫分类（现象可在受控复现中稳定观察到）。')
+        mapped_codes = {m[0] for m in mapping.values()}
+        if verdict == 'MATCH' and not any(h.code in mapped_codes for h in hypotheses):
+            known.append('自动复现判定为TARGET（现象复现），但未检出可归因的确定性异常，需进一步证据。')
+            ev_ids = repro.get('input_evidence_ids') or []
+            if ev_ids:
+                plan.append(PlanAction('RUN_MEDIA_ANALYSIS', '自动复现已复现现象但未定位异常；对复现PCAP执行统一媒体分析以定位根因。', 'L0', True,
+                                       {'evidence_id': ev_ids[0], 'profile_id': 'ruijie_aim_diag_v1'}, 30))
 
     @staticmethod
     def _dedupe(items):
