@@ -371,23 +371,57 @@ class RealReproductionPlatform:
 
     # -- capture builders (real pcap via tcpdump) --------------------------------------
 
+    def _tcpdump_capture(self, *, context: VoiceRuntimeContext, seconds: int,
+                         remote: str, port_filter: str | None = None) -> RealCapture:
+        """Run tcpdump -w on the DUT and return the captured pcap bytes.
+
+        Mirrors the verified pretrigger path: tcpdump writes a binary pcap to a temp
+        file on the DUT, then base64 is read back (ASCII-safe over the SSH text
+        channel) and decoded to bytes. ``port_filter`` narrows the capture (e.g. the
+        PCM mirror streams); the default captures all UDP on the voice interface.
+        """
+        flt = f"'{port_filter}'" if port_filter else "'udp'"
+        cmds = (
+            f"rm -f {remote}; "
+            f"timeout -t {seconds} tcpdump -ni {context.voice_interface} -w {remote} {flt} >/dev/null 2>&1; "
+            f"base64 {remote} 2>/dev/null || true"
+        )
+        b64 = self._shell(cmds, timeout=max(20.0, seconds + 10))
+        return RealCapture(pcap=base64.b64decode(b64.strip()), pcap_path=None)
+
     def build_pretrigger_capture(self, *, context: VoiceRuntimeContext, start_ms: int, end_ms: int) -> RealCapture:
         # Real tcpdump writes a binary pcap to a temp file on the DUT; read it back as
         # base64 (ASCII-safe over the SSH text channel) and decode to bytes.
         seconds = max(1, (int(end_ms) - int(start_ms)) // 1000)
         remote = f'/tmp/aiVoip_pretrigger_{int(start_ms)}_{int(end_ms)}.pcap'
-        cmds = (
-            f"rm -f {remote}; "
-            f"timeout -t {seconds} tcpdump -ni {context.voice_interface} -w {remote} 'udp' >/dev/null 2>&1; "
-            f"base64 {remote} 2>/dev/null || true"
-        )
         # The tcpdump window runs for ``seconds`` (e.g. the profile's pretrigger),
         # which exceeds the default 10s command timeout; pass a matching timeout.
-        b64 = self._shell(cmds, timeout=max(20.0, seconds + 10))
-        return RealCapture(pcap=base64.b64decode(b64.strip()), pcap_path=None)
+        return self._tcpdump_capture(context=context, seconds=seconds, remote=remote)
 
     def build_live_probe(self, *, context: VoiceRuntimeContext, start_ms: int, call_id: str) -> RealCapture:
-        return RealCapture(pcap=b'', debug_log=b'')
+        # Called at bind_call (call in progress): capture the PCM mirror streams for a
+        # short window so the LIVE analyzer sees real RTP/PCM packets, not empty data.
+        # tcpdump cannot replay history, so this captures the next 2s (the call is
+        # still active at bind time). The 40000/50000 ports are the verified PCM RX/TX
+        # mirrors opened during arm.
+        seconds = 2
+        remote = f'/tmp/aiVoip_live_{call_id}.pcap'
+        return self._tcpdump_capture(
+            context=context, seconds=seconds, remote=remote,
+            port_filter=f'udp port {self.DEFAULT_PCM_RX_PORT} or udp port {self.DEFAULT_PCM_TX_PORT}',
+        )
 
     def build_call_capture(self, *, context: VoiceRuntimeContext, start_ms: int, end_ms: int, call_id: str, profile_id: str, signal) -> RealCapture:
-        return RealCapture(pcap=b'', debug_log=b'')
+        # Called at end_call (call just ended): capture the PCM mirror streams for the
+        # post-capture tail window. A real mirror stream is only present while the call
+        # is active; by the time end_call runs the stream is typically quiet, so this
+        # returns a mostly-empty pcap and the analyzer degrades gracefully (RTP
+        # fallback / PCM UNAVAILABLE). The real media evidence for the LIVE analyzer is
+        # captured at bind time (build_live_probe) while the call is active.
+        seconds = max(1, (int(end_ms) - int(start_ms)) // 1000)
+        seconds = min(seconds, 8)  # cap the tail window; media already ended
+        remote = f'/tmp/aiVoip_call_{call_id}.pcap'
+        return self._tcpdump_capture(
+            context=context, seconds=seconds, remote=remote,
+            port_filter=f'udp port {self.DEFAULT_PCM_RX_PORT} or udp port {self.DEFAULT_PCM_TX_PORT}',
+        )

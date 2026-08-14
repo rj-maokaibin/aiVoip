@@ -8,6 +8,11 @@ import pytest
 from app.collectors.device_adapter import CommandResult
 from app.reproduction.real_platform import RealReproductionPlatform
 
+# A minimal classic pcap (24-byte global header only, 0 packets) as bytes.
+_DUMMY_PCAP = bytes.fromhex(
+    'd4c3b2a1020004000000000000000000ffff000001000000'
+)
+
 
 @dataclass
 class FakeAdapter:
@@ -85,6 +90,8 @@ def fake():
             'rm -f /tmp/aiVoip_pretrigger': (
                 'aGVsbG8gd29ybGQ='  # base64("hello world")
             ),
+            'rm -f /tmp/aiVoip_live_': __import__('base64').b64encode(_DUMMY_PCAP).decode(),
+            'rm -f /tmp/aiVoip_call_': __import__('base64').b64encode(_DUMMY_PCAP).decode(),
         },
         cli_responses={
             'voip dsp diag set 192.168.3.200 40000 1 pcm_rx on': 'AIM>',
@@ -174,11 +181,18 @@ def test_build_pretrigger_capture_returns_pcap_bytes(fake):
     assert cap.pcap == b'hello world'
 
 
-def test_live_probe_and_call_capture_are_empty_passthrough(fake):
+def test_live_probe_and_call_capture_run_tcpdump_and_return_pcap(fake):
     p = RealReproductionPlatform(adapter=fake)
     ctx = p.resolve_voice_context(_Device())
-    assert p.build_live_probe(context=ctx, start_ms=100, call_id='c1').pcap == b''
-    assert p.build_call_capture(context=ctx, start_ms=100, end_ms=500, call_id='c1', profile_id='P', signal=None).pcap == b''
+    # build_live_probe captures the PCM mirror ports for a 2s window.
+    live = p.build_live_probe(context=ctx, start_ms=100, call_id='c1')
+    assert live.pcap == _DUMMY_PCAP
+    assert any('aiVoip_live_c1.pcap' in c for c in fake.shell_calls)
+    assert any('udp port 40000 or udp port 50000' in c for c in fake.shell_calls)
+    # build_call_capture captures the post-call tail window (capped at 8s).
+    call = p.build_call_capture(context=ctx, start_ms=100, end_ms=500, call_id='c1', profile_id='P', signal=None)
+    assert call.pcap == _DUMMY_PCAP
+    assert any('aiVoip_call_c1.pcap' in c for c in fake.shell_calls)
 
 
 # -- FXS event streaming (bridge-loop reader -> queue -> sync poll) -------------------
