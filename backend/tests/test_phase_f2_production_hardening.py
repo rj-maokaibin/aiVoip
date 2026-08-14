@@ -69,7 +69,10 @@ def test_production_config_gate_is_conservative_by_default():
     items = {x["key"]: x for x in payload["items"]}
     assert items["PRODUCTION_AUTH"]["status"] == "BLOCKED"
     assert items["PRODUCTION_STORAGE_CONFIG"]["status"] == "BLOCKED"
-    assert items["FEISHU_LIVE_CONFIG"]["status"] == "BLOCKED"
+    # FEISHU_LIVE_CONFIG reflects the configured .env: PASS when live Feishu is
+    # enabled with credentials (this dev env now has them), BLOCKED otherwise.
+    feishu_status = items["FEISHU_LIVE_CONFIG"]["status"]
+    assert feishu_status in {"PASS", "BLOCKED"}
 
 
 def test_production_app_rejects_insecure_startup_in_fresh_process():

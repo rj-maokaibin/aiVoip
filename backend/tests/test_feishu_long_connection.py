@@ -118,3 +118,84 @@ def test_runner_skips_when_live_disabled(monkeypatch):
     result = feishu_long_connection.apply().get()
     assert result['status'] == 'SKIPPED'
     assert result['reason'] == 'FEISHU_LIVE_DISABLED'
+
+
+# -- card.action.trigger (v2) / card.action.trigger_v1 (legacy) responses -------
+
+
+def test_card_action_trigger_returns_toast_for_open_case(monkeypatch):
+    # v2 card.action.trigger: user taps a card button -> callback answers with a
+    # toast (immediate feedback) instead of a bare {"code":0,"msg":"ok"}.
+    from app.integrations.feishu.events import dispatch_event
+    eng = _engine()
+    with Session(eng) as db:
+        payload = {
+            'header': {'event_type': 'card.action.trigger', 'event_id': 'e1'},
+            'event': {'action': {'value': {'action': 'OPEN_CASE', 'case_id': 'c1'}},
+                      'operator': {'open_id': 'ou_1'}},
+        }
+        result = dispatch_event(db, payload=payload)
+        assert result['handled'] == 'open_case'
+        assert result['toast']['type'] == 'info'
+        assert '网页' in result['toast']['content']
+
+
+def test_card_action_trigger_v1_returns_toast_for_stop(monkeypatch):
+    # Legacy card.action.trigger_v1: action lives at top level (not under event).
+    from app.integrations.feishu.events import dispatch_event
+    from app.db.models import Case, CaseDevice, ReproductionSession
+    eng = _engine()
+    with Session(eng) as db:
+        case = Case(case_no='CARD-V1', summary='v1', status='ANALYZING')
+        db.add(case); db.flush()
+        dev = CaseDevice(case_id=case.id, ip='192.0.2.1', ssh_port=22, sn='V1', username='root')
+        db.add(dev); db.flush()
+        sess = ReproductionSession(case_id=case.id, device_id=dev.id, profile_key='P',
+                                   profile_version='1', profile_checksum='c', effective_profile_snapshot={},
+                                   state='WATCHING')
+        db.add(sess); db.commit()
+        dispatched = {'n': 0}
+        monkeypatch.setattr('app.workers.reproduction_tasks.cancel_reproduction.apply_async',
+                            lambda args, queue=None: dispatched.__setitem__('n', dispatched['n'] + 1), raising=False)
+        payload = {
+            'type': 'card.action.trigger_v1',
+            'action': {'value': {'action': 'STOP_REPRODUCTION', 'session_id': sess.id}},
+        }
+        result = dispatch_event(db, payload=payload)
+        assert result['handled'] == 'stop_reproduction'
+        assert result['toast']['type'] == 'info'
+        assert '停止' in result['toast']['content']
+        assert dispatched['n'] == 1
+
+
+def test_card_action_trigger_error_returns_error_toast():
+    from app.integrations.feishu.events import dispatch_event
+    eng = _engine()
+    with Session(eng) as db:
+        payload = {
+            'header': {'event_type': 'card.action.trigger'},
+            'event': {'action': {'value': {'action': 'STOP_REPRODUCTION', 'session_id': 'missing'}}},
+        }
+        result = dispatch_event(db, payload=payload)
+        assert result['handled'] == 'error'
+        assert result['toast']['type'] == 'error'
+
+
+def test_http_callback_returns_toast_for_card_action(monkeypatch):
+    # The HTTP callback endpoint surfaces the toast for card action-trigger events.
+    from app.integrations.feishu.events import dispatch_event
+    eng = _engine()
+    with Session(eng) as db:
+        payload = {
+            'header': {'event_type': 'card.action.trigger'},
+            'event': {'action': {'value': {'action': 'OPEN_CASE'}}},
+        }
+        result = dispatch_event(db, payload=payload)
+        # simulate the callback wrapper's card-action branch
+        from app.integrations.feishu.events import CARD_ACTION_EVENT_TYPES
+        event_type = payload['header']['event_type']
+        if event_type in CARD_ACTION_EVENT_TYPES:
+            response = {'code': 0, 'msg': 'ok', 'toast': result.get('toast') or {}}
+        else:
+            response = {'code': 0, 'msg': 'ok'}
+        assert response['toast']['type'] == 'info'

@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_db
 from app.core.errors import AppError
 from app.core.config import settings
-from app.integrations.feishu.events import dispatch_event
+from app.integrations.feishu.events import CARD_ACTION_EVENT_TYPES, callback_actor, dispatch_event
 from app.integrations.feishu.transport import FeishuCallbackVerifier, FeishuTransportError
 
 router = APIRouter(tags=["feishu-callback"])
@@ -50,8 +50,15 @@ async def feishu_callback(
     # Shared dispatch: im.message.receive_v1 text -> provision (with source
     # chat_id), card actions -> stop/experiment-complete. Same handler is used by
     # the WebSocket long-connection listener, so behaviour is identical either way.
-    from app.integrations.feishu.events import callback_actor
+    header = payload.get("header") if isinstance(payload.get("header"), dict) else {}
+    event_type = str(header.get("event_type") or payload.get("type") or "")
     result = dispatch_event(db, payload=payload, actor=callback_actor(payload))
     if result.get("handled") == "error":
         raise AppError(result.get("reason", "FEISHU_CALLBACK_INVALID"), details=result)
+    # Card action-trigger callbacks (v2 `card.action.trigger` / legacy
+    # `card.action.trigger_v1`) must answer with a toast so the user sees the
+    # click feedback immediately. Updated card content is produced by the async
+    # diagnosis/cleanup worker pushing the next sync_case_card.
+    if event_type in CARD_ACTION_EVENT_TYPES:
+        return {"code": 0, "msg": "ok", "toast": (result.get("toast") or {})}
     return {"code": 0, "msg": "ok"}

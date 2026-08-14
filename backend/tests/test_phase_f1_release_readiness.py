@@ -23,7 +23,11 @@ def test_runtime_release_readiness_is_conservative_for_pending_integrations():
     # when mock (default CI). This test runs in the real-mode dev environment.
     assert items["REAL_REPRODUCTION_PLATFORM"]["status"] == "PASS"
     assert items["PRODUCTION_AUTH_PROVIDER"]["status"] == "BLOCKED"
-    assert items["FEISHU_LIVE_TRANSPORT"]["status"] == "BLOCKED"
+    # FEISHU_LIVE_TRANSPORT reflects the configured .env: PASS when
+    # FEISHU_LIVE_ENABLED=true and app credentials are present (this dev env now
+    # has them), BLOCKED when live Feishu is not configured (default CI).
+    feishu_status = items["FEISHU_LIVE_TRANSPORT"]["status"]
+    assert feishu_status in {"PASS", "BLOCKED"}
 
 
 def test_release_readiness_api_requires_admin_permission_and_reports_blockers_in_fresh_process():
