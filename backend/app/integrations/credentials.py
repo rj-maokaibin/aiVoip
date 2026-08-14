@@ -156,12 +156,57 @@ class LocalSecretCredentialProvider(CredentialProvider):
         raise CredentialError("LOCAL_SECRET_DEVICE_MISSING_USERNAME")
 
 
+class PoseidonCredentialProvider(CredentialProvider):
+    """Resolve a device SSH password from Poseidon (ops.rj.link) by SN.
+
+    Authenticates through the baichuan SSO center (credentials in ~/secret.yaml
+    sso.baichuan) and asks Poseidon devKey for sshpassv1/v2. Used as the DUT
+    credential source for the background reproduction platform after a field
+    engineer provides SN/IP via Feishu. The password is never returned to the
+    engineer and never logged.
+    """
+
+    provider_id = "poseidon"
+    production_capable = True
+
+    def __init__(self, *, client=None):
+        # Optional injected Poseidon client for tests; production builds it per call.
+        self._client = client
+
+    async def get_password(self, *, sn: str, ip: str, product: str | None = None) -> str:
+        if not sn:
+            raise CredentialError("POSEIDON_SN_REQUIRED")
+        # Deferred import avoids a cycle (poseidon imports CredentialError from here).
+        if self._client is not None:
+            client = self._client
+        else:
+            from app.integrations.poseidon import PoseidonClient
+            client = PoseidonClient()
+        try:
+            v1, v2 = await client.get_ssh_pass(sn=sn, product=product)
+        except CredentialError:
+            raise
+        except Exception as exc:
+            raise CredentialError(f"POSEIDON_CREDENTIAL_FAILED:{type(exc).__name__}") from exc
+        # Prefer v2; fall back to v1 for older firmware (README_macc_open_ssh).
+        password = v2 or v1
+        if not password:
+            raise CredentialError("POSEIDON_DEVICE_MISSING_PASSWORD")
+        return password
+
+    def resolve_username(self, *, ip: str, fallback: str | None = None) -> str:
+        # ReyeeOS DUTs are reached as root over SSH (matches the verified APF1250).
+        return fallback or "root"
+
+
 def get_credential_provider() -> CredentialProvider:
     provider = str(settings.credential_provider).lower()
     if provider == "api":
         return ApiCredentialProvider()
     if provider == "local_secret":
         return LocalSecretCredentialProvider()
+    if provider == "poseidon":
+        return PoseidonCredentialProvider()
     if provider == "mock":
         return MockCredentialProvider()
     raise CredentialError(f"CREDENTIAL_PROVIDER_UNSUPPORTED:{provider}")

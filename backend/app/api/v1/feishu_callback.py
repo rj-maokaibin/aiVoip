@@ -75,6 +75,30 @@ async def feishu_callback(
     value = _action_value(payload)
     action = str(value.get("action") or "").upper()
     actor = _callback_actor(payload)
+
+    # Text-message events (engineer @bot in a group or DM): provision a DUT for
+    # background reproduction (open SSH + resolve Poseidon password). Text is
+    # extracted from im.message.receive_v1 event.message.content (JSON string).
+    header = payload.get("header") if isinstance(payload.get("header"), dict) else {}
+    event_type = str(header.get("event_type") or payload.get("type") or "")
+    if event_type == "im.message.receive_v1":
+        event = payload.get("event") or {}
+        msg = event.get("message") or {}
+        content = msg.get("content") or ""
+        if isinstance(content, str):
+            try:
+                content = json.loads(content)
+            except Exception:
+                content = {}
+        text = ""
+        if isinstance(content, dict):
+            text = str(content.get("text") or "")
+        if text.strip():
+            from app.workers.device_provision_task import provision_from_feishu
+            provision_from_feishu.apply_async(args=[text], queue="diagnosis")
+            return {"code": 0, "msg": "ok"}
+        return {"code": 0, "msg": "ok"}
+
     if action == "STOP_REPRODUCTION":
         session_id = str(value.get("session_id") or "")
         row = db.get(ReproductionSession, session_id)
