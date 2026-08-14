@@ -344,7 +344,8 @@ class ReproductionOrchestrator:
         transition_session(db,session,ReproductionEvent.WATCH_STARTED,actor=actor,reason='invalid_attempt_continue_watching',payload={'attempt_id':attempt.id})
         return attempt
 
-    def bind_call(self, db: Session, *, session: ReproductionSession, relative_ms: int, external_call_ref: str|None=None, actor: str|None=None) -> ReproductionCall:
+    def bind_call(self, db: Session, *, session: ReproductionSession, relative_ms: int, external_call_ref: str|None=None, actor: str|None=None,
+                  binding_event: str|None=None) -> ReproductionCall:
         state=ReproductionState(session.state)
         attempt=db.scalar(select(ReproductionAttempt).where(
             ReproductionAttempt.session_id==session.id,ReproductionAttempt.status==AttemptStatus.ACTIVE.value).order_by(ReproductionAttempt.attempt_no.desc()))
@@ -366,10 +367,11 @@ class ReproductionOrchestrator:
                               call_no=call_no,external_call_ref=external_call_ref,status=ReproductionCallStatus.ACTIVE.value)
         db.add(call); db.flush()
         if attempt: attempt.valid=True
+        binding = binding_event or self._profile(session).call_binding_event or 'SIP_INVITE'
         db.add(ReproductionEventRecord(session_id=session.id,attempt_id=attempt.id if attempt else None,call_id=call.id,case_id=session.case_id,
-                                       event_type='SIP_INVITE',source='MOCK_PCAP',anchor_type=AnchorType.CALL_BINDING.value,
+                                       event_type=binding,source='MOCK_PCAP',anchor_type=AnchorType.CALL_BINDING.value,
                                        session_relative_ms=int(relative_ms),timestamp_source=TimestampSource.PCAP.value,uncertainty_ms=1,
-                                       payload_json={'external_call_ref':external_call_ref}))
+                                       payload_json={'external_call_ref':external_call_ref,'binding_event':binding}))
         transition_session(db,session,ReproductionEvent.CALL_BOUND,actor=actor,reason='call_binding_event',payload={'call_id':call.id,'call_no':call.call_no})
         transition_session(db,session,ReproductionEvent.CAPTURE_STARTED,actor=actor,reason='call_scope_capture')
         ctx=self._runtime_context(session); probe=self.platform.build_live_probe(context=ctx,start_ms=int(relative_ms),call_id=call.id)

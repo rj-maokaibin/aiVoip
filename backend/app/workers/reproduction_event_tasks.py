@@ -15,8 +15,15 @@ from app.workers.celery_app import celery_app
 
 log = get_task_logger(__name__)
 
-# States during which the monitor should keep listening for FXS activity.
-_LISTENING_STATES = {ReproductionState.WATCHING.value, ReproductionState.ACTIVITY_DETECTED.value}
+# States during which the monitor should keep listening for FXS activity / call
+# capture. The real-mode watcher also advances through CALL_DETECTED/CAPTURING
+# while a media-bound call is being captured.
+_LISTENING_STATES = {
+    ReproductionState.WATCHING.value,
+    ReproductionState.ACTIVITY_DETECTED.value,
+    ReproductionState.CALL_DETECTED.value,
+    ReproductionState.CAPTURING.value,
+}
 
 
 def _session_listening(db, session_id: str) -> ReproductionSession | None:
@@ -62,12 +69,18 @@ async def _watch_mock(db, session, device, max_seconds: int) -> dict:
 
 
 async def _watch_real(db, session, device, max_seconds: int) -> dict:
-    """Real-mode watcher: FXS events stream through the real platform.
+    """Real-mode watcher: FXS events + real CALL analysis through the real platform.
 
     The platform owns the AsyncSSHDeviceAdapter on its dedicated bridge loop, so all
-    asyncssh I/O (connect, AIM commands, raw AIM stream reads) share ONE event loop.
-    A background reader pushes raw AIM chunks into a thread-safe queue and the
-    synchronous orchestrator polls it — no cross-loop handoff, no deadlock.
+    asyncssh I/O (connect, AIM commands, raw AIM stream reads, PCM probes) share ONE
+    event loop. A background reader pushes raw AIM chunks into a thread-safe queue
+    and the synchronous orchestrator polls it — no cross-loop handoff, no deadlock.
+
+    CALL-level analysis (the previously unconnected link) is driven by the real
+    platform's media-binding signal: a call is bound when the PCM mirror stream
+    (UDP 40000/50000) becomes active after an FXS OFFHOOK attempt, and ended when
+    the FXS ONHOOK arrives while a call is bound. No AIM SIP plaintext is needed
+    (verified: `de sip de` does not emit INVITE/BYE on the PTY).
     """
     provider = get_credential_provider()
     password = await provider.get_password(sn=device.sn, ip=device.ip)
@@ -79,23 +92,76 @@ async def _watch_real(db, session, device, max_seconds: int) -> dict:
             pass
 
     from app.collectors.asyncssh_adapter import AsyncSSHDeviceAdapter
+    from app.reproduction.quick import QuickAnalysisInput
+    from app.contracts.enums import CallVerdict
     adapter = AsyncSSHDeviceAdapter(ip=device.ip, port=device.ssh_port, username=username, password=password)
     orch, _close = build_orchestrator(adapter=adapter, connect=True)
     try:
         # Start the bridge-loop AIM reader and wire its monitor into the orchestrator.
         orch.fxs_event_monitor = orch.platform.start_fxs_monitor()
         events_handled = 0
+        calls_bound = 0
+        calls_ended = 0
+        active_call_id: str | None = None
+        last_media_probe = 0.0
+        media_probe_interval = 3.0
         started = time.monotonic()
         try:
             while time.monotonic() - started < max_seconds:
                 row = _session_listening(db, session.id)
-                if row is None or ReproductionState(row.state) not in _LISTENING_STATES:
+                if row is None:
                     break
+                state = ReproductionState(row.state)
+                # Continue listening only in the watching/activity/call states; stop
+                # when the session left for capture/analysis/cleanup or finished.
+                if state in {ReproductionState.WATCHING, ReproductionState.ACTIVITY_DETECTED,
+                             ReproductionState.CALL_DETECTED, ReproductionState.CAPTURING}:
+                    pass
+                else:
+                    break
+                ctx = orch.platform.resolve_voice_context(device) if hasattr(orch.platform, 'resolve_voice_context') else None
+
+                # 1. Poll FXS events (OFFHOOK -> record_activity; ONHOOK with no bound
+                #    call -> end_activity_without_call inside record_fxs_event).
                 for ev in orch.fxs_event_monitor.poll():
                     handled = orch.record_fxs_event(db, session=row, event=ev, actor='reproduction-worker')
                     if handled is not None:
                         events_handled += 1
                     db.commit()
+                    # FXS ONHOOK while a call is bound -> REAL end_call (CALL_QUICK
+                    # analysis on the real capture). record_fxs_event does not consume
+                    # ONHOOK in CALL_DETECTED/CAPTURING, so we handle it here.
+                    if ev.event == 'ONHOOK' and active_call_id is not None:
+                        now_state = ReproductionState(_session_listening(db, session.id).state)
+                        if now_state in {ReproductionState.CALL_DETECTED, ReproductionState.CAPTURING}:
+                            rel = orch.fxs_event_monitor.relative_ms()
+                            call, _decision = orch.end_call(
+                                db, session=row, call_id=active_call_id, relative_ms=rel,
+                                signal=QuickAnalysisInput(verdict=CallVerdict.INCONCLUSIVE, findings=()),
+                                end_anchor='FXS_ONHOOK', actor='reproduction-worker',
+                            )
+                            active_call_id = None
+                            calls_ended += 1
+                            db.commit()
+
+                # 2. Periodic media probe: if an FXS attempt is active (ACTIVITY_DETECTED)
+                #    and no call is bound yet, bind on the PCM mirror stream becoming live.
+                now = time.monotonic()
+                if (now - last_media_probe) >= media_probe_interval:
+                    last_media_probe = now
+                    cur_state = ReproductionState(_session_listening(db, session.id).state)
+                    if (cur_state == ReproductionState.ACTIVITY_DETECTED and active_call_id is None
+                            and orch.platform.pcm_media_active(context=ctx)):
+                        rel = orch.fxs_event_monitor.relative_ms()
+                        call = orch.bind_call(
+                            db, session=row, relative_ms=rel,
+                            external_call_ref=orch.platform.media_binding_call_ref(),
+                            binding_event='RTP_STREAM_START', actor='reproduction-worker',
+                        )
+                        active_call_id = call.id
+                        calls_bound += 1
+                        db.commit()
+
                 if events_handled == 0:
                     await asyncio.sleep(0.2)
         finally:
@@ -104,6 +170,7 @@ async def _watch_real(db, session, device, max_seconds: int) -> dict:
             except Exception:
                 pass
         return {'status': 'DONE', 'session_id': session.id, 'events_handled': events_handled,
+                'calls_bound': calls_bound, 'calls_ended': calls_ended,
                 'state': _session_listening(db, session.id).state if _session_listening(db, session.id) else 'GONE'}
     finally:
         _close()

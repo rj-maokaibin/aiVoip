@@ -244,6 +244,28 @@ class RealReproductionPlatform:
         except ValueError:
             return -1
 
+    # -- real CALL detection (media-binding, no AIM SIP plaintext) --------------------
+
+    def pcm_media_active(self, *, context: VoiceRuntimeContext | None = None) -> bool:
+        """Return True when the PCM mirror stream shows live media.
+
+        A real call is bound on the PCM mirror stream becoming active (UDP
+        40000/50000 carry packets), not on SIP INVITE plaintext: the DUT's AIM SIP
+        debug (`de sip de`) does not emit INVITE/BYE lines on the PTY (verified live
+        2026-08-14), so the verified media-binding signal is used instead — matching
+        the profile's ``media_binding_event = RTP_STREAM_START`` semantics.
+        """
+        iface = context.voice_interface if context and context.voice_interface else self.DEFAULT_VOICE_INTERFACE
+        for port in (self.DEFAULT_PCM_RX_PORT, self.DEFAULT_PCM_TX_PORT):
+            n = self._probe_packets(interface=iface, port=port)
+            if n > 0:
+                return True
+        return False
+
+    def media_binding_call_ref(self) -> str:
+        """Opaque call reference for the media-binding event (no SIP call-id exists)."""
+        return f'media-{int(time.monotonic() * 1000)}'
+
     # -- voice runtime context ---------------------------------------------------------
 
     def resolve_voice_context(self, device: CaseDevice) -> VoiceRuntimeContext:
