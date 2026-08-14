@@ -96,3 +96,58 @@ def test_poseidon_client_get_ssh_pass_parses_v1_v2():
     v1, v2 = asyncio.run(client.get_ssh_pass(sn="SN-2"))
     assert (v1, v2) == ("a1", "a2")
     assert fake.closed is True
+
+
+def test_poseidon_client_get_device_record_returns_mac_and_product():
+    fake = _FakeAsyncClient(page_items=[
+        {"sn": "SN-3", "mac": "98:4A:6B:D0:25:01", "productClass": "APF3260-M",
+         "sshpassv1": "v1pw", "sshpassv2": "v2pw"},
+    ])
+    client = PoseidonClient(client=fake)
+    import asyncio
+    rec = asyncio.run(client.get_device_record(sn="SN-3"))
+    assert rec["sn"] == "SN-3"
+    assert rec["mac"] == "98:4A:6B:D0:25:01"
+    assert rec["product_class"] == "APF3260-M"
+    assert rec["sshpassv1"] == "v1pw"
+    assert rec["sshpassv2"] == "v2pw"
+    assert fake.closed is True
+
+
+def test_poseidon_client_get_device_record_empty_fields():
+    fake = _FakeAsyncClient(page_items=[
+        {"sn": "SN-4", "mac": "", "productClass": "", "sshpassv1": "p1", "sshpassv2": ""},
+    ])
+    client = PoseidonClient(client=fake)
+    import asyncio
+    rec = asyncio.run(client.get_device_record(sn="SN-4"))
+    assert rec["mac"] is None
+    assert rec["product_class"] is None
+    assert rec["sshpassv1"] == "p1"
+    assert rec["sshpassv2"] == ""
+
+
+def test_poseidon_client_get_device_record_prefers_password_row():
+    """Poseidon returns several rows for one SN (failed attempts then the success
+    row). The password-bearing row must be chosen so SSH creds stay resolvable."""
+    fake = _FakeAsyncClient(page_items=[
+        {"sn": "SN-5", "mac": "98:4A:6B:D0:25:01", "productClass": "APF3260-M",
+         "sshpassv1": "", "sshpassv2": "", "status": "error"},
+        {"sn": "SN-5", "mac": "98:4A:6B:D0:25:01", "productClass": "APF3260-M",
+         "sshpassv1": "117915c7", "sshpassv2": "%L*^^2b2", "status": "success"},
+    ])
+    client = PoseidonClient(client=fake)
+    import asyncio
+    rec = asyncio.run(client.get_device_record(sn="SN-5"))
+    assert rec["sshpassv1"] == "117915c7"
+    assert rec["sshpassv2"] == "%L*^^2b2"
+    assert rec["mac"] == "98:4A:6B:D0:25:01"
+    assert rec["product_class"] == "APF3260-M"
+
+
+def test_poseidon_client_get_device_record_raises_when_no_row():
+    fake = _FakeAsyncClient(page_items=[])
+    client = PoseidonClient(client=fake)
+    import asyncio
+    with pytest.raises(CredentialError):
+        asyncio.run(client.get_device_record(sn="SN-6"))

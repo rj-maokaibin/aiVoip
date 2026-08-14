@@ -88,8 +88,21 @@ class PoseidonClient:
             await s.aclose()
             raise CredentialError(f"POSEIDON_SESSION_FAILED:{type(exc).__name__}") from exc
 
-    async def get_ssh_pass(self, *, sn: str, mac: str | None = None, product: str | None = None) -> tuple[str, str]:
-        """生成并读取设备 SSH 密码，返回 (sshpassv1, sshpassv2)。密码不回传飞书、不落日志。"""
+    async def get_device_record(self, *, sn: str, mac: str | None = None,
+                                product: str | None = None) -> dict:
+        """Generate/read the Poseidon device key and return its full record.
+
+        Returns a dict with keys: ``sn``, ``mac``, ``product_class``,
+        ``sshpassv1``, ``sshpassv2``. Poseidon's devKey/page record carries the
+        device MAC and product class, so a device provisioned with only a web_url
+        (whose EWEB page does not expose MAC/model — MACC relay strips it) can
+        still backfill MAC/model from here. Passwords are never logged.
+
+        Poseidon may return several rows for one SN (older failed attempts with
+        empty keys plus the successful row); the first row that carries a password
+        (or, if none do, the first row) is used so MAC/model and password stay
+        consistent across the record set.
+        """
         s = await self._session()
         try:
             add = await s.post(f"{POSEIDON}/devKey/add?cloud=cn", json=[{"sn": sn, "mac": mac, "productClass": product}])
@@ -103,12 +116,22 @@ class PoseidonClient:
             )
             page.raise_for_status()
             data = page.json()
-            for item in data.get("dataList") or []:
-                if item.get("sn") == sn:
-                    v1 = item.get("sshpassv1")
-                    v2 = item.get("sshpassv2")
-                    if v1 or v2:
-                        return str(v1 or ""), str(v2 or "")
-            raise CredentialError("POSEIDON_DEVKEY_NOT_FOUND")
+            rows = [item for item in (data.get("dataList") or []) if item.get("sn") == sn]
+            if not rows:
+                raise CredentialError("POSEIDON_DEVKEY_NOT_FOUND")
+            # Prefer the row that actually carries a password; fall back to the first.
+            chosen = next((r for r in rows if (r.get("sshpassv1") or r.get("sshpassv2"))), rows[0])
+            return {
+                "sn": sn,
+                "mac": str(chosen.get("mac") or "") or None,
+                "product_class": str(chosen.get("productClass") or "") or None,
+                "sshpassv1": str(chosen.get("sshpassv1") or ""),
+                "sshpassv2": str(chosen.get("sshpassv2") or ""),
+            }
         finally:
             await s.aclose()
+
+    async def get_ssh_pass(self, *, sn: str, mac: str | None = None, product: str | None = None) -> tuple[str, str]:
+        """生成并读取设备 SSH 密码，返回 (sshpassv1, sshpassv2)。密码不回传飞书、不落日志。"""
+        rec = await self.get_device_record(sn=sn, mac=mac, product=product)
+        return rec["sshpassv1"], rec["sshpassv2"]

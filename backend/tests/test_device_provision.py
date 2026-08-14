@@ -12,8 +12,22 @@ from app.integrations.ssh_opener import LuciSshOpener, SshOpenerError
 
 
 class _FakePoseidon:
+    def __init__(self, record_mac=None, record_product=None):
+        self.record_mac = record_mac
+        self.record_product = record_product
+
+    async def get_device_record(self, *, sn, mac=None, product=None):
+        return {
+            "sn": sn,
+            "mac": mac or self.record_mac,
+            "product_class": product or self.record_product,
+            "sshpassv1": "v1pw",
+            "sshpassv2": "v2pw",
+        }
+
     async def get_ssh_pass(self, *, sn, mac=None, product=None):
-        return "v1pw", "v2pw"
+        rec = await self.get_device_record(sn=sn, mac=mac, product=product)
+        return rec["sshpassv1"], rec["sshpassv2"]
 
 
 class _FakeOpener:
@@ -142,6 +156,60 @@ def test_provision_extracts_sn_from_web_url():
         assert res["sn"] == "SN-FROM-URL"
     finally:
         dp.extract_sn_from_web_url = orig
+
+
+def test_provision_backfills_mac_product_from_poseidon_record():
+    """Engineer only sends a web_url; SN comes from the page, MAC/model are
+    backfilled from the Poseidon devKey record (EWEB page exposes no identity)."""
+    factory = _mem_factory()
+    import app.integrations.feishu.device_provision as dp
+    async def fake_extract(url):
+        return "SN-FROM-URL"
+    orig = dp.extract_sn_from_web_url
+    dp.extract_sn_from_web_url = fake_extract
+    try:
+        prov = DeviceProvisioner(
+            opener=_FakeOpener(),
+            poseidon=_FakePoseidon(record_mac="F0:74:8D:E1:9C:E2", record_product="APF1250"),
+            session_factory=factory,
+        )
+        res = asyncio.run(prov.provision(web_url="https://x.noc.rj.link/", ssh_ip=None,
+                                         ssh_port=22, sn=None))
+        assert res["sn"] == "SN-FROM-URL"
+        db = factory()
+        try:
+            from app.db.models import DeviceCredential
+            from sqlalchemy import select
+            row = db.scalar(select(DeviceCredential).where(DeviceCredential.sn == "SN-FROM-URL"))
+            assert row is not None
+            assert row.mac == "F0:74:8D:E1:9C:E2"
+            assert row.product == "APF1250"
+            assert row.password == "v1pw"
+        finally:
+            db.close()
+    finally:
+        dp.extract_sn_from_web_url = orig
+
+
+def test_provision_explicit_mac_product_win_over_record():
+    """Engineer-provided mac/product take precedence over Poseidon record values."""
+    factory = _mem_factory()
+    prov = DeviceProvisioner(
+        opener=_FakeOpener(),
+        poseidon=_FakePoseidon(record_mac="RECORD-MAC", record_product="RECORD-PROD"),
+        session_factory=factory,
+    )
+    asyncio.run(prov.provision(web_url=None, ssh_ip="10.0.0.1", ssh_port=22,
+                               sn="SN-1", mac="EXPLICIT-MAC", product="EXPLICIT-PROD"))
+    db = factory()
+    try:
+        from app.db.models import DeviceCredential
+        from sqlalchemy import select
+        row = db.scalar(select(DeviceCredential).where(DeviceCredential.sn == "SN-1"))
+        assert row.mac == "EXPLICIT-MAC"
+        assert row.product == "EXPLICIT-PROD"
+    finally:
+        db.close()
 
 
 def test_provision_missing_sn_raises():
