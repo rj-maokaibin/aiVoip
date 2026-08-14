@@ -49,7 +49,7 @@ class LuciSshOpener:
             if sid is None:
                 if not web_url:
                     raise SshOpenerError("SSH_OPENER_WEB_URL_OR_SID_REQUIRED")
-                page = (await s.get(web_url, verify=False)).text
+                page = (await s.get(web_url)).text
                 m = _SID_RE.search(page)
                 if not m:
                     raise SshOpenerError("SSH_OPENER_SID_NOT_FOUND")
@@ -67,7 +67,6 @@ class LuciSshOpener:
                                "data": {"developMode": str(mode)}, "device": "pc"},
                 },
                 headers={"Content-Type": "application/json"},
-                verify=False,
             )
             resp.raise_for_status()
             return resp.json()
