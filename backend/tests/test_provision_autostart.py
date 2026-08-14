@@ -86,3 +86,41 @@ def test_autostart_missing_credential_returns_not_found(monkeypatch):
         result = _autostart_reproduction(sn='NO-SUCH-SN', product=None)
         assert result['started'] is False
         assert result['reason'] == 'DEVICE_CREDENTIAL_NOT_FOUND'
+
+
+def test_autostart_binds_case_to_source_chat(monkeypatch):
+    # A provisioned Case created from a Feishu message must be bound to the source
+    # chat_id so the conclusion card returns to the SAME group (multi-group support).
+    from app.workers.device_provision_task import _autostart_reproduction
+    eng = _engine()
+    with Session(eng) as db:
+        _seed_credential(db)
+        import app.db.session as dbs
+        monkeypatch.setattr(dbs, 'SessionLocal', lambda: Session(eng))
+        monkeypatch.setattr('app.workers.reproduction_tasks.start_reproduction.apply_async',
+                            lambda args, queue=None: None, raising=False)
+        result = _autostart_reproduction(sn='SN-1', product='APF1250', chat_id='oc_group_A')
+        assert result['started'] is True
+        from app.db.models import FeishuCaseBinding
+        binding = db.scalar(select(FeishuCaseBinding).where(FeishuCaseBinding.case_id == result['case_id']))
+        assert binding is not None
+        assert binding.receive_id == 'oc_group_A'
+        assert binding.receive_id_type == 'chat_id'
+        assert binding.message_id is None  # backfilled on first sync_case_card
+
+
+def test_autostart_without_chat_has_no_binding(monkeypatch):
+    # No chat_id supplied (e.g. API-created) -> no FeishuCaseBinding row.
+    from app.workers.device_provision_task import _autostart_reproduction
+    eng = _engine()
+    with Session(eng) as db:
+        _seed_credential(db)
+        import app.db.session as dbs
+        monkeypatch.setattr(dbs, 'SessionLocal', lambda: Session(eng))
+        monkeypatch.setattr('app.workers.reproduction_tasks.start_reproduction.apply_async',
+                            lambda args, queue=None: None, raising=False)
+        result = _autostart_reproduction(sn='SN-1', product='APF1250', chat_id=None)
+        assert result['started'] is True
+        from app.db.models import FeishuCaseBinding
+        binding = db.scalar(select(FeishuCaseBinding).where(FeishuCaseBinding.case_id == result['case_id']))
+        assert binding is None

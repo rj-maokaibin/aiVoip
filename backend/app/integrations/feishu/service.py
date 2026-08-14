@@ -9,6 +9,34 @@ from app.integrations.feishu.cards import FeishuCaseCardBuilder
 from app.integrations.feishu.transport import FeishuLiveTransport
 
 
+def bind_case_to_chat(db: Session, *, case_id: str, chat_id: str, receive_id_type: str = 'chat_id') -> FeishuCaseBinding | None:
+    """Record that a Case belongs to a specific Feishu chat (the group where the
+    engineer @bot'ed it). Called at provision time so every conclusion card is
+    pushed back to the SAME source group, even when different faults come from
+    different groups. The binding's message_id stays None until the first card
+    is actually sent (sync_case_card backfills it).
+
+    Returns the binding, or None when chat_id is empty / the binding already
+    exists with a message_id (already delivering).
+    """
+    if not chat_id:
+        return None
+    binding = db.scalar(select(FeishuCaseBinding).where(FeishuCaseBinding.case_id == case_id).limit(1))
+    if binding is not None:
+        # Keep existing delivery target; never override a live message.
+        if binding.message_id:
+            return binding
+        binding.receive_id = chat_id
+        binding.receive_id_type = receive_id_type
+        db.flush()
+        return binding
+    binding = FeishuCaseBinding(case_id=case_id, receive_id=chat_id, receive_id_type=receive_id_type,
+                                message_id=None, status='ACTIVE', card_version=0)
+    db.add(binding)
+    db.flush()
+    return binding
+
+
 class FeishuCaseCardService:
     async def sync_case_card(self, db: Session, *, case_id: str, receive_id: str | None = None, receive_id_type: str | None = None) -> FeishuCaseBinding:
         if not settings.feishu_live_enabled:

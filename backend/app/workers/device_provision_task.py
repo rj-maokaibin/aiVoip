@@ -20,8 +20,11 @@ from app.workers.celery_app import celery_app
 log = get_task_logger(__name__)
 
 
-def _autostart_reproduction(sn: str, product: str | None) -> dict:
+def _autostart_reproduction(sn: str, product: str | None, chat_id: str | None = None) -> dict:
     """Create a Case + ReproductionSession for the provisioned DUT and start it.
+
+    ``chat_id`` (the Feishu group that @bot'ed) is bound to the Case so the
+    diagnosis conclusion card is pushed back to that SAME group.
 
     Returns {'case_id','session_id','started': bool}. Uses device_credentials as the
     authoritative host/port/sn source so the reproduction platform can connect.
@@ -60,6 +63,15 @@ def _autostart_reproduction(sn: str, product: str | None) -> dict:
             device = CaseDevice(case_id=case.id, ip=ip, ssh_port=port, sn=sn,
                                 username='root', device_info={'product': product} if product else {})
             db.add(device); db.flush()
+        # Bind the Case to the source Feishu group so the conclusion card returns
+        # to the SAME chat (even when different faults come from different groups).
+        if chat_id:
+            try:
+                from app.integrations.feishu.service import bind_case_to_chat
+                bind_case_to_chat(db, case_id=case.id, chat_id=chat_id)
+                db.flush()
+            except Exception:
+                log.exception('bind case to feishu chat failed; provision continues')
         # Create a reproduction session for this case/device and start it.
         orch = ReproductionOrchestrator(registry=ReproductionProfileRegistry())
         session = orch.create_session(db, case_id=case.id,
@@ -77,7 +89,7 @@ def _autostart_reproduction(sn: str, product: str | None) -> dict:
 
 
 @celery_app.task(name='device.provision_from_feishu', bind=True, autoretry_for=(), max_retries=0)
-def provision_from_feishu(self, text: str):
+def provision_from_feishu(self, text: str, chat_id: str | None = None):
     async def _run():
         req = parse_device_request(text)
         if not req.has_minimal():
@@ -87,8 +99,9 @@ def provision_from_feishu(self, text: str):
             sn=req.sn, mac=req.mac, product=req.product,
         )
         sn = result.get("sn") or req.sn
-        # Auto-create Case + ReproductionSession and start autonomous reproduction.
-        auto = _autostart_reproduction(sn=sn, product=req.product)
+        # Auto-create Case + ReproductionSession, bind to the source Feishu chat
+        # and start autonomous reproduction.
+        auto = _autostart_reproduction(sn=sn, product=req.product, chat_id=chat_id)
         return {"status": "OK", **result, "autostart": auto}
 
     try:

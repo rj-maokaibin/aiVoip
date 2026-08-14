@@ -304,7 +304,9 @@ class FeishuCaseBinding(Base):
     case_id: Mapped[str]=mapped_column(ForeignKey('cases.id', ondelete='CASCADE'), index=True)
     receive_id: Mapped[str]=mapped_column(String(256))
     receive_id_type: Mapped[str]=mapped_column(String(32), default='chat_id')
-    message_id: Mapped[str]=mapped_column(String(256), unique=True, index=True)
+    # Nullable so a Case can be bound to its source chat BEFORE the first card is
+    # sent (provision time); message_id is backfilled on first sync_case_card.
+    message_id: Mapped[str|None]=mapped_column(String(256), unique=True, index=True, nullable=True)
     status: Mapped[str]=mapped_column(String(32), default='ACTIVE', index=True)
     card_version: Mapped[int]=mapped_column(Integer, default=1)
     created_at: Mapped[datetime]=mapped_column(DateTime(timezone=True), default=utcnow)

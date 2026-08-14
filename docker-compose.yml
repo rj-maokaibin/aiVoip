@@ -148,6 +148,25 @@ services:
       minio:
         condition: service_started
 
+  # Feishu WebSocket long-connection listener (intranet-friendly: outbound-only,
+  # no public callback URL needed). Only acts when FEISHU_LIVE_ENABLED=true.
+  feishu-long-connection:
+    build:
+      context: ./backend
+    env_file: ${VOIP_APP_ENV_FILE:-.env}
+    command: python run_feishu_long_connection.py
+    volumes:
+      - ./profiles:/app/profiles:ro
+      - ./rules:/app/rules:ro
+      - ./knowledge:/app/knowledge:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_started
+
   reproduction-worker:
     build:
       context: ./backend
