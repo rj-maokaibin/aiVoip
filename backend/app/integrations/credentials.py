@@ -219,8 +219,9 @@ class PoseidonCredentialProvider(CredentialProvider):
             raise
         except Exception as exc:
             raise CredentialError(f"POSEIDON_CREDENTIAL_FAILED:{type(exc).__name__}") from exc
-        # Prefer v2; fall back to v1 for older firmware (README_macc_open_ssh).
-        password = v2 or v1
+        # Older firmware (e.g. APF1250 2.387, APF3260-M) uses the v1 mechanism;
+        # v2 is rejected on those. Prefer v1, fall back to v2 (README_macc_open_ssh).
+        password = v1 or v2
         if not password:
             raise CredentialError("POSEIDON_DEVICE_MISSING_PASSWORD")
         return password

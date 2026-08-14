@@ -71,7 +71,9 @@ class DeviceProvisioner:
 
         # 3. Resolve the SSH password from Poseidon (also returns MAC/product).
         v1, v2 = await self._poseidon.get_ssh_pass(sn=sn, mac=mac, product=product)
-        password = v2 or v1
+        # Older firmware (e.g. APF1250 2.387, APF3260-M) uses the v1 mechanism; v2 is
+        # rejected. Prefer v1, fall back to v2 (matches README_macc_open_ssh).
+        password = v1 or v2
         if not password:
             raise CredentialError("DEVICE_POSEIDON_PASSWORD_MISSING")
 

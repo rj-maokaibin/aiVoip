@@ -101,7 +101,7 @@ def test_provision_opens_ssh_and_stores_in_db():
         assert row.ip == "10.44.77.254"
         assert row.ssh_port == 2222
         assert row.username == "root"
-        assert row.password == "v2pw"
+        assert row.password == "v1pw"
         assert row.mac == "M"
         assert row.product == "P"
     finally:
@@ -122,7 +122,7 @@ def test_provision_upserts_existing_sn_in_db():
     try:
         from sqlalchemy import select
         row = db.scalar(select(DeviceCredential).where(DeviceCredential.sn == "SN-1"))
-        assert row.password == "v2pw"
+        assert row.password == "v1pw"
     finally:
         db.close()
 

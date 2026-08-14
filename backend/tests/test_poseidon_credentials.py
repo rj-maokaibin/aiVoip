@@ -42,7 +42,7 @@ class _FakeAsyncClient:
         self.closed = True
 
 
-def test_poseidon_provider_returns_sshpassv2():
+def test_poseidon_provider_returns_sshpassv1_priority():
     fake = _FakeAsyncClient(page_items=[
         {"sn": "SN-1", "sshpassv1": "v1pw", "sshpassv2": "v2pw"},
     ])
@@ -50,18 +50,19 @@ def test_poseidon_provider_returns_sshpassv2():
     provider = PoseidonCredentialProvider(client=client)
     import asyncio
     pw = asyncio.run(provider.get_password(sn="SN-1", ip="10.0.0.1"))
-    assert pw == "v2pw"
+    # v1 is preferred (older firmware such as APF3260-M uses the v1 mechanism).
+    assert pw == "v1pw"
 
 
-def test_poseidon_provider_falls_back_to_v1():
+def test_poseidon_provider_falls_back_to_v2_when_v1_missing():
     fake = _FakeAsyncClient(page_items=[
-        {"sn": "SN-1", "sshpassv1": "v1pw", "sshpassv2": ""},
+        {"sn": "SN-1", "sshpassv1": "", "sshpassv2": "v2pw"},
     ])
     client = PoseidonClient(client=fake)
     provider = PoseidonCredentialProvider(client=client)
     import asyncio
     pw = asyncio.run(provider.get_password(sn="SN-1", ip="10.0.0.1"))
-    assert pw == "v1pw"
+    assert pw == "v2pw"
 
 
 def test_poseidon_provider_raises_when_no_record():
