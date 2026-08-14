@@ -25,6 +25,45 @@ ACTIVE={DiagnosisRunStatus.PENDING.value,DiagnosisRunStatus.ANALYZING.value,Diag
 
 def utcnow(): return datetime.now(timezone.utc)
 
+
+def _publish_diagnosed_artifacts(db, *, case_id: str, run_id: str) -> dict:
+    """Best-effort auto-publish after a DIAGNOSED run: generate the diagnosis
+    report and push the updated case card back to Feishu (if live transport is
+    configured). Failures are logged and never fail the diagnosis itself.
+
+    Returns {'report': ..., 'feishu': ...} status strings for observability.
+    """
+    from app.reports.diagnosis_report import generate_report
+    from app.integrations.feishu.service import FeishuCaseCardService
+    import asyncio
+
+    out = {'report': 'SKIPPED', 'feishu': 'SKIPPED'}
+    # 1) Generate the diagnosis report (persist HTML+JSON artifacts).
+    try:
+        row, _payload = generate_report(db, case_id=case_id, actor='diagnosis-worker')
+        db.flush()
+        audit(db, case_id=case_id, actor='diagnosis-worker', event_type='DIAGNOSIS_REPORT_GENERATED',
+              target_type='diagnosis_report', target_id=row.id)
+        out['report'] = f"GENERATED:{row.id}"
+    except Exception as exc:
+        log.exception('auto diagnosis report generation failed')
+        out['report'] = f"FAILED:{type(exc).__name__}:{exc}"
+
+    # 2) Push the case card back to Feishu with the fresh diagnosis conclusion.
+    #    Only when live transport is configured; otherwise report SKIPPED.
+    if getattr(settings, 'feishu_live_enabled', False):
+        try:
+            service = FeishuCaseCardService()
+            binding = asyncio.run(service.sync_case_card(db, case_id=case_id))
+            out['feishu'] = f"SYNCED:{getattr(binding, 'message_id', '')}"
+        except Exception as exc:
+            log.exception('auto feishu card sync failed')
+            out['feishu'] = f"FAILED:{type(exc).__name__}:{exc}"
+    else:
+        out['feishu'] = 'SKIPPED:FEISHU_LIVE_DISABLED'
+    return out
+
+
 def _active_child_job(db,case_id:str,job_type:str):
     return db.scalar(select(Job).where(Job.case_id==case_id,Job.type==job_type,Job.status.in_([JobStatus.PENDING.value,JobStatus.RUNNING.value])).order_by(Job.created_at.desc()))
 
@@ -139,8 +178,14 @@ def _execute_cycle(run_id:str):
         if decision.conclusion_state=='DIAGNOSED':
             run.status=DiagnosisRunStatus.DIAGNOSED.value; run.finished_at=utcnow()
             if parent: transition_job(db,parent,JobStatus.SUCCESS,reason='diagnosis_supported_hypothesis')
-            transition_case(db,case,CaseEvent.DIAGNOSIS_COMPLETED,'diagnosis_supported_hypothesis'); db.commit()
-            return {'status':'DIAGNOSED','run_id':run.id,'summary':decision.summary}
+            transition_case(db,case,CaseEvent.DIAGNOSIS_COMPLETED,'diagnosis_supported_hypothesis')
+            db.flush()
+            # Auto-publish: generate report + push the conclusion card to Feishu
+            # (best-effort; a publish failure must not fail the diagnosis itself).
+            published = _publish_diagnosed_artifacts(db, case_id=case.id, run_id=run.id)
+            db.commit()
+            return {'status':'DIAGNOSED','run_id':run.id,'summary':decision.summary,
+                    'published':published}
 
         run.status=DiagnosisRunStatus.WAITING_USER.value; run.finished_at=utcnow() if decision.conclusion_state=='WAITING_USER' else None
         if parent: transition_job(db,parent,JobStatus.WAITING_USER,reason='diagnosis_requires_user_evidence')
