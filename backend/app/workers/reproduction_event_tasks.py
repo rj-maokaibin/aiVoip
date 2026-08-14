@@ -111,6 +111,10 @@ async def _watch_real(db, session, device, max_seconds: int) -> dict:
         # inside at least one capture window during the conversation.
         media_capture_interval = 4.0
         started = time.monotonic()
+        # Resolve the voice runtime context ONCE, before the watch loop. It requires
+        # execute_cli on the same AIM PTY the FXS reader is draining; doing it once
+        # is safe, doing it every iteration steals FXS events (see the loop NOTE).
+        _VOICE_CTX = orch.platform.resolve_voice_context(device) if hasattr(orch.platform, 'resolve_voice_context') else None
         try:
             while time.monotonic() - started < max_seconds:
                 row = _session_listening(db, session.id)
@@ -124,7 +128,14 @@ async def _watch_real(db, session, device, max_seconds: int) -> dict:
                     pass
                 else:
                     break
-                ctx = orch.platform.resolve_voice_context(device) if hasattr(orch.platform, 'resolve_voice_context') else None
+                # NOTE: voice context is resolved ONCE (before the loop) and reused.
+                # Re-resolving here every iteration would run execute_cli on the SAME
+                # AIM PTY as the FXS reader, and that CLI output read consumes any
+                # OFFHOOK/ONHOOK lines arriving at that moment -> ONHOOK is lost and
+                # the call never ends (session stuck in CAPTURING). The voice context
+                # (vlan/interface/gateway) does not change during a session, so a
+                # single resolution is correct and safe.
+                ctx = _VOICE_CTX
 
                 # 1. Poll FXS events (OFFHOOK -> record_activity; ONHOOK with no bound
                 #    call -> end_activity_without_call inside record_fxs_event).
