@@ -106,6 +106,9 @@ async def _watch_real(db, session, device, max_seconds: int) -> dict:
         last_media_probe = 0.0
         media_probe_interval = 3.0
         last_media_capture = 0.0
+        # The PCM mirror stream is bursty on real devices, so each build_live_probe
+        # window is 8s; overlap the probes (every 4s) so a burst is very likely to be
+        # inside at least one capture window during the conversation.
         media_capture_interval = 4.0
         started = time.monotonic()
         try:

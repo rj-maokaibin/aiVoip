@@ -456,7 +456,12 @@ class RealReproductionPlatform:
         # so the merged capture spans the whole conversation, not just the dialing
         # window at bind_call. The 40000/50000 ports are the verified PCM RX/TX mirrors
         # opened during arm. build_call_capture later merges these segments for CALL_QUICK.
-        seconds = 2
+        #
+        # NOTE: the PCM mirror stream on APF3260-M is BURSTY (silence for seconds,
+        # then a short burst of 160B/10ms packets), so a short capture window often
+        # lands entirely in a silent gap and yields an empty pcap. Use a longer window
+        # so each probe is likely to span at least one burst and capture real media.
+        seconds = 8
         remote = f'/tmp/aiVoip_live_{call_id}_{int(time.monotonic()*1000)}.pcap'
         cap = self._tcpdump_capture(
             context=context, seconds=seconds, remote=remote,
