@@ -93,13 +93,19 @@ class FxsEventMonitor:
         for cmd in FULL_DEBUG_DISABLE:
             self.write_aim(cmd)
 
-    def start(self) -> None:
-        """Begin consuming the stream; no-op if already started."""
+    def start(self, *, enable_debug: bool = True) -> None:
+        """Begin consuming the stream; no-op if already started.
+
+        ``enable_debug=False`` is used by the real platform after its arm phase has
+        already issued FULL_DEBUG_ENABLE, so the monitor does not re-write debug
+        commands (which would duplicate AIM output on the same PTY).
+        """
         if self._started:
             return
         self._started = True
         self._buffer = ''
-        self.enable_debug()
+        if enable_debug:
+            self.enable_debug()
 
     def stop(self) -> None:
         self.disable_debug()

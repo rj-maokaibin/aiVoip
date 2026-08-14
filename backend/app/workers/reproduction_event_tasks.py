@@ -36,58 +36,77 @@ async def _watch(session_id: str, *, max_seconds: int = 900) -> dict:
         if device is None:
             return {'status': 'DEVICE_NOT_FOUND', 'session_id': session_id}
 
-        provider = get_credential_provider()
-        password = await provider.get_password(sn=device.sn, ip=device.ip)
-        username = device.username
-        if isinstance(provider, LocalSecretCredentialProvider):
-            try:
-                username = provider.resolve_username(ip=device.ip, fallback=username)
-            except Exception:
-                pass
-
-        from app.collectors.asyncssh_adapter import AsyncSSHDeviceAdapter
-        adapter = AsyncSSHDeviceAdapter(ip=device.ip, port=device.ssh_port, username=username, password=password)
-        await adapter.connect()
-        try:
-            process = await adapter._ensure_aim_session(10)
-            stream = process.stdout
-            loop = asyncio.get_event_loop()
-
-            def write_aim(cmd: str):
-                process.stdin.write(cmd + '\n')
-
-            monitor = FxsEventMonitor(read_aim_chunk=lambda: None, write_aim=write_aim)
-            monitor.start()
-            # Real mode drives activity through the real platform (its capture
-            # builders read real pcap); mock mode uses the default orchestrator.
-            from app.reproduction.platform_factory import build_orchestrator
-            orch, _close = build_orchestrator(adapter=adapter, connect=False)
-            events_handled = 0
-            started = time.monotonic()
-            try:
-                while time.monotonic() - started < max_seconds:
-                    # Check session state; stop if it left the listening states.
-                    row = _session_listening(db, session_id)
-                    if row is None or ReproductionState(row.state) not in _LISTENING_STATES:
-                        break
-                    try:
-                        chunk = await asyncio.wait_for(stream.read(4096), 1.0)
-                    except asyncio.TimeoutError:
-                        chunk = ''
-                    if chunk:
-                        for ev in monitor.feed(chunk):
-                            handled = orch.record_fxs_event(db, session=row, event=ev, actor='reproduction-worker')
-                            if handled is not None:
-                                events_handled += 1
-                            db.commit()
-            finally:
-                monitor.stop()
-            return {'status': 'DONE', 'session_id': session_id, 'events_handled': events_handled,
-                    'state': _session_listening(db, session_id).state if _session_listening(db, session_id) else 'GONE'}
-        finally:
-            await adapter.disconnect()
+        from app.reproduction.platform_factory import build_orchestrator, resolve_platform_mode
+        if resolve_platform_mode() == 'mock':
+            return await _watch_mock(db, session, device, max_seconds)
+        return await _watch_real(db, session, device, max_seconds)
     finally:
         db.close()
+
+
+async def _watch_mock(db, session, device, max_seconds: int) -> dict:
+    """Mock-mode watcher: no device I/O; the mock platform reports no FXS events."""
+    orch, _close = build_orchestrator(adapter=None, connect=False)
+    events_handled = 0
+    started = time.monotonic()
+    try:
+        while time.monotonic() - started < max_seconds:
+            row = _session_listening(db, session.id)
+            if row is None or ReproductionState(row.state) not in _LISTENING_STATES:
+                break
+            await asyncio.sleep(0.5)
+    finally:
+        _close()
+    return {'status': 'DONE', 'session_id': session.id, 'events_handled': events_handled,
+            'state': _session_listening(db, session.id).state if _session_listening(db, session.id) else 'GONE'}
+
+
+async def _watch_real(db, session, device, max_seconds: int) -> dict:
+    """Real-mode watcher: FXS events stream through the real platform.
+
+    The platform owns the AsyncSSHDeviceAdapter on its dedicated bridge loop, so all
+    asyncssh I/O (connect, AIM commands, raw AIM stream reads) share ONE event loop.
+    A background reader pushes raw AIM chunks into a thread-safe queue and the
+    synchronous orchestrator polls it — no cross-loop handoff, no deadlock.
+    """
+    provider = get_credential_provider()
+    password = await provider.get_password(sn=device.sn, ip=device.ip)
+    username = device.username
+    if isinstance(provider, LocalSecretCredentialProvider):
+        try:
+            username = provider.resolve_username(ip=device.ip, fallback=username)
+        except Exception:
+            pass
+
+    from app.collectors.asyncssh_adapter import AsyncSSHDeviceAdapter
+    adapter = AsyncSSHDeviceAdapter(ip=device.ip, port=device.ssh_port, username=username, password=password)
+    orch, _close = build_orchestrator(adapter=adapter, connect=True)
+    try:
+        # Start the bridge-loop AIM reader and wire its monitor into the orchestrator.
+        orch.fxs_event_monitor = orch.platform.start_fxs_monitor()
+        events_handled = 0
+        started = time.monotonic()
+        try:
+            while time.monotonic() - started < max_seconds:
+                row = _session_listening(db, session.id)
+                if row is None or ReproductionState(row.state) not in _LISTENING_STATES:
+                    break
+                for ev in orch.fxs_event_monitor.poll():
+                    handled = orch.record_fxs_event(db, session=row, event=ev, actor='reproduction-worker')
+                    if handled is not None:
+                        events_handled += 1
+                    db.commit()
+                if events_handled == 0:
+                    await asyncio.sleep(0.2)
+        finally:
+            try:
+                orch.platform.stop_fxs_monitor()
+            except Exception:
+                pass
+        return {'status': 'DONE', 'session_id': session.id, 'events_handled': events_handled,
+                'state': _session_listening(db, session.id).state if _session_listening(db, session.id) else 'GONE'}
+    finally:
+        _close()
 
 
 @celery_app.task(name='reproduction.watch_fxs_events', bind=True, autoretry_for=(), max_retries=0)

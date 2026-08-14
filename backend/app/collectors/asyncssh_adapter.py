@@ -136,3 +136,25 @@ class AsyncSSHDeviceAdapter(DeviceAdapter):
             except Exception as exc:
                 await self._close_aim_session()
                 raise DeviceCommandError(f'AIM_COMMAND_FAILED:{type(exc).__name__}') from exc
+
+    async def read_aim_chunk(self, timeout: float = 1.0) -> str:
+        """Read one raw chunk from the persistent AIM PTY stdout.
+
+        Unlike ``execute_cli`` this does not wait for a prompt; it returns whatever
+        AIM has emitted ('' on timeout). Used by the FXS event reader that runs on
+        the same event loop that owns the asyncssh connection.
+        """
+        if not self.conn:
+            raise DeviceConnectionError('SSH_NOT_CONNECTED')
+        process = await self._ensure_aim_session(10)
+        try:
+            return await asyncio.wait_for(process.stdout.read(4096), timeout)
+        except asyncio.TimeoutError:
+            return ''
+
+    async def write_aim(self, command: str) -> None:
+        """Write a line to the persistent AIM PTY stdin without reading a prompt."""
+        if not self.conn:
+            raise DeviceConnectionError('SSH_NOT_CONNECTED')
+        process = await self._ensure_aim_session(10)
+        process.stdin.write(command + '\n')

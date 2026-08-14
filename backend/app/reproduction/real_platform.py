@@ -17,7 +17,9 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import queue
 import threading
+import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -31,7 +33,11 @@ from app.platforms.resolvers import (
     resolve_voice_vlan_id_v1,
     resolve_voice_interface_v1,
 )
-from app.reproduction.fxs_event_monitor import FULL_DEBUG_DISABLE, FULL_DEBUG_ENABLE
+from app.reproduction.fxs_event_monitor import (
+    FxsEventMonitor,
+    FULL_DEBUG_DISABLE,
+    FULL_DEBUG_ENABLE,
+)
 from app.reproduction.mock_platform import VoiceRuntimeContext
 from app.reproduction.pcm_cleanup import (
     PcmCleanupChannelResult,
@@ -72,6 +78,14 @@ class _EventLoopBridge:
         fut = asyncio.run_coroutine_threadsafe(coro, self._loop)
         return fut.result()
 
+    def spawn(self, coro):
+        """Schedule a coroutine on the bridge loop without blocking on its result.
+
+        Returns the asyncio Task so the caller can cancel/wait it later.
+        """
+        fut = asyncio.run_coroutine_threadsafe(coro, self._loop)
+        return fut
+
 
 class RealReproductionPlatform:
     """Production adapter that executes verified real-DUT commands.
@@ -98,6 +112,95 @@ class RealReproductionPlatform:
             probe_packets=self._probe_packets,
             execute_aim=self._execute_aim,
         )
+        # FXS event streaming: a background reader runs on the bridge loop (the loop
+        # that owns the asyncssh connection) and pushes raw AIM chunks into a
+        # thread-safe queue; the synchronous orchestrator polls the queue via the
+        # FxsEventMonitor. This keeps ALL asyncssh I/O on ONE event loop, avoiding
+        # the previous cross-loop deadlock (bridge loop vs caller loop).
+        self._fxs_queue: queue.Queue = queue.Queue()
+        self._fxs_stop = threading.Event()
+        self._fxs_reader_fut = None
+        self._fxs_monitor: FxsEventMonitor | None = None
+        self._fxs_started_ms = int(time.monotonic() * 1000)
+
+    # -- FXS event streaming -------------------------------------------------------
+
+    @property
+    def fxs_event_monitor(self) -> FxsEventMonitor:
+        """The event monitor wired to this platform's bridge-loop AIM reader."""
+        if self._fxs_monitor is None:
+            self._fxs_monitor = FxsEventMonitor(
+                read_aim_chunk=self._read_fxs_chunk,
+                write_aim=self._write_aim,
+                relative_ms=self._fxs_relative_ms,
+            )
+        return self._fxs_monitor
+
+    def start_fxs_monitor(self):
+        """Start the background AIM reader on the bridge loop and return the monitor.
+
+        The reader shares the asyncssh connection with arm/cleanup but runs on the
+        same (bridge) event loop, so no cross-loop handoff ever happens. The caller
+        should call ``stop_fxs_monitor`` before cleanup so the reader is no longer
+        competing with ``execute_cli`` prompt reads on the same PTY.
+        """
+        if self._fxs_reader_fut is not None:
+            return self.fxs_event_monitor
+        self._fxs_stop.clear()
+        self._fxs_started_ms = int(time.monotonic() * 1000)
+        self._fxs_reader_fut = self._bridge.spawn(self._fxs_reader_loop())
+        # arm already issued FULL_DEBUG_ENABLE; do not re-write debug commands.
+        self.fxs_event_monitor.start(enable_debug=False)
+        return self.fxs_event_monitor
+
+    def stop_fxs_monitor(self):
+        """Stop the background AIM reader; safe to call even when not started."""
+        self._fxs_stop.set()
+        fut, self._fxs_reader_fut = self._fxs_reader_fut, None
+        if fut is not None:
+            try:
+                fut.result(timeout=5)
+            except Exception:
+                try:
+                    fut.cancel()
+                except Exception:
+                    pass
+        # Drain any buffered chunks so a later monitor use starts clean.
+        while True:
+            try:
+                self._fxs_queue.get_nowait()
+            except queue.Empty:
+                break
+
+    async def _fxs_reader_loop(self):
+        """Bridge-loop task: read raw AIM chunks and push them onto the queue.
+
+        Runs until ``stop_fxs_monitor`` sets the stop event. ``read_aim_chunk``
+        returns '' on timeout so this never blocks the bridge loop permanently.
+        """
+        while not self._fxs_stop.is_set():
+            try:
+                chunk = await self._adapter.read_aim_chunk(timeout=1.0)
+            except Exception:
+                break
+            if chunk:
+                self._fxs_queue.put(chunk)
+            else:
+                await asyncio.sleep(0.05)
+
+    def _read_fxs_chunk(self) -> str | None:
+        """Synchronous reader used by FxsEventMonitor.poll (no queue blocking)."""
+        try:
+            return self._fxs_queue.get_nowait()
+        except queue.Empty:
+            return None
+
+    def _write_aim(self, cmd: str):
+        self._bridge.run(self._adapter.write_aim(cmd))
+
+    def _fxs_relative_ms(self) -> int:
+        return int(time.monotonic() * 1000) - self._fxs_started_ms
+
     def connect(self):
         """Connect the injected adapter on the platform's bridge loop.
 
@@ -107,6 +210,10 @@ class RealReproductionPlatform:
         self._bridge.run(self._adapter.connect())
 
     def disconnect(self):
+        try:
+            self.stop_fxs_monitor()
+        except Exception:
+            pass
         try:
             self._bridge.run(self._adapter.disconnect())
         except Exception:
@@ -162,7 +269,7 @@ class RealReproductionPlatform:
         result: dict[str, dict[str, Any]] = {}
         # Real-device arm readiness means "capture facility ready": the PCM mirror
         # commands were accepted and the probe path is live. There is intentionally no
-        # real traffic count at arm time ¡ª media only appears after an FXS event starts
+        # real traffic count at arm time â€” media only appears after an FXS event starts
         # a call. The reproduction profile's arm_barrier for the real platform uses
         # min_pcm_packets=0 / min_pcap_packets=0 / require_advancing=false to encode this.
         if 'START_PCM_RX' in actions:
@@ -274,7 +381,9 @@ class RealReproductionPlatform:
             f"timeout -t {seconds} tcpdump -ni {context.voice_interface} -w {remote} 'udp' >/dev/null 2>&1; "
             f"base64 {remote} 2>/dev/null || true"
         )
-        b64 = self._shell(cmds)
+        # The tcpdump window runs for ``seconds`` (e.g. the profile's pretrigger),
+        # which exceeds the default 10s command timeout; pass a matching timeout.
+        b64 = self._shell(cmds, timeout=max(20.0, seconds + 10))
         return RealCapture(pcap=base64.b64decode(b64.strip()), pcap_path=None)
 
     def build_live_probe(self, *, context: VoiceRuntimeContext, start_ms: int, call_id: str) -> RealCapture:

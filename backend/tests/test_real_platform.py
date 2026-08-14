@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass, field
 
 import pytest
@@ -17,6 +18,7 @@ class FakeAdapter:
     shell_calls: list = field(default_factory=list)
     cli_calls: list = field(default_factory=list)
     connected: bool = False
+    aim_chunks: list = field(default_factory=list)
 
     async def connect(self):
         self.connected = True
@@ -37,6 +39,14 @@ class FakeAdapter:
             if command.startswith(prefix):
                 return CommandResult(stdout=out)
         return CommandResult(stdout='AIM>')
+
+    async def read_aim_chunk(self, timeout: float = 1.0) -> str:
+        if self.aim_chunks:
+            return self.aim_chunks.pop(0)
+        return ''
+
+    async def write_aim(self, command: str) -> None:
+        self.cli_calls.append(command)
 
     def _teardown(self):
         # Stop the background bridge loop thread.
@@ -169,3 +179,64 @@ def test_live_probe_and_call_capture_are_empty_passthrough(fake):
     ctx = p.resolve_voice_context(_Device())
     assert p.build_live_probe(context=ctx, start_ms=100, call_id='c1').pcap == b''
     assert p.build_call_capture(context=ctx, start_ms=100, end_ms=500, call_id='c1', profile_id='P', signal=None).pcap == b''
+
+
+# -- FXS event streaming (bridge-loop reader -> queue -> sync poll) -------------------
+
+_FXS_OFFHOOK = '2026-08-14 12:36:01.988000 [0] D:: [D]OFFHOOK\n'
+_FXS_DTMF = '2026-08-14 12:36:02.628000 [0] D:: [D]DTMF<1>\n'
+_FXS_ONHOOK = '2026-08-14 12:36:04.688000 [0] D:: [D]ONHOOK\n'
+
+
+def _collect_until(monitor, pred, timeout: float = 5.0) -> list:
+    """Poll repeatedly, accumulating events, until ``pred(accumulated)`` is true."""
+    collected = []
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        events = monitor.poll()
+        if events:
+            collected.extend(events)
+        if pred(collected):
+            return collected
+        time.sleep(0.05)
+    return collected
+
+
+def test_fxs_monitor_streams_events_through_bridge_reader(fake):
+    fake.aim_chunks = [_FXS_OFFHOOK, _FXS_DTMF, _FXS_ONHOOK]
+    p = RealReproductionPlatform(adapter=fake)
+    try:
+        monitor = p.start_fxs_monitor()
+        events = _collect_until(
+            monitor,
+            lambda evs: any(e.event == 'OFFHOOK' for e in evs)
+            and any(e.event == 'DTMF' for e in evs)
+            and any(e.event == 'ONHOOK' for e in evs),
+        )
+        assert any(e.event == 'OFFHOOK' for e in events)
+        assert any(e.event == 'DTMF' and e.digit == '1' for e in events)
+        assert any(e.event == 'ONHOOK' for e in events)
+    finally:
+        p.stop_fxs_monitor()
+        p.disconnect()
+
+
+def test_fxs_monitor_start_does_not_rewrite_debug(fake):
+    p = RealReproductionPlatform(adapter=fake)
+    try:
+        monitor = p.start_fxs_monitor()
+        # enable_debug=False: the arm phase already enabled FULL_DEBUG_ENABLE, so
+        # starting the monitor must NOT push debug commands onto the AIM PTY.
+        assert not any('debug' in c or 'de ' in c for c in fake.cli_calls)
+        assert monitor._started is True
+    finally:
+        p.stop_fxs_monitor()
+        p.disconnect()
+
+
+def test_fxs_monitor_stop_is_idempotent(fake):
+    p = RealReproductionPlatform(adapter=fake)
+    p.start_fxs_monitor()
+    p.stop_fxs_monitor()
+    p.stop_fxs_monitor()  # second stop must not raise
+    p.disconnect()
