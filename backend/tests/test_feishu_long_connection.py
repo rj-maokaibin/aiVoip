@@ -42,14 +42,18 @@ def test_dispatch_event_passes_chat_id_to_provision(monkeypatch):
             'header': {'event_type': 'im.message.receive_v1'},
             'event': {
                 'chat_id': 'oc_group_A',
+                'chat_type': 'group',
                 'message': {'content': json.dumps({'text': 'OPEN_SSH sn=SN-1 web=https://x.noc.rj.link/'})},
             },
         }
         result = dispatch_event(db, payload=payload)
         assert result['handled'] == 'provision_dispatched'
         assert result['chat_id'] == 'oc_group_A'
-        # provision_from_feishu(text, chat_id) -> chat_id is 2nd positional arg
+        assert result['chat_type'] == 'group'
+        # provision_from_feishu(text, chat_id, chat_type): chat_id is 2nd,
+        # chat_type is 3rd positional arg.
         assert dispatched['args'][1] == 'oc_group_A'
+        assert dispatched['args'][2] == 'group'
 
 
 def test_dispatch_event_no_text_does_not_provision(monkeypatch):
@@ -70,12 +74,13 @@ def test_dispatch_event_no_text_does_not_provision(monkeypatch):
         assert called['n'] == 0
 
 
-def _sdk_message(chat_id, text, sender_open_id='ou_1'):
+def _sdk_message(chat_id, text, sender_open_id='ou_1', chat_type='group'):
     """Build a fake P2ImMessageReceiveV1-shaped object (same accessor paths)."""
     return SimpleNamespace(
         event=SimpleNamespace(
             message=SimpleNamespace(
                 chat_id=chat_id,
+                chat_type=chat_type,
                 content=json.dumps({'text': text}),
                 message_type='text',
             ),
@@ -90,9 +95,44 @@ def test_message_payload_normalises_sdk_event():
     payload = _message_payload(data)
     assert payload['header']['event_type'] == 'im.message.receive_v1'
     assert payload['event']['chat_id'] == 'oc_group_A'
+    assert payload['event']['chat_type'] == 'group'
     assert payload['event']['message']['chat_id'] == 'oc_group_A'
+    assert payload['event']['message']['chat_type'] == 'group'
     assert json.loads(payload['event']['message']['content'])['text'].startswith('OPEN_SSH')
     assert payload['operator']['open_id'] == 'ou_1'
+
+
+def test_message_payload_p2p_carries_chat_type():
+    from app.integrations.feishu.long_connection import _message_payload
+    data = _sdk_message('ou_1', 'OPEN_SSH sn=SN-1', sender_open_id='ou_1', chat_type='p2p')
+    payload = _message_payload(data)
+    assert payload['event']['chat_type'] == 'p2p'
+    assert payload['event']['message']['chat_type'] == 'p2p'
+
+
+def test_dispatch_event_p2p_passes_open_id_and_chat_type(monkeypatch):
+    from app.integrations.feishu.events import dispatch_event
+    eng = _engine()
+    with Session(eng) as db:
+        dispatched = {}
+        def fake_apply_async(args, queue=None):
+            dispatched['args'] = args
+        monkeypatch.setattr('app.workers.device_provision_task.provision_from_feishu.apply_async',
+                            fake_apply_async, raising=False)
+        payload = {
+            'header': {'event_type': 'im.message.receive_v1'},
+            'event': {
+                'chat_id': 'ou_1',
+                'chat_type': 'p2p',
+                'message': {'content': json.dumps({'text': 'OPEN_SSH sn=SN-1'}), 'chat_id': 'ou_1', 'chat_type': 'p2p'},
+            },
+        }
+        result = dispatch_event(db, payload=payload)
+        assert result['handled'] == 'provision_dispatched'
+        assert result['chat_type'] == 'p2p'
+        # chat_id is the sender's open_id; chat_type tells the binding to use open_id.
+        assert dispatched['args'][1] == 'ou_1'
+        assert dispatched['args'][2] == 'p2p'
 
 
 def test_message_payload_empty_sender_has_no_operator():

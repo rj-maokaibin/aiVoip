@@ -9,16 +9,25 @@ from app.integrations.feishu.cards import FeishuCaseCardBuilder
 from app.integrations.feishu.transport import FeishuLiveTransport
 
 
-def bind_case_to_chat(db: Session, *, case_id: str, chat_id: str, receive_id_type: str = 'chat_id') -> FeishuCaseBinding | None:
-    """Record that a Case belongs to a specific Feishu chat (the group where the
-    engineer @bot'ed it). Called at provision time so every conclusion card is
-    pushed back to the SAME source group, even when different faults come from
-    different groups. The binding's message_id stays None until the first card
-    is actually sent (sync_case_card backfills it).
+def bind_case_to_chat(db: Session, *, case_id: str, chat_id: str, chat_type: str | None = None,
+                      receive_id_type: str | None = None) -> FeishuCaseBinding | None:
+    """Record that a Case belongs to a specific Feishu conversation (where the
+    engineer @bot'ed / DM'ed it). Called at provision time so every conclusion
+    card is pushed back to the SAME source conversation, even when different
+    faults come from different groups. The binding's message_id stays None until
+    the first card is actually sent (sync_case_card backfills it).
+
+    ``receive_id_type`` defaults from ``chat_type``: a p2p (DM) message's
+    chat_id is the sender's open_id, so the card must be sent with
+    receive_id_type='open_id'; a group message keeps 'chat_id'. An explicit
+    ``receive_id_type`` always wins (e.g. the API caller binding a specific
+    target).
 
     Returns the binding, or None when chat_id is empty / the binding already
     exists with a message_id (already delivering).
     """
+    if receive_id_type is None:
+        receive_id_type = 'open_id' if chat_type == 'p2p' else 'chat_id'
     if not chat_id:
         return None
     binding = db.scalar(select(FeishuCaseBinding).where(FeishuCaseBinding.case_id == case_id).limit(1))

@@ -54,12 +54,17 @@ def _message_payload(data) -> dict:
     event = getattr(data, "event", None)
     message = getattr(event, "message", None) if event is not None else None
     chat_id = str(getattr(message, "chat_id", "") or "")
+    # 'group' -> chat_id is a chat_id; 'p2p' (DM to the bot) -> chat_id is the
+    # sender's open_id. Carried so the conclusion card is pushed back with the
+    # matching receive_id_type (chat_id vs open_id).
+    chat_type = str(getattr(message, "chat_type", "") or "")
     content = str(getattr(message, "content", "") or "")
     sender = getattr(event, "sender", None) if event is not None else None
     sender_id = getattr(sender, "sender_id", None) if sender is not None else None
     payload = {
         "header": {"event_type": "im.message.receive_v1"},
-        "event": {"chat_id": chat_id, "message": {"content": content, "chat_id": chat_id}},
+        "event": {"chat_id": chat_id, "chat_type": chat_type,
+                  "message": {"content": content, "chat_id": chat_id, "chat_type": chat_type}},
     }
     operator = _sender_operator(sender_id)
     if operator:

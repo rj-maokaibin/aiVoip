@@ -109,6 +109,28 @@ def test_autostart_binds_case_to_source_chat(monkeypatch):
         assert binding.message_id is None  # backfilled on first sync_case_card
 
 
+def test_autostart_binds_case_to_source_dm_with_open_id_type(monkeypatch):
+    # A p2p (DM) message carries the sender's open_id as chat_id; the Case must be
+    # bound with receive_id_type='open_id' so the conclusion card can be pushed
+    # back to the DM (sending 'chat_id' with an open_id would be rejected).
+    from app.workers.device_provision_task import _autostart_reproduction
+    eng = _engine()
+    with Session(eng) as db:
+        _seed_credential(db)
+        import app.db.session as dbs
+        monkeypatch.setattr(dbs, 'SessionLocal', lambda: Session(eng))
+        monkeypatch.setattr('app.workers.reproduction_tasks.start_reproduction.apply_async',
+                            lambda args, queue=None: None, raising=False)
+        result = _autostart_reproduction(sn='SN-1', product='APF1250', chat_id='ou_1', chat_type='p2p')
+        assert result['started'] is True
+        from app.db.models import FeishuCaseBinding
+        binding = db.scalar(select(FeishuCaseBinding).where(FeishuCaseBinding.case_id == result['case_id']))
+        assert binding is not None
+        assert binding.receive_id == 'ou_1'
+        assert binding.receive_id_type == 'open_id'
+        assert binding.message_id is None
+
+
 def test_autostart_without_chat_has_no_binding(monkeypatch):
     # No chat_id supplied (e.g. API-created) -> no FeishuCaseBinding row.
     from app.workers.device_provision_task import _autostart_reproduction

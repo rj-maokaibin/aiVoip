@@ -88,6 +88,10 @@ def dispatch_event(db: Session, *, payload: dict, actor: str = "feishu:callback"
         event = payload.get("event") or {}
         msg = event.get("message") or {}
         chat_id = str(event.get("chat_id") or msg.get("chat_id") or "")
+        # 'group' -> chat_id is a chat_id; 'p2p' (DM to the bot) -> chat_id is the
+        # sender's open_id. Carried so the card is pushed back with the matching
+        # receive_id_type (chat_id vs open_id).
+        chat_type = str(event.get("chat_type") or msg.get("chat_type") or "")
         content = msg.get("content") or ""
         if isinstance(content, str):
             try:
@@ -99,8 +103,8 @@ def dispatch_event(db: Session, *, payload: dict, actor: str = "feishu:callback"
             text = str(content.get("text") or "")
         if text.strip():
             from app.workers.device_provision_task import provision_from_feishu
-            provision_from_feishu.apply_async(args=[text, chat_id], queue="diagnosis")
-            return {"handled": "provision_dispatched", "chat_id": chat_id, "text": text[:80]}
+            provision_from_feishu.apply_async(args=[text, chat_id, chat_type], queue="diagnosis")
+            return {"handled": "provision_dispatched", "chat_id": chat_id, "chat_type": chat_type, "text": text[:80]}
         return {"handled": "empty_text"}
 
     value = action_value(payload)
