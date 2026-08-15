@@ -34,6 +34,28 @@ def _session_listening(db, session_id: str) -> ReproductionSession | None:
     return row
 
 
+def _device_lock_reassigned(db, session) -> bool:
+    """True if another session now holds the device's ACTIVE diagnostic lock.
+
+    D1: a stale watcher (from a cancelled/superseded session) must not race the
+    new session's watcher for the same device — that concurrency previously caused
+    SSH_COMMAND_TIMEOUT when two watchers tcpdump'd the device at once.
+    """
+    from sqlalchemy import select
+    from app.db.models import DeviceDiagnosticLock
+    from app.contracts.enums import LockStatus
+    from datetime import datetime, timezone
+    lock = db.scalar(select(DeviceDiagnosticLock).where(DeviceDiagnosticLock.device_id == session.device_id))
+    if lock is None or lock.session_id == session.id:
+        return False
+    expires = lock.lease_expires_at
+    if expires is None:
+        return False
+    if expires.tzinfo is None:
+        expires = expires.replace(tzinfo=timezone.utc)
+    return lock.status == LockStatus.ACTIVE.value and expires > datetime.now(timezone.utc)
+
+
 async def _watch(session_id: str, *, max_seconds: int = 900) -> dict:
     db = SessionLocal()
     try:
@@ -43,6 +65,10 @@ async def _watch(session_id: str, *, max_seconds: int = 900) -> dict:
         device = db.get(CaseDevice, session.device_id)
         if device is None:
             return {'status': 'DEVICE_NOT_FOUND', 'session_id': session_id}
+
+        # D1: do not connect the device if another session has since taken its lock.
+        if _device_lock_reassigned(db, session):
+            return {'status': 'DEVICE_LOCK_REASSIGNED', 'session_id': session.id}
 
         if resolve_platform_mode() == 'mock':
             return await _watch_mock(db, session, device, max_seconds)

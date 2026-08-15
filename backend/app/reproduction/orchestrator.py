@@ -349,6 +349,7 @@ class ReproductionOrchestrator:
         state=ReproductionState(session.state)
         attempt=db.scalar(select(ReproductionAttempt).where(
             ReproductionAttempt.session_id==session.id,ReproductionAttempt.status==AttemptStatus.ACTIVE.value).order_by(ReproductionAttempt.attempt_no.desc()))
+        pre=None
         if state==ReproductionState.WATCHING and not attempt:
             # Low-level anchor was missed; freeze/bind on INVITE and mark it reconstructable offline.
             attempt_no=(db.scalar(select(func.count(ReproductionAttempt.id)).where(ReproductionAttempt.session_id==session.id)) or 0)+1
@@ -366,6 +367,11 @@ class ReproductionOrchestrator:
         call=ReproductionCall(session_id=session.id,attempt_id=attempt.id if attempt else None,case_id=session.case_id,
                               call_no=call_no,external_call_ref=external_call_ref,status=ReproductionCallStatus.ACTIVE.value)
         db.add(call); db.flush()
+        # Cache the dialing-window pretrigger under the new call_id so the real
+        # platform's final merged call.pcap includes the dialing DTMF/silence (the
+        # pretrigger is captured above, before the call row existed).
+        if pre is not None:
+            self.platform.cache_pretrigger(call_id=call.id, pcap=pre.pcap)
         if attempt: attempt.valid=True
         binding = binding_event or self._profile(session).call_binding_event or 'SIP_INVITE'
         db.add(ReproductionEventRecord(session_id=session.id,attempt_id=attempt.id if attempt else None,call_id=call.id,case_id=session.case_id,

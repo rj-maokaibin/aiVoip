@@ -159,23 +159,15 @@ class ReproductionCapturePipeline:
         start=int(attempt.start_anchor_ms if attempt and attempt.start_anchor_ms is not None else 0)
         end=int(attempt.end_anchor_ms if attempt and attempt.end_anchor_ms is not None else start+1000)
         rows=self._overlap_segments(db,session.id,channel=CaptureChannel.PCAP,start_ms=start,end_ms=end)
-        # Merge ALL time-overlapping segments for this call's attempt. The real
-        # platform produces three kinds of PCAP segments for one call:
-        #   1. PRETRIGGER  (call_id=None)  - captured just before/at bind; carries
-        #      the dialing DTMF and any early media. On APF3260-M this is where
-        #      DTMF digits and unexpected silence live (verified live).
-        #   2. LIVE_PROBE   (call_id=call) - 8s in-call mirror windows.
-        #   3. CALL_FINAL   (call_id=call, mock_final_call) - merged live probes.
-        # Previously the CALL_FINAL segment was chosen EXCLUSIVELY, discarding the
-        # pretrigger segment, so DTMF/silence detected in the dialing window never
-        # reached CALL_QUICK. Merge every retained segment whose time range
-        # overlaps the attempt instead.
-        final_rows=[x for x in rows if (x.metadata_json or {}).get('mock_final_call')]
+        # The CALL_FINAL segment is the platform's merged in-call media (for the real
+        # platform it already includes the pretrigger via platform.cache_pretrigger,
+        # so the dialing DTMF/silence reach CALL_QUICK without merging here). Prefer
+        # the final segment exclusively to avoid contaminating the analysis with a
+        # prior call's overlapping windows (the mock platform's final pcap is also
+        # self-contained).
+        final_rows=[x for x in rows if x.call_id==call.id and (x.metadata_json or {}).get('mock_final_call')]
         if final_rows:
-            # Keep the merged final segment but ALSO include the pretrigger (and any
-            # other time-overlapping) segments so dialing-phase media is analyzed.
-            others=[x for x in rows if x not in final_rows and x.call_id in (None, call.id)]
-            rows=final_rows + [x for x in others if x not in final_rows]
+            rows=final_rows
         else:
             # In non-mock/file-streaming paths prefer segments explicitly bound to
             # this call when such binding exists; otherwise fall back to the time

@@ -53,6 +53,10 @@ class FakeAdapter:
     async def write_aim(self, command: str) -> None:
         self.cli_calls.append(command)
 
+    async def ensure_aim_session_ready(self, timeout: float = 10) -> None:
+        # Stand-in for the real AIM PTY pre-open used by start_fxs_monitor.
+        return None
+
     def _teardown(self):
         # Stop the background bridge loop thread.
         if hasattr(self, '_platform'):
@@ -305,13 +309,15 @@ def test_fxs_monitor_streams_events_through_bridge_reader(fake):
         p.disconnect()
 
 
-def test_fxs_monitor_start_does_not_rewrite_debug(fake):
+def test_fxs_monitor_start_enables_full_debug_on_fresh_session(fake):
     p = RealReproductionPlatform(adapter=fake)
     try:
         monitor = p.start_fxs_monitor()
-        # enable_debug=False: the arm phase already enabled FULL_DEBUG_ENABLE, so
-        # starting the monitor must NOT push debug commands onto the AIM PTY.
-        assert not any('debug' in c or 'de ' in c for c in fake.cli_calls)
+        # The watcher opens a fresh AIM session (its own adapter connection), so
+        # it must re-send FULL_DEBUG_ENABLE (idempotent) for the DUT to emit
+        # OFFHOOK/ONHOOK lines on THIS PTY.
+        assert any('de sip de' in c for c in fake.cli_calls)
+        assert any('voip sip log-pkt on' in c for c in fake.cli_calls)
         assert monitor._started is True
     finally:
         p.stop_fxs_monitor()

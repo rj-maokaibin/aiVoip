@@ -172,6 +172,12 @@ class MockReproductionPlatform:
             start_ms=start_ms,end_ms=end_ms,device_ip=context.voice_device_ip or '192.0.2.10',gateway_ip=context.voice_gateway_ip,
         )
 
+    def cache_pretrigger(self, *, call_id: str, pcap: bytes) -> None:
+        # Mock final pcap is self-contained (SIP + PCM + RTP with the target
+        # findings); caching the pretrigger would contaminate CALL_QUICK's RTP
+        # analysis, so this is a deliberate no-op.
+        return None
+
     def build_live_probe(self, *, context: VoiceRuntimeContext, start_ms: int, call_id: str):
         return self.capture_builder.live_probe(start_ms=start_ms,device_ip=context.voice_device_ip or '192.0.2.10',gateway_ip=context.voice_gateway_ip,call_id=call_id)
 

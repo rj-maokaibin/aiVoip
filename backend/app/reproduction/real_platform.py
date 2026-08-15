@@ -523,6 +523,20 @@ class RealReproductionPlatform:
         self._live_probe_futures.setdefault(call_id, []).append(fut)
         return fut
 
+    def cache_pretrigger(self, *, call_id: str, pcap: bytes) -> None:
+        """Stash the dialing-window pretrigger capture so build_call_capture merges it.
+
+        The pretrigger (which carries the dialing DTMF / unexpected silence on real
+        devices) is captured at bind_call BEFORE the call row exists, so it cannot be
+        keyed by call_id at that point. Cache it here (right after the call is
+        created) so the final merged call.pcap includes the dialing phase. The mock
+        platform overrides this as a no-op because its final pcap is self-contained.
+        """
+        if pcap and len(pcap) > 24:
+            cache = self._live_pcap_cache.setdefault(call_id, [])
+            if not cache:
+                cache.append(pcap)
+
     @staticmethod
     def _merge_pcap_segments(segments: list[bytes]) -> bytes:
         """Concatenate multiple classic-pcap captures into one valid pcap blob.
