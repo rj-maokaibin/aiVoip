@@ -174,6 +174,8 @@ async def _watch_real(db, session, device, max_seconds: int) -> dict:
                 # 1. Poll FXS events (OFFHOOK -> record_activity; ONHOOK with no bound
                 #    call -> end_activity_without_call inside record_fxs_event).
                 for ev in orch.fxs_event_monitor.poll():
+                    log.info('[repro %s] FXS %s%s', session.id[:8], ev.event,
+                             f'<{ev.digit}>' if ev.event == 'DTMF' else '')
                     handled = orch.record_fxs_event(db, session=row, event=ev, actor='reproduction-worker')
                     if handled is not None:
                         events_handled += 1
@@ -185,6 +187,7 @@ async def _watch_real(db, session, device, max_seconds: int) -> dict:
                         now_state = ReproductionState(_session_listening(db, session.id).state)
                         if now_state in {ReproductionState.CALL_DETECTED, ReproductionState.CAPTURING}:
                             rel = orch.fxs_event_monitor.relative_ms()
+                            log.info('[repro %s] ONHOOK -> end_call %s', session.id[:8], active_call_id[:8])
                             call, _decision = orch.end_call(
                                 db, session=row, call_id=active_call_id, relative_ms=rel,
                                 signal=QuickAnalysisInput(verdict=CallVerdict.INCONCLUSIVE, findings=()),
@@ -232,6 +235,7 @@ async def _watch_real(db, session, device, max_seconds: int) -> dict:
                             active_call_id = call.id
                             call_bound_at = now
                             calls_bound += 1
+                            log.info('[repro %s] PCM live -> CALL_BOUND call=%s', session.id[:8], call.id[:8])
                             db.commit()
                         except Exception as exc:
                             # bind_call may fail on a transient device SSH delay (e.g.
@@ -289,6 +293,7 @@ async def _watch_real(db, session, device, max_seconds: int) -> dict:
                         orch.platform.spawn_live_probe(
                             context=ctx, start_ms=int(rel), call_id=call_id, on_segment=persist_live,
                         )
+                        log.info('[repro %s] in-call live probe spawned call=%s', session.id[:8], call_id[:8])
                         db.commit()
 
                 if events_handled == 0:

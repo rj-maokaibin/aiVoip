@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 from typing import Iterable
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
+
+log = logging.getLogger(__name__)
 
 from app.contracts.enums import (
     AnchorType, ArmValidationStatus, AttemptStatus, CallRole, CallVerdict, CaptureChannel, CaptureStage,
@@ -293,6 +296,7 @@ class ReproductionOrchestrator:
                            payload={'attempt_id':attempt.id,'anchor':source_event,'relative_ms':relative_ms})
         emit_event(db,event_type=EventType.REPRODUCTION_ATTEMPT_CHANGED,case_id=session.case_id,
                    entity_type='reproduction_attempt',entity_id=attempt.id,payload={'status':attempt.status,'attempt_no':attempt.attempt_no})
+        log.info('[repro %s] OFFHOOK -> attempt no=%s state=%s', session.id[:8], attempt.attempt_no, ReproductionState(session.state).value)
         return attempt
 
     def record_fxs_event(self, db: Session, *, session: ReproductionSession, event, actor: str|None=None) -> ReproductionAttempt | None:
@@ -342,6 +346,7 @@ class ReproductionOrchestrator:
                                        timestamp_source=TimestampSource.COLLECTOR_MONOTONIC.value,uncertainty_ms=1,payload_json={'valid_call':False}))
         self.capture.reset_after_attempt(db,session=session,invalid=True)
         transition_session(db,session,ReproductionEvent.WATCH_STARTED,actor=actor,reason='invalid_attempt_continue_watching',payload={'attempt_id':attempt.id})
+        log.info('[repro %s] ONHOOK no-call -> attempt no=%s INVALID -> WATCHING', session.id[:8], attempt.attempt_no)
         return attempt
 
     def bind_call(self, db: Session, *, session: ReproductionSession, relative_ms: int, external_call_ref: str|None=None, actor: str|None=None,
@@ -391,6 +396,7 @@ class ReproductionOrchestrator:
                 call.live_summary_json=self.live_analyzer.run(db,session=session,call=call,pcap_path=__import__('pathlib').Path(pseg.local_path),input_evidence=live_ev)
         emit_event(db,event_type=EventType.REPRODUCTION_CALL_CHANGED,case_id=session.case_id,entity_type='reproduction_call',entity_id=call.id,
                    payload={'status':call.status,'call_no':call.call_no,'live_summary':call.live_summary_json})
+        log.info('[repro %s] CALL_BOUND call=%s attempt=%s binding=%s', session.id[:8], call.id[:8], (attempt.id[:8] if attempt else None), binding)
         return call
 
     def _compensate_call_capture(self, db: Session, *, session: ReproductionSession, call: ReproductionCall,
@@ -495,6 +501,8 @@ class ReproductionOrchestrator:
                 q.answer_json=answer
         self.capture.reset_after_attempt(db,session=session,invalid=False)
         self._after_call(db,session=session,call=call,decision=decision,actor=actor)
+        log.info('[repro %s] CALL_ENDED call=%s verdict=%s findings=%s sufficiency=%s', session.id[:8], call.id[:8],
+                 result.verdict.value, sorted(result.findings), decision.status.value)
         emit_event(db,event_type=EventType.REPRODUCTION_CALL_CHANGED,case_id=session.case_id,entity_type='reproduction_call',entity_id=call.id,
                    payload={'status':call.status,'verdict':call.verdict,'role':call.role,'sufficiency':decision.status.value})
         return call,decision
