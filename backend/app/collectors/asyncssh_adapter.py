@@ -53,20 +53,22 @@ class AsyncSSHDeviceAdapter(DeviceAdapter):
             )
         except asyncio.TimeoutError as exc:
             # A connect timeout over a manually-opened EWEB tunnel almost always
-            # means the tunnel has expired (stok/stamp/pass rotate ~3h) or is
-            # unreachable, NOT a code fault. Say so explicitly so the operator is
-            # told to re-open the tunnel and share the new endpoint instead of
-            # treating it as a silent retryable blip.
+            # means the tunnel has expired (stok/stamp/pass rotate ~3h) or the
+            # device rebooted (which also drops the tunnel), NOT a code fault. Say
+            # so explicitly so the operator re-opens/re-builds the tunnel and shares
+            # the new endpoint instead of treating it as a silent retryable blip.
             raise DeviceConnectionError(
                 'SSH_CONNECT_TIMEOUT: tunnel/device unreachable - the EWEB tunnel may '
-                'have expired (re-open it and share the new host:port/web_url)'
+                'have expired (3h) OR the device rebooted (both drop the tunnel): '
+                're-open/rebuild the tunnel and share the new host:port/web_url'
             ) from exc
         except asyncssh.PermissionDenied as exc:
             raise DeviceConnectionError('SSH_AUTH_FAILED: SSH password rejected') from exc
         except Exception as exc:
             raise DeviceConnectionError(
                 f'SSH_CONNECT_FAILED:{type(exc).__name__}: tunnel/device unreachable '
-                '(re-open the EWEB tunnel and share the new host:port/web_url)'
+                '(re-open/rebuild the EWEB tunnel - expired 3h or device reboot - and '
+                'share the new host:port/web_url)'
             ) from exc
 
     async def _close_aim_session(self):
