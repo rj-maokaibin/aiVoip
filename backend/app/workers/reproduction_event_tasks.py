@@ -257,8 +257,37 @@ async def _watch_real(db, session, device, max_seconds: int) -> dict:
                     cur_state = ReproductionState(_session_listening(db, session.id).state)
                     if cur_state in {ReproductionState.CAPTURING, ReproductionState.CALL_DETECTED}:
                         rel = orch.fxs_event_monitor.relative_ms()
+                        call_id = active_call_id
+
+                        def persist_live(pcap: bytes):
+                            # Durably persist an in-call PCM segment on the bridge
+                            # thread as a retained CaptureSegment, so a watcher crash
+                            # cannot lose the in-call media: the final compensation can
+                            # rebuild the call pcap from the retained segment store even
+                            # if the in-memory _live_pcap_cache was lost.
+                            sdb = SessionLocal()
+                            try:
+                                srow = sdb.get(ReproductionSession, session.id)
+                                if srow is None:
+                                    return
+                                rel2 = orch.fxs_event_monitor.relative_ms()
+                                seg = orch.capture.append_pcap(
+                                    sdb, session=srow, start_ms=rel2, end_ms=rel2 + 8000,
+                                    data=pcap, attempt_id=None, call_id=call_id,
+                                    metadata={'phase': 'LIVE_PROBE', 'persisted': True},
+                                )
+                                orch.capture.preserve_new_segment(sdb, session=srow, row=seg)
+                                sdb.commit()
+                            except Exception:
+                                try:
+                                    sdb.rollback()
+                                except Exception:
+                                    pass
+                            finally:
+                                sdb.close()
+
                         orch.platform.spawn_live_probe(
-                            context=ctx, start_ms=int(rel), call_id=active_call_id,
+                            context=ctx, start_ms=int(rel), call_id=call_id, on_segment=persist_live,
                         )
                         db.commit()
 

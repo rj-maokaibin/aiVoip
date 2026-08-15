@@ -28,13 +28,34 @@ class ObjectStorage:
         if not self.client.bucket_exists(self.bucket):
             self.client.make_bucket(self.bucket)
 
+    def _retry_write(self, fn, *, attempts: int = 3, label: str = 'object'):
+        """Retry an idempotent MinIO write on transient network errors.
+
+        MinIO writes (analysis results, evidence blobs) can hit transient connection
+        drops; a retry keeps the evidence from being lost. Confirmed-immutable writes
+        are safe to retry because the object key is content-addressed / unique.
+        """
+        import time as _t
+        last: Exception | None = None
+        for i in range(attempts):
+            try:
+                return fn()
+            except Exception as exc:
+                last = exc
+                if i < attempts - 1:
+                    _t.sleep(1.0 * (i + 1))
+                    continue
+        raise last
+
     def put_bytes(self, object_key:str, data:bytes, content_type='application/octet-stream'):
         self.ensure_bucket()
-        self.client.put_object(self.bucket, object_key, BytesIO(data), length=len(data), content_type=content_type)
+        self._retry_write(lambda: self.client.put_object(
+            self.bucket, object_key, BytesIO(data), length=len(data), content_type=content_type))
 
     def put_file(self, object_key:str, file_path:str|Path, content_type='application/octet-stream'):
         self.ensure_bucket()
-        self.client.fput_object(self.bucket, object_key, str(file_path), content_type=content_type)
+        self._retry_write(lambda: self.client.fput_object(
+            self.bucket, object_key, str(file_path), content_type=content_type))
 
     def get_to_file(self, object_key:str, file_path:str|Path):
         self.ensure_bucket()

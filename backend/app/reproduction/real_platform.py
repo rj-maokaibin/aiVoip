@@ -23,7 +23,7 @@ import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from app.contracts.enums import CaptureChannel, ChannelHealth
 from app.core.errors import AppError
@@ -497,11 +497,15 @@ class RealReproductionPlatform:
             self._live_pcap_cache.setdefault(call_id, []).append(cap.pcap)
         return cap
 
-    async def _async_live_probe(self, *, context: VoiceRuntimeContext, start_ms: int, call_id: str) -> None:
+    async def _async_live_probe(self, *, context: VoiceRuntimeContext, start_ms: int, call_id: str,
+                                on_segment: Callable[[bytes], None] | None = None) -> None:
         """Async body of build_live_probe: run one 8s PCM-mirror capture and append it.
 
         Runs on the bridge loop (spawned by spawn_live_probe) so the watcher main loop
-        is free to keep polling FXS events during the capture window.
+        is free to keep polling FXS events during the capture window. When ``on_segment``
+        is provided, the captured pcap is also handed to it for durable persistence
+        (so an in-call segment survives a watcher crash and can be rebuilt from the
+        retained segment store instead of being lost with the in-memory cache).
         """
         seconds = 8
         remote = f'/tmp/aiVoip_live_{call_id}_{int(time.monotonic()*1000)}.pcap'
@@ -511,15 +515,24 @@ class RealReproductionPlatform:
         )
         if cap.pcap and len(cap.pcap) > 24:
             self._live_pcap_cache.setdefault(call_id, []).append(cap.pcap)
+            if on_segment is not None:
+                try:
+                    on_segment(cap.pcap)
+                except Exception:
+                    pass
 
-    def spawn_live_probe(self, *, context: VoiceRuntimeContext, start_ms: int, call_id: str):
+    def spawn_live_probe(self, *, context: VoiceRuntimeContext, start_ms: int, call_id: str,
+                         on_segment: Callable[[bytes], None] | None = None):
         """Schedule one async live-probe capture without blocking the caller.
 
         Returns the concurrent.futures.Future for the probe; it is recorded so
         build_call_capture can wait for in-flight probes before merging (avoiding a
-        missed tail segment when ONHOOK arrives mid-capture).
+        missed tail segment when ONHOOK arrives mid-capture). ``on_segment``, when
+        given, is invoked on the bridge thread with each captured pcap so the caller
+        can persist it durably.
         """
-        fut = self._bridge.spawn(self._async_live_probe(context=context, start_ms=start_ms, call_id=call_id))
+        fut = self._bridge.spawn(self._async_live_probe(
+            context=context, start_ms=start_ms, call_id=call_id, on_segment=on_segment))
         self._live_probe_futures.setdefault(call_id, []).append(fut)
         return fut
 
