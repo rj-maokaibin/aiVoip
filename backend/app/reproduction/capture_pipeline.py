@@ -203,6 +203,10 @@ class ReproductionCapturePipeline:
                     ReproductionCaptureSegment.retained.is_(True)).order_by(ReproductionCaptureSegment.segment_no)))
                 if channel==CaptureChannel.PCAP:
                     rows=[x for x in rows if not (x.metadata_json or {}).get('mock_probe_only')]
+                # Robustness: skip segments whose raw file is gone (e.g. wiped by a
+                # container recreate before the persistence fix) instead of crashing
+                # the whole finalize / reconcile run on FileNotFoundError.
+                rows=[x for x in rows if x.local_path and Path(x.local_path).exists()]
                 if not rows: continue
                 for row in rows: self._retain_raw_segment(db,session,row)
                 out=self._session_dir(session.id)/'final'/f'session_{channel.value.lower()}{suffix}'; out.parent.mkdir(parents=True,exist_ok=True)

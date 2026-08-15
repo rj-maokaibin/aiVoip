@@ -142,7 +142,7 @@ def cancel_reproduction(session_id: str):
                 'diagnosis':diag}
 
 
-@celery_app.task(name='reproduction.reconcile')
+@celery_app.task(name='reproduction.reconcile', queue='reproduction')
 def reconcile_reproduction():
     with SessionLocal() as db:
         r=RecoveryReconciler()
