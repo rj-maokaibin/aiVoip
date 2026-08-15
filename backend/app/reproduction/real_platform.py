@@ -131,6 +131,10 @@ class RealReproductionPlatform:
         # mirror stream stops on hangup), so CALL_QUICK analyzes actual PCM
         # instead of an empty/near-empty capture.
         self._live_pcap_cache: dict[str, list[bytes]] = {}
+        # In-flight async live-probe futures, keyed by call_id. build_call_capture
+        # waits on these BEFORE merging so the last <=8s of a call (captured by a
+        # probe still running when ONHOOK arrived) is not silently dropped.
+        self._live_probe_futures: dict[str, list] = {}
 
     # -- FXS event streaming -------------------------------------------------------
 
@@ -442,6 +446,23 @@ class RealReproductionPlatform:
         b64 = self._shell(cmds, timeout=max(20.0, seconds + 10))
         return RealCapture(pcap=base64.b64decode(b64.strip()), pcap_path=None)
 
+    async def _async_tcpdump_capture(self, *, context: VoiceRuntimeContext, seconds: int,
+                                     remote: str, port_filter: str | None = None) -> RealCapture:
+        """Async version of _tcpdump_capture; runs on the bridge loop.
+
+        Used by spawn_live_probe so the watcher's main loop is NOT blocked waiting
+        for the tcpdump window to finish (which previously delayed FXS ONHOOK
+        handling by up to the full capture window).
+        """
+        flt = f"'{port_filter}'" if port_filter else "'udp'"
+        cmds = (
+            f"rm -f {remote}; "
+            f"timeout -t {seconds} tcpdump -ni {context.voice_interface} -w {remote} {flt} >/dev/null 2>&1; "
+            f"base64 {remote} 2>/dev/null || true"
+        )
+        b64 = await self._async_shell(cmds, timeout=max(20.0, seconds + 10))
+        return RealCapture(pcap=base64.b64decode(b64.strip()), pcap_path=None)
+
     def build_pretrigger_capture(self, *, context: VoiceRuntimeContext, start_ms: int, end_ms: int) -> RealCapture:
         # Real tcpdump writes a binary pcap to a temp file on the DUT; read it back as
         # base64 (ASCII-safe over the SSH text channel) and decode to bytes.
@@ -476,6 +497,32 @@ class RealReproductionPlatform:
             self._live_pcap_cache.setdefault(call_id, []).append(cap.pcap)
         return cap
 
+    async def _async_live_probe(self, *, context: VoiceRuntimeContext, start_ms: int, call_id: str) -> None:
+        """Async body of build_live_probe: run one 8s PCM-mirror capture and append it.
+
+        Runs on the bridge loop (spawned by spawn_live_probe) so the watcher main loop
+        is free to keep polling FXS events during the capture window.
+        """
+        seconds = 8
+        remote = f'/tmp/aiVoip_live_{call_id}_{int(time.monotonic()*1000)}.pcap'
+        cap = await self._async_tcpdump_capture(
+            context=context, seconds=seconds, remote=remote,
+            port_filter=f'udp port {self.DEFAULT_PCM_RX_PORT} or udp port {self.DEFAULT_PCM_TX_PORT}',
+        )
+        if cap.pcap and len(cap.pcap) > 24:
+            self._live_pcap_cache.setdefault(call_id, []).append(cap.pcap)
+
+    def spawn_live_probe(self, *, context: VoiceRuntimeContext, start_ms: int, call_id: str):
+        """Schedule one async live-probe capture without blocking the caller.
+
+        Returns the concurrent.futures.Future for the probe; it is recorded so
+        build_call_capture can wait for in-flight probes before merging (avoiding a
+        missed tail segment when ONHOOK arrives mid-capture).
+        """
+        fut = self._bridge.spawn(self._async_live_probe(context=context, start_ms=start_ms, call_id=call_id))
+        self._live_probe_futures.setdefault(call_id, []).append(fut)
+        return fut
+
     @staticmethod
     def _merge_pcap_segments(segments: list[bytes]) -> bytes:
         """Concatenate multiple classic-pcap captures into one valid pcap blob.
@@ -498,6 +545,14 @@ class RealReproductionPlatform:
         # accumulated by build_live_probe (bind + conversation probes) when available;
         # otherwise fall back to a short post-call tail capture (may be empty ->
         # analyzer degrades gracefully).
+        # Wait for any in-flight async probes so their captured tail segments are
+        # present in _live_pcap_cache before we merge (otherwise the final <=8s of the
+        # call is dropped when ONHOOK arrived while a probe was still capturing).
+        for fut in self._live_probe_futures.pop(call_id, []):
+            try:
+                fut.result(timeout=15.0)
+            except Exception:
+                pass
         segments = self._live_pcap_cache.pop(call_id, None)
         merged = self._merge_pcap_segments(segments or [])
         if merged and len(merged) > 24:

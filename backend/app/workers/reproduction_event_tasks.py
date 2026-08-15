@@ -103,6 +103,13 @@ async def _watch_real(db, session, device, max_seconds: int) -> dict:
         calls_bound = 0
         calls_ended = 0
         active_call_id: str | None = None
+        # Monotonic timestamp when the active call was bound; used for the ONHOOK
+        # timeout fallback (B1): if the real DUT's ONHOOK is never observed within
+        # ONHOOK_TIMEOUT_SECONDS, end the call anyway so the session cannot hang in
+        # CAPTURING forever (the FXS ONHOOK is normally emitted, but a lost/delayed
+        # event must not wedge the pipeline).
+        call_bound_at: float | None = None
+        ONHOOK_TIMEOUT_SECONDS = 90.0
         last_media_probe = 0.0
         media_probe_interval = 3.0
         last_media_capture = 0.0
@@ -157,12 +164,32 @@ async def _watch_real(db, session, device, max_seconds: int) -> dict:
                                 end_anchor='FXS_ONHOOK', actor='reproduction-worker',
                             )
                             active_call_id = None
+                            call_bound_at = None
                             calls_ended += 1
                             db.commit()
 
+                now = time.monotonic()
+
+                # 1.5 ONHOOK timeout fallback (B1): the real DUT emits ONHOOK on hangup,
+                # but if the event is ever lost/delayed the session must not wedge in
+                # CAPTURING forever. End the bound call after a generous timeout.
+                if (active_call_id is not None and call_bound_at is not None
+                        and (now - call_bound_at) >= ONHOOK_TIMEOUT_SECONDS):
+                    cur_state = ReproductionState(_session_listening(db, session.id).state)
+                    if cur_state in {ReproductionState.CALL_DETECTED, ReproductionState.CAPTURING}:
+                        rel = orch.fxs_event_monitor.relative_ms()
+                        call, _decision = orch.end_call(
+                            db, session=row, call_id=active_call_id, relative_ms=rel,
+                            signal=QuickAnalysisInput(verdict=CallVerdict.INCONCLUSIVE, findings=()),
+                            end_anchor='FXS_ONHOOK_TIMEOUT', actor='reproduction-worker',
+                        )
+                        active_call_id = None
+                        call_bound_at = None
+                        calls_ended += 1
+                        db.commit()
+
                 # 2. Periodic media probe: if an FXS attempt is active (ACTIVITY_DETECTED)
                 #    and no call is bound yet, bind on the PCM mirror stream becoming live.
-                now = time.monotonic()
                 if (now - last_media_probe) >= media_probe_interval:
                     last_media_probe = now
                     cur_state = ReproductionState(_session_listening(db, session.id).state)
@@ -175,18 +202,21 @@ async def _watch_real(db, session, device, max_seconds: int) -> dict:
                             binding_event='RTP_STREAM_START', actor='reproduction-worker',
                         )
                         active_call_id = call.id
+                        call_bound_at = now
                         calls_bound += 1
                         db.commit()
 
                 # 3. Periodic media accumulation during the conversation: while a call is
                 #    bound and still capturing, keep appending short PCM segments so the
                 #    merged capture spans the whole call (not just the bind_call window).
+                #    Probes are spawned ASYNC (A1) so the loop keeps polling FXS events
+                #    during the capture window instead of blocking on tcpdump.
                 if active_call_id is not None and (now - last_media_capture) >= media_capture_interval:
                     last_media_capture = now
                     cur_state = ReproductionState(_session_listening(db, session.id).state)
                     if cur_state in {ReproductionState.CAPTURING, ReproductionState.CALL_DETECTED}:
                         rel = orch.fxs_event_monitor.relative_ms()
-                        orch.platform.build_live_probe(
+                        orch.platform.spawn_live_probe(
                             context=ctx, start_ms=int(rel), call_id=active_call_id,
                         )
                         db.commit()

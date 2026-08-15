@@ -247,6 +247,24 @@ def test_call_capture_prefers_cached_real_media_from_live_probe(fake):
     assert not any('aiVoip_call_c9.pcap' in c for c in fake.shell_calls)
 
 
+def test_spawn_live_probe_inflight_segment_not_dropped(fake):
+    # A1: an async probe that is still capturing when end_call arrives must be
+    # waited on and its segment merged, NOT silently dropped from the tail.
+    media = _DUMMY_PCAP + bytes.fromhex(
+        '000000010000000100000001000000010000000000000001'  # 1 packet record
+    )
+    fake.shell_responses['rm -f /tmp/aiVoip_live_'] = __import__('base64').b64encode(media).decode()
+    p = RealReproductionPlatform(adapter=fake)
+    ctx = p.resolve_voice_context(_Device())
+    # Spawn (async) and immediately end the call without waiting on the future.
+    p.spawn_live_probe(context=ctx, start_ms=100, call_id='c10')
+    call = p.build_call_capture(context=ctx, start_ms=100, end_ms=6000, call_id='c10', profile_id='P', signal=None)
+    # The in-flight probe's segment was collected (not dropped) and no fresh
+    # post-call tail capture was issued.
+    assert call.pcap == media
+    assert not any('aiVoip_call_c10.pcap' in c for c in fake.shell_calls)
+
+
 # -- FXS event streaming (bridge-loop reader -> queue -> sync poll) -------------------
 
 _FXS_OFFHOOK = '2026-08-14 12:36:01.988000 [0] D:: [D]OFFHOOK\n'
