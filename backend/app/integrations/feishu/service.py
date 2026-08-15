@@ -17,17 +17,18 @@ def bind_case_to_chat(db: Session, *, case_id: str, chat_id: str, chat_type: str
     faults come from different groups. The binding's message_id stays None until
     the first card is actually sent (sync_case_card backfills it).
 
-    ``receive_id_type`` defaults from ``chat_type``: a p2p (DM) message's
-    chat_id is the sender's open_id, so the card must be sent with
-    receive_id_type='open_id'; a group message keeps 'chat_id'. An explicit
-    ``receive_id_type`` always wins (e.g. the API caller binding a specific
-    target).
+    ``receive_id_type`` defaults to 'chat_id' regardless of ``chat_type``: a
+    p2p (DM) message's chat_id is the single-chat session id (oc_*) - the
+    sender's open_id is NOT exposed there - so the conclusion card must still
+    be sent with receive_id_type='chat_id' (same mechanism as a group), or
+    Feishu rejects the send. An explicit ``receive_id_type`` always wins (e.g.
+    the API caller binding a specific open_id target).
 
     Returns the binding, or None when chat_id is empty / the binding already
     exists with a message_id (already delivering).
     """
     if receive_id_type is None:
-        receive_id_type = 'open_id' if chat_type == 'p2p' else 'chat_id'
+        receive_id_type = 'chat_id'
     if not chat_id:
         return None
     binding = db.scalar(select(FeishuCaseBinding).where(FeishuCaseBinding.case_id == case_id).limit(1))

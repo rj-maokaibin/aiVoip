@@ -104,13 +104,13 @@ def test_message_payload_normalises_sdk_event():
 
 def test_message_payload_p2p_carries_chat_type():
     from app.integrations.feishu.long_connection import _message_payload
-    data = _sdk_message('ou_1', 'OPEN_SSH sn=SN-1', sender_open_id='ou_1', chat_type='p2p')
+    data = _sdk_message('oc_dm_1', 'OPEN_SSH sn=SN-1', sender_open_id='ou_1', chat_type='p2p')
     payload = _message_payload(data)
     assert payload['event']['chat_type'] == 'p2p'
     assert payload['event']['message']['chat_type'] == 'p2p'
 
 
-def test_dispatch_event_p2p_passes_open_id_and_chat_type(monkeypatch):
+def test_dispatch_event_p2p_passes_dm_chat_id_and_chat_type(monkeypatch):
     from app.integrations.feishu.events import dispatch_event
     eng = _engine()
     with Session(eng) as db:
@@ -122,16 +122,17 @@ def test_dispatch_event_p2p_passes_open_id_and_chat_type(monkeypatch):
         payload = {
             'header': {'event_type': 'im.message.receive_v1'},
             'event': {
-                'chat_id': 'ou_1',
+                'chat_id': 'oc_dm_1',
                 'chat_type': 'p2p',
-                'message': {'content': json.dumps({'text': 'OPEN_SSH sn=SN-1'}), 'chat_id': 'ou_1', 'chat_type': 'p2p'},
+                'message': {'content': json.dumps({'text': 'OPEN_SSH sn=SN-1'}), 'chat_id': 'oc_dm_1', 'chat_type': 'p2p'},
             },
         }
         result = dispatch_event(db, payload=payload)
         assert result['handled'] == 'provision_dispatched'
         assert result['chat_type'] == 'p2p'
-        # chat_id is the sender's open_id; chat_type tells the binding to use open_id.
-        assert dispatched['args'][1] == 'ou_1'
+        # p2p chat_id is the single-chat session id (oc_*), carried for
+        # record-keeping; the binding still uses the chat_id receive type.
+        assert dispatched['args'][1] == 'oc_dm_1'
         assert dispatched['args'][2] == 'p2p'
 
 
