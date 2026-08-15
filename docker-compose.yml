@@ -196,6 +196,29 @@ services:
       minio:
         condition: service_started
 
+  # Celery beat: schedules the reproduction watchdog (reconcile) every 60s so a
+  # crashed watcher / stale lease / failed cleanup is recovered automatically
+  # instead of leaving the session wedged.
+  beat:
+    build:
+      context: ./backend
+    env_file: ${VOIP_APP_ENV_FILE:-.env}
+    command: celery -A app.workers.celery_app:celery_app beat --loglevel=INFO
+    volumes:
+      - ./profiles:/app/profiles:ro
+      - ./rules:/app/rules:ro
+      - ./knowledge:/app/knowledge:ro
+      - /home/dev/secret.yaml:/home/dev/secret.yaml:ro
+      - ${VOIP_DATA_ROOT:-/data/voip}/reproduction/capture:/tmp/voip-reproduction-capture
+      - ${VOIP_DATA_ROOT:-/data/voip}/reproduction/objects:/tmp/voip-reproduction-objects
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_started
+
   frontend:
     build:
       context: ./frontend

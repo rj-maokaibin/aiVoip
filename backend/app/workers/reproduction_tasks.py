@@ -4,6 +4,7 @@ import asyncio
 
 from sqlalchemy import select
 
+from app.collectors.asyncssh_adapter import DeviceCommandError, DeviceConnectionError
 from app.core.config import settings
 from app.db.models import ReproductionSession
 from app.db.session import SessionLocal
@@ -97,7 +98,8 @@ def _build_orchestrator_for(session: ReproductionSession, *, connect: bool = Fal
     return orch, adapter, close
 
 
-@celery_app.task(name='reproduction.start')
+@celery_app.task(name='reproduction.start', bind=True, autoretry_for=(DeviceConnectionError, DeviceCommandError),
+                 retry_backoff=True, retry_backoff_max=60, max_retries=3)
 def start_reproduction(session_id: str):
     if settings.app_env.lower()=='production' and settings.reproduction_platform_mode=='mock':
         raise RuntimeError('REPRODUCTION_PLATFORM_NOT_CONFIGURED')

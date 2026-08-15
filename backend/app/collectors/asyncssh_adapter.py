@@ -86,21 +86,39 @@ class AsyncSSHDeviceAdapter(DeviceAdapter):
             await self.conn.wait_closed()
             self.conn=None
 
-    async def execute_shell(self, command:str, timeout:float|None=None) -> CommandResult:
+    async def execute_shell(self, command:str, timeout:float|None=None, retries:int=2) -> CommandResult:
+        """Execute a shell command, retrying transient SSH timeouts.
+
+        Shell here is used for idempotent capture/query commands only (tcpdump -w
+        to a unique file, dev_config reads, base64 reads), so a transient
+        SSH_COMMAND_TIMEOUT can be safely retried - this is the first line of the
+        "capture must never be lost" guarantee on the real DUT (a single tcpdump
+        window timing out due to channel congestion must not drop the segment).
+        """
         if not self.conn:
             raise DeviceConnectionError('SSH_NOT_CONNECTED')
-        try:
-            res=await asyncio.wait_for(
-                self.conn.run(command, check=False),
-                timeout=timeout or settings.ssh_command_timeout,
-            )
-            return CommandResult(
-                stdout=res.stdout or '',
-                stderr=res.stderr or '',
-                exit_status=int(res.exit_status or 0),
-            )
-        except asyncio.TimeoutError as exc:
-            raise DeviceCommandError('SSH_COMMAND_TIMEOUT') from exc
+        last: Exception | None = None
+        for attempt in range(max(1, retries + 1)):
+            try:
+                res = await asyncio.wait_for(
+                    self.conn.run(command, check=False),
+                    timeout=timeout or settings.ssh_command_timeout,
+                )
+                return CommandResult(
+                    stdout=res.stdout or '',
+                    stderr=res.stderr or '',
+                    exit_status=int(res.exit_status or 0),
+                )
+            except asyncio.TimeoutError as exc:
+                last = exc
+                if attempt < retries:
+                    # Back off briefly; the next attempt likely finds a free channel.
+                    await asyncio.sleep(1.5 * (attempt + 1))
+                    continue
+                raise DeviceCommandError('SSH_COMMAND_TIMEOUT') from exc
+            except Exception as exc:
+                raise DeviceCommandError(f'SSH_COMMAND_FAILED:{type(exc).__name__}') from exc
+        raise DeviceCommandError('SSH_COMMAND_TIMEOUT') from last
 
     async def _ensure_aim_session(self, timeout:float, retries:int=3):
         """Ensure the persistent AIM PTY session is open, retrying the initial

@@ -5,6 +5,7 @@ import time
 
 from celery.utils.log import get_task_logger
 
+from app.collectors.asyncssh_adapter import DeviceCommandError, DeviceConnectionError
 from app.contracts.enums import ReproductionState
 from app.core.config import settings
 from app.db.models import CaseDevice, ReproductionSession
@@ -275,7 +276,9 @@ async def _watch_real(db, session, device, max_seconds: int) -> dict:
         _close()
 
 
-@celery_app.task(name='reproduction.watch_fxs_events', bind=True, autoretry_for=(), max_retries=0)
+@celery_app.task(name='reproduction.watch_fxs_events', bind=True,
+                 autoretry_for=(DeviceConnectionError, DeviceCommandError),
+                 retry_backoff=True, retry_backoff_max=30, max_retries=2)
 def watch_fxs_events(self, session_id: str, max_seconds: int = 900):
     """Watch a reproduction session's DUT for FXS activity and feed it to the
     orchestrator as real activity anchors. Runs until the session leaves the

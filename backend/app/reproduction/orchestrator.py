@@ -393,6 +393,42 @@ class ReproductionOrchestrator:
                    payload={'status':call.status,'call_no':call.call_no,'live_summary':call.live_summary_json})
         return call
 
+    def _compensate_call_capture(self, db: Session, *, session: ReproductionSession, call: ReproductionCall,
+                                 start_ms: int, end_ms: int, signal) -> object | None:
+        """Capture-completeness guard for the final call capture.
+
+        When the platform's build_call_capture returns an empty pcap (mirror stream
+        already stopped at hangup / window landed in a silent gap), retry a wider
+        post-call window and, as a last resort, reconstruct media evidence from any
+        retained PCAP segments so CALL_QUICK never analyzes an empty capture.
+        Returns a capture-like object (with ``pcap``/``debug_log``) or None.
+        """
+        ctx=self._runtime_context(session)
+        for _attempt in range(2):
+            try:
+                cap=self.platform.build_call_capture(context=ctx,start_ms=start_ms,end_ms=end_ms,
+                    call_id=call.id,profile_id=session.profile_key,signal=signal)
+            except Exception:
+                cap=None
+            if cap is not None and getattr(cap,'pcap',None) and len(cap.pcap)>24:
+                return cap
+        try:
+            from app.db.models import ReproductionCaptureSegment
+            from app.reproduction.pcap_codec import merge_classic_pcaps
+            from app.reproduction.real_platform import RealCapture
+            rows=list(db.scalars(select(ReproductionCaptureSegment).where(
+                ReproductionCaptureSegment.session_id==session.id,
+                ReproductionCaptureSegment.channel==CaptureChannel.PCAP.value,
+                ReproductionCaptureSegment.retained.is_(True),
+            ).order_by(ReproductionCaptureSegment.segment_no)))
+            paths=[r.local_path for r in rows if r.local_path]
+            merged=merge_classic_pcaps(paths) if paths else b''
+            if merged and len(merged)>24:
+                return RealCapture(pcap=merged, debug_log=b'')
+        except Exception:
+            pass
+        return None
+
     def end_call(self, db: Session, *, session: ReproductionSession, call_id: str, relative_ms: int,
                  signal: QuickAnalysisInput, end_anchor: str='FXS_ONHOOK', actor: str|None=None) -> tuple[ReproductionCall,SufficiencyDecision]:
         call=db.get(ReproductionCall,call_id)
@@ -414,10 +450,20 @@ class ReproductionOrchestrator:
         bind_event=db.scalar(select(ReproductionEventRecord).where(ReproductionEventRecord.call_id==call.id,ReproductionEventRecord.event_type=='SIP_INVITE').order_by(ReproductionEventRecord.session_relative_ms))
         call_start_ms=int(bind_event.session_relative_ms if bind_event and bind_event.session_relative_ms is not None else max(0,int(relative_ms)-1200))
         ctx=self._runtime_context(session); scenario=self.platform.build_call_capture(context=ctx,start_ms=call_start_ms,end_ms=int(relative_ms),call_id=call.id,profile_id=session.profile_key,signal=signal)
-        pseg=self.capture.append_pcap(db,session=session,start_ms=call_start_ms,end_ms=int(relative_ms)+self._profile(session).timeouts.post_capture_seconds*1000,data=scenario.pcap,attempt_id=call.attempt_id,call_id=call.id,metadata={'mock_final_call':True,'phase':'CALL_FINAL'})
-        self.capture.preserve_new_segment(db,session=session,row=pseg)
-        lseg=self.capture.append_log(db,session=session,start_ms=call_start_ms,end_ms=int(relative_ms)+self._profile(session).timeouts.post_capture_seconds*1000,data=scenario.debug_log,attempt_id=call.attempt_id,call_id=call.id,metadata={'phase':'CALL_FINAL'})
-        self.capture.preserve_new_segment(db,session=session,row=lseg)
+        # Capture-completeness guard: an empty final pcap (mirror stream already
+        # stopped at hangup / window landed in a silent gap) must never become the
+        # sole CALL_FINAL evidence. Compensate before appending so CALL_QUICK never
+        # analyzes an empty capture.
+        if not getattr(scenario,'pcap',None) or len(scenario.pcap)<=24:
+            scenario=self._compensate_call_capture(db,session=session,call=call,start_ms=call_start_ms,end_ms=int(relative_ms),signal=signal)
+        if scenario is not None:
+            pseg=self.capture.append_pcap(db,session=session,start_ms=call_start_ms,end_ms=int(relative_ms)+self._profile(session).timeouts.post_capture_seconds*1000,data=scenario.pcap,attempt_id=call.attempt_id,call_id=call.id,metadata={'mock_final_call':True,'phase':'CALL_FINAL'})
+            self.capture.preserve_new_segment(db,session=session,row=pseg)
+            lseg=self.capture.append_log(db,session=session,start_ms=call_start_ms,end_ms=int(relative_ms)+self._profile(session).timeouts.post_capture_seconds*1000,data=scenario.debug_log,attempt_id=call.attempt_id,call_id=call.id,metadata={'phase':'CALL_FINAL'})
+            self.capture.preserve_new_segment(db,session=session,row=lseg)
+        # When compensation also failed, no empty final segment is appended: the
+        # capture pipeline falls back to the retained in-call LIVE_PROBE segments
+        # (or raises CALL_CAPTURE_SEGMENTS_MISSING -> task autoretry).
         call_pcap,call_evidence=self.capture.build_call_capture(db,session=session,call=call)
         result=self.quick_analyzer.run(db,session=session,call=call,signal=signal,pcap_path=call_pcap,pcap_evidence=call_evidence)
         call.status=ReproductionCallStatus.ANALYZED.value
