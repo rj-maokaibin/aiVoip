@@ -100,7 +100,7 @@ def _build_orchestrator_for(session: ReproductionSession, *, connect: bool = Fal
 
 @celery_app.task(name='reproduction.start', bind=True, autoretry_for=(DeviceConnectionError, DeviceCommandError),
                  retry_backoff=True, retry_backoff_max=60, max_retries=3)
-def start_reproduction(session_id: str):
+def start_reproduction(self, session_id: str):
     if settings.app_env.lower()=='production' and settings.reproduction_platform_mode=='mock':
         raise RuntimeError('REPRODUCTION_PLATFORM_NOT_CONFIGURED')
     with SessionLocal() as db:
@@ -108,7 +108,7 @@ def start_reproduction(session_id: str):
         if not row: return {'status':'NOT_FOUND','session_id':session_id}
         orch, adapter, close = _build_orchestrator_for(row, connect=True)
         try:
-            orch.start(db,session=row,owner_worker=f'celery:{start_reproduction.request.id}',actor='reproduction-worker')
+            orch.start(db,session=row,owner_worker=f'celery:{self.request.id}',actor='reproduction-worker')
             db.commit()
         finally:
             close()
