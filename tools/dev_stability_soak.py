@@ -22,7 +22,7 @@ from app.collectors.asyncssh_adapter import AsyncSSHDeviceAdapter
 from app.integrations.credentials import get_credential_provider
 
 IP = '47.104.22.0'
-PORT = 65243  # current live tunnel; update when the EWEB tunnel rotates
+PORT = 65212  # current live tunnel; update when the EWEB tunnel rotates
 SN = 'MACC1JZH3260M'
 IFACE = 'br-lan_400'
 PCM_RX = 40000
@@ -125,18 +125,26 @@ async def g3_fault_injection(a, results):
         r = await a.execute_shell('dd if=/dev/urandom of=/tmp/soak_big.bin bs=256k count=1 2>/dev/null; md5sum /tmp/soak_big.bin | cut -d" " -f1; base64 /tmp/soak_big.bin | wc -c; rm -f /tmp/soak_big.bin', timeout=20)
         lines = (r.stdout or '').splitlines()
         _line('256KB base64 round-trip (device)', len(lines) >= 2, f'lines={len(lines)}')
+    except Exception as e:
+        _line('256KB base64 round-trip', False, f'{type(e).__name__}:{e}')
 
 
 async def g5_state_clean(a, results):
     """G5: after the soak, device AIM/debug state must be clean (no leak)."""
     print('=== G5: device state clean ===')
     try:
-        r = await a.execute_shell('ps w | grep -c tcpdump; ps w | grep -c aim', timeout=8)
-        lines = (r.stdout or '').splitlines()
-        tcp = int(lines[0].strip() or 0) if lines else -1
-        aim = int(lines[1].strip() or 0) if len(lines) > 1 else -1
-        # tcpdump count includes the grep itself sometimes; allow <=1 leftover
-        _line('no leaked tcpdump/aim processes', tcp <= 1 and aim >= 0, f'tcpdump={tcp} aim={aim}')
+        # grep -v grep excludes the counting grep itself; aimd.s is the device's
+        # legitimate AIM daemon and must remain. Leaked tcpdump/dsp-diag = 0.
+        r = await a.execute_shell(
+            'echo T=$(ps w | grep tcpdump | grep -v grep | wc -l); '
+            'echo P=$(ps w | grep "dsp diag" | grep -v grep | wc -l)', timeout=10)
+        import re
+        m_t = re.search(r'T=(\d+)', r.stdout or '')
+        m_p = re.search(r'P=(\d+)', r.stdout or '')
+        tcp = int(m_t.group(1)) if m_t else -1
+        pcm = int(m_p.group(1)) if m_p else -1
+        _line('no leaked tcpdump/dsp-diag processes', tcp == 0 and pcm == 0,
+              f'tcpdump={tcp} dsp_diag={pcm}')
     except Exception as e:
         _line('device state check', False, f'{type(e).__name__}:{e}')
 
