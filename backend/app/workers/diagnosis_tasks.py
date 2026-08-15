@@ -167,14 +167,10 @@ def _execute_cycle(run_id:str):
             transition_case(db,case,CaseEvent.USER_ACTION_REQUIRED,'diagnosis_no_progress'); db.commit()
             return {'status':'WAITING_USER','run_id':run.id,'summary':summary}
 
-        jobs=[]
-        if plan: jobs=_dispatch_plan(db,run,plan,decision)
-        if jobs:
-            run.status=DiagnosisRunStatus.WAITING_EVIDENCE.value
-            if parent: transition_job(db,parent,JobStatus.WAITING_EVIDENCE,reason='diagnosis_auto_collection_dispatched')
-            transition_case(db,case,CaseEvent.EVIDENCE_REQUIRED,'diagnosis_auto_collection_dispatched'); db.commit()
-            return {'status':'WAITING_EVIDENCE','run_id':run.id,'child_jobs':jobs}
-
+        # A sufficiently-supported hypothesis is a conclusion: honor DIAGNOSED
+        # BEFORE dispatching any auto-collection plans, otherwise a recurring plan
+        # (e.g. RUN_MEDIA_ANALYSIS) keeps re-dispatching -> WAITING_EVIDENCE ->
+        # fingerprint unchanged -> no-progress guard stalls the run at WAITING_USER.
         if decision.conclusion_state=='DIAGNOSED':
             run.status=DiagnosisRunStatus.DIAGNOSED.value; run.finished_at=utcnow()
             if parent: transition_job(db,parent,JobStatus.SUCCESS,reason='diagnosis_supported_hypothesis')
@@ -186,6 +182,14 @@ def _execute_cycle(run_id:str):
             db.commit()
             return {'status':'DIAGNOSED','run_id':run.id,'summary':decision.summary,
                     'published':published}
+
+        jobs=[]
+        if plan: jobs=_dispatch_plan(db,run,plan,decision)
+        if jobs:
+            run.status=DiagnosisRunStatus.WAITING_EVIDENCE.value
+            if parent: transition_job(db,parent,JobStatus.WAITING_EVIDENCE,reason='diagnosis_auto_collection_dispatched')
+            transition_case(db,case,CaseEvent.EVIDENCE_REQUIRED,'diagnosis_auto_collection_dispatched'); db.commit()
+            return {'status':'WAITING_EVIDENCE','run_id':run.id,'child_jobs':jobs}
 
         run.status=DiagnosisRunStatus.WAITING_USER.value; run.finished_at=utcnow() if decision.conclusion_state=='WAITING_USER' else None
         if parent: transition_job(db,parent,JobStatus.WAITING_USER,reason='diagnosis_requires_user_evidence')

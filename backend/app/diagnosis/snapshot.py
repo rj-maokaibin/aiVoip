@@ -4,12 +4,35 @@ import json
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from app.db.models import AnalyzerRun, Case, CaseDevice, Evidence
-from app.integrations.storage import ObjectStorage
+from app.integrations.storage import ObjectStorage, reproduction_object_storage
 
 SUCCESS={'SUCCESS','PARTIAL_SUCCESS','SUCCEEDED'}  # SUCCEEDED accepted only for legacy stored runs
 
 class CaseEvidenceSnapshotBuilder:
     def __init__(self, storage:ObjectStorage|None=None): self.storage=storage or ObjectStorage()
+
+    def _read_result(self, result_object_key: str):
+        """Read an AnalyzerRun result JSON regardless of which backend stored it.
+
+        The reproduction analyzers (REPRODUCTION_CALL_QUICK_EVIDENCE /
+        REPRODUCTION_LIVE_ANALYZER) persist their results to the reproduction
+        object storage (local under REPRODUCTION_STORAGE_MODE=local), while the
+        classic media/packet/pcm analyzers persist to MinIO. Try both so
+        reproduction findings (verdict/findings) reach the diagnosis reasoner.
+        """
+        if not result_object_key:
+            return None
+        candidates = [self.storage, reproduction_object_storage()]
+        seen = set()
+        for st in candidates:
+            if id(st) in seen:
+                continue
+            seen.add(id(st))
+            try:
+                return json.loads(st.get_bytes(result_object_key))
+            except Exception:
+                continue
+        return None
 
     def build(self, db:Session, case_id:str) -> dict:
         case=db.get(Case,case_id)
@@ -22,10 +45,7 @@ class CaseEvidenceSnapshotBuilder:
             latest[run.analyzer_name]=run
         analyzer_results={}
         for name,run in latest.items():
-            result=None
-            if run.result_object_key:
-                try: result=json.loads(self.storage.get_bytes(run.result_object_key))
-                except Exception: result=None
+            result=self._read_result(run.result_object_key)
             analyzer_results[name]={
                 'run_id':run.id,'status':run.status,'version':run.analyzer_version,'config_version':run.config_version,
                 'summary':run.summary_json or {},'result':result,

@@ -36,14 +36,15 @@ class DeterministicDiagnosisReasoner:
             result=packet['result']; source_run=packet['run_id']
         if result:
             self._reason_from_result(result,source_run,hypotheses,known,unknown,excluded,plan,symptoms)
-        else:
-            # No classic packet/media analyzer, but a reproduction CALL_QUICK run may
-            # have produced real findings (verdict/role/findings). Feed them into the
-            # same deterministic hypothesis mapping so autonomous-reproduction
-            # evidence reaches the diagnosis.
-            repro = analyzers.get('REPRODUCTION_CALL_QUICK_EVIDENCE')
-            if repro and repro.get('result'):
-                self._reason_from_reproduction(repro, hypotheses, known, plan, symptoms)
+        # A reproduction CALL_QUICK run may have produced real findings
+        # (verdict/role/findings) even when a classic media/packet analyzer exists
+        # (e.g. a clean media analysis over a real call whose DTMF was only surfaced
+        # by the reproduction analyzer). Always feed reproduction findings into the
+        # same deterministic mapping so they complement, not get shadowed by, the
+        # classic analyzer result.
+        repro = analyzers.get('REPRODUCTION_CALL_QUICK_EVIDENCE')
+        if repro and repro.get('result'):
+            self._reason_from_reproduction(repro, hypotheses, known, plan, symptoms)
 
         # 设备文本证据存在，但没有网络/媒体证据时，提示上传/采集PCAP。
         if not pcap and not result:
@@ -59,8 +60,12 @@ class DeterministicDiagnosisReasoner:
         relevant_supported=[h for h in hypotheses if h.status==HypothesisState.SUPPORTED.value and h.confidence>=0.85]
         if not auto and not plan and not relevant_supported and result:
             plan.append(PlanAction('REQUEST_USER_EVIDENCE','当前确定性证据尚不足以解释用户现象，需要补充复现异常时间点、现场录音或新的抓包证据。','USER',False,{'need':['anomaly_timestamp_or_recording_or_new_capture']},90))
-        if auto: state='NEED_MORE_EVIDENCE'
-        elif relevant_supported: state='DIAGNOSED'
+        if relevant_supported:
+            # A sufficiently-supported hypothesis (>=0.85) is a deterministic
+            # conclusion; do not let pending auto-collection plans downgrade it to
+            # NEED_MORE_EVIDENCE and loop until the no-progress guard stalls the run.
+            state='DIAGNOSED'
+        elif auto: state='NEED_MORE_EVIDENCE'
         else: state='WAITING_USER'
         rank={
             HypothesisState.CONFIRMED.value:6,

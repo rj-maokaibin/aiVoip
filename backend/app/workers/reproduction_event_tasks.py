@@ -221,16 +221,30 @@ async def _watch_real(db, session, device, max_seconds: int) -> dict:
                     cur_state = ReproductionState(_session_listening(db, session.id).state)
                     if (cur_state == ReproductionState.ACTIVITY_DETECTED and active_call_id is None
                             and orch.platform.pcm_media_active(context=ctx)):
-                        rel = orch.fxs_event_monitor.relative_ms()
-                        call = orch.bind_call(
-                            db, session=row, relative_ms=rel,
-                            external_call_ref=orch.platform.media_binding_call_ref(),
-                            binding_event='RTP_STREAM_START', actor='reproduction-worker',
-                        )
-                        active_call_id = call.id
-                        call_bound_at = now
-                        calls_bound += 1
-                        db.commit()
+                        try:
+                            rel = orch.fxs_event_monitor.relative_ms()
+                            call = orch.bind_call(
+                                db, session=row, relative_ms=rel,
+                                external_call_ref=orch.platform.media_binding_call_ref(),
+                                binding_event='RTP_STREAM_START', actor='reproduction-worker',
+                            )
+                            active_call_id = call.id
+                            call_bound_at = now
+                            calls_bound += 1
+                            db.commit()
+                        except Exception as exc:
+                            # bind_call may fail on a transient device SSH delay (e.g.
+                            # its synchronous live-probe tcpdump timing out while the
+                            # media probe holds a channel). Do NOT crash the watcher —
+                            # that would lose pending FXS events (ONHOOK) and leave the
+                            # session wedged in ACTIVITY_DETECTED. Roll back any partial
+                            # call-creation state and keep listening so the next probe
+                            # can retry the bind.
+                            log.exception('bind_call failed (transient); continuing to watch')
+                            try:
+                                db.rollback()
+                            except Exception:
+                                pass
 
                 # 3. Periodic media accumulation during the conversation: while a call is
                 #    bound and still capturing, keep appending short PCM segments so the
