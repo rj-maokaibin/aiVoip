@@ -50,8 +50,8 @@ services:
       - ./knowledge:/app/knowledge:ro
       - ./tools:/tools:ro
       - /home/dev/secret.yaml:/home/dev/secret.yaml:ro
-      - ${REPRODUCTION_CAPTURE_ROOT:-/tmp/voip-reproduction-capture}:/tmp/voip-reproduction-capture
-      - ${REPRODUCTION_OBJECT_ROOT:-/tmp/voip-reproduction-objects}:/tmp/voip-reproduction-objects
+      - ${VOIP_DATA_ROOT:-/data/voip}/reproduction/capture:/tmp/voip-reproduction-capture
+      - ${VOIP_DATA_ROOT:-/data/voip}/reproduction/objects:/tmp/voip-reproduction-objects
     depends_on:
       postgres:
         condition: service_healthy
@@ -122,6 +122,8 @@ services:
       - ./profiles:/app/profiles:ro
       - ./rules:/app/rules:ro
       - ./knowledge:/app/knowledge:ro
+      - ${VOIP_DATA_ROOT:-/data/voip}/reproduction/capture:/tmp/voip-reproduction-capture
+      - ${VOIP_DATA_ROOT:-/data/voip}/reproduction/objects:/tmp/voip-reproduction-objects
     depends_on:
       postgres:
         condition: service_healthy
@@ -143,6 +145,8 @@ services:
       - ./rules:/app/rules:ro
       - ./knowledge:/app/knowledge:ro
       - /home/dev/secret.yaml:/home/dev/secret.yaml:ro
+      - ${VOIP_DATA_ROOT:-/data/voip}/reproduction/capture:/tmp/voip-reproduction-capture
+      - ${VOIP_DATA_ROOT:-/data/voip}/reproduction/objects:/tmp/voip-reproduction-objects
     depends_on:
       postgres:
         condition: service_healthy
@@ -182,6 +186,8 @@ services:
       - ./rules:/app/rules:ro
       - ./knowledge:/app/knowledge:ro
       - /home/dev/secret.yaml:/home/dev/secret.yaml:ro
+      - ${VOIP_DATA_ROOT:-/data/voip}/reproduction/capture:/tmp/voip-reproduction-capture
+      - ${VOIP_DATA_ROOT:-/data/voip}/reproduction/objects:/tmp/voip-reproduction-objects
     depends_on:
       postgres:
         condition: service_healthy
