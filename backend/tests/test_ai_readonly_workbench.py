@@ -92,19 +92,21 @@ def test_readonly_record_is_idempotent_and_engineering_output_stays_draft():
         assert len(list(db.scalars(select(AIProposalRecord)))) == 2
 
 
-def test_eval_gate_reports_hard_zero_contract_and_requires_samples(monkeypatch):
+def test_eval_gate_reports_audited_hard_zero_and_requires_complete_coverage(monkeypatch):
     monkeypatch.setattr("app.diagnosis.ai_workbench.settings.ai_eval_min_samples", 1)
     row = AIProposalRecord(
-        case_id="c", schema_version="ai-proposal-v1", intent="DIAGNOSIS_ENHANCEMENT",
+        case_id="c", schema_version="ai-proposal-v2", intent="DIAGNOSIS_ENHANCEMENT",
         mode="SHADOW", status="ACCEPTED", input_fingerprint="f" * 64,
-        workflow_version="v1", latency_ms=12,
-        validated_output_json={"hypotheses": [{"supporting_evidence_ids": ["e"]}]},
+        workflow_version="v2", latency_ms=12,
+        validated_output_json={"hypotheses": [{"supporting_evidence_ids": ["e"]}], "claims": []},
         validation_errors=[], baseline_json={},
         diff_json={"overlap_codes": ["H"], "ai_only_codes": [], "formal_result_changed": False},
     )
-    feedback=AIRecommendationFeedback(proposal_id="p",case_id="c",item_type="PROFILE",
-                                      decision="ACCEPTED",actor="tester")
-    report = build_eval_report([row],[feedback])
+    feedback = AIRecommendationFeedback(proposal_id="p", case_id="c", item_type="PROFILE",
+                                        decision="ACCEPTED", actor="tester")
+    incomplete = build_eval_report([row], [feedback])
+    assert incomplete["status"] == "INSUFFICIENT_DATA"
+    report = build_eval_report([row], [feedback], audit_events=[], audit_coverage_complete=True)
     assert report["status"] == "PASS"
     assert report["metrics"]["evidence_reference_accuracy"] == 1.0
     assert report["metrics"]["question_profile_recommendation_acceptance"] == 1.0
