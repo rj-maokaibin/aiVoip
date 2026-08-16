@@ -99,7 +99,7 @@ _PROMPT_INJECTION = re.compile(
     r'(?i)(ignore|disregard|override).{0,30}(instruction|prompt|policy)|忽略.{0,20}(指令|提示词|规则)'
 )
 _UNREDACTED_SECRET = re.compile(
-    r'(?i)(password|passwd|pwd|token|secret|cookie|authorization)\s*[:=]\s*[^\s\],}]+ '
+    r'(?i)(password|passwd|pwd|token|secret|cookie|authorization)\s*[:=]\s*[^\s\],}]+'
 )
 
 
@@ -138,7 +138,7 @@ def assert_gateway_payload_safe(payload: dict) -> None:
     rendered = str(payload)
     # After recursive redaction a raw secret assignment must never remain. The
     # gateway token itself lives only in HTTP headers and is not part of ``payload``.
-    if _UNREDACTED_SECRET.search(rendered + ' '):
+    if _UNREDACTED_SECRET.search(rendered):
         raise ReasoningGatewayError('REASONING_GATEWAY_SECRET_GUARD_REJECTED')
 
 
