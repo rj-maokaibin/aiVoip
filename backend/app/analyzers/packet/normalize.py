@@ -49,6 +49,33 @@ def _to_bool(value: Any) -> bool | None:
     return str(value).strip().lower() in {"1", "true", "yes", "set"}
 
 
+def _to_epoch(value: Any) -> float | None:
+    """Parse a frame timestamp that may be numeric epoch or ISO-8601 string.
+
+    TShark EK serializes ``frame.time_epoch`` as ISO-8601 (e.g.
+    ``2026-08-14T07:02:49.100710000Z``) on modern versions, while older builds
+    and tests emit a numeric epoch.  Accept both so the normalizer never drops
+    packets just because of a timestamp representation change.
+    """
+    value = _first(value)
+    if value is None or value == "":
+        return None
+    text = str(value).strip()
+    try:
+        return float(text)
+    except ValueError:
+        pass
+    try:
+        from datetime import datetime, timezone
+        normalized = text[:-1] + "+00:00" if text.endswith("Z") else text
+        parsed = datetime.fromisoformat(normalized)
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed.timestamp()
+    except ValueError:
+        return None
+
+
 def _flatten(obj: Any, prefix: str = "") -> dict[str, list[Any]]:
     out: dict[str, list[Any]] = {}
 
@@ -141,7 +168,7 @@ def normalize_ek_record(record: dict[str, Any]) -> NormalizedPacket | None:
     idx = FieldIndex(layers)
 
     frame_number = _to_int(idx.get("frame.number", "frame_frame_number"))
-    ts = _to_float(idx.get("frame.time_epoch", "frame_frame_time_epoch"))
+    ts = _to_epoch(idx.get("frame.time_epoch", "frame_frame_time_epoch"))
     if frame_number is None or ts is None:
         return None
 

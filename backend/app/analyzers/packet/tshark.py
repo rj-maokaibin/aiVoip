@@ -27,8 +27,6 @@ class TSharkAdapter:
     an overall wall-clock timeout and only emits normalized VOIP packets.
     """
 
-    protocols = "frame eth vlan arp ip ipv6 udp tcp sip sdp rtp rtcp"
-
     def __init__(self, binary: str = "tshark", timeout_seconds: int = 300, display_filter: str = "sip || sdp || rtp || rtcp"):
         self.binary = binary
         self.timeout_seconds = timeout_seconds
@@ -52,7 +50,11 @@ class TSharkAdapter:
         cmd = [binary, "-n", "-l", "-r", str(pcap_path)]
         if self.display_filter:
             cmd += ["-Y", self.display_filter]
-        cmd += ["-T", "ek", "-j", self.protocols]
+        # NOTE: do NOT pass `-j <protocols>` together with `-T ek`. On
+        # Wireshark/TShark 4.4.x that combination emits only `{"filtered": ...}`
+        # placeholders instead of real field values, so the normalizer would see
+        # zero packets. Full EK output is streamed line-by-line and stays bounded.
+        cmd += ["-T", "ek"]
 
         proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1)
         assert proc.stdout is not None and proc.stderr is not None

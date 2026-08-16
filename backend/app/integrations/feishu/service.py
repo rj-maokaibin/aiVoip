@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -86,9 +87,26 @@ class FeishuCaseCardService:
             binding.card_version += 1
         else:
             result = await transport.send_card(receive_id=rid, receive_id_type=rtype, card=built.card)
+            # Re-check after the network await: a concurrent sync_case_card in
+            # another worker may have created the binding while we were waiting
+            # (the earlier SELECT saw nothing), which would make the INSERT below
+            # violate uq_feishu_case_binding_case and fail the whole diagnosis.
             if binding is None:
-                binding = FeishuCaseBinding(case_id=case_id, receive_id=rid, receive_id_type=rtype, message_id=result.message_id, status="ACTIVE", card_version=1)
-                db.add(binding)
+                binding = db.scalar(select(FeishuCaseBinding).where(FeishuCaseBinding.case_id == case_id).limit(1))
+            if binding is None:
+                candidate = FeishuCaseBinding(case_id=case_id, receive_id=rid, receive_id_type=rtype, message_id=result.message_id, status="ACTIVE", card_version=1)
+                try:
+                    with db.begin_nested():
+                        db.add(candidate)
+                        db.flush()
+                except IntegrityError:
+                    # Lost the create race; adopt the binding another worker won.
+                    binding = db.scalar(select(FeishuCaseBinding).where(FeishuCaseBinding.case_id == case_id).limit(1))
+                    if binding is not None and not binding.message_id:
+                        binding.message_id = result.message_id
+                        binding.status = "ACTIVE"
+                else:
+                    binding = candidate
             else:
                 binding.receive_id = rid
                 binding.receive_id_type = rtype
