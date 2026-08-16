@@ -1,0 +1,23 @@
+{
+  "schema_version": "ai-model-eval-dataset-v2",
+  "dataset_id": "replace-with-exported-field-dataset",
+  "generated_at": null,
+  "source": "TEMPLATE_ONLY",
+  "audit_coverage_complete": false,
+  "thresholds": {
+    "minimum_samples": 10,
+    "min_top1_recall": 0.6,
+    "min_top3_recall": 0.8,
+    "min_fault_domain_recall": 0.8,
+    "min_evidence_precision": 0.98,
+    "max_unsupported_claim_rate": 0.05,
+    "max_unauthorized_suggestion_rate": 0.0
+  },
+  "cases": [],
+  "audit_events": [],
+  "notes": [
+    "Do not mark synthetic fixtures as REAL.",
+    "Use tools/export_ai_eval_dataset.py to generate REAL cases from machine-confirmed field history.",
+    "Production promotion requires real verified samples plus complete audit coverage."
+  ]
+}
