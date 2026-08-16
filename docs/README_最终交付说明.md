@@ -6,6 +6,10 @@
 
 - `01_Source_Code/`：当前最新、累积完整的 V1.0 源码快照。代码基线为 Phase F3 Production Deployment Runner，包含 M0～M6.2、Web/飞书产品化基础、Production Hardening、Deployment Runner、Golden/E2E/Release Gate 等。
 - `02_Core_Documents/`：最终冻结的 PRD、总 SPEC、M6.2 SPEC、Engineering Contract、Implementation Plan。
+- 2026-08-15 后续修订：V1.1 复现采集合同保持有效；AI 群聊入口与诊断工作流新增
+  `VOIP_AI_故障助手_飞书AI诊断整体方案_V1.0.md` 和
+  `VOIP_AI_故障助手_SPEC_V1.2_AI诊断与飞书入口修订.md`。V1.2 当前为 DRAFT，不能
+  在实现与 Eval Gate 完成前视为已交付能力。
 - `03_Implementation_Trace/`：从 M0 到 F3 的实现与校准记录，用于追溯各阶段落地情况。
 - `04_Quality_and_Release/`：当前源码对应的 Phase F3 验证、Release Readiness、Field Golden、OpenAPI/Migration/Security/Deployment Gate 等机器可读证据。
 - `05_Pending_Platform/`：EC-02 真机 Platform Contract V0.1。该项按项目决策保持待定，不能视为生产就绪合同。
