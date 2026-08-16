@@ -51,4 +51,17 @@ jobs:
       - name: AI E1-E6 regression gate
         run: make ai-e1-e6-gate
       - name: Full backend regression
-        run: make test
+        shell: bash
+        run: |
+          set +e
+          PYTHONPATH=backend pytest -q backend/tests --tb=short 2>&1 | tee /tmp/backend-pytest.log
+          status=${PIPESTATUS[0]}
+          if [ "$status" -ne 0 ]; then
+            python - <<'PY'
+          from pathlib import Path
+          text = Path('/tmp/backend-pytest.log').read_text(encoding='utf-8', errors='replace')[-6000:]
+          text = text.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
+          print(f'::error title=Full backend regression failed::{text}')
+          PY
+          fi
+          exit "$status"
