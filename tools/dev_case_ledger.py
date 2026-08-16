@@ -175,11 +175,13 @@ def collect(db):
             "hook_src": set(),
             "bind": set(),
             "in_call_dtmf": 0,
+            "dtmf_count": 0,
             "hook_s": None,
             "calls": 0,
             "verdicts": set(),
             "findings": set(),
             "attempts": [],
+            "attempt_durations": [],
             "segments": 0,
             "retained": 0,
             "evicted": 0,
@@ -202,6 +204,7 @@ def collect(db):
         if e.event_type == "FXS_DTMF":
             d = (e.payload_json or {}).get("digit")
             dtmf_by_sid[e.session_id].append((e.session_relative_ms or 0, str(d or "?")))
+            f["dtmf_count"] += 1
             if e.call_id:
                 f["in_call_dtmf"] += 1
         elif e.event_type in ("FXS_OFFHOOK", "FXS_ONHOOK"):
@@ -224,6 +227,10 @@ def collect(db):
     for a in db.execute(select(ReproductionAttempt)).scalars():
         if a.session_id in facts:
             facts[a.session_id]["attempts"].append(a.status)
+            if a.started_at and a.ended_at and a.ended_at >= a.started_at:
+                facts[a.session_id]["attempt_durations"].append(
+                    round((a.ended_at - a.started_at).total_seconds(), 2)
+                )
     for c in db.execute(select(ReproductionCall)).scalars():
         f = facts.get(c.session_id)
         if f is None:
@@ -299,14 +306,22 @@ def judge(cid: str, spec: dict, f: dict) -> tuple[str, list[str]]:
             bad.append(f"expected exactly 1 call, got {f['calls']}")
         if not exp["call"] and f["calls"] != 0:
             bad.append(f"expected no call, got {f['calls']}")
-    if "hook_s" in exp and f["hook_s"] is not None:
+    if "hook_s" in exp:
         lo, hi = exp["hook_s"]
-        if not (lo <= f["hook_s"] <= hi):
-            bad.append(f"hook duration {f['hook_s']}s outside [{lo},{hi}]")
+        # A session can contain several off-hook/on-hook rounds, so the
+        # session-wide OFFHOOK..ONHOOK span is meaningless here. Judge each
+        # attempt and accept when at least one round matches the case intent.
+        per = f["attempt_durations"]
+        cands = per or ([f["hook_s"]] if f["hook_s"] is not None else [])
+        if cands and not any(lo <= d <= hi for d in cands):
+            bad.append(f"no round within [{lo},{hi}]s (rounds={cands})")
     if "bind" in exp and exp["bind"] not in f["bind"]:
         bad.append(f"missing bind event {exp['bind']} (have {sorted(f['bind']) or 'none'})")
     if exp.get("in_call_dtmf") and f["in_call_dtmf"] == 0:
-        bad.append("no in-call DTMF event (call_id IS NULL on all FXS_DTMF)")
+        bad.append(
+            f"no in-call DTMF event: {f['dtmf_count']} FXS_DTMF rows but all have "
+            "call_id NULL (see KNOWN-DEFECT DTMF attribution)"
+        )
 
     # 诊断
     if "verdict" in exp and f["verdicts"] and exp["verdict"] not in f["verdicts"]:
