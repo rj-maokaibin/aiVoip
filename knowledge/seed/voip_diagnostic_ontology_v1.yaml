@@ -1,0 +1,192 @@
+items:
+  - type: DIAGNOSTIC_ONTOLOGY
+    title: DTMF 首位丢失/号码丢失分层定位
+    summary: >-
+      将号码路径拆为话机 DTMF 信号、SLIC 检测/box、CPU/AIM getnumber、SIP/RTP DTMF 转发；
+      用同一次拨号的 PCM_RX、AIM 按键日志和协议侧结果寻找首次不一致层。
+    verified: true
+    tags: [voip, dtmf, first_digit_loss, slic, aimd, pcm_rx, sip]
+    content_json:
+      symptom: DTMF_LOSS
+      fault_domains: [PHONE_SIGNAL, SLIC_DETECTION, CPU_AIM_INPUT, SIP_DTMF_FORWARD]
+      preconditions: [同一次拨号可对齐, 已知用户实际输入号码]
+      path:
+        - {stage: PHONE_SIGNAL, observable: 用户实际输入/话机生成 DTMF}
+        - {stage: PCM_RX, observable: 话机进入设备的 DTMF PCM/频谱}
+        - {stage: AIM_GETNUMBER, observable: CPU/AIM 获取号码日志}
+        - {stage: SIP_DTMF_FORWARD, observable: SIP INFO/RFC2833/呼出号码结果}
+      discriminating_questions:
+        - DTMF_FIRST_MISMATCH_LAYER
+        - DTMF_ROOT_CAUSE
+      required_evidence: [PCM_RX, AIM_DEBUG_LOG, PCAP]
+      expected_findings: [DTMF_PATH]
+      recommended_profiles: [POST_REBOOT_FIRST_CALL]
+      decision_logic:
+        - if: PCM_RX 与用户输入一致且 AIM_GETNUMBER 首次少位
+          boundary: PCM_RX_TO_SLIC_CPU_AIM
+        - if: AIM_GETNUMBER 完整但协议侧少位
+          boundary: AIM_TO_SIP_DTMF_FORWARD
+        - if: PCM_RX 已缺失或 DTMF 频谱不满足要求
+          boundary: PHONE_SIGNAL_OR_ANALOG_INPUT
+      evidence_policy: 当前 Case L1/L2 证据才能支持边界；历史 Case 只能作为 L4 经验佐证。
+
+  - type: DIAGNOSTIC_ONTOLOGY
+    title: 电流音/周期噪声分层定位
+    summary: >-
+      先区分本端硬件/话机引入、对端输入、网络 RTP 与本地 DSP/PCM 路径；
+      在活动媒体窗口对齐 RTP、PCM_RX、PCM_TX、频谱周期干扰和现场音频。
+    verified: true
+    tags: [voip, audio_noise, hum, periodic_interference, pcm, rtp]
+    content_json:
+      symptom: AUDIO_NOISE
+      fault_domains: [LOCAL_ANALOG, REMOTE_ANALOG, RTP_NETWORK, DSP_PCM, POWER_SUPPLY]
+      discriminating_questions: [AUDIO_NOISE_FAULT_LAYER, AUDIO_NOISE_ROOT_CAUSE]
+      required_evidence: [PCAP, PCM_RX, PCM_TX, FIELD_AUDIO]
+      expected_findings: [ACTIVE_MEDIA_WINDOW, PERIODIC_INTERFERENCE]
+      recommended_experiments: [POWER_SUPPLY_AB, PHONE_SWAP_AB, LINE_SWAP_AB, FXS_PORT_SWAP_AB, DEVICE_SWAP_AB]
+      decision_logic:
+        - if: 未通话摘机即可稳定听到噪声
+          supports: [LOCAL_ANALOG, PHONE_HARDWARE]
+        - if: RTP 干净但 PCM_RX/PCM_TX 某层首次出现周期干扰
+          supports: [DSP_PCM, LOCAL_ANALOG]
+        - if: RTP 输入已含同频干扰且 PCM 仅忠实复现
+          supports: [REMOTE_ANALOG, RTP_UPSTREAM]
+
+  - type: DIAGNOSTIC_ONTOLOGY
+    title: 单通/无声媒体路径定位
+    summary: >-
+      对齐 SDP 媒体协商、双向 RTP 流、PCM_RX/PCM_TX 与 FXS 通话状态，判断问题首次出现在网络媒体还是本地音频路径。
+    verified: true
+    tags: [voip, one_way_audio, no_audio, rtp, sdp, pcm]
+    content_json:
+      symptom: ONE_WAY_AUDIO
+      fault_domains: [SIP_SDP, RTP_NETWORK, DSP_PCM, FXS_ANALOG]
+      discriminating_questions: [ONE_WAY_FAULT_LAYER, ONE_WAY_ROOT_CAUSE]
+      required_evidence: [PCAP, PCM_RX, PCM_TX]
+      expected_findings: [CALL_MEDIA_DIRECTION, ONE_WAY_RTP_MEDIA]
+      decision_logic:
+        - if: SDP 方向/地址协商异常
+          boundary: SIP_SDP
+        - if: 某方向 RTP 未到达但本地 PCM 路径无异常
+          boundary: RTP_NETWORK
+        - if: RTP 双向正常但某方向 PCM 缺失
+          boundary: DSP_PCM_OR_FXS
+
+  - type: DIAGNOSTIC_ONTOLOGY
+    title: 通话卡顿/断续定位
+    summary: >-
+      同一活动媒体窗口比较 RTP 丢包/乱序/抖动与 PCM rff/tfe 等本地媒体异常，避免把网络问题和 DSP/话机问题混为一类。
+    verified: true
+    tags: [voip, stutter, jitter, packet_loss, pcm, rtp]
+    content_json:
+      symptom: AUDIO_STUTTER
+      fault_domains: [RTP_NETWORK, DSP_PCM, PHONE_HALF_DUPLEX]
+      discriminating_questions: [STUTTER_FAULT_LAYER, STUTTER_ROOT_CAUSE]
+      required_evidence: [PCAP, PCM_RX, PCM_TX, DSP_COUNTERS]
+      expected_findings: [ACTIVE_MEDIA_WINDOW]
+      decision_logic:
+        - if: RTP 丢包/抖动与卡顿窗口强对齐
+          supports: [RTP_NETWORK]
+        - if: RTP 正常而 PCM rff/tfe 或本地媒体事件异常
+          supports: [DSP_PCM]
+        - if: 特定面板话机在播放/环境声触发下采集通道被关闭
+          supports: [PHONE_HALF_DUPLEX]
+
+  - type: DIAGNOSTIC_ONTOLOGY
+    title: 回声/啸叫定位
+    summary: >-
+      区分话机声学反馈、回声消除参数/算法和远端路径；先换常见话机做 A/B，再结合 PCM/RTP 时序判断回声形成层。
+    verified: true
+    tags: [voip, echo, howl, acoustic_feedback, echo_canceller]
+    content_json:
+      symptom: ECHO
+      fault_domains: [PHONE_ACOUSTIC, DSP_ECHO_CANCELLER, REMOTE_PATH]
+      discriminating_questions: [ECHO_FAULT_LAYER, ECHO_ROOT_CAUSE]
+      required_evidence: [PCAP, PCM_RX, PCM_TX]
+      expected_findings: [ECHO_PATH]
+      decision_logic:
+        - if: 更换常见话机后啸叫消失
+          supports: [PHONE_ACOUSTIC]
+        - if: 回声在本地 PCM 路径形成且 RTP 输入无对应副本
+          supports: [DSP_ECHO_CANCELLER, LOCAL_ACOUSTIC]
+
+  - type: DIAGNOSTIC_ONTOLOGY
+    title: SIP 注册失败分层定位
+    summary: >-
+      先确认 Voice VLAN/IP/绑定接口和适配层下发，再核对 AIM 注册配置；仍失败时用 PBX 侧/Voice VLAN PCAP 判断请求是否发出及响应类型。
+    verified: true
+    tags: [voip, sip, register, voice_vlan, aimd, pbx]
+    content_json:
+      symptom: REGISTER_FAILURE
+      fault_domains: [VOICE_VLAN, ADAPTER_CONFIG, AIM_CONFIG, NETWORK_ROUTE_DNS, PBX_AUTH_POLICY]
+      discriminating_questions: [REGISTER_PATH_FAILURE_DOMAIN, REGISTER_ROOT_CAUSE]
+      required_evidence: [DEVICE_CONFIG, ADAPTER_LOG, AIM_DEBUG_LOG, PCAP]
+      expected_findings: [REGISTER_ATTEMPT]
+      decision_logic:
+        - if: Voice VLAN 未创建/无 IP/未绑定接口
+          boundary: VOICE_VLAN
+        - if: 适配层参数与配置不一致或下发 AIM 失败
+          boundary: ADAPTER_CONFIG
+        - if: REGISTER 已发出且收到 401/403/超时等响应
+          boundary: SIP_PBX_OR_NETWORK
+
+  - type: DIAGNOSTIC_ONTOLOGY
+    title: 呼叫建立失败/回铃延迟定位
+    summary: >-
+      用 AIM 拨号结束时间、INVITE 发出时间和 PBX 响应/180 Ringing 时间做时间线，区分设备拨号超时、SIP 信令和 PBX 处理延迟。
+    verified: true
+    tags: [voip, call_setup, invite, ringback, pbx, timeout]
+    content_json:
+      symptom: CALL_SETUP_FAILURE
+      fault_domains: [DTMF_DIAL_TIMER, SIP_CALL_SETUP, PBX_PROCESSING]
+      discriminating_questions: [CALL_SETUP_FAILURE_LAYER, CALL_SETUP_ROOT_CAUSE]
+      required_evidence: [AIM_DEBUG_LOG, PCAP]
+      expected_findings: [SIP_CALL_ATTEMPT]
+
+  - type: DIAGNOSTIC_ONTOLOGY
+    title: FXS 无馈电/摘挂机/响铃基础定位
+    summary: >-
+      检查 aimd.s、license、BBD 与 SLIC 初始化，再对齐 Hook State、摘挂机电流和国家区域参数；响铃问题重点核对电压/频率是否符合区域标准。
+    verified: true
+    tags: [voip, fxs, feed, hook, ring, slic, bbd, license]
+    content_json:
+      symptoms: [NO_FEED, HOOK_ABNORMAL, RING_ABNORMAL]
+      fault_domains: [AIM_PROCESS, LICENSE, BBD, SLIC_SPI, REGION_PARAMETER, PHONE_LINE]
+      required_evidence: [PROCESS_STATE, DEVICE_CONFIG, AIM_DEBUG_LOG, FXS_INFORMATION]
+      decision_logic:
+        - if: aimd.s/license/BBD 缺失或 SLIC 初始化报错
+          boundary: VOIP_RUNTIME_OR_SLIC_INIT
+        - if: Hook State 与现场动作不一致
+          boundary: FXS_HOOK_DETECTION
+        - if: 振铃电压/频率与区域参数不一致
+          boundary: REGION_OR_RING_PARAMETER
+
+  - type: DIAGNOSTIC_ONTOLOGY
+    title: VOIP 配置适配层异常定位
+    summary: >-
+      将界面配置、适配层参数、Voice VLAN/IP/绑定接口和 AIM 实际配置逐层对齐；只有前层一致后才继续判断 AIM/PBX。
+    verified: true
+    tags: [voip, adapter, config, voice_vlan, aimd]
+    content_json:
+      fault_domains: [UI_CONFIG, ADAPTER_CONFIG, VOICE_INTERFACE_BIND, AIM_CONFIG]
+      required_evidence: [DEVICE_CONFIG, ADAPTER_LOG, AIM_CONFIG]
+      path:
+        - UI_CONFIG
+        - ADAPTER_CONFIG
+        - VOICE_INTERFACE_BIND
+        - AIM_CONFIG
+        - SIP_RUNTIME
+
+  - type: DIAGNOSTIC_ONTOLOGY
+    title: PCM 诊断采集拓扑约束
+    summary: >-
+      PCM_RX/PCM_TX 命令中的目标 IP 是语音网关/PBX 侧的 UDP 接收目的地址参数；故障助手只 SSH 控制被测 VOIP 设备，不把语音网关当成受控 DUT。
+    verified: true
+    tags: [voip, pcm_rx, pcm_tx, topology, dut, voice_gateway]
+    content_json:
+      invariant: ONLY_DUT_IS_SSH_CONTROLLED
+      pcm_destination_semantics: VOICE_GATEWAY_IP_IS_UDP_DESTINATION_ARGUMENT
+      channels:
+        PCM_RX: {default_port: 40000, direction: RX}
+        PCM_TX: {default_port: 50000, direction: TX}
+      safety: [禁止假设可 SSH/控制 PBX, cleanup 只作用于 DUT 上开启的临时采集状态]
