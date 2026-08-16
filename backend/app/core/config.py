@@ -52,7 +52,20 @@ class Settings(BaseSettings):
     reasoning_gateway_timeout_seconds: float = 20.0
     ai_shadow_enabled: bool = False
     ai_shadow_workflow_version: str = "ai-shadow-v1"
+    # AI promotion is capability-based. OFF/SHADOW/SUGGEST/CONTROLLED_PLANNER.
+    # The deterministic reasoner remains formal authority at every stage.
+    ai_promotion_stage: str = "OFF"
+    # This flag must be produced by an external quality/promotion gate. It only
+    # permits selection of registered question/profile/experiment IDs; it never
+    # permits raw device commands or AI-only root-cause confirmation.
+    ai_promotion_gate_passed: bool = False
     ai_eval_min_samples: int = 10
+    ai_eval_min_top1_recall: float = 0.60
+    ai_eval_min_top3_recall: float = 0.80
+    ai_eval_min_fault_domain_recall: float = 0.80
+    ai_eval_min_evidence_precision: float = 0.98
+    ai_eval_max_unsupported_claim_rate: float = 0.05
+    ai_eval_max_unauthorized_suggestion_rate: float = 0.0
     reasoning_gateway_models: str = ""
     reasoning_gateway_failover_enabled: bool = True
     auth_allow_anonymous_dev: bool = True
