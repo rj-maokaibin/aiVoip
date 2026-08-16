@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.db.models import AIProposalRecord, Evidence
+from app.diagnosis.claim_grounding import ClaimGroundingValidator, DiagnosticClaim
 from app.diagnosis.gateway import ReasoningGatewayClient
 from app.services.audit import audit
 
@@ -43,11 +44,18 @@ class AIRecommendedAction(BaseModel):
 
 
 class AIProposal(BaseModel):
+    """Non-executable model output contract.
+
+    ``ai-proposal-v1`` remains accepted for compatibility.  ``ai-proposal-v2`` adds
+    structured DiagnosticClaim objects but does not increase model authority.
+    """
+
     model_config = ConfigDict(extra='forbid')
 
-    schema_version: Literal['ai-proposal-v1']
+    schema_version: Literal['ai-proposal-v1', 'ai-proposal-v2']
     intent: Literal['DIAGNOSIS_ENHANCEMENT']
     hypotheses: list[AIHypothesisProposal] = Field(default_factory=list, max_length=20)
+    claims: list[DiagnosticClaim] = Field(default_factory=list, max_length=100)
     known: list[str] = Field(default_factory=list, max_length=100)
     unknown: list[str] = Field(default_factory=list, max_length=100)
     excluded: list[str] = Field(default_factory=list, max_length=100)
@@ -66,9 +74,9 @@ _FORBIDDEN_COMMAND = re.compile(
 class AIProposalValidator:
     """Validate model output without turning it into executable state.
 
-    Validation is deliberately fail-closed. The normalized output adds the
-    invariant fields used by downstream read-only consumers: every AI-created
-    hypothesis is OPEN, non-confirmable and L5, with confidence capped at 0.75.
+    Validation is fail-closed. Every AI-created hypothesis is OPEN,
+    non-confirmable and L5, with confidence capped at 0.75. AI-created claims are
+    likewise L5/PROPOSED and may only reference Evidence owned by the current Case.
     """
 
     def validate(self, db: Session, *, case_id: str, raw: dict,
@@ -87,19 +95,34 @@ class AIProposalValidator:
         if _FORBIDDEN_COMMAND.search(str(serialized)):
             errors.append({'code': 'COMMAND_OR_TEMPLATE_FORBIDDEN'})
 
-        referenced = {
+        hypothesis_refs = {
             evidence_id
             for hypothesis in proposal.hypotheses
             for evidence_id in (
                 hypothesis.supporting_evidence_ids + hypothesis.contradicting_evidence_ids
             )
         }
+        claim_refs = {
+            ref.evidence_id
+            for claim in proposal.claims
+            for ref in claim.evidence
+        }
+        referenced = hypothesis_refs | claim_refs
+        owned: set[str] = set()
         if referenced:
             owned = set(db.scalars(select(Evidence.id).where(
                 Evidence.case_id == case_id, Evidence.id.in_(referenced)
             )))
             for evidence_id in sorted(referenced - owned):
                 errors.append({'code': 'EVIDENCE_NOT_IN_CASE', 'evidence_id': evidence_id})
+
+        if proposal.claims:
+            grounding = ClaimGroundingValidator().validate(
+                proposal.claims,
+                allowed_evidence_ids=owned,
+                ai_generated=True,
+            )
+            errors.extend(grounding.errors)
 
         baseline_excluded = set(deterministic_baseline.get('excluded') or [])
         for claim in sorted(set(proposal.known) & baseline_excluded):
@@ -139,6 +162,9 @@ class AIProposalValidator:
             hypothesis['status'] = 'OPEN'
             hypothesis['confirmable'] = False
             hypothesis['evidence_level'] = 'L5'
+        for claim in serialized['claims']:
+            claim['status'] = 'PROPOSED'
+            claim['evidence_level'] = 'L5'
         return serialized, []
 
 
@@ -210,6 +236,7 @@ def run_ai_shadow(db: Session, *, case_id: str, diagnosis_run_id: str | None,
         db, case_id=case_id, actor='ai-shadow', event_type='AI_PROPOSAL_EVALUATED',
         target_type='ai_proposal', target_id=row.id,
         detail={'status': status, 'model': gateway.model, 'latency_ms': latency_ms,
-                'validation_error_count': len(errors), 'formal_result_changed': False},
+                'validation_error_count': len(errors), 'formal_result_changed': False,
+                'claim_count': len((validated or {}).get('claims') or [])},
     )
     return row
