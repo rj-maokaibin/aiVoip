@@ -54,7 +54,7 @@ jobs:
         shell: bash
         run: |
           set +e
-          PYTHONPATH=backend pytest -q backend/tests --tb=short 2>&1 | tee /tmp/backend-pytest.log
+          PYTHONPATH=backend:. pytest -q backend/tests --tb=short 2>&1 | tee /tmp/backend-pytest.log
           status=${PIPESTATUS[0]}
           if [ "$status" -ne 0 ]; then
             python - <<'PY'
