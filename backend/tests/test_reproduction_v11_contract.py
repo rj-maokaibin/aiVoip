@@ -107,6 +107,66 @@ def test_generic_profile_does_not_treat_path_presence_as_a_fault():
     ) == CallVerdict.MATCH
 
 
+def test_dtmf_loss_requires_loss_signal_not_path_presence():
+    """DTMF_PATH (dial digits / in-call key presses observed) must NOT be treated
+    as DTMF loss. Only a real loss signal (PCM dial digits mismatch the SIP
+    target) may produce a DTMF_LOSS MATCH. Regression test for the false MATCH
+    observed on real hardware (call where 1234567890 was fully captured but the
+    DTMF_LOSS profile still returned MATCH because DTMF_PATH was present)."""
+    signal = QuickAnalysisInput(verdict=CallVerdict.INCONCLUSIVE)  # real-platform signal
+
+    # DTMF observed but no loss -> NO_MATCH (was a false MATCH before the fix).
+    assert EvidenceBackedCallQuickAnalyzer._verdict(
+        "DTMF_LOSS", {"DTMF_PATH", "ACTIVE_MEDIA_WINDOW"}, signal
+    ) == CallVerdict.NO_MATCH
+    # Real loss signal present -> MATCH.
+    assert EvidenceBackedCallQuickAnalyzer._verdict(
+        "DTMF_LOSS", {"DTMF_PATH", "DTMF_LOSS"}, signal
+    ) == CallVerdict.MATCH
+
+
+def test_findings_dtmf_loss_only_from_dial_mismatch():
+    """DTMF_PATH is an observation; DTMF_LOSS is added only when the cross-layer
+    dial comparison reports a PCM-vs-SIP mismatch."""
+    result = {
+        'packet': {'calls': [], 'anomalies': [], 'rtp_streams': []},
+        'correlations': [],
+        'echo_paths': [],
+        'periodic_interference_paths': [],
+        'cross_layer_events': [{'type': 'DTMF_SIP_DIAL_MATCH'}],
+        'pcm': {'streams': [{'sessions': [{'dtmf_sequences': [{'digits': '301'}]}]}]},
+    }
+    assert EvidenceBackedCallQuickAnalyzer._findings(result) == {'DTMF_PATH'}
+
+    result['cross_layer_events'].append({'type': 'DTMF_SIP_DIAL_MISMATCH'})
+    findings = EvidenceBackedCallQuickAnalyzer._findings(result)
+    assert 'DTMF_PATH' in findings
+    assert 'DTMF_LOSS' in findings
+
+
+def test_pcm_dtmf_sequences_extracts_media_truth():
+    """The authoritative PCM-media DTMF sequences (complete even when the FXS
+    event report drops fast-pressed digits) are extracted from the analysis."""
+    result = {
+        'pcm': {'streams': [
+            {'tap': {'name': 'pcm_rx'}, 'sessions': [
+                {'session_index': 0, 'dtmf_sequences': [
+                    {'digits': '301', 'start_seconds': 3.0, 'end_seconds': 3.68, 'event_count': 3, 'min_confidence': 0.8},
+                    {'digits': '11110000', 'start_seconds': 9.0, 'end_seconds': 10.0, 'event_count': 8, 'min_confidence': 1.0},
+                ]},
+            ]},
+            {'tap': {'name': 'pcm_tx'}, 'sessions': [
+                {'session_index': 0, 'dtmf_sequences': []},
+            ]},
+        ]},
+    }
+    seqs = EvidenceBackedCallQuickAnalyzer._pcm_dtmf_sequences(result)
+    assert len(seqs) == 2
+    assert seqs[0]['digits'] == '301' and seqs[0]['tap'] == 'pcm_rx'
+    assert seqs[1]['digits'] == '11110000' and seqs[1]['event_count'] == 8
+    assert EvidenceBackedCallQuickAnalyzer._pcm_dtmf_sequences({'pcm': {'streams': []}}) == ()
+
+
 def test_activity_gated_arm_accepts_path_ready_but_marks_verification_pending():
     root = Path(__file__).resolve().parents[2] / "profiles"
     profile = ReproductionProfileRegistry(root).get("AUDIO_NOISE").definition

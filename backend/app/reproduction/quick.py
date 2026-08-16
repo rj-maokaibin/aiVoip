@@ -50,13 +50,21 @@ class QuickAnalysisResult:
     input_evidence_ids: tuple[str,...] = ()
     output_evidence_ids: tuple[str,...] = ()
     analysis_summary: dict = field(default_factory=dict)
+    # Authoritative DTMF digits detected in the PCM media (raw audio). Fast key
+    # presses that the device DSP's FXS event report drops still appear here, so
+    # this is the complete media-truth sequence used to reconcile the DTMF record.
+    pcm_dtmf_sequences: tuple[dict, ...] = ()
 
 
 _TARGET_FINDING = {
     'AUDIO_NOISE':'PERIODIC_INTERFERENCE',
     'AUDIO_STUTTER':'RTP_BURST_LOSS',
     'ONE_WAY_AUDIO':'ONE_WAY_RTP_MEDIA',
-    'DTMF_LOSS':'DTMF_PATH',
+    # DTMF_LOSS must map to a *loss* signal, not DTMF_PATH. DTMF_PATH only means
+    # "DTMF was observed in the media path"; it does not imply digits were lost.
+    # Treating DTMF presence as the DTMF_LOSS target caused every DTMF-bearing
+    # call (dial digits, in-call key presses) to be a false MATCH.
+    'DTMF_LOSS':'DTMF_LOSS',
     'ECHO':'ECHO_PATH',
     'CALL_SETUP_FAILURE':'SIP_CALL_FAILED',
     'REGISTER_FAILURE':'REGISTER_ATTEMPT',
@@ -88,6 +96,7 @@ class EvidenceBackedCallQuickAnalyzer:
             findings=self._findings(result)
             verdict=self._verdict(session.profile_key,findings,signal)
             role={CallVerdict.MATCH:CallRole.TARGET,CallVerdict.NO_MATCH:CallRole.CONTROL,CallVerdict.INCONCLUSIVE:CallRole.INCONCLUSIVE}[verdict]
+            pcm_dtmf=self._pcm_dtmf_sequences(result)
             # Persist generated media artifacts as regeneratable Analyzer artifacts.
             for spec in result.get('artifacts',[]):
                 local=Path(spec['local_path']); data=local.read_bytes(); sha=hashlib.sha256(data).hexdigest()
@@ -101,6 +110,9 @@ class EvidenceBackedCallQuickAnalyzer:
                 'media_summary':result.get('summary') or {},'packet_summary':(result.get('packet') or {}).get('summary') or {},
                 'pcm_summary':(result.get('pcm') or {}).get('summary') or {},'mock_scenario_expected_verdict':signal.verdict.value,
                 'mock_scenario_requested_findings':list(signal.findings),
+                # Authoritative PCM-media DTMF sequences (complete even under fast key
+                # presses that the device FXS event report may drop).
+                'pcm_dtmf_sequences':[dict(x) for x in pcm_dtmf],
             }
             encoded=json.dumps({'summary':summary,'analysis':result},ensure_ascii=False,separators=(',',':'),default=str).encode()
             key=f'cases/{call.case_id}/reproductions/{session.id}/analysis/{run.id}/call_quick.json'; self.storage.put_bytes(key,encoded,'application/json')
@@ -114,7 +126,8 @@ class EvidenceBackedCallQuickAnalyzer:
             run.finished_at=_utcnow(); run.summary_json=summary; run.result_object_key=key; run.output_evidence_ids=[finding_ev.id]
             db.flush()
             return QuickAnalysisResult(verdict,role,tuple(sorted(findings)),signal.hard_contradiction,signal.capture_recovery_required,
-                signal.external_action_required,{**signal.metrics,'media_summary':result.get('summary') or {}},run.id,(pcap_evidence.id,),(finding_ev.id,),summary)
+                signal.external_action_required,{**signal.metrics,'media_summary':result.get('summary') or {}},run.id,(pcap_evidence.id,),(finding_ev.id,),summary,
+                tuple(pcm_dtmf))
 
     @staticmethod
     def _findings(result:dict) -> set[str]:
@@ -134,10 +147,43 @@ class EvidenceBackedCallQuickAnalyzer:
         if any(e.get('type')=='LOCAL_CAPTURE_PERIODIC_INTERFERENCE' for e in result.get('periodic_interference_paths',[]) or []): out.add('PERIODIC_INTERFERENCE')
         if any(e.get('type')=='PCM_RTP_CORRELATION' for e in result.get('correlations',[]) or []): out.add('PCM_RTP_CORRELATION')
         if any(e.get('type')=='ECHO_PATH_DETECTED' for e in result.get('echo_paths',[]) or []): out.add('ECHO_PATH')
+        # DTMF loss: the PCM RX dialed-digit sequence disagrees with the SIP dial
+        # target (a digit was dropped or the number was assembled wrong in the
+        # media path).  This is a real DTMF_LOSS signal.  DTMF_PATH below remains
+        # a path observability observation and is intentionally NOT a loss signal.
+        cross=result.get('cross_layer_events') or []
+        if any(e.get('type')=='DTMF_SIP_DIAL_MISMATCH' for e in cross):
+            out.add('DTMF_LOSS')
         pcm=result.get('pcm') or {}
         if any(sess.get('dtmf_sequences') for stream in pcm.get('streams',[]) for sess in (stream.get('sessions') or [])):
             out.add('DTMF_PATH')
         return out
+
+    @staticmethod
+    def _pcm_dtmf_sequences(result: dict) -> tuple[dict, ...]:
+        """Authoritative DTMF sequences detected in the PCM media (raw audio).
+
+        These come from the Goertzel detector on the captured media, independent of
+        the device FXS event report. Fast key presses that the DSP's FXS event
+        detector drops still appear here, so this is the complete media truth used
+        to reconcile the DTMF record and to judge DTMF-sequence completeness.
+        """
+        out=[]
+        pcm=result.get('pcm') or {}
+        for stream in pcm.get('streams',[]):
+            tap=(stream.get('tap') or {}).get('name')
+            for sess in stream.get('sessions',[]):
+                for seq in sess.get('dtmf_sequences') or []:
+                    out.append({
+                        'tap': tap,
+                        'session_index': sess.get('session_index'),
+                        'digits': seq.get('digits'),
+                        'start_seconds': seq.get('start_seconds'),
+                        'end_seconds': seq.get('end_seconds'),
+                        'event_count': seq.get('event_count'),
+                        'min_confidence': seq.get('min_confidence'),
+                    })
+        return tuple(out)
 
     @staticmethod
     def _verdict(profile_id:str, findings:set[str], signal:QuickAnalysisInput) -> CallVerdict:

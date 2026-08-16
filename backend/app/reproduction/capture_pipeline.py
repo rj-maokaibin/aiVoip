@@ -182,6 +182,42 @@ class ReproductionCapturePipeline:
         attempt=db.get(ReproductionAttempt,call.attempt_id) if call.attempt_id else None
         start=int(attempt.start_anchor_ms if attempt and attempt.start_anchor_ms is not None else 0)
         end=int(attempt.end_anchor_ms if attempt and attempt.end_anchor_ms is not None else start+1000)
+        # For segmented-ring captures the per-call window is anchored to the FXS
+        # on-hook anchor. Media that landed in the FOLLOWING ring segment (e.g.
+        # in-call DTMF / audio tail just before hang-up) was being truncated out
+        # of the per-call analysis even though the raw session capture holds it.
+        # Extend the window by the profile post-capture window so that media tail
+        # is retained, bounded by the last retained segment end and the next
+        # attempt's start (never bleed into a subsequent call).
+        snapshot=session.effective_profile_snapshot or {}
+        post_capture_ms=int(((snapshot.get('timeouts') or {}).get('post_capture_seconds')) or 0)*1000
+        if attempt is not None and attempt.end_anchor_ms is not None:
+            upper=int(attempt.end_anchor_ms)+post_capture_ms
+            # The fixed post-capture window alone is insufficient: the media
+            # stream continues until the SIP BYE (not the FXS on-hook anchor),
+            # so the final in-call key press / audio tail can land in a ring
+            # segment that starts AFTER on-hook+post_capture. Those tail segments
+            # are explicitly bound to this call, so extend the window to cover
+            # every retained segment attributed to this call (real session
+            # f43f6b7d lost the last DTMF '0' because seg5 started at 50454ms >
+            # on-hook 44600 + 3s post_capture = 47600ms and was dropped).
+            call_bound_end=db.scalar(select(func.max(ReproductionCaptureSegment.end_ms)).where(
+                ReproductionCaptureSegment.session_id==session.id,
+                ReproductionCaptureSegment.channel==CaptureChannel.PCAP.value,
+                ReproductionCaptureSegment.call_id==call.id,
+                ReproductionCaptureSegment.retained.is_(True)))
+            if call_bound_end is not None: upper=max(upper,int(call_bound_end))
+            next_start=db.scalar(select(func.min(ReproductionAttempt.start_anchor_ms)).where(
+                ReproductionAttempt.session_id==session.id,
+                ReproductionAttempt.attempt_no>attempt.attempt_no,
+                ReproductionAttempt.start_anchor_ms.is_not(None)))
+            if next_start is not None: upper=min(upper,int(next_start))
+            last_end=db.scalar(select(func.max(ReproductionCaptureSegment.end_ms)).where(
+                ReproductionCaptureSegment.session_id==session.id,
+                ReproductionCaptureSegment.channel==CaptureChannel.PCAP.value,
+                ReproductionCaptureSegment.retained.is_(True)))
+            if last_end is not None: upper=min(upper,int(last_end))
+            end=int(max(end,upper))
         rows=self._overlap_segments(db,session.id,channel=CaptureChannel.PCAP,start_ms=start,end_ms=end)
         # The CALL_FINAL segment is the platform's merged in-call media (for the real
         # platform it already includes the pretrigger via platform.cache_pretrigger,

@@ -339,13 +339,33 @@ class ReproductionOrchestrator:
                                                       relative_ms=relative_ms,end_anchor='FXS_ONHOOK',actor=actor)
             return None
         if event.event=='DTMF':
-            if state!=ReproductionState.ACTIVITY_DETECTED:
+            # A digit is meaningful both while dialing (ACTIVITY_DETECTED) and once the
+            # call is up (CALL_DETECTED/CAPTURING, e.g. IVR input). Dropping the latter
+            # made in-call DTMF unobservable, so record across the whole off-hook span.
+            if state not in {ReproductionState.ACTIVITY_DETECTED,ReproductionState.CALL_DETECTED,
+                             ReproductionState.CAPTURING}:
                 return None
+            attempt=db.scalar(select(ReproductionAttempt).where(
+                ReproductionAttempt.session_id==session.id,
+                ReproductionAttempt.status==AttemptStatus.ACTIVE.value).order_by(ReproductionAttempt.attempt_no.desc()))
+            # Attribute to the Call when it already exists at write time. Binding
+            # trails physical answer by ~8s (segmented capture), so digits pressed
+            # during a call usually arrive before the Call row; correct in-call
+            # attribution for those needs post-hoc PCAP reconciliation (pending).
+            call=None
+            if attempt is not None:
+                call=db.scalar(select(ReproductionCall).where(
+                    ReproductionCall.session_id==session.id,
+                    ReproductionCall.attempt_id==attempt.id,
+                    ReproductionCall.status==ReproductionCallStatus.ACTIVE.value).order_by(ReproductionCall.call_no.desc()))
+            in_call=call is not None
             db.add(ReproductionEventRecord(
-                session_id=session.id,case_id=session.case_id,event_type='FXS_DTMF',source='REAL_PLATFORM',
+                session_id=session.id,attempt_id=attempt.id if attempt else None,
+                call_id=call.id if call else None,
+                case_id=session.case_id,event_type='FXS_DTMF',source='REAL_PLATFORM',
                 anchor_type=AnchorType.PRIMARY_START.value,session_relative_ms=int(relative_ms),
                 timestamp_source=TimestampSource.COLLECTOR_MONOTONIC.value,uncertainty_ms=1,
-                payload_json={'digit':event.digit}))
+                payload_json={'digit':event.digit,'in_call':in_call}))
             db.flush()
             return None
         return None
@@ -399,6 +419,12 @@ class ReproductionOrchestrator:
                 ReproductionCaptureSegment.call_id.is_(None),
             )):
                 segment.call_id=call.id
+        # NOTE: in-call DTMF attribution cannot be backfilled here. Call binding
+        # trails the physical answer by ~1 segment (~8s) because it waits on
+        # downloaded PCAP, so digits pressed during the call are typically
+        # recorded before the Call row exists. Correct in-call attribution
+        # requires post-hoc reconciliation against the PCAP-analyzed call window,
+        # which is a separate piece of work (see KNOWN-DEFECT in the ledger).
         # Cache the dialing-window pretrigger under the new call_id so the real
         # platform's final merged call.pcap includes the dialing DTMF/silence (the
         # pretrigger is captured above, before the call row existed).
@@ -525,6 +551,10 @@ class ReproductionOrchestrator:
             'external_action_required':result.external_action_required,'input_evidence_ids':list(result.input_evidence_ids),
             'output_evidence_ids':list(result.output_evidence_ids),'analysis_summary':result.analysis_summary,
         }
+        # Reconcile the authoritative PCM-media DTMF sequences into the event record
+        # so fast key presses that the device FXS event report drops (DSP tone
+        # duration/inter-digit thresholds) are still reflected in the DTMF record.
+        self._reconcile_pcm_dtmf_events(db,session=session,call=call,result=result)
         if result.role==CallRole.TARGET and session.primary_target_call_id is None:
             session.primary_target_call_id=call.id
             emit_event(db,event_type=EventType.TARGET_CONFIRMED,case_id=session.case_id,entity_type='reproduction_call',entity_id=call.id,
@@ -551,6 +581,44 @@ class ReproductionOrchestrator:
         emit_event(db,event_type=EventType.REPRODUCTION_CALL_CHANGED,case_id=session.case_id,entity_type='reproduction_call',entity_id=call.id,
                    payload={'status':call.status,'verdict':call.verdict,'role':call.role,'sufficiency':decision.status.value})
         return call,decision
+
+    def _reconcile_pcm_dtmf_events(self, db: Session, *, session: ReproductionSession, call: ReproductionCall, result) -> None:
+        """Record PCM-media DTMF sequences as supplementary reproduction events.
+
+        The device FXS event report (``FXS_DTMF``) drops digits under fast key
+        presses (the DSP applies tone-duration / inter-digit thresholds); the PCM
+        media still carries those tones. Conversely the PCM media stream can end
+        before the physical hang-up, so FXS can hold digits the media lacks. No
+        single source is complete, so we record the media-truth sequences as
+        supplementary ``PCM_DTMF_SEQUENCE`` (source ``PCM_MEDIA_ANALYSIS``) events;
+        the complete DTMF record is the union of ``FXS_DTMF`` and
+        ``PCM_DTMF_SEQUENCE``. P2-2 / RP-D06 fast-dial verification relies on this.
+        """
+        seqs=getattr(result,'pcm_dtmf_sequences',()) or ()
+        if not seqs:
+            return
+        existing=set()
+        for row in db.scalars(select(ReproductionEventRecord).where(
+                ReproductionEventRecord.session_id==session.id,
+                ReproductionEventRecord.event_type=='PCM_DTMF_SEQUENCE',
+                ReproductionEventRecord.call_id==call.id)):
+            existing.add((row.event_type,(row.payload_json or {}).get('digits')))
+        for seq in seqs:
+            digits=seq.get('digits')
+            if not digits:
+                continue
+            if ('PCM_DTMF_SEQUENCE',digits) in existing:
+                continue
+            db.add(ReproductionEventRecord(
+                session_id=session.id,attempt_id=call.attempt_id,call_id=call.id,
+                case_id=session.case_id,event_type='PCM_DTMF_SEQUENCE',
+                source='PCM_MEDIA_ANALYSIS',anchor_type=AnchorType.PRIMARY_START.value,
+                session_relative_ms=int((seq.get('start_seconds') or 0)*1000),
+                timestamp_source=TimestampSource.PCAP.value,uncertainty_ms=10,
+                payload_json={'digits':digits,'event_count':seq.get('event_count'),
+                              'min_confidence':seq.get('min_confidence'),'tap':seq.get('tap'),
+                              'session_index':seq.get('session_index'),'supplementary':True}))
+        db.flush()
 
     def _evaluate_session_sufficiency(self, db: Session, *, session: ReproductionSession, current: QuickAnalysisResult) -> SufficiencyDecision:
         profile=self._profile(session)

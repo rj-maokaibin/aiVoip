@@ -1,22 +1,29 @@
 from __future__ import annotations
 
+import hashlib
+import struct
 from pathlib import Path
 
 import pytest
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
-from app.contracts.enums import CallVerdict, EvidenceKind, EvidenceSufficiency
+from app.contracts.enums import (
+    AttemptStatus, CallVerdict, CaptureChannel, CaptureSegmentStatus, EvidenceKind,
+    EvidenceSufficiency, ReproductionCallStatus, RetentionClass,
+)
 from app.db.base import Base
 from app.db.models import (
     AnalyzerRun, Case, CaseDevice, Evidence, EvidenceFinalizeRun,
-    ReproductionCaptureSegment, ReproductionCaptureState,
+    ReproductionAttempt, ReproductionCall, ReproductionCaptureSegment,
+    ReproductionCaptureState,
 )
 from app.integrations.storage import FilesystemObjectStorage
 from app.reproduction.bundle import build_reproduction_evidence_bundle
-from app.reproduction.capture_pipeline import ReproductionCapturePipeline
+from app.reproduction.capture_pipeline import ReproductionCapturePipeline, _utcnow
 from app.reproduction.mock_platform import MockReproductionPlatform
 from app.reproduction.orchestrator import ReproductionOrchestrator
+from app.reproduction.pcap_codec import PcapRecord, build_pcap, udp_ethernet_frame
 from app.reproduction.profile import ReproductionProfileRegistry
 from app.reproduction.quick import QuickAnalysisInput
 
@@ -126,3 +133,192 @@ def test_ring_eviction_deletes_unfrozen_local_segment_but_never_retained_evidenc
         evicted=pipe.evict_ring(db,session=session,current_end_ms=2500)
         assert a.id in evicted and not Path(a.local_path).exists()
         assert Path(b.local_path).exists() and b.status=='ACTIVE'
+
+
+def test_build_call_capture_includes_post_onhook_media_tail(tmp_path):
+    """Per-call capture window must extend past the FXS on-hook anchor by the
+    profile post-capture window, so in-call DTMF/audio pressed just before
+    hang-up (landed in the following ring segment) is not truncated from the
+    per-call analysis. Regression for real session e694d134 where the DTMF tail
+    (4567890) was cut off because the next segment started after the on-hook
+    anchor."""
+    def pcap_stats(path):
+        data=Path(path).read_bytes(); magic=struct.unpack('<I',data[:4])[0]
+        pos=24; n=0; first=None; last=None
+        while pos+16<=len(data):
+            sec,frac,incl,_=struct.unpack('<IIII',data[pos:pos+16])
+            ts=sec+frac*1e-6
+            if first is None: first=ts
+            last=ts
+            pos+=16+incl; n+=1
+        return n,first,last
+
+    eng=_engine()
+    with Session(eng) as db:
+        _,_,orch,session,pipe=_setup(db,tmp_path,'DTMF_LOSS')
+        attempt=ReproductionAttempt(session_id=session.id,case_id=session.case_id,attempt_no=1,
+            status=AttemptStatus.COMPLETED.value,valid=True,start_anchor_type='FXS_OFFHOOK',start_anchor_ms=1000,
+            end_anchor_type='FXS_ONHOOK',end_anchor_ms=5000)
+        db.add(attempt); db.flush()
+        call=ReproductionCall(session_id=session.id,attempt_id=attempt.id,case_id=session.case_id,call_no=1,
+            status=ReproductionCallStatus.ACTIVE.value,started_at=_utcnow())
+        db.add(call); db.flush()
+
+        def add_seg(no,start,end,records):
+            p=tmp_path/f'cap_{no}.pcap'; data=build_pcap(records); p.write_bytes(data)
+            db.add(ReproductionCaptureSegment(session_id=session.id,attempt_id=attempt.id,call_id=call.id,
+                channel=CaptureChannel.PCAP.value,segment_no=no,start_ms=start,end_ms=end,local_path=str(p),
+                content_type='application/vnd.tcpdump.pcap',size_bytes=p.stat().st_size,sha256=hashlib.sha256(data).hexdigest(),
+                status=CaptureSegmentStatus.FROZEN.value,frozen=True,retained=True,
+                retention_class=RetentionClass.PERMANENT_RAW.value))
+            db.flush()
+        add_seg(1,800,5200,[PcapRecord(1.0,udp_ethernet_frame('192.0.2.1','192.0.2.2',40000,41000,b'aaa'))])
+        # Media tail: this segment starts AFTER the on-hook anchor (5200 > 5000).
+        # With the fix the window extends to 5000+post_capture(3000)=8000, so the
+        # tail is included instead of being truncated from the per-call analysis.
+        add_seg(2,5200,9000,[PcapRecord(6.0,udp_ethernet_frame('192.0.2.1','192.0.2.2',40000,41000,b'bbb'))])
+
+        pcap_path,ev=pipe.build_call_capture(db,session=session,call=call)
+        n,first,last=pcap_stats(pcap_path)
+        assert n==2, f'expected in-window + post-onhook tail merged, got {n} packets'
+        assert abs(first-1.0)<0.01 and abs(last-6.0)<0.01
+        assert ev.type=='CALL_PCAP' and ev.size_bytes>0
+
+
+def test_build_call_capture_does_not_bleed_into_next_attempt(tmp_path):
+    """The post-capture window extension must stop at the next attempt's start
+    so a later call's media is never merged into the current call's analysis."""
+    def pcap_stats(path):
+        data=Path(path).read_bytes(); pos=24; n=0; first=None; last=None
+        while pos+16<=len(data):
+            sec,frac,incl,_=struct.unpack('<IIII',data[pos:pos+16])
+            ts=sec+frac*1e-6
+            if first is None: first=ts
+            last=ts
+            pos+=16+incl; n+=1
+        return n,first,last
+
+    eng=_engine()
+    with Session(eng) as db:
+        _,_,orch,session,pipe=_setup(db,tmp_path,'DTMF_LOSS')
+        attempt=ReproductionAttempt(session_id=session.id,case_id=session.case_id,attempt_no=1,
+            status=AttemptStatus.COMPLETED.value,valid=True,start_anchor_type='FXS_OFFHOOK',start_anchor_ms=1000,
+            end_anchor_type='FXS_ONHOOK',end_anchor_ms=5000)
+        db.add(attempt); db.flush()
+        # a later attempt (next call) starts at 7000ms ¡ª the extension (5000+3000)
+        # must stop there and not pull in the next call's segment [7000,12000].
+        attempt2=ReproductionAttempt(session_id=session.id,case_id=session.case_id,attempt_no=2,
+            status=AttemptStatus.COMPLETED.value,valid=True,start_anchor_type='FXS_OFFHOOK',start_anchor_ms=7000,
+            end_anchor_type='FXS_ONHOOK',end_anchor_ms=11000)
+        db.add(attempt2); db.flush()
+        call=ReproductionCall(session_id=session.id,attempt_id=attempt.id,case_id=session.case_id,call_no=1,
+            status=ReproductionCallStatus.ACTIVE.value,started_at=_utcnow())
+        db.add(call); db.flush()
+
+        def add_seg(no,start,end,records,call_id=None):
+            p=tmp_path/f'cap2_{no}.pcap'; data=build_pcap(records); p.write_bytes(data)
+            db.add(ReproductionCaptureSegment(session_id=session.id,attempt_id=attempt.id,call_id=call_id or call.id,
+                channel=CaptureChannel.PCAP.value,segment_no=no,start_ms=start,end_ms=end,local_path=str(p),
+                content_type='application/vnd.tcpdump.pcap',size_bytes=p.stat().st_size,sha256=hashlib.sha256(data).hexdigest(),
+                status=CaptureSegmentStatus.FROZEN.value,frozen=True,retained=True,
+                retention_class=RetentionClass.PERMANENT_RAW.value))
+            db.flush()
+        add_seg(1,800,5200,[PcapRecord(1.0,udp_ethernet_frame('192.0.2.1','192.0.2.2',40000,41000,b'aaa'))])
+        # next call's segment bound to a DIFFERENT call -> must NOT be merged in.
+        add_seg(2,7000,12000,[PcapRecord(9.0,udp_ethernet_frame('192.0.2.1','192.0.2.2',40000,41000,b'xxx'))],call_id='other-call')
+
+        pcap_path,ev=pipe.build_call_capture(db,session=session,call=call)
+        n,first,last=pcap_stats(pcap_path)
+        assert n==1, f'expected only current-call media, got {n} packets (bleed into next attempt)'
+        assert abs(first-1.0)<0.01
+        assert ev.type=='CALL_PCAP'
+
+
+def test_build_call_capture_includes_call_bound_tail_beyond_post_capture(tmp_path):
+    """Per-call window must extend to cover retained segments that are explicitly
+    bound to THIS call even when they start after on-hook + post_capture. The
+    fixed post-capture window alone is insufficient because the media stream runs
+    to the SIP BYE, so the final key press / audio tail can land in a ring segment
+    starting beyond on-hook+3s. Regression for real session f43f6b7d where the
+    last DTMF '0' was lost (seg5 started 50454 > on-hook 44600 + 3s = 47600)."""
+    def pcap_stats(path):
+        data=Path(path).read_bytes(); pos=24; n=0; first=None; last=None
+        while pos+16<=len(data):
+            sec,frac,incl,_=struct.unpack('<IIII',data[pos:pos+16])
+            ts=sec+frac*1e-6
+            if first is None: first=ts
+            last=ts
+            pos+=16+incl; n+=1
+        return n,first,last
+
+    eng=_engine()
+    with Session(eng) as db:
+        _,_,orch,session,pipe=_setup(db,tmp_path,'DTMF_LOSS')
+        attempt=ReproductionAttempt(session_id=session.id,case_id=session.case_id,attempt_no=1,
+            status=AttemptStatus.COMPLETED.value,valid=True,start_anchor_type='FXS_OFFHOOK',start_anchor_ms=1000,
+            end_anchor_type='FXS_ONHOOK',end_anchor_ms=5000)
+        db.add(attempt); db.flush()
+        call=ReproductionCall(session_id=session.id,attempt_id=attempt.id,case_id=session.case_id,call_no=1,
+            status=ReproductionCallStatus.ACTIVE.value,started_at=_utcnow())
+        db.add(call); db.flush()
+
+        def add_seg(no,start,end,records):
+            p=tmp_path/f'cap3_{no}.pcap'; data=build_pcap(records); p.write_bytes(data)
+            db.add(ReproductionCaptureSegment(session_id=session.id,attempt_id=attempt.id,call_id=call.id,
+                channel=CaptureChannel.PCAP.value,segment_no=no,start_ms=start,end_ms=end,local_path=str(p),
+                content_type='application/vnd.tcpdump.pcap',size_bytes=p.stat().st_size,sha256=hashlib.sha256(data).hexdigest(),
+                status=CaptureSegmentStatus.FROZEN.value,frozen=True,retained=True,
+                retention_class=RetentionClass.PERMANENT_RAW.value))
+            db.flush()
+        add_seg(1,800,5200,[PcapRecord(1.0,udp_ethernet_frame('192.0.2.1','192.0.2.2',40000,41000,b'aaa'))])
+        # Media tail bound to THIS call, starting AFTER on-hook(5000)+post_capture(3000)=8000.
+        # Without the call-bound extension this segment is dropped -> tail DTMF lost.
+        add_seg(2,8500,11000,[PcapRecord(9.5,udp_ethernet_frame('192.0.2.1','192.0.2.2',40000,41000,b'bbb'))])
+
+        pcap_path,ev=pipe.build_call_capture(db,session=session,call=call)
+        n,first,last=pcap_stats(pcap_path)
+        assert n==2, f'expected in-window + call-bound tail beyond post_capture, got {n} packets'
+        assert abs(first-1.0)<0.01 and abs(last-9.5)<0.01
+        assert ev.type=='CALL_PCAP'
+
+
+def test_reconcile_pcm_dtmf_records_authoritative_sequences(tmp_path):
+    """After CALL_QUICK, PCM-media DTMF sequences (media truth that survives fast
+    key presses the FXS event report drops) are reconciled into the event record
+    as authoritative PCM_DTMF_SEQUENCE events, idempotently."""
+    from app.contracts.enums import CallRole
+    from app.db.models import ReproductionEventRecord
+    from app.reproduction.quick import QuickAnalysisResult
+
+    eng=_engine()
+    with Session(eng) as db:
+        _,_,orch,session,pipe=_setup(db,tmp_path,'DTMF_LOSS')
+        attempt=ReproductionAttempt(session_id=session.id,case_id=session.case_id,attempt_no=1,
+            status=AttemptStatus.COMPLETED.value,valid=True,start_anchor_type='FXS_OFFHOOK',start_anchor_ms=1000,
+            end_anchor_type='FXS_ONHOOK',end_anchor_ms=5000)
+        db.add(attempt); db.flush()
+        call=ReproductionCall(session_id=session.id,attempt_id=attempt.id,case_id=session.case_id,call_no=1,
+            status=ReproductionCallStatus.ACTIVE.value,started_at=_utcnow())
+        db.add(call); db.flush()
+
+        result=QuickAnalysisResult(verdict=CallVerdict.NO_MATCH,role=CallRole.CONTROL,findings=(),
+            hard_contradiction=False,capture_recovery_required=False,external_action_required=False,
+            metrics={},analyzer_run_id='run1',
+            pcm_dtmf_sequences=({'digits':'11110000','event_count':8,'min_confidence':1.0,
+                                 'tap':'pcm_rx','session_index':0,'start_seconds':9.0},))
+        orch._reconcile_pcm_dtmf_events(db,session=session,call=call,result=result)
+        db.flush()
+        events=list(db.scalars(select(ReproductionEventRecord).where(
+            ReproductionEventRecord.session_id==session.id,
+            ReproductionEventRecord.event_type=='PCM_DTMF_SEQUENCE')))
+        assert len(events)==1
+        assert events[0].payload_json['digits']=='11110000'
+        assert events[0].source=='PCM_MEDIA_ANALYSIS' and events[0].call_id==call.id
+        assert events[0].payload_json.get('supplementary') is True
+        # idempotent: re-running does not duplicate the sequence event
+        orch._reconcile_pcm_dtmf_events(db,session=session,call=call,result=result)
+        db.flush()
+        again=list(db.scalars(select(ReproductionEventRecord).where(
+            ReproductionEventRecord.session_id==session.id,
+            ReproductionEventRecord.event_type=='PCM_DTMF_SEQUENCE')))
+        assert len(again)==1

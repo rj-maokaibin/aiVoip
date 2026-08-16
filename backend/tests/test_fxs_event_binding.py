@@ -114,3 +114,43 @@ def test_offhook_when_not_watching_is_ignored():
         # CREATED state, not watching.
         offhook = FxsEvent(timestamp='2026-08-13 22:52:53.878000', line=0, event='OFFHOOK')
         assert orch.record_fxs_event(db, session=session, event=offhook) is None
+
+
+def test_dtmf_is_attributed_to_attempt_and_call():
+    """DTMF recorded during dialing carries attempt_id; after bind_call it
+    carries call_id. DTMF during CAPTURING is recorded, not dropped."""
+    from app.contracts.enums import AttemptStatus, ReproductionCallStatus
+
+    eng = _engine()
+    with Session(eng) as db:
+        case, _ = _case_device(db)
+        orch = _orch(_monitor(ms_seq=(1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000)))
+        session = _session_at_watching(db, orch, case)
+
+        # OFFHOOK -> attempt 1, then a dial digit.
+        orch.record_fxs_event(db, session=session, event=FxsEvent(timestamp='t', line=0, event='OFFHOOK'))
+        orch.record_fxs_event(db, session=session, event=FxsEvent(timestamp='t', line=0, event='DTMF', digit='3'))
+        dial_rec = db.scalar(select(ReproductionEventRecord).where(
+            ReproductionEventRecord.event_type == 'FXS_DTMF',
+            ReproductionEventRecord.payload_json['digit'].as_string() == '3'))
+        # attempt_id must be set (was NULL before the fix).
+        assert dial_rec.attempt_id is not None
+        # No call yet -> call_id None, in_call False.
+        assert dial_rec.call_id is None
+        assert dial_rec.payload_json['in_call'] is False
+
+        # Bind the call (simulating SIP_INVITE observed by the signal observer).
+        call = orch.bind_call(db, session=session, relative_ms=3500, binding_event='SIP_INVITE')
+        assert call is not None
+        assert session.state == ReproductionState.CAPTURING.value
+
+        # A digit pressed AFTER binding is in-call: recorded (not dropped),
+        # attributed to both attempt and call, in_call True.
+        orch.record_fxs_event(db, session=session, event=FxsEvent(timestamp='t', line=0, event='DTMF', digit='5'))
+        in_call_rec = db.scalar(select(ReproductionEventRecord).where(
+            ReproductionEventRecord.event_type == 'FXS_DTMF',
+            ReproductionEventRecord.payload_json['digit'].as_string() == '5'))
+        assert in_call_rec is not None, 'DTMF during CAPTURING must be recorded, not dropped'
+        assert in_call_rec.attempt_id is not None
+        assert in_call_rec.call_id == call.id
+        assert in_call_rec.payload_json['in_call'] is True
