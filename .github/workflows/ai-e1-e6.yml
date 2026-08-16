@@ -5,9 +5,8 @@ on:
     paths:
       - "backend/app/diagnosis/**"
       - "backend/app/knowledge/**"
-      - "backend/tests/test_ai_*.py"
-      - "backend/tests/test_claim_grounding.py"
-      - "backend/tests/test_controlled_ai_selection.py"
+      - "backend/app/core/config.py"
+      - "backend/tests/**"
       - "tools/ai_*.py"
       - "tools/export_ai_eval_dataset.py"
       - "knowledge/seed/**"
@@ -20,9 +19,8 @@ on:
     paths:
       - "backend/app/diagnosis/**"
       - "backend/app/knowledge/**"
-      - "backend/tests/test_ai_*.py"
-      - "backend/tests/test_claim_grounding.py"
-      - "backend/tests/test_controlled_ai_selection.py"
+      - "backend/app/core/config.py"
+      - "backend/tests/**"
       - "tools/ai_*.py"
       - "tools/export_ai_eval_dataset.py"
       - "knowledge/seed/**"
@@ -36,7 +34,7 @@ permissions:
 jobs:
   ai-contracts:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -52,3 +50,5 @@ jobs:
         run: make ai-eval-gate
       - name: AI E1-E6 regression gate
         run: make ai-e1-e6-gate
+      - name: Full backend regression
+        run: make test
