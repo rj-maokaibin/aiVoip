@@ -13,7 +13,7 @@ migrate:
 	docker compose run --rm backend alembic upgrade head
 
 test:
-	PYTHONPATH=backend pytest -q backend/tests
+	PYTHONPATH=backend:. pytest -q backend/tests
 
 lint:
 	cd backend && python -m compileall -q app tests
