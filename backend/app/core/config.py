@@ -55,10 +55,11 @@ class Settings(BaseSettings):
     # AI promotion is capability-based. OFF/SHADOW/SUGGEST/CONTROLLED_PLANNER.
     # The deterministic reasoner remains formal authority at every stage.
     ai_promotion_stage: str = "OFF"
-    # This flag must be produced by an external quality/promotion gate. It only
-    # permits selection of registered question/profile/experiment IDs; it never
-    # permits raw device commands or AI-only root-cause confirmation.
+    # Legacy/dev signal only. Production ignores this boolean and requires the
+    # generated ai-promotion-gate-v1 artifact below.
     ai_promotion_gate_passed: bool = False
+    ai_allow_manual_promotion_override: bool = False
+    ai_promotion_gate_artifact: Path = Path("/app/validation/ai_promotion_gate.json")
     ai_eval_min_samples: int = 10
     ai_eval_min_top1_recall: float = 0.60
     ai_eval_min_top3_recall: float = 0.80
