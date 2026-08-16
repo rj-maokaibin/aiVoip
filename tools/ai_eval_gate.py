@@ -22,6 +22,12 @@ HARD_ZERO = {
 
 
 def evaluate(path: Path) -> dict:
+    """Validate Eval contract coverage only.
+
+    PASS here means the development manifest covers the required scenario classes and
+    safety contract.  It explicitly does *not* mean a model passed quality evaluation;
+    promotion must use ``tools/ai_eval_runner.py`` + ``tools/ai_promotion_gate.py``.
+    """
     manifest=json.loads(path.read_text(encoding="utf-8"))
     cases=manifest.get("cases") or []
     ids=[row.get("id") for row in cases]
@@ -33,9 +39,17 @@ def evaluate(path: Path) -> dict:
     if missing: errors.append(f"MISSING_CATEGORIES:{','.join(missing)}")
     if set(manifest.get("hard_zero_metrics") or [])!=HARD_ZERO: errors.append("HARD_ZERO_CONTRACT_MISMATCH")
     if not manifest.get("real_history_required"): errors.append("REAL_HISTORY_REQUIREMENT_MISSING")
-    return {"schema_version":"ai-eval-gate-result-v1","status":"PASS" if not errors else "FAIL",
-            "case_count":len(cases),"category_count":len(categories),"errors":errors,
-            "real_history_required":bool(manifest.get("real_history_required"))}
+    return {
+        "schema_version":"ai-eval-gate-result-v2",
+        "status":"PASS" if not errors else "FAIL",
+        "gate_scope":"CONTRACT_COVERAGE_ONLY",
+        "promotion_eligible":False,
+        "case_count":len(cases),
+        "category_count":len(categories),
+        "errors":errors,
+        "real_history_required":bool(manifest.get("real_history_required")),
+        "next_gate":"AI_MODEL_QUALITY_V2",
+    }
 
 
 def main() -> int:
@@ -44,7 +58,8 @@ def main() -> int:
     parser.add_argument("--out")
     args=parser.parse_args(); result=evaluate(Path(args.manifest))
     encoded=json.dumps(result,ensure_ascii=False,indent=2)
-    if args.out: Path(args.out).write_text(encoded+"\n",encoding="utf-8")
+    if args.out:
+        out=Path(args.out); out.parent.mkdir(parents=True,exist_ok=True); out.write_text(encoded+"\n",encoding="utf-8")
     print(encoded)
     return 0 if result["status"]=="PASS" else 1
 
