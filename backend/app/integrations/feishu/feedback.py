@@ -1,0 +1,126 @@
+from __future__ import annotations
+
+from typing import Any
+
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from app.core.config import settings
+from app.db.models import Case, FeishuCaseBinding
+from app.services.idempotency import begin_idempotent, complete_idempotent
+
+
+CASE_STATUS_LABELS = {
+    'NEW': '已受理，等待开始诊断',
+    'TRIAGING': '正在检查问题描述和诊断条件',
+    'COLLECTING': '正在采集诊断证据',
+    'ANALYZING': '正在分析已有证据',
+    'NEED_MORE_EVIDENCE': '需要更多证据，正在准备下一步采集',
+    'WAITING_USER': '等待您补充信息或完成现场操作',
+    'DIAGNOSED': '已形成诊断结论',
+    'ROOT_CAUSE_CONFIRMED': '已确认根因',
+    'RESOLVING': '正在处理并验证修复效果',
+    'RESOLVED': '问题已解决',
+    'CLOSED': 'Case 已关闭',
+    'FAILED': '诊断流程异常，等待重试或人工处理',
+}
+
+
+def human_case_status(status: str | None) -> str:
+    value = str(status or 'NEW').upper()
+    return CASE_STATUS_LABELS.get(value, f'处理中（{value}）')
+
+
+def accepted_text() -> str:
+    return '已受理。我会先检查已有证据，再决定是否需要采集或现场复现。'
+
+
+def case_created_text(case_no: str) -> str:
+    return f'已建立 Case {case_no}，正在检查设备信息和已有证据。'
+
+
+def attachment_ready_text(case_no: str, count: int,
+                          failed: list[dict] | None = None) -> str:
+    base = f'Case {case_no} 已登记 {count} 个附件，正在优先分析附件，暂不启动设备复现。'
+    if not failed:
+        return base
+    names = '、'.join(str(item.get('filename') or '未命名附件') for item in failed[:3])
+    return f'{base} 以下附件未处理成功：{names}；请在原线程重新发送这些附件。'
+
+
+def attachment_failed_text(failed: list[dict] | None = None) -> str:
+    names = '、'.join(str(item.get('filename') or '未命名附件') for item in (failed or [])[:3])
+    detail = f'（{names}）' if names else ''
+    return f'附件{detail}下载或登记失败，未启动设备复现。请在原线程重新发送失败附件。'
+
+
+def completed_text(case_no: str, headline: str | None) -> str:
+    conclusion = (headline or '已形成诊断结果').strip()
+    return f'Case {case_no} 诊断完成：{conclusion}。详情和证据请查看 Case 主卡。'
+
+
+def failed_text(case_no: str | None = None) -> str:
+    prefix = f'Case {case_no} ' if case_no else ''
+    return f'{prefix}诊断流程遇到异常，已停止自动推进；不会执行未经确认的设备动作，请稍后重试或联系研发。'
+
+
+def build_single_user_question(*, decision: dict | None = None,
+                               summary: dict | None = None) -> str:
+    """Return one field-facing question with explicit answer paths.
+
+    Internal PCM/SLIC/aimd/SIP/RTP questions are intentionally never surfaced.
+    """
+    decision = decision or {}
+    summary = summary or {}
+    for action in decision.get('plan') or []:
+        if str(action.get('action_type') or '') != 'REQUEST_USER_EVIDENCE':
+            continue
+        need = {str(x).lower() for x in ((action.get('params') or {}).get('need') or [])}
+        if need & {'device_or_pcap', 'device_url', 'device'}:
+            return '请提供设备入口（URL，或 IP+SN）；如果暂时无法提供，也可以直接上传 PCAP/PCAPNG。'
+        if any('timestamp' in x for x in need):
+            return '请提供本次异常发生的大致时间；如果不知道，请回复“不知道”。'
+        if any(x in {'pcap', 'pcap_or_pcapng', 'anomaly_timestamp_or_recording_or_new_capture'} or 'pcap' in x for x in need):
+            return '请上传包含异常过程的 PCAP/PCAPNG；如果暂时无法抓取，请回复“暂时不能”。'
+        if any('recording' in x or 'audio' in x for x in need):
+            return '请上传异常时的现场录音；如果没有录音，请回复“没有”。'
+    return '这个故障现在还能复现吗？请回复：可以 / 暂时不能 / 不确定。'
+
+
+def enqueue_reply(message_id: str | None, text: str) -> bool:
+    if not settings.feishu_live_enabled or not message_id:
+        return False
+    from app.workers.device_provision_task import reply_feishu_text
+    reply_feishu_text.apply_async(args=[message_id, text], queue='diagnosis')
+    return True
+
+
+def notify_case_once(db: Session, *, case_id: str, feedback_type: str,
+                     token: str, text: str) -> dict[str, Any]:
+    """Idempotently enqueue one active Feishu reply for a Case milestone."""
+    if not settings.feishu_live_enabled:
+        return {'status': 'SKIPPED', 'reason': 'FEISHU_LIVE_DISABLED'}
+    binding = db.scalar(select(FeishuCaseBinding).where(
+        FeishuCaseBinding.case_id == case_id,
+        FeishuCaseBinding.status == 'ACTIVE',
+    ).limit(1))
+    if not binding or not binding.source_message_id:
+        return {'status': 'SKIPPED', 'reason': 'NO_SOURCE_MESSAGE'}
+    key = f'{case_id}:{feedback_type}:{token}'
+    handle = begin_idempotent(
+        db, scope='FEISHU_CASE_FEEDBACK', key=key,
+        payload={'case_id': case_id, 'feedback_type': feedback_type,
+                 'message_id': binding.source_message_id, 'text': text},
+    )
+    if handle.replay is not None:
+        return {**handle.replay, 'duplicate': True}
+    queued = enqueue_reply(binding.source_message_id, text)
+    response = {'status': 'QUEUED' if queued else 'SKIPPED',
+                'feedback_type': feedback_type}
+    complete_idempotent(db, handle, response=response, status_code=200,
+                        resource_type='case', resource_id=case_id)
+    return response
+
+
+def status_text(case: Case) -> str:
+    return f'Case {case.case_no} 当前进度：{human_case_status(case.status)}。'

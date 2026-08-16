@@ -47,13 +47,16 @@ class TimeoutsConfig(BaseModel):
 
 class ArmBarrierConfig(BaseModel):
     model_config = ConfigDict(extra='forbid')
-    # min_* may be 0 for real DUTs where arm readiness means "capture facility
-    # ready" (channels armed, probes listening) rather than "live traffic already
-    # flowing" ¡ª real media only appears once an FXS event triggers a call.
+    # PREWATCH_DATA_PLANE is the strict legacy/M6.2 mode: PCM packets must already
+    # flow before WATCHING. ACTIVITY_GATED is for platforms whose PCM mirrors are
+    # silent while idle: ARM proves the capture path, then the first business
+    # activity must verify both PCM directions inside a bounded window.
+    readiness_mode: Literal['PREWATCH_DATA_PLANE', 'ACTIVITY_GATED'] = 'PREWATCH_DATA_PLANE'
     min_pcap_packets: int = Field(default=2, ge=0, le=10000)
     min_pcm_packets: int = Field(default=3, ge=0, le=10000)
     require_advancing: bool = True
     retry_attempts: int = Field(default=2, ge=1, le=10)
+    first_activity_validation_seconds: int = Field(default=10, ge=1, le=120)
 
 class RingConfig(BaseModel):
     model_config = ConfigDict(extra='forbid')

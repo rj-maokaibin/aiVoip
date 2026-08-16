@@ -42,7 +42,7 @@ class Settings(BaseSettings):
     diagnosis_no_progress_limit: int = 2
     diagnosis_max_cycles: int = 6
     diagnosis_reasoner: str = "deterministic"
-    reproduction_platform_mode: str = "mock"  # Phase C only; production EC-02 adapter is intentionally not implemented yet.
+    reproduction_platform_mode: str = "mock"  # Safe CI/dev default; set to real only for the verified EC-02 adapter runtime.
     reproduction_capture_root: Path = Path("/tmp/voip-reproduction-capture")
     reproduction_object_root: Path = Path("/tmp/voip-reproduction-objects")
     reproduction_storage_mode: str = "local"  # Mock C2 uses filesystem object storage; production may switch to minio.
@@ -50,6 +50,11 @@ class Settings(BaseSettings):
     reasoning_gateway_token: str = ""
     reasoning_gateway_model: str = ""
     reasoning_gateway_timeout_seconds: float = 20.0
+    ai_shadow_enabled: bool = False
+    ai_shadow_workflow_version: str = "ai-shadow-v1"
+    ai_eval_min_samples: int = 10
+    reasoning_gateway_models: str = ""
+    reasoning_gateway_failover_enabled: bool = True
     auth_allow_anonymous_dev: bool = True
     production_auth_provider: str = "pending"
     auth_gateway_hmac_secret: str = ""
@@ -72,6 +77,7 @@ class Settings(BaseSettings):
     feishu_verification_token_file: str = ""
     feishu_verification_token_env: str = ""
     feishu_timeout_seconds: float = 8.0
+    feishu_attachment_max_bytes: int = 100 * 1024 * 1024
     auth_default_actor: str = "dev-admin"
     auth_default_role: str = "ADMIN"
     idempotency_ttl_hours: int = 24

@@ -33,6 +33,11 @@ def acquire_device_lock(
     now=_utcnow()
     existing=db.scalar(select(DeviceDiagnosticLock).where(DeviceDiagnosticLock.device_id==session.device_id))
     if existing:
+        if existing.status == LockStatus.QUARANTINED.value:
+            raise AppError(
+                'DEVICE_DIAGNOSTIC_QUARANTINED',
+                details={'device_id':session.device_id,'cleanup_session_id':existing.session_id},
+            )
         expires=_aware(existing.lease_expires_at)
         active=existing.status==LockStatus.ACTIVE.value and expires is not None and expires>now
         if active and existing.session_id != session.id:
@@ -105,6 +110,23 @@ def release_device_lock(db: Session, *, session: ReproductionSession, cleanup_ve
     row.released_at=now
     row.heartbeat_at=now
     # Keep the row for audit but make it immediately reclaimable.
+    row.lease_expires_at=now
+    session.lease_expires_at=None
+    db.flush()
+
+
+def quarantine_device_lock(db: Session, *, session: ReproductionSession) -> None:
+    """Block new ARM while allowing Cleanup/Recovery to keep using the DUT."""
+    row=db.scalar(select(DeviceDiagnosticLock).where(
+        DeviceDiagnosticLock.device_id==session.device_id,
+        DeviceDiagnosticLock.session_id==session.id,
+    ))
+    if row is None:
+        return
+    now=_utcnow()
+    row.status=LockStatus.QUARANTINED.value
+    row.heartbeat_at=now
+    # Quarantine is a safety interlock, not an expiring operation lease.
     row.lease_expires_at=now
     session.lease_expires_at=None
     db.flush()

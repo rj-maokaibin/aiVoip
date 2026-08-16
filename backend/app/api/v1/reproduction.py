@@ -52,7 +52,7 @@ def create_reproduction(
     complete_idempotent(db,handle,response=response,status_code=202,resource_type='reproduction_session',resource_id=row.id)
     db.commit()
     # Autonomous main flow: creation schedules ARM immediately. In production the EC-02 adapter must replace mock mode.
-    start_reproduction.apply_async(args=[row.id],queue='reproduction')
+    start_reproduction.apply_async(args=[row.id],queue='reproduction-control')
     return row
 
 
@@ -96,5 +96,5 @@ def stop_reproduction(
 ):
     row=db.get(ReproductionSession,session_id)
     if not row: raise AppError('REPRODUCTION_NOT_FOUND')
-    cancel_reproduction.apply_async(args=[row.id],queue='reproduction')
+    cancel_reproduction.apply_async(args=[row.id],queue='reproduction-control-high')
     return row

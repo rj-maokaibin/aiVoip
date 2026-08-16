@@ -11,10 +11,12 @@ feishu=(ROOT/'backend/app/integrations/feishu/cards.py').read_text(encoding='utf
 
 checks={
  'tabs': all(x in front for x in ['总览','诊断','自动复现','实验/因果','Evidence','飞书卡片','审计']),
+ 'ai_readonly_workbench': all(x in front for x in ['AI 工作台','Evidence Quality','Contradiction Critic','AI Eval Gate','工程 Copilot 草案']),
  'packet_media_views': all(x in front for x in ['Packet Intelligence','Media Intelligence','PCM ↔ RTP 自动关联','Unified Timeline','Waveform','Spectrogram']),
- 'sse': '/events/stream?case_id=' in front and 'TARGET_CONFIRMED' in front and 'CLEANUP_ALERT' in front,
+ 'sse': all(x in front for x in ['/events/stream?case_id=','TARGET_CONFIRMED','CLEANUP_ALERT','FXS_MONITOR_READY','FXS_MONITOR_FAILED']),
  'safe_stop': 'Finalize → Cleanup' in front and '/stop' in front,
- 'ec02_pending_banner': 'EC-02' in front and '真实 DUT 命令不会被猜测执行' in front,
+ 'platform_mode_not_hardcoded': 'Mock / Real 由后端配置决定' in front and '当前只允许 Mock Platform' not in front,
+ 'watch_runtime_gate': '请等待 FXS_MONITOR_READY' in front and '可以开始现场复现：FXS 监听已就绪' in front,
  'case_reproduction_list_api': "'/cases/{case_id}/reproductions'" in repro,
  'case_experiment_list_api': "'/cases/{case_id}/experiments'" in exp,
  'case_fix_read_api': "'/cases/{case_id}/fix-actions'" in exp and "'/cases/{case_id}/fix-verifications'" in exp,

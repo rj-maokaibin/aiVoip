@@ -58,6 +58,24 @@ services:
       - ${VOIP_DATA_ROOT:-/data/voip}/reproduction:/var/lib/voip/reproduction
     secrets: *app_secrets
 
+  reproduction-control-high-worker:
+    restart: unless-stopped
+    environment:
+      REPRODUCTION_CAPTURE_ROOT: /var/lib/voip/reproduction/capture
+      REPRODUCTION_OBJECT_ROOT: /var/lib/voip/reproduction/objects
+    volumes:
+      - ${VOIP_DATA_ROOT:-/data/voip}/reproduction:/var/lib/voip/reproduction
+    secrets: *app_secrets
+
+  reproduction-watch-worker:
+    restart: unless-stopped
+    environment:
+      REPRODUCTION_CAPTURE_ROOT: /var/lib/voip/reproduction/capture
+      REPRODUCTION_OBJECT_ROOT: /var/lib/voip/reproduction/objects
+    volumes:
+      - ${VOIP_DATA_ROOT:-/data/voip}/reproduction:/var/lib/voip/reproduction
+    secrets: *app_secrets
+
   release-runner:
     build:
       context: ./backend

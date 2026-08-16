@@ -45,16 +45,23 @@ def parse_dotenv(path: Path) -> dict[str, str]:
 
 
 def secure_file(path: Path) -> tuple[bool, str]:
-    if not path.exists():
-        return False, "missing"
-    if not path.is_file():
-        return False, "not a regular file"
-    if path.stat().st_size <= 0:
-        return False, "empty"
-    mode = stat.S_IMODE(path.stat().st_mode)
-    if mode & (stat.S_IRWXG | stat.S_IRWXO):
-        return False, f"mode {mode:04o} is group/world accessible"
-    return True, f"mode {mode:04o}, {path.stat().st_size} bytes"
+    try:
+        if not path.exists():
+            return False, "missing"
+        if not path.is_file():
+            return False, "not a regular file"
+        metadata = path.stat()
+        if metadata.st_size <= 0:
+            return False, "empty"
+        mode = stat.S_IMODE(metadata.st_mode)
+        if mode & (stat.S_IRWXG | stat.S_IRWXO):
+            return False, f"mode {mode:04o} is group/world accessible"
+        return True, f"mode {mode:04o}, {metadata.st_size} bytes"
+    except OSError as exc:
+        # A preflight check must fail closed and keep producing its machine-
+        # readable report even when the invoking account cannot traverse a
+        # production secret directory.
+        return False, f"unreadable ({type(exc).__name__})"
 
 
 def bool_value(v: str) -> bool:

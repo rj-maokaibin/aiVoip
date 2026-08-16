@@ -2,11 +2,11 @@
   "status": "PASS",
   "checks": {
     "unknown_action_rejected": true,
-    "ec02_partial_has_no_autonomous_actions": true,
+    "ec02_autonomous_contract_verified": true,
     "no_direct_shell_in_high_level_orchestration": true,
     "production_auth_gap_explicit": true,
-    "mock_platform_gap_explicit": true,
-    "feishu_live_gap_explicit": true
+    "reproduction_platform_configuration_consistent": true,
+    "feishu_transport_implementation_verified": true
   },
   "errors": []
 }

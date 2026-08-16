@@ -1,38 +1,9 @@
 {
   "schema_version": 1,
   "status": "PASS",
-  "source_manifest_aggregate_sha256": "8c4f6e503e3a9ce8d1aa28bac3ab9659b319ae789642dda22401e613a76289db",
+  "source_manifest_aggregate_sha256": "d20864449908767dd416c5f8dad9d981bee19ee9b99225a57345ce53d62c7385",
   "backend_tests": {
-    "passed": 148
-  },
-  "reproduction_mock_e2e": {
-    "passed": 3,
-    "total": 3
-  },
-  "reproduction_evidence_e2e": {
-    "passed": 5,
-    "total": 5
-  },
-  "reproduction_c3_e2e": {
-    "passed": 4,
-    "total": 4
-  },
-  "synthetic_golden": {
-    "passed": 21,
-    "total": 21
-  },
-  "synthetic_e2e": {
-    "passed": 53,
-    "total": 53
-  },
-  "baseline_diff": {
-    "regressions": 0,
-    "changes": 0
-  },
-  "field_golden": {
-    "passed": true,
-    "failed": 0,
-    "skipped": 0
+    "passed": 361
   },
   "gates": [
     "PYTHON_COMPILE",

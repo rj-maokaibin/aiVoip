@@ -181,6 +181,45 @@ class DiagnosisRun(Base):
     created_at: Mapped[datetime]=mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime]=mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
+
+class AIProposalRecord(Base):
+    """Immutable audit record for an AI proposal evaluated in Shadow Mode.
+
+    A proposal is never a DiagnosisDecision and is never consumed by the
+    orchestrator. Both accepted and rejected outputs are retained for Eval.
+    """
+    __tablename__='ai_proposals'
+    id: Mapped[str]=mapped_column(String(36), primary_key=True, default=new_id)
+    case_id: Mapped[str]=mapped_column(ForeignKey('cases.id', ondelete='CASCADE'), index=True)
+    diagnosis_run_id: Mapped[str|None]=mapped_column(ForeignKey('diagnosis_runs.id', ondelete='SET NULL'), nullable=True, index=True)
+    schema_version: Mapped[str]=mapped_column(String(64), default='ai-proposal-v1')
+    intent: Mapped[str]=mapped_column(String(64), default='DIAGNOSIS_ENHANCEMENT')
+    mode: Mapped[str]=mapped_column(String(32), default='SHADOW', index=True)
+    status: Mapped[str]=mapped_column(String(32), index=True)
+    input_fingerprint: Mapped[str]=mapped_column(String(64), index=True)
+    model_name: Mapped[str|None]=mapped_column(String(128), nullable=True)
+    prompt_version: Mapped[str|None]=mapped_column(String(64), nullable=True)
+    workflow_version: Mapped[str]=mapped_column(String(64))
+    latency_ms: Mapped[int|None]=mapped_column(Integer, nullable=True)
+    raw_output_json: Mapped[dict|None]=mapped_column(JSON, nullable=True)
+    validated_output_json: Mapped[dict|None]=mapped_column(JSON, nullable=True)
+    validation_errors: Mapped[list|None]=mapped_column(JSON, nullable=True)
+    baseline_json: Mapped[dict]=mapped_column(JSON)
+    diff_json: Mapped[dict|None]=mapped_column(JSON, nullable=True)
+    gateway_error: Mapped[str|None]=mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime]=mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+
+class AIRecommendationFeedback(Base):
+    __tablename__='ai_recommendation_feedback'
+    id: Mapped[str]=mapped_column(String(36), primary_key=True, default=new_id)
+    proposal_id: Mapped[str]=mapped_column(ForeignKey('ai_proposals.id', ondelete='CASCADE'), index=True)
+    case_id: Mapped[str]=mapped_column(ForeignKey('cases.id', ondelete='CASCADE'), index=True)
+    item_type: Mapped[str]=mapped_column(String(32), index=True)
+    decision: Mapped[str]=mapped_column(String(32), index=True)
+    actor: Mapped[str]=mapped_column(String(128), index=True)
+    reason: Mapped[str|None]=mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime]=mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+
 class Hypothesis(Base):
     __tablename__='hypotheses'
     __table_args__=(UniqueConstraint('case_id','code',name='uq_hypotheses_case_code'),)
@@ -307,6 +346,16 @@ class FeishuCaseBinding(Base):
     # Nullable so a Case can be bound to its source chat BEFORE the first card is
     # sent (provision time); message_id is backfilled on first sync_case_card.
     message_id: Mapped[str|None]=mapped_column(String(256), unique=True, index=True, nullable=True)
+    source_event_id: Mapped[str|None]=mapped_column(String(256), nullable=True, index=True)
+    source_message_id: Mapped[str|None]=mapped_column(String(256), nullable=True, index=True)
+    source_root_message_id: Mapped[str|None]=mapped_column(String(256), nullable=True, index=True)
+    source_parent_message_id: Mapped[str|None]=mapped_column(String(256), nullable=True)
+    source_sender_open_id: Mapped[str|None]=mapped_column(String(256), nullable=True)
+    source_chat_type: Mapped[str|None]=mapped_column(String(32), nullable=True)
+    source_tenant_key: Mapped[str|None]=mapped_column(String(256), nullable=True)
+    source_message_timestamp: Mapped[str|None]=mapped_column(String(32), nullable=True)
+    source_normalized_text: Mapped[str|None]=mapped_column(Text, nullable=True)
+    source_attachment_refs: Mapped[list|None]=mapped_column(JSON, nullable=True)
     status: Mapped[str]=mapped_column(String(32), default='ACTIVE', index=True)
     card_version: Mapped[int]=mapped_column(Integer, default=1)
     created_at: Mapped[datetime]=mapped_column(DateTime(timezone=True), default=utcnow)

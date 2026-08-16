@@ -723,7 +723,7 @@
         "plan_actions": [
           "COLLECT_PROFILE"
         ],
-        "conclusion_state": "NEED_MORE_EVIDENCE",
+        "conclusion_state": "DIAGNOSED",
         "rtp_stream_count": 0,
         "facts": {
           "case": {

@@ -23,6 +23,12 @@ class FeishuMessageResult:
     raw: dict[str, Any]
 
 
+@dataclass(frozen=True)
+class FeishuResourceResult:
+    data: bytes
+    content_type: str
+
+
 class FeishuCallbackVerifier:
     """Verify Feishu HTTP callback origin without logging callback secrets/body."""
 
@@ -132,4 +138,44 @@ class FeishuLiveTransport:
         await self._request(
             "PATCH", f"/im/v1/messages/{message_id}",
             json_body={"content": json.dumps(card, ensure_ascii=False)},
+        )
+
+    async def reply_text(self, *, message_id: str, text: str) -> FeishuMessageResult:
+        data = await self._request(
+            'POST', f'/im/v1/messages/{message_id}/reply',
+            json_body={'msg_type': 'text',
+                       'content': json.dumps({'text': text}, ensure_ascii=False)},
+        )
+        reply_id = str(((data.get('data') or {}).get('message_id') or ''))
+        if not reply_id:
+            raise FeishuTransportError('FEISHU_MESSAGE_ID_MISSING')
+        return FeishuMessageResult(message_id=reply_id, raw=data)
+
+    async def download_message_resource(self, *, message_id: str, file_key: str,
+                                        resource_type: str) -> FeishuResourceResult:
+        """Download an attachment belonging to one Feishu message.
+
+        Feishu requires message_id and file_key to match and accepts only
+        resource type ``file`` or ``image`` for this endpoint.
+        """
+        from urllib.parse import quote
+        if resource_type not in {'file', 'image'}:
+            raise FeishuTransportError('FEISHU_RESOURCE_TYPE_INVALID')
+        token = await self._tenant_token()
+        path = (f'/im/v1/messages/{quote(message_id, safe="")}/resources/'
+                f'{quote(file_key, safe="")}')
+        url = settings.feishu_base_url.rstrip('/') + path
+        async with httpx.AsyncClient(timeout=settings.feishu_timeout_seconds) as client:
+            response = await client.get(
+                url, params={'type': resource_type},
+                headers={'Authorization': f'Bearer {token}'},
+            )
+        if response.status_code >= 400:
+            raise FeishuTransportError(f'FEISHU_RESOURCE_DOWNLOAD_FAILED:{response.status_code}')
+        data = response.content
+        if len(data) > settings.feishu_attachment_max_bytes:
+            raise FeishuTransportError('FEISHU_RESOURCE_TOO_LARGE')
+        return FeishuResourceResult(
+            data=data,
+            content_type=str(response.headers.get('content-type') or 'application/octet-stream'),
         )

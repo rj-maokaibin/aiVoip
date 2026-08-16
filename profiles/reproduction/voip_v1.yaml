@@ -30,13 +30,14 @@ profiles:
 
   - id: CALL_SETUP_FAILURE
     name: 呼叫建立失败自动复现
-    version: "1.0.0"
+    version: "1.1.0"
     status: ACTIVE
     symptom_classes: [CALL_SETUP_FAILURE, CALL_FAILURE]
     primary_start_anchor: FXS_OFFHOOK
     end_policy: EVIDENCE_SUFFICIENCY
     max_calls: 3
     target_count: 1
+    arm_barrier: {readiness_mode: ACTIVITY_GATED, min_pcap_packets: 0, min_pcm_packets: 1, require_advancing: false, first_activity_validation_seconds: 10}
     stages:
       - stage: BASE
         auto_arm_actions: [CAPTURE_PRE_SNAPSHOT, START_VOICE_PCAP, START_PCM_RX, START_PCM_TX, ENABLE_BASIC_VOIP_DEBUG, ENABLE_SIP_PACKET_LOG]
@@ -52,13 +53,14 @@ profiles:
 
   - id: ONE_WAY_AUDIO
     name: 单通自动复现
-    version: "1.0.0"
+    version: "1.1.0"
     status: ACTIVE
     symptom_classes: [ONE_WAY_AUDIO]
     primary_start_anchor: FXS_OFFHOOK
     end_policy: EVIDENCE_SUFFICIENCY
     max_calls: 4
     target_count: 1
+    arm_barrier: {readiness_mode: ACTIVITY_GATED, min_pcap_packets: 0, min_pcm_packets: 1, require_advancing: false, first_activity_validation_seconds: 10}
     stages:
       - stage: BASE
         auto_arm_actions: [CAPTURE_PRE_SNAPSHOT, START_VOICE_PCAP, START_PCM_RX, START_PCM_TX, ENABLE_BASIC_VOIP_DEBUG]
@@ -74,13 +76,14 @@ profiles:
 
   - id: AUDIO_STUTTER
     name: 卡顿自动复现
-    version: "1.0.0"
+    version: "1.1.0"
     status: ACTIVE
     symptom_classes: [AUDIO_STUTTER, STUTTER]
     primary_start_anchor: FXS_OFFHOOK
     end_policy: EVIDENCE_SUFFICIENCY
     max_calls: 5
     target_count: 1
+    arm_barrier: {readiness_mode: ACTIVITY_GATED, min_pcap_packets: 0, min_pcm_packets: 1, require_advancing: false, first_activity_validation_seconds: 10}
     stages:
       - stage: BASE
         auto_arm_actions: [CAPTURE_PRE_SNAPSHOT, START_VOICE_PCAP, START_PCM_RX, START_PCM_TX, ENABLE_BASIC_VOIP_DEBUG]
@@ -96,13 +99,14 @@ profiles:
 
   - id: AUDIO_NOISE
     name: 电流音/噪声自动复现
-    version: "1.0.0"
+    version: "1.1.0"
     status: ACTIVE
     symptom_classes: [AUDIO_NOISE, CURRENT_NOISE, HUM_NOISE]
     primary_start_anchor: FXS_OFFHOOK
     end_policy: EVIDENCE_SUFFICIENCY
     max_calls: 5
     target_count: 1
+    arm_barrier: {readiness_mode: ACTIVITY_GATED, min_pcap_packets: 0, min_pcm_packets: 1, require_advancing: false, first_activity_validation_seconds: 10}
     stages:
       - stage: BASE
         auto_arm_actions: [CAPTURE_PRE_SNAPSHOT, START_VOICE_PCAP, START_PCM_RX, START_PCM_TX, ENABLE_BASIC_VOIP_DEBUG]
@@ -124,13 +128,14 @@ profiles:
 
   - id: DTMF_LOSS
     name: DTMF丢号自动复现
-    version: "1.0.0"
+    version: "1.1.0"
     status: ACTIVE
     symptom_classes: [DTMF_LOSS, FIRST_DIGIT_LOSS]
     primary_start_anchor: FXS_OFFHOOK
     end_policy: FIRST_TARGET
     max_calls: 1
     target_count: 1
+    arm_barrier: {readiness_mode: ACTIVITY_GATED, min_pcap_packets: 0, min_pcm_packets: 1, require_advancing: false, first_activity_validation_seconds: 10}
     stages:
       - stage: BASE
         auto_arm_actions: [CAPTURE_PRE_SNAPSHOT, START_VOICE_PCAP, START_PCM_RX, START_PCM_TX, ENABLE_BASIC_VOIP_DEBUG, ENABLE_DTMF_DEBUG, ENABLE_SIP_PACKET_LOG]
@@ -146,13 +151,14 @@ profiles:
 
   - id: ECHO
     name: 回声自动复现
-    version: "1.0.0"
+    version: "1.1.0"
     status: ACTIVE
     symptom_classes: [ECHO]
     primary_start_anchor: FXS_OFFHOOK
     end_policy: EVIDENCE_SUFFICIENCY
     max_calls: 4
     target_count: 1
+    arm_barrier: {readiness_mode: ACTIVITY_GATED, min_pcap_packets: 0, min_pcm_packets: 1, require_advancing: false, first_activity_validation_seconds: 10}
     stages:
       - stage: BASE
         auto_arm_actions: [CAPTURE_PRE_SNAPSHOT, START_VOICE_PCAP, START_PCM_RX, START_PCM_TX, ENABLE_BASIC_VOIP_DEBUG]
@@ -168,19 +174,21 @@ profiles:
 
   - id: VOIP_GENERIC_FULL_CAPTURE
     name: VOIP通用完整采集
-    version: "1.0.0"
+    version: "1.1.0"
     status: ACTIVE
     symptom_classes: [UNKNOWN, GENERIC]
-    description: 无法可靠分类时的安全兜底Profile；允许能力缺失降级，但缺失必须显式标记UNAVAILABLE/PARTIAL。arm_barrier 采用真机语义（min=0/不要求推进）：arm 就绪 = 捕获设施就绪，真实媒体流量在 FXS 事件触发呼叫后才会出现。
+    description: 无法可靠分类时的安全兜底Profile；空闲期验证采集路径，首次业务活动后必须在有界窗口内验证真实PCM数据面，缺失必须显式标记PARTIAL/FAILED。
     primary_start_anchor: FXS_OFFHOOK
     end_policy: EVIDENCE_SUFFICIENCY
     max_calls: 5
     target_count: 1
     allow_partial_capability_downgrade: true
     arm_barrier:
+      readiness_mode: ACTIVITY_GATED
       min_pcap_packets: 0
-      min_pcm_packets: 0
+      min_pcm_packets: 1
       require_advancing: false
+      first_activity_validation_seconds: 10
     stages:
       - stage: BASE
         auto_arm_actions: [CAPTURE_PRE_SNAPSHOT, START_VOICE_PCAP, START_PCM_RX, START_PCM_TX, ENABLE_BASIC_VOIP_DEBUG]

@@ -4,7 +4,12 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import ENGINEER_ROLES, READ_ROLES, REVIEWER_ROLES, get_db, require_roles
 from app.contracts.enums import CaseEvent, DiagnosisRunStatus, HypothesisState
-from app.db.models import Case, CollectionPlan, DiagnosisRun, Hypothesis, HypothesisEvidence, HypothesisRevision
+from app.db.models import AIProposalRecord, AIRecommendationFeedback, Case, CollectionPlan, DiagnosisRun, Hypothesis, HypothesisEvidence, HypothesisRevision
+from app.diagnosis.ai_workbench import (
+    AIRecommendationFeedbackRequest, EngineeringDraftRequest, build_eval_report, persist_engineering_draft,
+    persist_readonly_workbench,
+)
+from app.diagnosis.snapshot import CaseEvidenceSnapshotBuilder
 from app.schemas.diagnosis import CollectionPlanOut, ConfirmHypothesisRequest, DiagnosisRunOut, HypothesisEvidenceOut, HypothesisOut, HypothesisRevisionOut
 from app.schemas.jobs import JobOut
 from app.services.audit import audit
@@ -14,6 +19,19 @@ from app.services.idempotency import begin_idempotent, complete_idempotent
 from app.workers.diagnosis_tasks import run_diagnosis
 
 router=APIRouter(tags=['diagnosis'])
+
+
+def _ai_record(row: AIProposalRecord) -> dict:
+    return {
+        'id': row.id, 'case_id': row.case_id, 'diagnosis_run_id': row.diagnosis_run_id,
+        'schema_version': row.schema_version, 'intent': row.intent, 'mode': row.mode,
+        'status': row.status, 'input_fingerprint': row.input_fingerprint,
+        'model_name': row.model_name, 'prompt_version': row.prompt_version,
+        'workflow_version': row.workflow_version, 'latency_ms': row.latency_ms,
+        'result': row.validated_output_json, 'validation_errors': row.validation_errors or [],
+        'diff': row.diff_json or {}, 'gateway_error': row.gateway_error,
+        'created_at': row.created_at,
+    }
 
 
 @router.post('/cases/{case_id}/diagnosis/start',response_model=JobOut,status_code=202)
@@ -90,6 +108,93 @@ def hypothesis_evidence(
 def plans(run_id:str,db:Session=Depends(get_db),_identity=Depends(require_roles(*READ_ROLES))):
     if not db.get(DiagnosisRun,run_id): raise HTTPException(404,'DIAGNOSIS_NOT_FOUND')
     return list(db.scalars(select(CollectionPlan).where(CollectionPlan.diagnosis_run_id==run_id).order_by(CollectionPlan.cycle.asc())))
+
+
+@router.get('/cases/{case_id}/ai/records')
+def ai_records(case_id:str, mode:str|None=Query(default=None,max_length=32),
+               db:Session=Depends(get_db),_identity=Depends(require_roles(*READ_ROLES))):
+    if not db.get(Case,case_id): raise HTTPException(404,'CASE_NOT_FOUND')
+    stmt=select(AIProposalRecord).where(AIProposalRecord.case_id==case_id)
+    if mode: stmt=stmt.where(AIProposalRecord.mode==mode.upper())
+    rows=list(db.scalars(stmt.order_by(AIProposalRecord.created_at.desc()).limit(200)))
+    return [_ai_record(row) for row in rows]
+
+
+@router.get('/cases/{case_id}/ai/workbench')
+def ai_workbench(case_id:str,db:Session=Depends(get_db),_identity=Depends(require_roles(*READ_ROLES))):
+    if not db.get(Case,case_id): raise HTTPException(404,'CASE_NOT_FOUND')
+    row=db.scalar(select(AIProposalRecord).where(
+        AIProposalRecord.case_id==case_id,AIProposalRecord.mode=='READ_ONLY'
+    ).order_by(AIProposalRecord.created_at.desc()).limit(1))
+    if not row: raise HTTPException(404,'AI_WORKBENCH_NOT_FOUND')
+    return _ai_record(row)
+
+
+@router.post('/cases/{case_id}/ai/workbench')
+def refresh_ai_workbench(case_id:str,db:Session=Depends(get_db),
+                         identity=Depends(require_roles(*ENGINEER_ROLES))):
+    case=db.get(Case,case_id)
+    if not case: raise HTTPException(404,'CASE_NOT_FOUND')
+    run=db.scalar(select(DiagnosisRun).where(DiagnosisRun.case_id==case_id)
+                  .order_by(DiagnosisRun.created_at.desc()).limit(1))
+    baseline=(run.decision_json or {}) if run else {
+        'hypotheses':[],'known':[],'unknown':[],'excluded':[],
+        'summary':{'headline':'尚无确定性诊断结果'},
+    }
+    snapshot=CaseEvidenceSnapshotBuilder().build(db,case_id)
+    shadow=db.scalar(select(AIProposalRecord).where(
+        AIProposalRecord.case_id==case_id,AIProposalRecord.mode=='SHADOW',
+        AIProposalRecord.status=='ACCEPTED'
+    ).order_by(AIProposalRecord.created_at.desc()).limit(1))
+    row=persist_readonly_workbench(db,case_id=case_id,diagnosis_run_id=run.id if run else None,
+                                   snapshot=snapshot,baseline=baseline,proposal_record=shadow)
+    db.commit(); db.refresh(row)
+    return _ai_record(row)
+
+
+@router.get('/cases/{case_id}/ai/eval')
+def ai_eval(case_id:str,db:Session=Depends(get_db),_identity=Depends(require_roles(*READ_ROLES))):
+    if not db.get(Case,case_id): raise HTTPException(404,'CASE_NOT_FOUND')
+    rows=list(db.scalars(select(AIProposalRecord).where(AIProposalRecord.case_id==case_id)
+                         .order_by(AIProposalRecord.created_at.asc())))
+    feedback=list(db.scalars(select(AIRecommendationFeedback).where(AIRecommendationFeedback.case_id==case_id)
+                             .order_by(AIRecommendationFeedback.created_at.asc())))
+    return build_eval_report(rows,feedback)
+
+
+@router.post('/ai/records/{record_id}/feedback',status_code=201)
+def ai_recommendation_feedback(record_id:str,req:AIRecommendationFeedbackRequest,
+                               db:Session=Depends(get_db),
+                               identity=Depends(require_roles(*ENGINEER_ROLES))):
+    proposal=db.get(AIProposalRecord,record_id)
+    if not proposal: raise HTTPException(404,'AI_RECORD_NOT_FOUND')
+    if proposal.mode!='READ_ONLY': raise HTTPException(409,'AI_FEEDBACK_REQUIRES_READ_ONLY_RECORD')
+    row=AIRecommendationFeedback(proposal_id=proposal.id,case_id=proposal.case_id,
+                                 item_type=req.item_type,decision=req.decision,
+                                 actor=identity.actor_id,reason=req.reason)
+    db.add(row); db.flush()
+    audit(db,case_id=proposal.case_id,actor=identity.actor_id,event_type='AI_RECOMMENDATION_FEEDBACK',
+          target_type='ai_proposal',target_id=proposal.id,
+          detail={'item_type':req.item_type,'decision':req.decision,'feedback_id':row.id})
+    db.commit(); db.refresh(row)
+    return {'id':row.id,'proposal_id':row.proposal_id,'case_id':row.case_id,
+            'item_type':row.item_type,'decision':row.decision,'reason':row.reason,
+            'actor':row.actor,'created_at':row.created_at}
+
+
+@router.post('/cases/{case_id}/ai/drafts',status_code=201)
+def create_ai_draft(case_id:str,req:EngineeringDraftRequest,db:Session=Depends(get_db),
+                    identity=Depends(require_roles(*ENGINEER_ROLES))):
+    case=db.get(Case,case_id)
+    if not case: raise HTTPException(404,'CASE_NOT_FOUND')
+    run=db.scalar(select(DiagnosisRun).where(DiagnosisRun.case_id==case_id)
+                  .order_by(DiagnosisRun.created_at.desc()).limit(1))
+    baseline=(run.decision_json or {}) if run else {'hypotheses':[],'known':[],'unknown':[],'excluded':[]}
+    snapshot=CaseEvidenceSnapshotBuilder().build(db,case_id)
+    row=persist_engineering_draft(db,case_id=case_id,request=req,snapshot=snapshot,
+                                  baseline=baseline,actor=identity.actor_id)
+    db.commit(); db.refresh(row)
+    return _ai_record(row)
 
 
 @router.post('/hypotheses/{hypothesis_id}/confirm',response_model=HypothesisOut)

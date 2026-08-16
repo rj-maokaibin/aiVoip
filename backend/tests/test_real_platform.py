@@ -83,6 +83,10 @@ def fake():
             'dev_config get -m voipServInfo': _DEV_CONFIG_SVC,
             'dev_config get -m voice_vlan': _DEV_CONFIG_VLAN,
             'ip -o link show': _IP_LINK,
+            'timeout -t 1 tcpdump -ni br-lan_400 -c 1': (
+                'tcpdump: listening on br-lan_400, link-type EN10MB (Ethernet), capture size 262144 bytes\n'
+                '0 packets captured\n'
+            ),
             'timeout -t 3 tcpdump -ni br-lan_400 -c 1': (
                 'tcpdump: listening on br-lan_400, link-type EN10MB (Ethernet), capture size 262144 bytes\n'
                 '0 packets captured\n'
@@ -112,7 +116,7 @@ class _Device:
 
 def test_platform_identity():
     assert RealReproductionPlatform.platform_id == 'ruijie-voip-aim-real'
-    assert RealReproductionPlatform.version == '0.6.0'
+    assert RealReproductionPlatform.version == '0.7.0'
 
 
 def test_resolve_voice_context_parses_real_output(fake):
@@ -139,8 +143,11 @@ def test_arm_runs_real_commands_and_returns_snapshot(fake):
     assert any('voip sip log-pkt on' in c for c in fake.cli_calls)
     assert any('debug p on' in c for c in fake.cli_calls)
     # PCAP readiness validated by a listening probe.
-    assert snap['PCM_RX']['status'] == 'HEALTHY'
+    assert snap['PCM_RX']['status'] == 'STARTING'
     assert snap['PCM_RX']['enabled'] is True
+    assert snap['PCM_RX']['configured'] is True
+    assert snap['PCM_RX']['verification_pending'] is True
+    assert snap['PCM_RX']['readiness_phase'] == 'CAPTURE_PATH_READY'
     assert snap['PCAP']['pcap_header_valid'] is True
     assert snap['PCAP']['status'] == 'HEALTHY'
     assert snap['DEBUG']['enabled'] is True
@@ -154,6 +161,52 @@ def test_arm_pcap_failed_when_not_listening(fake):
     assert snap['PCAP']['status'] == 'FAILED'
     assert snap['PCAP']['pcap_header_valid'] is False
     assert snap['PCAP']['advancing'] is False
+
+
+def test_segmented_ring_uses_one_continuous_producer_while_downloads_are_separate(fake):
+    fake.shell_responses['i=0; while [ ! -f /tmp/aiVoip_ring_session1/sealed'] = (
+        __import__('base64').b64encode(_DUMMY_PCAP).decode()
+    )
+    p = RealReproductionPlatform(adapter=fake)
+    ctx = p.resolve_voice_context(_Device())
+    try:
+        cap = p.spawn_ring_segment(
+            context=ctx, seconds=5, segment_key='session1_000001').result(timeout=5)
+        assert cap.pcap == _DUMMY_PCAP
+        producer = next(c for c in fake.shell_calls if 'start-stop-daemon -S' in c)
+        downloader = next(c for c in fake.shell_calls if c.startswith('i=0; while'))
+        assert '-x /usr/bin/tcpdump' in producer
+        assert '-ni br-lan_400 -G 5' in producer
+        assert 'base64' not in producer
+        assert '-m -p /tmp/aiVoip_ring_session1/producer.pid' in producer
+        assert 'tcpdump' not in downloader
+        assert 'capture_*.pcap' in downloader
+        assert 'gzip -c "$f"' in downloader
+        assert "sed '$d'" in downloader
+        p.seal_segmented_ring('session1')
+        assert any('touch /tmp/aiVoip_ring_session1/sealed' in c for c in fake.shell_calls)
+    finally:
+        p.stop_segmented_ring()
+
+
+def test_segmented_ring_decodes_bounded_gzip_file_and_reports_backlog(fake):
+    packet = bytes.fromhex('000000010000000100000001000000010000000000000001')
+    encode = __import__('base64').b64encode
+    compress = __import__('gzip').compress
+    payload = (
+        '__AIVOIP_PCAP_BEGIN__\n' + encode(compress(_DUMMY_PCAP + packet)).decode()
+        + '\n__AIVOIP_PCAP_END__\n__AIVOIP_REMAINING__3\n'
+    )
+    fake.shell_responses['i=0; while [ ! -f /tmp/aiVoip_ring_batch1/sealed'] = payload
+    p = RealReproductionPlatform(adapter=fake)
+    ctx = p.resolve_voice_context(_Device())
+    try:
+        cap = p.spawn_ring_segment(
+            context=ctx, seconds=5, segment_key='batch1_000001').result(timeout=5)
+        assert cap.pcap == _DUMMY_PCAP + packet
+        assert cap.remaining_files == 3
+    finally:
+        p.stop_segmented_ring()
 
 
 def test_cleanup_quiet_channel_skips_off(fake):
@@ -319,6 +372,7 @@ def test_fxs_monitor_start_enables_full_debug_on_fresh_session(fake):
         assert any('de sip de' in c for c in fake.cli_calls)
         assert any('voip sip log-pkt on' in c for c in fake.cli_calls)
         assert monitor._started is True
+        assert p.fxs_monitor_healthy() is True
     finally:
         p.stop_fxs_monitor()
         p.disconnect()

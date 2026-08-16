@@ -12,6 +12,17 @@ import yaml
 ROOT = Path(__file__).resolve().parents[2]
 
 
+def test_secure_file_fails_closed_when_secret_path_is_not_accessible(monkeypatch):
+    monkeypatch.syspath_prepend(str(ROOT))
+    from deploy.deployment_preflight import secure_file
+
+    def denied(*_args, **_kwargs):
+        raise PermissionError("not allowed")
+
+    monkeypatch.setattr(Path, "stat", denied)
+    assert secure_file(Path("/protected/secret")) == (False, "unreadable (PermissionError)")
+
+
 def test_production_frontend_is_same_origin_and_sse_safe():
     api = (ROOT / "frontend/src/api.ts").read_text(encoding="utf-8")
     nginx = (ROOT / "frontend/nginx.conf").read_text(encoding="utf-8")
@@ -59,7 +70,9 @@ def test_deployment_preflight_rejects_example_placeholders(tmp_path):
     payload = json.loads(cp.stdout)
     assert payload["release_status"] == "BLOCKED"
     assert "NO_PLACEHOLDERS" in payload["release_blocking_keys"]
-    assert "EC02_REAL_PLATFORM" in payload["release_blocking_keys"]
+    checks = {item["key"]: item for item in payload["checks"]}
+    assert checks["EC02_REAL_PLATFORM"]["status"] == "PASS"
+    assert "EC02_REAL_PLATFORM" not in payload["release_blocking_keys"]
 
 
 def test_runtime_verifier_is_source_bound_and_checks_all_service_layers():

@@ -2,17 +2,29 @@ from __future__ import annotations
 
 import asyncio
 import time
+from datetime import datetime, timezone
 
 from celery.utils.log import get_task_logger
+from sqlalchemy import select
 
 from app.collectors.asyncssh_adapter import DeviceCommandError, DeviceConnectionError
-from app.contracts.enums import ReproductionState
+from app.contracts.enums import (
+    CallVerdict, CaptureChannel, CaptureSegmentStatus, ChannelHealth, EvidenceCompleteness,
+    EventType, ReproductionState, TimestampSource,
+)
 from app.core.config import settings
-from app.db.models import CaseDevice, ReproductionSession
+from app.core.errors import AppError
+from app.db.models import (
+    CaptureChannelHealth, CaseDevice, ReproductionAttempt, ReproductionEventRecord,
+    ReproductionSession,
+)
 from app.db.session import SessionLocal
 from app.integrations.credentials import get_credential_provider, LocalSecretCredentialProvider
 from app.reproduction.fxs_event_monitor import FxsEventMonitor
+from app.reproduction.barriers import ArmReadinessBarrier
 from app.reproduction.platform_factory import build_orchestrator, resolve_platform_mode
+from app.reproduction.signal_observer import binding_relative_ms, observe_pcap_signals
+from app.services.events import emit_event
 from app.workers.celery_app import celery_app
 
 log = get_task_logger(__name__)
@@ -29,10 +41,124 @@ _LISTENING_STATES = {
 
 
 def _session_listening(db, session_id: str) -> ReproductionSession | None:
-    row = db.get(ReproductionSession, session_id)
+    # The watcher and high-priority cancel worker use different DB sessions.
+    # Force an authoritative read instead of returning SQLAlchemy's identity-map
+    # copy, otherwise a watcher can keep seeing WATCHING after cancel committed
+    # CANCELLED and continue capture/heartbeat work against a released lock.
+    row = db.scalar(
+        select(ReproductionSession)
+        .where(ReproductionSession.id == session_id)
+        .execution_options(populate_existing=True)
+    )
     if row is None:
         return None
     return row
+
+
+def _ring_segment_retainable(observation) -> bool:
+    """A UDP-filtered ring segment is evidence only when it has a packet.
+
+    A valid classic-PCAP global header is exactly 24 bytes, so file length alone
+    cannot distinguish an empty capture from evidence.
+    """
+    return observation.parse_error is None and observation.udp_packets > 0
+
+
+def _latch_first_end_anchor(current_ms: int | None, observed_ms: int) -> int:
+    """End anchors are edge-triggered: hook bounce must not move the first edge."""
+    return observed_ms if current_ms is None else current_ms
+
+
+def _should_restart_ring_after_end(state: str, active_call_id: str | None) -> bool:
+    return active_call_id is None and state in {
+        ReproductionState.WATCHING.value,
+        ReproductionState.ACTIVITY_DETECTED.value,
+    }
+
+
+def _persist_fxs_monitor_ready(db, session, orch) -> None:
+    debug_health = db.scalar(select(CaptureChannelHealth).where(
+        CaptureChannelHealth.session_id == session.id,
+        CaptureChannelHealth.channel == CaptureChannel.DEBUG.value,
+    ))
+    if debug_health is not None:
+        debug_health.status = ChannelHealth.HEALTHY.value
+        debug_health.last_observed_at = datetime.now(timezone.utc)
+        debug_health.health_json = {
+            **(debug_health.health_json or {}),
+            'reader_alive': True,
+            'runtime_ready': True,
+            'readiness_phase': 'WATCH_RUNTIME_READY',
+            'debug_enable_acknowledged': True,
+        }
+    db.add(ReproductionEventRecord(
+        session_id=session.id, case_id=session.case_id,
+        event_type='FXS_MONITOR_READY', source='REAL_PLATFORM',
+        session_relative_ms=orch.fxs_event_monitor.relative_ms(),
+        timestamp_source=TimestampSource.COLLECTOR_MONOTONIC.value,
+        payload_json={'reader_alive': True, 'debug_enable_acknowledged': True},
+    ))
+    emit_event(
+        db,
+        event_type=EventType.FXS_MONITOR_READY,
+        case_id=session.case_id,
+        entity_type='reproduction_session',
+        entity_id=session.id,
+        payload={
+            'session_id': session.id,
+            'runtime_ready': True,
+            'reader_alive': True,
+            'debug_enable_acknowledged': True,
+        },
+    )
+    db.commit()
+    try:
+        from app.workers.device_provision_task import sync_case_card
+        sync_case_card.apply_async(
+            args=[session.case_id, 'FXS_MONITOR_READY'], queue='diagnosis')
+    except Exception:
+        log.exception('[repro %s] failed to enqueue Feishu ready card sync', session.id[:8])
+    log.info('[repro %s] FXS_MONITOR_READY', session.id[:8])
+
+
+def _persist_fxs_monitor_failed(db, session, orch, *, reason: str) -> None:
+    debug_health = db.scalar(select(CaptureChannelHealth).where(
+        CaptureChannelHealth.session_id == session.id,
+        CaptureChannelHealth.channel == CaptureChannel.DEBUG.value,
+    ))
+    if debug_health is not None:
+        debug_health.status = ChannelHealth.FAILED.value
+        debug_health.health_json = {
+            **(debug_health.health_json or {}),
+            'reader_alive': False,
+            'runtime_ready': False,
+            'failure_reason': reason,
+            'readiness_phase': 'NOT_READY',
+        }
+    session.capture_completeness = EvidenceCompleteness.PARTIAL.value
+    payload = {'reason': reason, 'runtime_ready': False, 'session_id': session.id}
+    db.add(ReproductionEventRecord(
+        session_id=session.id, case_id=session.case_id,
+        event_type='FXS_MONITOR_FAILED', source='REAL_PLATFORM',
+        session_relative_ms=orch.fxs_event_monitor.relative_ms(),
+        timestamp_source=TimestampSource.COLLECTOR_MONOTONIC.value,
+        payload_json=payload,
+    ))
+    emit_event(
+        db,
+        event_type=EventType.FXS_MONITOR_FAILED,
+        case_id=session.case_id,
+        entity_type='reproduction_session',
+        entity_id=session.id,
+        payload=payload,
+    )
+    db.commit()
+    try:
+        from app.workers.device_provision_task import sync_case_card
+        sync_case_card.apply_async(
+            args=[session.case_id, 'FXS_MONITOR_FAILED'], queue='diagnosis')
+    except Exception:
+        log.exception('[repro %s] failed to enqueue Feishu failure card sync', session.id[:8])
 
 
 def _device_lock_reassigned(db, session) -> bool:
@@ -57,7 +183,7 @@ def _device_lock_reassigned(db, session) -> bool:
     return lock.status == LockStatus.ACTIVE.value and expires > datetime.now(timezone.utc)
 
 
-async def _watch(session_id: str, *, max_seconds: int = 900) -> dict:
+async def _watch(session_id: str, *, max_seconds: int | None = None) -> dict:
     db = SessionLocal()
     try:
         session = _session_listening(db, session_id)
@@ -72,8 +198,9 @@ async def _watch(session_id: str, *, max_seconds: int = 900) -> dict:
             return {'status': 'DEVICE_LOCK_REASSIGNED', 'session_id': session.id}
 
         if resolve_platform_mode() == 'mock':
-            return await _watch_mock(db, session, device, max_seconds)
-        return await _watch_real(db, session, device, max_seconds)
+            configured=int(((session.effective_profile_snapshot or {}).get('timeouts') or {}).get('watching_timeout_seconds') or 900)
+            return await _watch_mock(db, session, device, int(max_seconds or configured))
+        return await _watch_real_v11(db, session, device, max_seconds)
     finally:
         db.close()
 
@@ -86,7 +213,7 @@ async def _watch_mock(db, session, device, max_seconds: int) -> dict:
     try:
         while time.monotonic() - started < max_seconds:
             row = _session_listening(db, session.id)
-            if row is None or ReproductionState(row.state) not in _LISTENING_STATES:
+            if row is None or row.state not in _LISTENING_STATES:
                 break
             await asyncio.sleep(0.5)
     finally:
@@ -126,6 +253,7 @@ async def _watch_real(db, session, device, max_seconds: int) -> dict:
     try:
         # Start the bridge-loop AIM reader and wire its monitor into the orchestrator.
         orch.fxs_event_monitor = orch.platform.start_fxs_monitor()
+        _persist_fxs_monitor_ready(db, session, orch)
         events_handled = 0
         calls_bound = 0
         calls_ended = 0
@@ -138,12 +266,12 @@ async def _watch_real(db, session, device, max_seconds: int) -> dict:
         call_bound_at: float | None = None
         ONHOOK_TIMEOUT_SECONDS = 90.0
         last_media_probe = 0.0
-        media_probe_interval = 3.0
+        media_probe_interval = 1.0
         last_media_capture = 0.0
         # The PCM mirror stream is bursty on real devices, so each build_live_probe
-        # window is 8s; overlap the probes (every 4s) so a burst is very likely to be
+        # window is 8s; overlap the probes (every 2s) so a burst is very likely to be
         # inside at least one capture window during the conversation.
-        media_capture_interval = 4.0
+        media_capture_interval = 2.0
         started = time.monotonic()
         # Resolve the voice runtime context ONCE, before the watch loop. It requires
         # execute_cli on the same AIM PTY the FXS reader is draining; doing it once
@@ -282,7 +410,9 @@ async def _watch_real(db, session, device, max_seconds: int) -> dict:
                                 )
                                 orch.capture.preserve_new_segment(sdb, session=srow, row=seg)
                                 sdb.commit()
-                            except Exception:
+                            except Exception as exc:
+                                log.exception('[repro %s] persist_live FAILED call=%s: %s',
+                                              session.id[:8], call_id[:8], exc)
                                 try:
                                     sdb.rollback()
                                 except Exception:
@@ -310,10 +440,388 @@ async def _watch_real(db, session, device, max_seconds: int) -> dict:
         _close()
 
 
-@celery_app.task(name='reproduction.watch_fxs_events', bind=True,
+async def _watch_real_v11(db, session, device, max_seconds: int | None) -> dict:
+    """Capability-aware segmented-ring watcher.
+
+    One asynchronous full-UDP segment is active before and during an Attempt. PCM
+    validates the capture data plane only; SIP INVITE or progressing RTP binds a
+    Call. ONHOOK is deferred until the open segment has been inspected so a late
+    binding signal cannot be discarded as an invalid Attempt.
+    """
+    provider = get_credential_provider()
+    password = await provider.get_password(sn=device.sn, ip=device.ip)
+    username = device.username
+    if isinstance(provider, LocalSecretCredentialProvider):
+        try:
+            username = provider.resolve_username(ip=device.ip, fallback=username)
+        except Exception:
+            pass
+
+    from app.collectors.asyncssh_adapter import AsyncSSHDeviceAdapter
+    from app.reproduction.quick import QuickAnalysisInput
+
+    adapter = AsyncSSHDeviceAdapter(
+        ip=device.ip, port=device.ssh_port, username=username, password=password)
+    orch, close = build_orchestrator(adapter=adapter, connect=True)
+    events_handled = calls_bound = calls_ended = 0
+    active_call_id: str | None = None
+    pending_onhook_ms: int | None = None
+    call_bound_at: float | None = None
+    segment_future = None
+    segment_is_final_drain = False
+    ring_sealed = False
+    timeout_kind: str | None = None
+    data_plane_validation_recorded = False
+    try:
+        orch.fxs_event_monitor = orch.platform.start_fxs_monitor()
+        _persist_fxs_monitor_ready(db, session, orch)
+        profile = session.effective_profile_snapshot or {}
+        timeouts = profile.get('timeouts') or {}
+        ring = profile.get('ring') or {}
+        arm_barrier = profile.get('arm_barrier') or {}
+        watch_limit = int(max_seconds or timeouts.get('watching_timeout_seconds') or 900)
+        capture_limit = int(timeouts.get('max_capture_seconds') or 900)
+        heartbeat_seconds = int(timeouts.get('heartbeat_seconds') or 15)
+        segment_seconds = int(ring.get('segment_seconds') or 5)
+        validation_seconds = int(arm_barrier.get('first_activity_validation_seconds') or 10)
+        context = orch.platform.resolve_voice_context(device)
+        started = last_heartbeat = time.monotonic()
+        activity_deadline: float | None = None
+        activity_degraded_reported = False
+        segment_no = 0
+        segment_start_ms = 0
+
+        def start_segment(*, final_drain: bool = False):
+            nonlocal segment_future, segment_no, segment_start_ms, segment_is_final_drain
+            segment_no += 1
+            segment_start_ms = orch.fxs_event_monitor.relative_ms()
+            segment_is_final_drain = final_drain
+            segment_future = orch.platform.spawn_ring_segment(
+                context=context, seconds=segment_seconds,
+                segment_key=f'{session.id[:8]}_{segment_no:06d}',
+            )
+
+        def health(channel: CaptureChannel, count: int):
+            row = db.scalar(select(CaptureChannelHealth).where(
+                CaptureChannelHealth.session_id == session.id,
+                CaptureChannelHealth.channel == channel.value,
+            ))
+            if row is None:
+                row = CaptureChannelHealth(session_id=session.id, channel=channel.value)
+                db.add(row)
+            row.packet_count = int(row.packet_count or 0) + int(count)
+            if count > 0:
+                row.status = ChannelHealth.HEALTHY.value
+                row.last_observed_at = datetime.now(timezone.utc)
+            detail = dict(row.health_json or {})
+            detail.update({
+                'packet_count': row.packet_count,
+                'advancing': count > 0,
+                'verification_pending': False if count > 0 else detail.get('verification_pending', True),
+                'readiness_phase': 'DATA_PLANE_VERIFIED' if count > 0 else detail.get('readiness_phase', 'CAPTURE_PATH_READY'),
+            })
+            row.health_json = detail
+
+        def pcm_verified() -> bool:
+            rows = {item.channel: item for item in db.scalars(select(CaptureChannelHealth).where(
+                CaptureChannelHealth.session_id == session.id,
+                CaptureChannelHealth.channel.in_([
+                    CaptureChannel.PCM_RX.value, CaptureChannel.PCM_TX.value]),
+            ))}
+            return all(int((rows.get(name) and rows[name].packet_count) or 0) > 0
+                       for name in (CaptureChannel.PCM_RX.value, CaptureChannel.PCM_TX.value))
+
+        start_segment()
+        try:
+            while True:
+                row = _session_listening(db, session.id)
+                if row is None or row.state not in _LISTENING_STATES:
+                    break
+                if (hasattr(orch.platform, 'fxs_monitor_healthy')
+                        and not orch.platform.fxs_monitor_healthy()):
+                    _persist_fxs_monitor_failed(
+                        db, row, orch, reason='FXS_MONITOR_STOPPED')
+                    timeout_kind = ('CAPTURE_TIMEOUT' if ReproductionState(row.state) in {
+                        ReproductionState.CALL_DETECTED, ReproductionState.CAPTURING,
+                    } else 'WATCH_TIMEOUT')
+                    log.error('[repro %s] FXS monitor unhealthy; fail closed', session.id[:8])
+                    break
+
+                for event in orch.fxs_event_monitor.poll():
+                    log.info('[repro %s] FXS %s%s', session.id[:8], event.event,
+                             f'<{event.digit}>' if event.event == 'DTMF' else '')
+                    if event.event == 'ONHOOK':
+                        observed_onhook_ms = orch.fxs_event_monitor.relative_ms()
+                        first_onhook = pending_onhook_ms is None
+                        pending_onhook_ms = _latch_first_end_anchor(
+                            pending_onhook_ms, observed_onhook_ms)
+                        if not first_onhook:
+                            log.info('[repro %s] duplicate ONHOOK ignored observed_ms=%s latched_ms=%s',
+                                     session.id[:8], observed_onhook_ms, pending_onhook_ms)
+                            continue
+                        # COMPLETE is provisional until every file covering the End
+                        # Anchor has been sealed, transferred and inspected.
+                        row.capture_completeness = EvidenceCompleteness.PARTIAL.value
+                        if not ring_sealed:
+                            # Stop acquisition immediately at the end anchor, but
+                            # retain DUT files. The in-flight fetch plus one explicit
+                            # final drain below must consume every sealed file before
+                            # call finalization/cleanup removes the ring directory.
+                            orch.platform.seal_segmented_ring(session.id)
+                            ring_sealed = True
+                        db.commit()
+                        continue
+                    handled = orch.record_fxs_event(
+                        db, session=row, event=event, actor='reproduction-worker')
+                    if handled is not None:
+                        events_handled += 1
+                    if event.event == 'OFFHOOK':
+                        if not data_plane_validation_recorded:
+                            activity_deadline = time.monotonic() + validation_seconds
+                            activity_degraded_reported = False
+                    db.commit()
+
+                now = time.monotonic()
+                if segment_future is not None and segment_future.done():
+                    # Cancel may commit after the loop-head read while a segment
+                    # finishes. Do not persist that segment into a terminal session.
+                    row = _session_listening(db, session.id)
+                    if row is None or row.state not in _LISTENING_STATES:
+                        segment_future = None
+                        break
+                    capture = segment_future.result()
+                    end_ms = orch.fxs_event_monitor.relative_ms()
+                    attempt = db.scalar(select(ReproductionAttempt).where(
+                        ReproductionAttempt.session_id == session.id,
+                        ReproductionAttempt.status == 'ACTIVE',
+                    ).order_by(ReproductionAttempt.attempt_no.desc()))
+                    segment = orch.capture.append_pcap(
+                        db, session=row, start_ms=segment_start_ms, end_ms=end_ms,
+                        data=capture.pcap, attempt_id=attempt.id if attempt else None,
+                        call_id=active_call_id,
+                        metadata={'phase': 'SEGMENTED_RING', 'segment_seconds': segment_seconds},
+                    )
+                    observation = observe_pcap_signals(segment.local_path)
+                    segment.metadata_json = {
+                        **(segment.metadata_json or {}),
+                        'signal_observation': observation.as_dict(),
+                    }
+                    if _ring_segment_retainable(observation):
+                        orch.capture.preserve_new_segment(db, session=row, row=segment)
+                    else:
+                        # Native tcpdump can seal a header-only 24-byte PCAP before
+                        # the first Voice UDP packet. It is health state, never
+                        # immutable evidence and never a finalize/merge input.
+                        segment.status = CaptureSegmentStatus.EVICTED.value
+                        segment.retained = False
+                        segment.metadata_json = {
+                            **(segment.metadata_json or {}),
+                            'capture_empty': True,
+                            'capture_empty_reason': 'NO_UDP_PACKETS',
+                        }
+                    orch.capture.evict_ring(db, session=row, current_end_ms=end_ms)
+                    health(CaptureChannel.PCAP, observation.udp_packets)
+                    health(CaptureChannel.PCM_RX, observation.pcm_rx_packets)
+                    health(CaptureChannel.PCM_TX, observation.pcm_tx_packets)
+                    if (pending_onhook_ms is None and pcm_verified()
+                            and not data_plane_validation_recorded):
+                        ArmReadinessBarrier.persist_activity_data_plane_validation(
+                            db, session=row)
+                        db.add(ReproductionEventRecord(
+                            session_id=row.id, case_id=row.case_id,
+                            event_type='PCM_DATA_PLANE_VERIFIED', source='PCAP_SIGNAL_OBSERVER',
+                            session_relative_ms=end_ms, timestamp_source=TimestampSource.PCAP.value,
+                            payload_json={
+                                **observation.as_dict(),
+                                'readiness_phase': 'DATA_PLANE_VERIFIED',
+                            },
+                        ))
+                        data_plane_validation_recorded = True
+
+                    # Make the segment and channel-health observations durable
+                    # before call binding. A transient bind failure may roll back
+                    # its own state, but must never discard the capture itself.
+                    db.commit()
+                    row = _session_listening(db, session.id)
+                    attempt = db.get(ReproductionAttempt, attempt.id) if attempt else None
+                    bind_ms = binding_relative_ms(
+                        observation,
+                        segment_start_ms=segment_start_ms,
+                        segment_end_ms=end_ms,
+                    )
+
+                    # RTP captured only after the pending ONHOOK is a tail packet,
+                    # not proof that a call started before hangup.  Never create a
+                    # call whose binding anchor is later than its end anchor.
+                    binding_precedes_end = pending_onhook_ms is None or bind_ms <= pending_onhook_ms
+                    if (attempt is not None and active_call_id is None
+                            and observation.call_binding_event and binding_precedes_end):
+                        try:
+                            call = orch.bind_call(
+                                db, session=row, relative_ms=bind_ms,
+                                external_call_ref=observation.external_call_ref,
+                                binding_event=observation.call_binding_event,
+                                actor='reproduction-worker',
+                            )
+                            active_call_id = call.id
+                            segment.call_id = call.id
+                            call_bound_at = now
+                            calls_bound += 1
+                            log.info('[repro %s] %s -> CALL_BOUND call=%s',
+                                     session.id[:8], observation.call_binding_event, call.id[:8])
+                        except Exception:
+                            log.exception('[repro %s] deterministic call binding failed', session.id[:8])
+                            db.rollback()
+                    db.commit()
+
+                    # Inspect-before-invalidate: the segment above may contain an
+                    # INVITE/RTP signal emitted immediately before ONHOOK.
+                    if pending_onhook_ms is not None and not segment_is_final_drain:
+                        # The in-flight downloader may have selected its file list
+                        # just before ONHOOK sealed the producer. Always perform one
+                        # post-seal drain to collect the former open file and backlog.
+                        start_segment(final_drain=True)
+                    elif (pending_onhook_ms is not None and segment_is_final_drain
+                          and capture.remaining_files > 0):
+                        log.info('[repro %s] tail drain continues remaining_files=%s',
+                                 session.id[:8], capture.remaining_files)
+                        start_segment(final_drain=True)
+                    elif pending_onhook_ms is not None:
+                        row = _session_listening(db, session.id)
+                        row.capture_completeness = (
+                            EvidenceCompleteness.COMPLETE.value
+                            if pcm_verified() else EvidenceCompleteness.PARTIAL.value
+                        )
+                        db.add(ReproductionEventRecord(
+                            session_id=row.id, case_id=row.case_id,
+                            event_type='CAPTURE_TAIL_DRAINED', source='SEGMENTED_RING_DOWNLOADER',
+                            session_relative_ms=pending_onhook_ms,
+                            timestamp_source=TimestampSource.COLLECTOR_MONOTONIC.value,
+                            payload_json={'remaining_files': 0, 'end_anchor': 'FXS_ONHOOK'},
+                        ))
+                        log.info('[repro %s] tail drain complete remaining_files=0', session.id[:8])
+                        if active_call_id is not None and ReproductionState(row.state) in {
+                            ReproductionState.CALL_DETECTED, ReproductionState.CAPTURING,
+                        }:
+                            orch.end_call(
+                                db, session=row, call_id=active_call_id,
+                                relative_ms=pending_onhook_ms,
+                                signal=QuickAnalysisInput(
+                                    verdict=CallVerdict.INCONCLUSIVE, findings=()),
+                                end_anchor='FXS_ONHOOK', actor='reproduction-worker',
+                            )
+                            active_call_id = None
+                            call_bound_at = None
+                            calls_ended += 1
+                        elif attempt is not None and attempt.status == 'ACTIVE':
+                            orch.end_activity_without_call(
+                                db, session=row, attempt_id=attempt.id,
+                                relative_ms=pending_onhook_ms,
+                                end_anchor='FXS_ONHOOK', actor='reproduction-worker',
+                            )
+                        pending_onhook_ms = None
+                        db.commit()
+
+                    row = _session_listening(db, session.id)
+                    if (row is not None and ring_sealed
+                            and _should_restart_ring_after_end(row.state, active_call_id)):
+                        # A no-call Attempt returns to WATCHING. Its producer was
+                        # sealed to drain the End Anchor, so remove that sealed ring
+                        # and let start_segment() create a fresh idle producer.
+                        orch.platform.stop_segmented_ring(session.id)
+                        ring_sealed = False
+                        log.info('[repro %s] no-call tail drained; idle ring restarted',
+                                 session.id[:8])
+                    if pending_onhook_ms is not None:
+                        # A final drain was started above; do not replace its future.
+                        pass
+                    elif row is not None and row.state in _LISTENING_STATES:
+                        start_segment()
+                    else:
+                        segment_future = None
+
+                if (activity_deadline is not None and not activity_degraded_reported
+                        and not data_plane_validation_recorded
+                        and now >= activity_deadline and not pcm_verified()):
+                    row.capture_completeness = EvidenceCompleteness.PARTIAL.value
+                    decision = ArmReadinessBarrier.persist_activity_data_plane_validation(
+                        db, session=row)
+                    db.add(ReproductionEventRecord(
+                        session_id=row.id, case_id=row.case_id,
+                        event_type='PCM_DATA_PLANE_DEGRADED', source='CAPTURE_HEALTH_MONITOR',
+                        session_relative_ms=orch.fxs_event_monitor.relative_ms(),
+                        timestamp_source=TimestampSource.COLLECTOR_MONOTONIC.value,
+                        payload_json={
+                            'reason': 'FIRST_ACTIVITY_PCM_NOT_VERIFIED',
+                            'readiness_phase': decision.readiness_phase,
+                            'failed_reasons': list(decision.failed_reasons),
+                        },
+                    ))
+                    activity_degraded_reported = True
+                    data_plane_validation_recorded = True
+                    db.commit()
+
+                if now - last_heartbeat >= heartbeat_seconds:
+                    # A cancel can release the device lock between our refreshed
+                    # state read and heartbeat. That is a normal external stop,
+                    # not a watcher failure or retryable lease-expiry incident.
+                    row = _session_listening(db, session.id)
+                    if row is None or row.state not in _LISTENING_STATES:
+                        break
+                    try:
+                        orch.heartbeat(db, session=row)
+                        db.commit()
+                    except AppError as exc:
+                        if exc.code != 'REPRODUCTION_LEASE_EXPIRED':
+                            raise
+                        db.rollback()
+                        row = _session_listening(db, session.id)
+                        if row is not None and row.state in _LISTENING_STATES:
+                            raise
+                        log.info('[repro %s] external terminal state observed during heartbeat; watcher exits',
+                                 session.id[:8])
+                        break
+                    last_heartbeat = now
+                if active_call_id is None and now - started >= watch_limit:
+                    timeout_kind = 'WATCH_TIMEOUT'
+                    break
+                if active_call_id is not None and call_bound_at is not None and now - call_bound_at >= capture_limit:
+                    timeout_kind = 'CAPTURE_TIMEOUT'
+                    break
+                await asyncio.sleep(0.1)
+        finally:
+            try:
+                orch.platform.stop_fxs_monitor()
+            except Exception:
+                pass
+            if segment_future is not None and not segment_future.done():
+                segment_future.cancel()
+
+        row = _session_listening(db, session.id)
+        if row is not None and timeout_kind == 'WATCH_TIMEOUT' and ReproductionState(row.state) in {
+            ReproductionState.WATCHING, ReproductionState.ACTIVITY_DETECTED,
+        }:
+            orch.watch_timeout(db, session=row, actor='reproduction-worker')
+            db.commit()
+        elif row is not None and timeout_kind == 'CAPTURE_TIMEOUT' and ReproductionState(row.state) in {
+            ReproductionState.CALL_DETECTED, ReproductionState.CAPTURING,
+        }:
+            orch.capture_timeout(db, session=row, actor='reproduction-worker')
+            db.commit()
+        return {
+            'status': 'DONE', 'session_id': session.id,
+            'events_handled': events_handled, 'calls_bound': calls_bound,
+            'calls_ended': calls_ended,
+            'state': _session_listening(db, session.id).state if _session_listening(db, session.id) else 'GONE',
+        }
+    finally:
+        close()
+
+
+@celery_app.task(name='reproduction.watch_fxs_events', bind=True, queue='reproduction-watch',
                  autoretry_for=(DeviceConnectionError, DeviceCommandError),
                  retry_backoff=True, retry_backoff_max=30, max_retries=2)
-def watch_fxs_events(self, session_id: str, max_seconds: int = 900):
+def watch_fxs_events(self, session_id: str, max_seconds: int | None = None):
     """Watch a reproduction session's DUT for FXS activity and feed it to the
     orchestrator as real activity anchors. Runs until the session leaves the
     watching/activity-detected states or the timeout elapses.

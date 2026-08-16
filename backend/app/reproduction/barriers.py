@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.contracts.enums import (
     ArmValidationStatus, CaptureChannel, ChannelHealth, CleanupRunStatus, CleanupStatus,
-    EventType,
+    EventType, EvidenceSufficiency,
 )
 from app.db.models import ArmValidationResult, CaptureChannelHealth, CleanupRun, ReproductionSession
 from app.reproduction.profile import ReproductionProfileDefinition
@@ -25,13 +25,23 @@ class ArmBarrierDecision:
     status: ArmValidationStatus
     failed_reasons: tuple[str, ...]
     observed: dict
+    readiness_phase: str = 'DATA_PLANE_VERIFIED'
 
 
 class ArmReadinessBarrier:
     @staticmethod
+    def _validation_no(db: Session, session_id: str) -> int:
+        return (db.scalar(select(func.count(ArmValidationResult.id)).where(
+            ArmValidationResult.session_id == session_id)) or 0) + 1
+
+    @staticmethod
     def _channel_ready(channel: CaptureChannel, observed: dict, profile: ReproductionProfileDefinition) -> tuple[bool,str|None]:
         data=observed.get(channel.value) or {}
-        if data.get('status') != ChannelHealth.HEALTHY.value:
+        activity_gated=(profile.arm_barrier.readiness_mode == 'ACTIVITY_GATED')
+        path_ready=(activity_gated and channel in {CaptureChannel.PCM_RX,CaptureChannel.PCM_TX}
+                    and data.get('configured') is True
+                    and data.get('status') in {ChannelHealth.STARTING.value,ChannelHealth.HEALTHY.value})
+        if data.get('status') != ChannelHealth.HEALTHY.value and not path_ready:
             return False, f'{channel.value}_NOT_HEALTHY'
         require_adv=profile.arm_barrier.require_advancing
         if channel == CaptureChannel.PCAP:
@@ -39,6 +49,8 @@ class ArmReadinessBarrier:
             if int(data.get('packet_count',0)) < profile.arm_barrier.min_pcap_packets: return False,'PCAP_PACKET_COUNT_LOW'
             if require_adv and not data.get('advancing',False): return False,'PCAP_NOT_ADVANCING'
         elif channel in {CaptureChannel.PCM_RX,CaptureChannel.PCM_TX}:
+            if path_ready:
+                return True,None
             if int(data.get('packet_count',0)) < profile.arm_barrier.min_pcm_packets: return False,f'{channel.value}_PACKET_COUNT_LOW'
             if require_adv and not data.get('advancing',False): return False,f'{channel.value}_NOT_ADVANCING'
         elif channel == CaptureChannel.DEBUG:
@@ -53,21 +65,31 @@ class ArmReadinessBarrier:
             ok,reason=cls._channel_ready(channel,observed,profile)
             if not ok and reason: failures.append(reason)
         if not failures:
-            return ArmBarrierDecision(True,ArmValidationStatus.PASSED,(),observed)
+            pending=(profile.arm_barrier.readiness_mode == 'ACTIVITY_GATED' and any(
+                (observed.get(ch.value) or {}).get('verification_pending')
+                for ch in (CaptureChannel.PCM_RX,CaptureChannel.PCM_TX)
+            ))
+            return ArmBarrierDecision(
+                True,
+                ArmValidationStatus.PARTIAL if pending else ArmValidationStatus.PASSED,
+                (),observed,
+                'CAPTURE_PATH_READY' if pending else 'DATA_PLANE_VERIFIED',
+            )
         if profile.allow_partial_capability_downgrade:
             pcap_ok,_=cls._channel_ready(CaptureChannel.PCAP,observed,profile)
             if pcap_ok:
-                return ArmBarrierDecision(True,ArmValidationStatus.PARTIAL,tuple(failures),observed)
-        return ArmBarrierDecision(False,ArmValidationStatus.FAILED,tuple(failures),observed)
+                return ArmBarrierDecision(True,ArmValidationStatus.PARTIAL,tuple(failures),observed,'CAPTURE_PATH_DEGRADED')
+        return ArmBarrierDecision(False,ArmValidationStatus.FAILED,tuple(failures),observed,'NOT_READY')
 
     @classmethod
     def persist(cls, db: Session, *, session: ReproductionSession, profile: ReproductionProfileDefinition, observed: dict, required_channels: list[CaptureChannel]) -> ArmBarrierDecision:
         decision=cls.evaluate(profile,observed,required_channels)
-        validation_no=(db.scalar(select(func.count(ArmValidationResult.id)).where(ArmValidationResult.session_id==session.id)) or 0)+1
+        validation_no=cls._validation_no(db, session.id)
         now=_utcnow()
+        observed_snapshot={**observed, '_readiness_phase': decision.readiness_phase}
         db.add(ArmValidationResult(
             session_id=session.id, validation_no=validation_no, status=decision.status.value,
-            required_channels_json=[x.value for x in required_channels], observed_channels_json=observed,
+            required_channels_json=[x.value for x in required_channels], observed_channels_json=observed_snapshot,
             failed_reasons_json=list(decision.failed_reasons), started_at=now, finished_at=now,
         ))
         for channel in CaptureChannel:
@@ -84,7 +106,82 @@ class ArmReadinessBarrier:
         db.flush()
         emit_event(db,event_type=EventType.REPRODUCTION_ARM_VALIDATED,case_id=session.case_id,
                    entity_type='reproduction_session',entity_id=session.id,
-                   payload={'status':decision.status.value,'ready':decision.ready,'failed_reasons':list(decision.failed_reasons)})
+                   payload={'status':decision.status.value,'ready':decision.ready,
+                            'readiness_phase':decision.readiness_phase,
+                            'failed_reasons':list(decision.failed_reasons)})
+        return decision
+
+    @classmethod
+    def persist_activity_data_plane_validation(
+        cls,
+        db: Session,
+        *,
+        session: ReproductionSession,
+    ) -> ArmBarrierDecision:
+        """Persist the second ACTIVITY_GATED readiness phase as Arm Evidence.
+
+        Command/path readiness is recorded during ARM. This method records whether
+        the first real business activity actually produced both required PCM
+        directions, so CAPTURE_PATH_READY is never mistaken for data-plane proof.
+        """
+        rows = {row.channel: row for row in db.scalars(select(CaptureChannelHealth).where(
+            CaptureChannelHealth.session_id == session.id,
+            CaptureChannelHealth.channel.in_([
+                CaptureChannel.PCM_RX.value, CaptureChannel.PCM_TX.value,
+            ]),
+        ))}
+        observed: dict[str, dict] = {}
+        failures: list[str] = []
+        for channel in (CaptureChannel.PCM_RX, CaptureChannel.PCM_TX):
+            row = rows.get(channel.value)
+            packet_count = int((row.packet_count if row else 0) or 0)
+            verified = packet_count > 0
+            if not verified:
+                failures.append(f'{channel.value}_NOT_VERIFIED')
+                if row is not None:
+                    row.status = ChannelHealth.DEGRADED.value
+            details = dict((row.health_json if row else {}) or {})
+            details.update({
+                'packet_count': packet_count,
+                'advancing': verified,
+                'verification_pending': False,
+                'readiness_phase': 'DATA_PLANE_VERIFIED' if verified else 'CAPTURE_PATH_DEGRADED',
+            })
+            if row is not None:
+                row.health_json = details
+            observed[channel.value] = details
+
+        verified = not failures
+        phase = 'DATA_PLANE_VERIFIED' if verified else 'CAPTURE_PATH_DEGRADED'
+        status = ArmValidationStatus.PASSED if verified else ArmValidationStatus.PARTIAL
+        observed['_readiness_phase'] = phase
+        now = _utcnow()
+        db.add(ArmValidationResult(
+            session_id=session.id,
+            validation_no=cls._validation_no(db, session.id),
+            status=status.value,
+            required_channels_json=[CaptureChannel.PCM_RX.value, CaptureChannel.PCM_TX.value],
+            observed_channels_json=observed,
+            failed_reasons_json=failures,
+            started_at=now,
+            finished_at=now,
+        ))
+        if failures:
+            session.evidence_sufficiency = EvidenceSufficiency.INSUFFICIENT_CAPTURE_RECOVERY.value
+        decision = ArmBarrierDecision(verified, status, tuple(failures), observed, phase)
+        emit_event(
+            db,
+            event_type=EventType.REPRODUCTION_ARM_VALIDATED,
+            case_id=session.case_id,
+            entity_type='reproduction_session',
+            entity_id=session.id,
+            payload={
+                'status': status.value,
+                'ready': verified,
+                'readiness_phase': phase,
+                'failed_reasons': failures,
+            },
+        )
         return decision
 
 

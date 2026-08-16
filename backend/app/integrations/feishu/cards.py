@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.db.models import (
     Case, DiagnosisRun, Hypothesis, ReproductionSession, ReproductionAttempt, ReproductionCall,
-    DiagnosticExperiment, CausalAssessment, FixVerificationRun,
+    CaptureChannelHealth, DiagnosticExperiment, CausalAssessment, FixVerificationRun,
 )
 
 
@@ -84,6 +84,21 @@ class FeishuCaseCardBuilder:
         capture = repro.capture_completeness if repro else "-"
         suff = repro.evidence_sufficiency if repro else "-"
         cleanup = repro.cleanup_status if repro else "-"
+        operation_status = "尚未创建复现任务"
+        if repro:
+            debug_health = db.scalar(select(CaptureChannelHealth).where(
+                CaptureChannelHealth.session_id == repro.id,
+                CaptureChannelHealth.channel == "DEBUG",
+            ))
+            debug_details = (debug_health.health_json if debug_health else {}) or {}
+            if repro.state in {"COMPLETED", "FAILED", "CANCELLED", "CLEANUP_FAILED"}:
+                operation_status = "复现流程已结束"
+            elif debug_health and (debug_health.status == "FAILED" or debug_details.get("runtime_ready") is False):
+                operation_status = "禁止继续操作：FXS 监听未就绪或已失败"
+            elif debug_details.get("runtime_ready") is True:
+                operation_status = "可以开始现场复现：FXS 监听已就绪"
+            else:
+                operation_status = "请等待 FXS_MONITOR_READY，暂勿操作话机"
 
         diagnosis_state = "尚未诊断"
         if top_h:
@@ -122,6 +137,7 @@ class FeishuCaseCardBuilder:
                     _kv_line("Capture", capture),
                     _kv_line("Evidence Sufficiency", suff),
                     _kv_line("Cleanup", cleanup),
+                    _kv_line("现场操作", operation_status),
                 ])
             )},
         ]

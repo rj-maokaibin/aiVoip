@@ -151,7 +151,10 @@ class EvidenceBackedCallQuickAnalyzer:
             if signal.verdict==CallVerdict.MATCH and ('ACTIVE_MEDIA_WINDOW' in findings or 'SIP_CALL_FAILED' in findings):
                 return CallVerdict.MATCH
             return CallVerdict.NO_MATCH
-        abnormal={'PERIODIC_INTERFERENCE','RTP_BURST_LOSS','ONE_WAY_RTP_MEDIA','ECHO_PATH','SIP_CALL_FAILED'} & findings
+        # ECHO_PATH and DTMF_PATH are observations that the paths exist.  They
+        # become target evidence only under their symptom-specific profiles; a
+        # generic normal call must not be classified as faulty from path presence.
+        abnormal={'PERIODIC_INTERFERENCE','RTP_BURST_LOSS','ONE_WAY_RTP_MEDIA','SIP_CALL_FAILED'} & findings
         if abnormal: return CallVerdict.MATCH
         return CallVerdict.INCONCLUSIVE if profile_id=='VOIP_GENERIC_FULL_CAPTURE' else signal.verdict
 

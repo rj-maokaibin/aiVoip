@@ -108,6 +108,25 @@ def test_echo_event_reasoner_does_not_confirm_specific_root():
     assert h.confirmable is False
     assert not any(x.status=='CONFIRMED' for x in d.hypotheses)
 
+
+def test_hum_candidate_requires_noise_symptom_before_becoming_supported_fault():
+    result={
+        'packet':{'anomalies':[],'calls':[],'registrations':[],'rtp_streams':[]},
+        'pcm':{'streams':[{'sessions':[{'hum':{'level':'HIGH'}}]}]},
+        'correlations':[], 'cross_layer_events':[],
+    }
+    base={'devices':[],'evidences':[{'id':'e','type':'PCAP','filename':'x.pcap'}],
+          'analyzers':{'media_intelligence':{'run_id':'r1','result':result,'status':'SUCCESS','version':'x'}},
+          'fingerprint':'x'}
+
+    generic=DeterministicDiagnosisReasoner().reason({**base,'case':{'id':'c','summary':'例行通话验证'}})
+    assert not any(h.code=='PCM_HUM_INTERFERENCE' for h in generic.hypotheses)
+    assert any('仅保留为频谱候选' in item for item in generic.known)
+
+    noisy=DeterministicDiagnosisReasoner().reason({**base,'case':{'id':'c','summary':'通话有明显电流音'}})
+    hum=next(h for h in noisy.hypotheses if h.code=='PCM_HUM_INTERFERENCE')
+    assert hum.status=='SUPPORTED'
+
 from app.analyzers.media.engine import MediaIntelligenceEngine
 from app.analyzers.pcm.profile import PcmProfile, PcmTap
 

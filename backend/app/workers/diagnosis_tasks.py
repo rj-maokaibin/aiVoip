@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from celery.utils.log import get_task_logger
 from sqlalchemy import select
 from app.core.config import settings
-from app.db.models import Case, CollectionPlan, DiagnosisRun, Evidence, Hypothesis, HypothesisEvidence, Job
+from app.db.models import AnalyzerRun, Case, CollectionPlan, DiagnosisRun, Evidence, Hypothesis, HypothesisEvidence, Job
 from app.db.session import SessionLocal
 from app.diagnosis.factory import get_diagnosis_reasoner
 from app.diagnosis.policy import enforce_plan_action
@@ -24,6 +24,29 @@ ACTIVE={DiagnosisRunStatus.PENDING.value,DiagnosisRunStatus.ANALYZING.value,Diag
 
 
 def utcnow(): return datetime.now(timezone.utc)
+
+
+def _refresh_feishu_card(case_id: str, reason: str) -> None:
+    if not settings.feishu_live_enabled:
+        return
+    try:
+        from app.workers.device_provision_task import sync_case_card
+        sync_case_card.apply_async(args=[case_id, reason], queue='diagnosis')
+    except Exception:
+        log.exception('failed to enqueue feishu card refresh case=%s', case_id)
+
+
+def _notify_feishu_milestone(db, *, case_id: str, feedback_type: str,
+                              token: str, text: str) -> None:
+    try:
+        from app.integrations.feishu.feedback import notify_case_once
+        notify_case_once(db, case_id=case_id, feedback_type=feedback_type,
+                         token=token, text=text)
+        db.commit()
+    except Exception:
+        db.rollback()
+        log.exception('failed to enqueue feishu milestone case=%s type=%s',
+                      case_id, feedback_type)
 
 
 def _publish_diagnosed_artifacts(db, *, case_id: str, run_id: str) -> dict:
@@ -68,6 +91,8 @@ def _active_child_job(db,case_id:str,job_type:str):
     return db.scalar(select(Job).where(Job.case_id==case_id,Job.type==job_type,Job.status.in_([JobStatus.PENDING.value,JobStatus.RUNNING.value])).order_by(Job.created_at.desc()))
 
 def _dispatch_plan(db, run:DiagnosisRun, plan:CollectionPlan, decision) -> list[str]:
+    from app.services.analysis import create_field_audio_analysis_job, create_field_media_alignment_job, create_image_analysis_job
+    from app.workers.attachment_tasks import align_field_media, analyze_field_audio, analyze_image
     from app.workers.collector_tasks import collect_case
     from app.workers.media_tasks import analyze_media_evidence
     from app.workers.packet_tasks import analyze_evidence
@@ -78,7 +103,7 @@ def _dispatch_plan(db, run:DiagnosisRun, plan:CollectionPlan, decision) -> list[
         if not action.auto_execute: continue
         if action.risk_level not in {'L0','L1'}: continue
         p=action.params
-        if action.action_type in {'RUN_MEDIA_ANALYSIS','RUN_PACKET_ANALYSIS','RUN_PCM_ANALYSIS'}:
+        if action.action_type in {'RUN_MEDIA_ANALYSIS','RUN_PACKET_ANALYSIS','RUN_PCM_ANALYSIS','RUN_FIELD_AUDIO_ANALYSIS','RUN_IMAGE_METADATA_ANALYSIS','RUN_FIELD_MEDIA_ALIGNMENT'}:
             evidence=db.get(Evidence,p.get('evidence_id'))
             if not evidence or evidence.case_id!=run.case_id:
                 continue
@@ -99,6 +124,26 @@ def _dispatch_plan(db, run:DiagnosisRun, plan:CollectionPlan, decision) -> list[
             if not child:
                 child=create_pcm_analysis_job(db,case_id=run.case_id,evidence_id=p['evidence_id'],profile_id=p.get('profile_id','ruijie_aim_diag_v1'))
                 analyze_pcm_evidence.apply_async(args=[child.id,p['evidence_id'],p.get('profile_id','ruijie_aim_diag_v1')],queue='pcm')
+            jobs.append(child.id)
+        elif action.action_type=='RUN_FIELD_AUDIO_ANALYSIS':
+            child=_active_child_job(db,run.case_id,'ANALYZE_FIELD_AUDIO')
+            if not child:
+                child=create_field_audio_analysis_job(db,case_id=run.case_id,evidence_id=p['evidence_id'])
+                analyze_field_audio.apply_async(args=[child.id,p['evidence_id']],queue='media')
+            jobs.append(child.id)
+        elif action.action_type=='RUN_IMAGE_METADATA_ANALYSIS':
+            child=_active_child_job(db,run.case_id,'ANALYZE_IMAGE_METADATA')
+            if not child:
+                child=create_image_analysis_job(db,case_id=run.case_id,evidence_id=p['evidence_id'])
+                analyze_image.apply_async(args=[child.id,p['evidence_id']],queue='media')
+            jobs.append(child.id)
+        elif action.action_type=='RUN_FIELD_MEDIA_ALIGNMENT':
+            child=_active_child_job(db,run.case_id,'ALIGN_FIELD_MEDIA')
+            if not child:
+                media_run=db.get(AnalyzerRun,p.get('media_run_id'))
+                if not media_run or media_run.case_id!=run.case_id: continue
+                child=create_field_media_alignment_job(db,case_id=run.case_id,evidence_id=p['evidence_id'],media_run_id=media_run.id)
+                align_field_media.apply_async(args=[child.id,p['evidence_id'],media_run.id],queue='media')
             jobs.append(child.id)
         elif action.action_type=='COLLECT_PROFILE':
             child=_active_child_job(db,run.case_id,'COLLECT_DEVICE')
@@ -135,11 +180,17 @@ def _execute_cycle(run_id:str):
             run.status=DiagnosisRunStatus.WAITING_USER.value; run.summary_json=summary
             if parent: transition_job(db,parent,JobStatus.WAITING_USER,reason='diagnosis_max_cycles')
             transition_case(db,case,CaseEvent.USER_ACTION_REQUIRED,'diagnosis_max_cycles'); db.commit()
+            from app.integrations.feishu.feedback import build_single_user_question
+            _notify_feishu_milestone(
+                db, case_id=case.id, feedback_type='WAITING_USER',
+                token=f'{run.id}:max-cycles', text=build_single_user_question(summary=summary),
+            )
             return {'status':'WAITING_USER','run_id':run.id,'summary':summary}
         run.status=DiagnosisRunStatus.ANALYZING.value; run.cycle+=1; run.started_at=run.started_at or utcnow()
         if parent:
             transition_job(db,parent,JobStatus.RUNNING,reason='diagnosis_cycle_started')
         transition_case(db,case,CaseEvent.ANALYSIS_STARTED,'diagnosis_cycle_started'); db.commit()
+        _refresh_feishu_card(case.id, 'diagnosis_started')
 
         snapshot=CaseEvidenceSnapshotBuilder().build(db,case.id)
         similar=find_similar_cases(db,case.id,limit=settings.knowledge_similarity_limit,min_score=settings.knowledge_similarity_min_score)
@@ -152,6 +203,27 @@ def _execute_cycle(run_id:str):
         decision=merge_rule_effects(decision,rule_effects,rule_matches)
         decision=enrich_decision_with_history(decision,similar)
         decision.summary={**decision.summary,'known':decision.known,'unknown':decision.unknown,'excluded':decision.excluded,'knowledge_context_count':len(snapshot.get('knowledge') or []),'similar_case_count':len(similar)}
+        shadow = None
+        if settings.ai_shadow_enabled:
+            # Best-effort side channel only: the proposal is persisted for Eval
+            # and is never merged into ``decision`` or dispatched as a plan.
+            from app.diagnosis.ai_proposal import run_ai_shadow
+            shadow = run_ai_shadow(
+                db, case_id=case.id, diagnosis_run_id=run.id, snapshot=snapshot,
+                deterministic_baseline=decision.to_dict(),
+            )
+            decision.summary={**decision.summary, 'ai_shadow_status':shadow.status,
+                              'ai_shadow_proposal_id':shadow.id}
+        # AI-F01/F02/F03/F05 are a read-only assurance sidecar. It is useful in
+        # development even when no external model is configured and can never
+        # modify the deterministic decision or dispatch an action.
+        from app.diagnosis.ai_workbench import persist_readonly_workbench
+        assurance = persist_readonly_workbench(
+            db, case_id=case.id, diagnosis_run_id=run.id, snapshot=snapshot,
+            baseline=decision.to_dict(), proposal_record=shadow,
+        )
+        decision.summary={**decision.summary, 'ai_readonly_status':assurance.status,
+                          'ai_readonly_record_id':assurance.id}
         if run.last_fingerprint==snapshot['fingerprint']: run.no_progress_count+=1
         else: run.no_progress_count=0
         run.last_fingerprint=snapshot['fingerprint']; run.reasoner_name=type(reasoner).__name__; run.reasoner_version=getattr(reasoner,'version','unknown'); run.prompt_version=settings.reasoning_prompt_version; run.model_name=settings.reasoning_gateway_model if settings.diagnosis_reasoner.lower()=='hybrid' else None
@@ -165,6 +237,12 @@ def _execute_cycle(run_id:str):
             summary=_standard_no_progress(decision,run); run.summary_json=summary; run.status=DiagnosisRunStatus.WAITING_USER.value
             if parent: transition_job(db,parent,JobStatus.WAITING_USER,reason='diagnosis_no_progress')
             transition_case(db,case,CaseEvent.USER_ACTION_REQUIRED,'diagnosis_no_progress'); db.commit()
+            from app.integrations.feishu.feedback import build_single_user_question
+            _notify_feishu_milestone(
+                db, case_id=case.id, feedback_type='WAITING_USER',
+                token=f'{run.id}:no-progress:{run.cycle}',
+                text=build_single_user_question(decision=decision.to_dict(), summary=summary),
+            )
             return {'status':'WAITING_USER','run_id':run.id,'summary':summary}
 
         # A sufficiently-supported hypothesis is a conclusion: honor DIAGNOSED
@@ -180,6 +258,11 @@ def _execute_cycle(run_id:str):
             # (best-effort; a publish failure must not fail the diagnosis itself).
             published = _publish_diagnosed_artifacts(db, case_id=case.id, run_id=run.id)
             db.commit()
+            from app.integrations.feishu.feedback import completed_text
+            _notify_feishu_milestone(
+                db, case_id=case.id, feedback_type='COMPLETED', token=run.id,
+                text=completed_text(case.case_no, decision.summary.get('headline')),
+            )
             return {'status':'DIAGNOSED','run_id':run.id,'summary':decision.summary,
                     'published':published}
 
@@ -189,11 +272,18 @@ def _execute_cycle(run_id:str):
             run.status=DiagnosisRunStatus.WAITING_EVIDENCE.value
             if parent: transition_job(db,parent,JobStatus.WAITING_EVIDENCE,reason='diagnosis_auto_collection_dispatched')
             transition_case(db,case,CaseEvent.EVIDENCE_REQUIRED,'diagnosis_auto_collection_dispatched'); db.commit()
+            _refresh_feishu_card(case.id, 'automatic_collection_started')
             return {'status':'WAITING_EVIDENCE','run_id':run.id,'child_jobs':jobs}
 
         run.status=DiagnosisRunStatus.WAITING_USER.value; run.finished_at=utcnow() if decision.conclusion_state=='WAITING_USER' else None
         if parent: transition_job(db,parent,JobStatus.WAITING_USER,reason='diagnosis_requires_user_evidence')
         transition_case(db,case,CaseEvent.USER_ACTION_REQUIRED,'diagnosis_requires_user_evidence'); db.commit()
+        from app.integrations.feishu.feedback import build_single_user_question
+        _notify_feishu_milestone(
+            db, case_id=case.id, feedback_type='WAITING_USER',
+            token=f'{run.id}:cycle:{run.cycle}',
+            text=build_single_user_question(decision=decision.to_dict(), summary=decision.summary),
+        )
         return {'status':'WAITING_USER','run_id':run.id,'summary':decision.summary}
     except Exception as exc:
         log.exception('diagnosis cycle failed')
@@ -211,6 +301,12 @@ def _execute_cycle(run_id:str):
                     try: transition_case(db,case,CaseEvent.CASE_FAILED,'diagnosis_engine_error')
                     except Exception: pass
                 db.commit()
+                if case:
+                    from app.integrations.feishu.feedback import failed_text
+                    _notify_feishu_milestone(
+                        db, case_id=case.id, feedback_type='FAILED', token=run.id,
+                        text=failed_text(case.case_no),
+                    )
         except Exception: db.rollback()
         raise
     finally: db.close()

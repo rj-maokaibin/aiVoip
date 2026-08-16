@@ -10,7 +10,7 @@ from app.analyzers.packet import PacketIntelligenceEngine, TSharkAdapter
 from app.core.config import settings
 from app.db.models import AnalyzerRun, Evidence, Job
 from app.db.session import SessionLocal
-from app.integrations.storage import ObjectStorage
+from app.integrations.storage import ObjectStorage, materialize_evidence
 from app.services.analysis import create_analyzer_run
 from app.services.audit import audit
 from app.services.jobs import transition_job
@@ -45,7 +45,7 @@ def analyze_evidence(self, job_id:str, evidence_id:str):
         suffix=Path(evidence.filename).suffix or '.pcap'
         with tempfile.TemporaryDirectory(prefix='voip-packet-') as td:
             local=Path(td)/f'input{suffix}'
-            ObjectStorage().get_to_file(evidence.object_key, local)
+            materialize_evidence(evidence, local)
             result=engine.analyze_pcap(local)
             encoded=json.dumps(result, ensure_ascii=False, separators=(',',':')).encode('utf-8')
             result_key=f'cases/{job.case_id}/analysis/{run.id}/packet_analysis.json'

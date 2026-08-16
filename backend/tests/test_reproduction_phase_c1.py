@@ -53,6 +53,16 @@ def _orch():
     return ReproductionOrchestrator(registry=ReproductionProfileRegistry(root),platform=MockReproductionPlatform(),capture_pipeline=pipe)
 
 
+class _SegmentedMockPlatform(MockReproductionPlatform):
+    supports_segmented_ring = True
+
+    def build_pretrigger_capture(self, **kwargs):
+        raise AssertionError('segmented ring must not perform blocking pretrigger capture')
+
+    def build_live_probe(self, **kwargs):
+        raise AssertionError('segmented ring must not perform blocking live probe')
+
+
 def test_all_eight_frozen_reproduction_profiles_load_and_generic_exists():
     root=Path(__file__).resolve().parents[2]/'profiles'
     registry=ReproductionProfileRegistry(root)
@@ -117,6 +127,28 @@ def test_invalid_attempt_returns_to_watching_without_ending_session():
         assert session.state==ReproductionState.WATCHING.value
 
 
+def test_segmented_ring_activity_and_binding_never_start_blocking_probe(tmp_path):
+    eng=_engine()
+    with Session(eng) as db:
+        case,_=_case_device(db)
+        root=Path(__file__).resolve().parents[2]/'profiles'
+        pipe=ReproductionCapturePipeline(
+            root=tmp_path/'capture',storage=FilesystemObjectStorage(tmp_path/'objects'))
+        orch=ReproductionOrchestrator(
+            registry=ReproductionProfileRegistry(root),platform=_SegmentedMockPlatform(),
+            capture_pipeline=pipe)
+        session=orch.create_session(db,case_id=case.id,profile_id='AUDIO_NOISE')
+        orch.start(db,session=session)
+
+        attempt=orch.record_activity(db,session=session,relative_ms=100)
+        call=orch.bind_call(
+            db,session=session,relative_ms=200,external_call_ref='sip-call-1',
+            binding_event='SIP_INVITE')
+
+        assert call.attempt_id==attempt.id
+        assert session.state==ReproductionState.CAPTURING.value
+
+
 def test_call_can_bind_when_low_level_anchor_was_missed_and_becomes_control():
     eng=_engine()
     with Session(eng) as db:
@@ -177,7 +209,7 @@ def test_generic_profile_can_arm_partial_when_pcm_is_unavailable_but_never_fakes
         assert bundle['capture_health']['PCM_RX']['packet_count']==0
 
 
-def test_cleanup_reverse_validation_failure_keeps_lock_for_watchdog():
+def test_cleanup_reverse_validation_failure_quarantines_device_until_recovery():
     eng=_engine()
     with Session(eng) as db:
         case,_=_case_device(db,device_info={'mock_cleanup':{'pcm_tx_leak':True}})
@@ -186,7 +218,10 @@ def test_cleanup_reverse_validation_failure_keeps_lock_for_watchdog():
         assert session.state==ReproductionState.CLEANUP_FAILED.value
         assert session.cleanup_status==CleanupStatus.CLEANUP_FAILED.value
         lock=db.scalar(select(DeviceDiagnosticLock).where(DeviceDiagnosticLock.session_id==session.id))
-        assert lock is not None and lock.status=='ACTIVE'
+        assert lock is not None and lock.status=='QUARANTINED'
+        blocked=orch.create_session(db,case_id=case.id,profile_id='DTMF_LOSS',device_id=session.device_id)
+        orch.start(db,session=blocked,owner_worker='w2')
+        assert blocked.state==ReproductionState.WAITING_DEVICE_RESOURCE.value
 
 
 def test_lease_expiry_reconciler_orphans_then_cleans_up():
@@ -200,6 +235,25 @@ def test_lease_expiry_reconciler_orphans_then_cleans_up():
         assert recovered==[session.id]
         assert session.cleanup_status==CleanupStatus.CLEANUP_VERIFIED.value
         assert session.state==ReproductionState.PARTIAL_SUCCESS.value
+
+
+def test_lease_expiry_reconciler_recovers_watching_session_when_lock_row_is_missing():
+    eng=_engine()
+    with Session(eng) as db:
+        case,_=_case_device(db)
+        orch=_orch(); session=orch.create_session(db,case_id=case.id,profile_id='AUDIO_STUTTER'); orch.start(db,session=session,owner_worker='dead-worker')
+        lock=db.scalar(select(DeviceDiagnosticLock).where(DeviceDiagnosticLock.session_id==session.id))
+        assert session.state==ReproductionState.WATCHING.value
+        session.lease_expires_at=datetime.now(timezone.utc)-timedelta(seconds=1)
+        db.delete(lock)
+        db.flush()
+
+        recovered=RecoveryReconciler(orch).reconcile_expired_leases(db)
+
+        assert recovered==[session.id]
+        assert session.cleanup_status==CleanupStatus.CLEANUP_VERIFIED.value
+        assert session.state==ReproductionState.PARTIAL_SUCCESS.value
+        assert session.terminal_reason=='LEASE_EXPIRED'
 
 
 def test_segmented_ring_evicts_before_trigger_and_preserves_after_freeze():

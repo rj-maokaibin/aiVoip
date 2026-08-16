@@ -23,6 +23,9 @@ def infer_type(filename:str) -> str:
     lower=filename.lower()
     if lower.endswith('.pcapng'): return 'PCAPNG'
     if lower.endswith('.pcap'): return 'PCAP'
+    if lower.endswith(('.wav','.ogg','.opus','.mp3','.m4a')): return 'FIELD_AUDIO'
+    if lower.endswith(('.pcm','.raw')): return 'FIELD_AUDIO_RAW'
+    if lower.endswith(('.png','.jpg','.jpeg','.gif','.webp')): return 'FIELD_IMAGE'
     return 'USER_UPLOAD'
 
 
@@ -31,6 +34,11 @@ async def upload_evidence(
     case_id:str,
     file:UploadFile=File(...),
     evidence_type:str|None=Form(None),
+    pcm_sample_rate:int|None=Form(None),
+    pcm_sample_width_bits:int|None=Form(None),
+    pcm_channels:int|None=Form(None),
+    pcm_signed:bool=Form(True),
+    pcm_endian:str=Form('little'),
     idempotency_key:str|None=Header(default=None,alias='Idempotency-Key'),
     db:Session=Depends(get_db),
     identity=Depends(require_roles(*ENGINEER_ROLES)),
@@ -44,11 +52,23 @@ async def upload_evidence(
         while chunk:=await file.read(1024*1024):
             sha.update(chunk); size+=len(chunk); tmp.write(chunk)
     digest=sha.hexdigest()
+    inferred=evidence_type or infer_type(filename)
+    pcm_values=[pcm_sample_rate,pcm_sample_width_bits,pcm_channels]
+    if inferred=='FIELD_AUDIO_RAW' and any(value is not None for value in pcm_values) and not all(value is not None for value in pcm_values):
+        tmp_path.unlink(missing_ok=True)
+        raise HTTPException(422,'RAW_PCM_ALL_FORMAT_FIELDS_REQUIRED')
+    if inferred=='FIELD_AUDIO_RAW' and all(value is not None for value in pcm_values):
+        if pcm_sample_rate<1000 or pcm_sample_rate>192000 or pcm_sample_width_bits not in {8,16,32} or pcm_channels<1 or pcm_channels>8 or pcm_endian not in {'little','big'}:
+            tmp_path.unlink(missing_ok=True)
+            raise HTTPException(422,'RAW_PCM_FORMAT_INVALID')
+    pcm_format={'sample_rate':pcm_sample_rate,'sample_width_bits':pcm_sample_width_bits,
+                'channels':pcm_channels,'signed':pcm_signed,'endian':pcm_endian} if all(value is not None for value in pcm_values) else None
     handle=begin_idempotent(
         db,
         scope=f'POST:/api/v1/cases/{case_id}/evidences/upload',
         key=idempotency_key,
-        payload={'case_id':case_id,'filename':filename,'evidence_type':evidence_type or infer_type(filename),'size_bytes':size,'sha256':digest,'content_type':file.content_type},
+        payload={'case_id':case_id,'filename':filename,'evidence_type':inferred,'size_bytes':size,
+                 'sha256':digest,'content_type':file.content_type,'pcm_format':pcm_format},
     )
     if handle.replay is not None:
         tmp_path.unlink(missing_ok=True)
@@ -60,10 +80,11 @@ async def upload_evidence(
         tmp_path.unlink(missing_ok=True)
     now=datetime.now(timezone.utc)
     row=create_evidence(
-        db,evidence_id=evidence_id,case_id=case_id,evidence_type=evidence_type or infer_type(filename),source='USER_UPLOAD',
+        db,evidence_id=evidence_id,case_id=case_id,evidence_type=inferred,source='USER_UPLOAD',
         filename=filename,object_key=object_key,size_bytes=size,sha256=digest,content_type=file.content_type,
         kind=EvidenceKind.RAW,scope=EvidenceScope.CASE,level=EvidenceLevel.L1,completeness=EvidenceCompleteness.COMPLETE,
-        captured_at=now,producer_type='USER',producer_id=identity.actor_id,producer_version='upload-v1',metadata={},actor=identity.actor_id,
+        captured_at=now,producer_type='USER',producer_id=identity.actor_id,producer_version='upload-v1',
+        metadata={'pcm_format':pcm_format} if pcm_format else {},actor=identity.actor_id,
     )
     audit(db,case_id=case_id,actor=identity.actor_id,event_type='EVIDENCE_UPLOADED',target_type='evidence',target_id=row.id,
           detail={'filename':filename,'size_bytes':size,'type':row.type,'kind':row.kind,'completeness':row.completeness})

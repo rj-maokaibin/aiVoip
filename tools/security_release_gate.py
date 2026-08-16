@@ -11,6 +11,7 @@ if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 
 from app.actions.registry import ActionRegistry, RegistryError  # noqa: E402
+from app.core.config import settings  # noqa: E402
 from app.platforms.registry import PlatformProfileRegistry  # noqa: E402
 from app.release_readiness import runtime_release_readiness  # noqa: E402
 
@@ -28,9 +29,12 @@ def main() -> int:
         checks["unknown_action_rejected"] = True
 
     platform = PlatformProfileRegistry(ROOT / "profiles").get("RUIJIE_VOIP_AIM_V1").definition
-    checks["ec02_partial_has_no_autonomous_actions"] = not bool(platform.autonomous_reproduction_actions)
-    if not checks["ec02_partial_has_no_autonomous_actions"]:
-        errors.append("Partial EC-02 platform must not expose autonomous reproduction actions")
+    checks["ec02_autonomous_contract_verified"] = bool(
+        platform.autonomous_reproduction_actions
+        and platform.production_ready_for("AUTONOMOUS_REPRODUCTION")
+    )
+    if not checks["ec02_autonomous_contract_verified"]:
+        errors.append("EC-02 autonomous reproduction actions must have a production-ready platform contract")
 
     # High-level API/orchestration code must not bypass ActionRegistry/Adapter with direct shell execution.
     forbidden_hits: list[str] = []
@@ -46,13 +50,28 @@ def main() -> int:
 
     readiness = runtime_release_readiness(profile_root=ROOT / "profiles")
     keys = {x["key"]: x for x in readiness["items"]}
-    # A safe F1 build must explicitly block production for known incomplete security/platform integrations.
+    # Implementation gates and runtime-configuration gates are separate: a
+    # capability may be implemented while the current environment remains
+    # intentionally unconfigured.  The readiness report must describe that
+    # state consistently instead of preserving the old Phase-D1 blockers.
     checks["production_auth_gap_explicit"] = keys.get("PRODUCTION_AUTH_PROVIDER", {}).get("status") == "BLOCKED"
-    checks["mock_platform_gap_explicit"] = keys.get("REAL_REPRODUCTION_PLATFORM", {}).get("status") == "BLOCKED"
-    checks["feishu_live_gap_explicit"] = keys.get("FEISHU_LIVE_TRANSPORT", {}).get("status") == "BLOCKED"
-    for key in ("production_auth_gap_explicit", "mock_platform_gap_explicit", "feishu_live_gap_explicit"):
+    platform_mode = str(settings.reproduction_platform_mode).lower()
+    expected_platform_status = "BLOCKED" if platform_mode == "mock" else "PASS"
+    checks["reproduction_platform_configuration_consistent"] = (
+        keys.get("EC02_PLATFORM_PRODUCTION_READY", {}).get("status") == "PASS"
+        and keys.get("REAL_REPRODUCTION_PLATFORM", {}).get("status") == expected_platform_status
+    )
+    checks["feishu_transport_implementation_verified"] = (
+        keys.get("FEISHU_TRANSPORT_IMPLEMENTATION", {}).get("status") == "PASS"
+        and keys.get("FEISHU_LIVE_TRANSPORT", {}).get("status") in {"PASS", "BLOCKED"}
+    )
+    for key in (
+        "production_auth_gap_explicit",
+        "reproduction_platform_configuration_consistent",
+        "feishu_transport_implementation_verified",
+    ):
         if not checks[key]:
-            errors.append(f"expected explicit release blocker missing: {key}")
+            errors.append(f"security/readiness contract failed: {key}")
 
     payload = {"status": "PASS" if not errors else "FAIL", "checks": checks, "errors": errors}
     print(json.dumps(payload, ensure_ascii=False, indent=2))

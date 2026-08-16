@@ -52,19 +52,31 @@ def _message_payload(data) -> dict:
         data.event.sender.sender_id  (open_id / user_id / union_id)
     """
     event = getattr(data, "event", None)
+    header = getattr(data, "header", None)
     message = getattr(event, "message", None) if event is not None else None
     chat_id = str(getattr(message, "chat_id", "") or "")
-    # 'group' -> chat_id is a chat_id; 'p2p' (DM to the bot) -> chat_id is the
-    # sender's open_id. Carried so the conclusion card is pushed back with the
-    # matching receive_id_type (chat_id vs open_id).
+    # Both group and p2p events carry the conversation chat_id (oc_*). A p2p
+    # chat_id is not the sender open_id and still uses receive_id_type=chat_id.
     chat_type = str(getattr(message, "chat_type", "") or "")
     content = str(getattr(message, "content", "") or "")
+    message_type = str(getattr(message, "message_type", "") or "text")
+    event_id = str(getattr(header, "event_id", "") or "")
+    tenant_key = str(getattr(header, "tenant_key", "") or "")
+    header_create_time = str(getattr(header, "create_time", "") or "")
+    message_id = str(getattr(message, "message_id", "") or "")
+    root_id = str(getattr(message, "root_id", "") or "")
+    parent_id = str(getattr(message, "parent_id", "") or "")
+    create_time = str(getattr(message, "create_time", "") or "")
     sender = getattr(event, "sender", None) if event is not None else None
     sender_id = getattr(sender, "sender_id", None) if sender is not None else None
     payload = {
-        "header": {"event_type": "im.message.receive_v1"},
+        "header": {"event_type": "im.message.receive_v1", "event_id": event_id,
+                   "tenant_key": tenant_key, "create_time": header_create_time},
         "event": {"chat_id": chat_id, "chat_type": chat_type,
-                  "message": {"content": content, "chat_id": chat_id, "chat_type": chat_type}},
+                  "message": {"content": content, "chat_id": chat_id, "chat_type": chat_type,
+                              "message_type": message_type,
+                              "message_id": message_id, "root_id": root_id,
+                              "parent_id": parent_id, "create_time": create_time}},
     }
     operator = _sender_operator(sender_id)
     if operator:
@@ -100,12 +112,14 @@ def _on_message_receive(data) -> None:
 def _card_action_payload(data) -> dict:
     """Normalize a SDK P2CardActionTrigger into dispatch_event's payload shape."""
     event = getattr(data, "event", None)
+    header = getattr(data, "header", None)
     action = getattr(event, "action", None) if event is not None else None
     operator = getattr(event, "operator", None) if event is not None else None
     context = getattr(event, "context", None) if event is not None else None
     value = getattr(action, "value", None) if action is not None else None
     payload = {
-        "header": {"event_type": "card.action.trigger"},
+        "header": {"event_type": "card.action.trigger",
+                   "event_id": str(getattr(header, "event_id", "") or "")},
         "event": {
             "action": {"value": value if isinstance(value, dict) else {}},
             "operator": {},

@@ -48,12 +48,18 @@ class CaseEvidenceSnapshotBuilder:
             result=self._read_result(run.result_object_key)
             analyzer_results[name]={
                 'run_id':run.id,'status':run.status,'version':run.analyzer_version,'config_version':run.config_version,
+                'config_snapshot':run.config_snapshot or {},'input_evidence_ids':run.input_evidence_ids or [],
                 'summary':run.summary_json or {},'result':result,
             }
         data={
             'case':{'id':case.id,'case_no':case.case_no,'summary':case.summary,'status':case.status},
-            'devices':[{'id':d.id,'ip':d.ip,'ssh_port':d.ssh_port,'sn':d.sn,'platform_id':d.platform_id} for d in devices],
-            'evidences':[{'id':e.id,'type':e.type,'source':e.source,'filename':e.filename,'sha256':e.sha256,'metadata':e.metadata_json or {}} for e in evidences],
+            'devices':[{'id':d.id,'ip':d.ip,'ssh_port':d.ssh_port,'sn':d.sn,'platform_id':d.platform_id,
+                        'device_info':d.device_info or {}} for d in devices],
+            'evidences':[{
+                'id':e.id,'type':e.type,'source':e.source,'filename':e.filename,'sha256':e.sha256,
+                'kind':e.kind,'scope':e.source_scope,'level':e.level,'completeness':e.completeness,
+                'content_type':e.content_type,'metadata':e.metadata_json or {},
+            } for e in evidences],
             'analyzers':analyzer_results,
         }
         data['fingerprint']=self.fingerprint(data)

@@ -145,7 +145,11 @@ class AsyncSSHDeviceAdapter(DeviceAdapter):
         if not self.conn:
             raise DeviceConnectionError('SSH_NOT_CONNECTED')
         if self._aim_process is not None:
-            return self._aim_process
+            # A process may have emitted the AIM prompt and then exited before
+            # the first debug command is written.  Do not return that stale PTY.
+            if getattr(self._aim_process, 'returncode', None) is None:
+                return self._aim_process
+            await self._close_aim_session()
         last: Exception | None = None
         for attempt in range(max(1, retries)):
             try:
@@ -183,7 +187,7 @@ class AsyncSSHDeviceAdapter(DeviceAdapter):
                     output=await read_until_prompt(process.stdout, self.aim_prompt, timeout)
                     clean=output.rsplit(self.aim_prompt,1)[0]
                     return CommandResult(stdout=clean, stderr='', exit_status=0)
-                except (PromptTimeout, PromptSessionClosed) as exc:
+                except (PromptTimeout, PromptSessionClosed, BrokenPipeError) as exc:
                     # The prompt contract is no longer trustworthy.  Drop the PTY so the
                     # next attempt starts from a known root state instead of continuing
                     # in an unknown sub-mode, then retry (AIM respawn can be transient).
@@ -204,15 +208,35 @@ class AsyncSSHDeviceAdapter(DeviceAdapter):
         """
         if not self.conn:
             raise DeviceConnectionError('SSH_NOT_CONNECTED')
-        process = await self._ensure_aim_session(10)
-        try:
-            return await asyncio.wait_for(process.stdout.read(4096), timeout)
-        except asyncio.TimeoutError:
-            return ''
+        for attempt in range(3):
+            process = await self._ensure_aim_session(10)
+            try:
+                chunk = await asyncio.wait_for(process.stdout.read(4096), timeout)
+                if chunk or getattr(process, 'returncode', None) is None:
+                    return chunk
+                await self._close_aim_session()
+            except asyncio.TimeoutError:
+                return ''
+            except (PromptSessionClosed, BrokenPipeError):
+                await self._close_aim_session()
+            if attempt < 2:
+                await asyncio.sleep(1.0 * (attempt + 1))
+        raise DeviceCommandError('AIM_STREAM_CLOSED')
 
     async def write_aim(self, command: str) -> None:
         """Write a line to the persistent AIM PTY stdin without reading a prompt."""
         if not self.conn:
             raise DeviceConnectionError('SSH_NOT_CONNECTED')
-        process = await self._ensure_aim_session(10)
-        process.stdin.write(command + '\n')
+        async with self._aim_lock:
+            last: Exception | None = None
+            for attempt in range(3):
+                process = await self._ensure_aim_session(10)
+                try:
+                    process.stdin.write(command + '\n')
+                    return
+                except (PromptSessionClosed, BrokenPipeError) as exc:
+                    last = exc
+                    await self._close_aim_session()
+                    if attempt < 2:
+                        await asyncio.sleep(1.0 * (attempt + 1))
+            raise DeviceCommandError(f'AIM_WRITE_FAILED:{type(last).__name__}') from last

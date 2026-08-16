@@ -10,7 +10,8 @@ from app.integrations.feishu.transport import FeishuLiveTransport
 
 
 def bind_case_to_chat(db: Session, *, case_id: str, chat_id: str, chat_type: str | None = None,
-                      receive_id_type: str | None = None) -> FeishuCaseBinding | None:
+                      receive_id_type: str | None = None,
+                      source_context: dict | None = None) -> FeishuCaseBinding | None:
     """Record that a Case belongs to a specific Feishu conversation (where the
     engineer @bot'ed / DM'ed it). Called at provision time so every conclusion
     card is pushed back to the SAME source conversation, even when different
@@ -31,8 +32,26 @@ def bind_case_to_chat(db: Session, *, case_id: str, chat_id: str, chat_type: str
         receive_id_type = 'chat_id'
     if not chat_id:
         return None
+    source_context = source_context or {}
+
+    def apply_source_context(row: FeishuCaseBinding) -> None:
+        # A binding represents the Case's original/main thread. Later correlated
+        # messages must not move that anchor, otherwise replies to the original
+        # card stop resolving. Follow-ups are stored separately as Evidence.
+        row.source_event_id = row.source_event_id or source_context.get('event_id')
+        row.source_message_id = row.source_message_id or source_context.get('message_id')
+        row.source_root_message_id = row.source_root_message_id or source_context.get('root_message_id')
+        row.source_parent_message_id = row.source_parent_message_id or source_context.get('parent_message_id')
+        row.source_sender_open_id = row.source_sender_open_id or source_context.get('sender_open_id')
+        row.source_chat_type = row.source_chat_type or chat_type or source_context.get('chat_type')
+        row.source_tenant_key = row.source_tenant_key or source_context.get('tenant_key')
+        row.source_message_timestamp = row.source_message_timestamp or source_context.get('create_time')
+        row.source_normalized_text = row.source_normalized_text or source_context.get('normalized_text')
+        row.source_attachment_refs = row.source_attachment_refs or source_context.get('attachments')
+
     binding = db.scalar(select(FeishuCaseBinding).where(FeishuCaseBinding.case_id == case_id).limit(1))
     if binding is not None:
+        apply_source_context(binding)
         # Keep existing delivery target; never override a live message.
         if binding.message_id:
             return binding
@@ -42,6 +61,7 @@ def bind_case_to_chat(db: Session, *, case_id: str, chat_id: str, chat_type: str
         return binding
     binding = FeishuCaseBinding(case_id=case_id, receive_id=chat_id, receive_id_type=receive_id_type,
                                 message_id=None, status='ACTIVE', card_version=0)
+    apply_source_context(binding)
     db.add(binding)
     db.flush()
     return binding

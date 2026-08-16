@@ -12,11 +12,14 @@ The password is never returned to the engineer and never logged.
 """
 from __future__ import annotations
 
+import logging
 import re
 from urllib.parse import urlparse
 
 from sqlalchemy import select
 import httpx
+
+log = logging.getLogger(__name__)
 
 from app.integrations.credentials import CredentialError
 from app.integrations.poseidon import PoseidonClient
@@ -60,14 +63,22 @@ class DeviceProvisioner:
         if not sn:
             raise CredentialError("DEVICE_PROVISION_SN_REQUIRED")
 
-        # 2. Open the SSH service when a web_url is available.
+        # 2. Open the SSH service when a web_url is available AND no direct
+        #    tunnel endpoint was given. Manual-tunnel messages (ip=... port=...)
+        #    already expose SSH; the EWEB/LUCI relay URL carries a short-lived
+        #    stok that quickly goes stale, so opening SSH through it would block
+        #    for a full connect timeout instead of using the live tunnel.
         ssh_opened = False
-        if web_url:
+        if web_url and not ssh_ip:
+            log.info('provision sn=%s opening SSH via web_url (no tunnel ip)', sn)
             try:
                 await self._opener.set_ssh(web_url=web_url, mode=1)
                 ssh_opened = True
             except SshOpenerError as exc:
                 raise CredentialError(f"DEVICE_SSH_OPEN_FAILED:{exc}") from exc
+        else:
+            log.info('provision sn=%s web_url=%s ssh_ip=%s:%s ssh_opened=%s',
+                     sn, bool(web_url), ssh_ip, ssh_port, ssh_opened)
 
         # 3. Resolve the SSH password from Poseidon (also yields MAC/product).
         record = await self._poseidon.get_device_record(sn=sn, mac=mac, product=product)

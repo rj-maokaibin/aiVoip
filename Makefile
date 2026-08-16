@@ -1,4 +1,4 @@
-.PHONY: up down logs migrate test lint profiles phase-e1-workbench-gate platform-contract-gate platform-production-gate rules golden-synthetic e2e-synthetic e2e-diff golden-field quality-gate fullstack-smoke fullstack-field release-gate field-release-gate reproduction-profile-gate reproduction-e2e reproduction-evidence-e2e phase-c3-profile-gate diagnostic-question-gate experiment-profile-gate reproduction-c3-e2e m62-core-gate m62-c2-gate m62-c3-gate migration-contract-gate openapi-contract-gate compose-contract-gate security-release-gate source-manifest-gate frontend-build-gate phase-f1-static-gate phase-f2-static-gate production-hardening-gate v1-release-readiness v1-release-gate
+.PHONY: up down logs migrate test lint profiles ai-eval-gate phase-e1-workbench-gate platform-contract-gate platform-production-gate rules golden-synthetic e2e-synthetic e2e-diff golden-field quality-gate fullstack-smoke fullstack-field release-gate field-release-gate reproduction-profile-gate reproduction-e2e reproduction-evidence-e2e phase-c3-profile-gate diagnostic-question-gate experiment-profile-gate reproduction-c3-e2e m62-core-gate m62-c2-gate m62-c3-gate migration-contract-gate openapi-contract-gate compose-contract-gate security-release-gate source-manifest-gate frontend-build-gate phase-f1-static-gate phase-f2-static-gate production-hardening-gate v1-release-readiness v1-release-gate
 
 up:
 	docker compose up -d --build
@@ -70,6 +70,9 @@ m62-c2-gate: reproduction-profile-gate test reproduction-e2e reproduction-eviden
 m62-c3-gate: reproduction-profile-gate diagnostic-question-gate experiment-profile-gate test reproduction-e2e reproduction-evidence-e2e reproduction-c3-e2e rules golden-synthetic e2e-diff
 
 quality-gate: lint profiles reproduction-profile-gate test rules golden-synthetic e2e-diff
+
+ai-eval-gate:
+	PYTHONPATH=backend:. python tools/ai_eval_gate.py --out validation/ai_eval_gate.json
 
 # M6.1: real PostgreSQL + Redis + MinIO + Celery + HTTP API full-stack smoke.
 # Uses a generated periodic-audio PCAP so it can run in CI without field evidence.

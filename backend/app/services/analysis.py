@@ -54,3 +54,27 @@ def create_media_analysis_job(db:Session, *, case_id:str, evidence_id:str, profi
     db.add(job); db.flush()
     audit(db, case_id=case_id, event_type='MEDIA_ANALYSIS_JOB_CREATED', target_type='job', target_id=job.id, detail={'evidence_id':evidence_id,'profile_id':profile_id})
     db.commit(); db.refresh(job); return job
+
+
+def create_field_audio_analysis_job(db:Session, *, case_id:str, evidence_id:str) -> Job:
+    job=Job(case_id=case_id, type='ANALYZE_FIELD_AUDIO', status=JobStatus.PENDING.value)
+    db.add(job); db.flush()
+    audit(db, case_id=case_id, event_type='FIELD_AUDIO_ANALYSIS_JOB_CREATED', target_type='job', target_id=job.id,
+          detail={'evidence_id':evidence_id})
+    db.commit(); db.refresh(job); return job
+
+
+def create_image_analysis_job(db:Session, *, case_id:str, evidence_id:str) -> Job:
+    job=Job(case_id=case_id, type='ANALYZE_IMAGE_METADATA', status=JobStatus.PENDING.value)
+    db.add(job); db.flush()
+    audit(db, case_id=case_id, event_type='IMAGE_METADATA_ANALYSIS_JOB_CREATED', target_type='job', target_id=job.id,
+          detail={'evidence_id':evidence_id})
+    db.commit(); db.refresh(job); return job
+
+
+def create_field_media_alignment_job(db:Session, *, case_id:str, evidence_id:str, media_run_id:str) -> Job:
+    job=Job(case_id=case_id,type='ALIGN_FIELD_MEDIA',status=JobStatus.PENDING.value)
+    db.add(job); db.flush()
+    audit(db,case_id=case_id,event_type='FIELD_MEDIA_ALIGNMENT_JOB_CREATED',target_type='job',target_id=job.id,
+          detail={'evidence_id':evidence_id,'media_run_id':media_run_id})
+    db.commit(); db.refresh(job); return job

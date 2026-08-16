@@ -178,3 +178,29 @@ def reproduction_object_storage():
     if mode=='minio':
         return ObjectStorage()
     raise ValueError(f'REPRODUCTION_STORAGE_MODE_INVALID:{settings.reproduction_storage_mode}')
+
+
+def materialize_evidence(evidence, destination: str | Path, *, permanent_storage=None) -> str:
+    """Resolve an Evidence object from Hot/Staging or permanent object storage.
+
+    Reproduction Quick/Live analyzers may consume immutable frozen Staging objects
+    before the final MinIO manifest exists. Classic analyzers must therefore not
+    assume every Evidence row is already in MinIO. The returned string identifies
+    the backend used and is suitable for structured audit/debug metadata.
+    """
+    last = None
+    if getattr(evidence, 'session_id', None):
+        try:
+            reproduction_object_storage().get_to_file(evidence.object_key, destination)
+            return 'reproduction'
+        except Exception as exc:
+            last = exc
+    try:
+        storage = permanent_storage if permanent_storage is not None else ObjectStorage()
+        storage.get_to_file(evidence.object_key, destination)
+        return 'permanent'
+    except Exception as exc:
+        last = exc
+    if last is not None:
+        raise last
+    raise FileNotFoundError(evidence.object_key)

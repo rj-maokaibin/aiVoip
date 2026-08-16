@@ -99,6 +99,8 @@ class MediaIntelligenceEngine:
             media_events.extend(item.pop('_events'))
         correlations = self._correlate_pcm_rtp(pcm_signals, tracks)
         scoped_audio_events = self._active_media_audio_events(pcm_signals, packet_result)
+        # A delayed RX/TX correlation is a path observation.  Whether it is a
+        # user-visible echo fault is decided later using symptom context.
         echo_events = self._pcm_echo_events(pcm_signals)
         cross = []
         try:

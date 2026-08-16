@@ -32,6 +32,7 @@ def build_reproduction_evidence_bundle(db: Session, session: ReproductionSession
         'voice_runtime_context':context.snapshot_json if context else session.voice_runtime_context_json,
         'arm_validations':[
             {'validation_no':x.validation_no,'status':x.status,'required_channels':x.required_channels_json,
+             'readiness_phase':(x.observed_channels_json or {}).get('_readiness_phase'),
              'observed_channels':x.observed_channels_json,'failed_reasons':x.failed_reasons_json or []}
             for x in arm
         ],

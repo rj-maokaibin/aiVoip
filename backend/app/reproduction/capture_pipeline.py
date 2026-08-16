@@ -147,6 +147,30 @@ class ReproductionCapturePipeline:
         row.evidence_id=ev.id; row.retained=True; row.status=CaptureSegmentStatus.RETAINED.value; row.retention_class=RetentionClass.PERMANENT_RAW.value
         return ev.id
 
+    @staticmethod
+    def _usable_pcap_rows(rows: list[ReproductionCaptureSegment]) -> list[ReproductionCaptureSegment]:
+        """Exclude empty/truncated poll results from a derived PCAP.
+
+        Raw non-empty corruption remains a hard error in merge_classic_pcaps.
+        A <24-byte row, however, cannot contain even a classic-PCAP header and is
+        an unavailable segment rather than evidence; retaining it would make one
+        idle poll abort an otherwise complete call.
+        """
+        usable=[]
+        for row in rows:
+            path=Path(row.local_path) if row.local_path else None
+            if path is None or not path.exists() or path.stat().st_size < 24:
+                row.status=CaptureSegmentStatus.CORRUPTED.value
+                row.retained=False
+                row.metadata_json={
+                    **(row.metadata_json or {}),
+                    'excluded_from_merge': True,
+                    'exclusion_reason': 'PCAP_HEADER_UNAVAILABLE',
+                }
+                continue
+            usable.append(row)
+        return usable
+
     def _overlap_segments(self, db:Session, session_id:str, *, channel:CaptureChannel, start_ms:int, end_ms:int):
         return list(db.scalars(select(ReproductionCaptureSegment).where(
             ReproductionCaptureSegment.session_id==session_id,ReproductionCaptureSegment.channel==channel.value,
@@ -175,6 +199,7 @@ class ReproductionCapturePipeline:
             bound_rows=[x for x in rows if x.call_id==call.id]
             if bound_rows:
                 rows=bound_rows
+        rows=self._usable_pcap_rows(rows)
         if not rows: raise ValueError('CALL_CAPTURE_SEGMENTS_MISSING')
         for row in rows: self._retain_raw_segment(db,session,row)
         out=self._session_dir(session.id)/'calls'/call.id/'call.pcap'; out.parent.mkdir(parents=True,exist_ok=True)
@@ -207,6 +232,8 @@ class ReproductionCapturePipeline:
                 # container recreate before the persistence fix) instead of crashing
                 # the whole finalize / reconcile run on FileNotFoundError.
                 rows=[x for x in rows if x.local_path and Path(x.local_path).exists()]
+                if channel==CaptureChannel.PCAP:
+                    rows=self._usable_pcap_rows(rows)
                 if not rows: continue
                 for row in rows: self._retain_raw_segment(db,session,row)
                 out=self._session_dir(session.id)/'final'/f'session_{channel.value.lower()}{suffix}'; out.parent.mkdir(parents=True,exist_ok=True)

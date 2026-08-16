@@ -96,14 +96,16 @@ def _mem_factory():
     return sessionmaker(bind=engine)
 
 
-def test_provision_opens_ssh_and_stores_in_db():
+def test_provision_uses_existing_tunnel_without_reopening_ssh_and_stores_in_db():
     factory = _mem_factory()
-    prov = DeviceProvisioner(opener=_FakeOpener(), poseidon=_FakePoseidon(), session_factory=factory)
+    opener = _FakeOpener()
+    prov = DeviceProvisioner(opener=opener, poseidon=_FakePoseidon(), session_factory=factory)
     res = asyncio.run(prov.provision(
         web_url="https://x.noc.rj.link/cgi-bin/luci/?stamp=1",
         ssh_ip="10.44.77.254", ssh_port=2222, sn="SN-1", mac="M", product="P",
     ))
-    assert res["ssh_opened"] is True
+    assert res["ssh_opened"] is False
+    assert opener.calls == []
     assert res["password_resolved"] is True
     assert res["stored_in_db"] is True
     db = factory()
@@ -218,7 +220,7 @@ def test_provision_missing_sn_raises():
         asyncio.run(prov.provision(web_url=None, ssh_ip="10.0.0.1", ssh_port=22, sn=""))
 
 
-def test_provision_open_failure_raises():
+def test_provision_url_only_open_failure_raises():
     prov = DeviceProvisioner(opener=_FakeOpener(fail=True), poseidon=_FakePoseidon(), session_factory=_mem_factory())
     with pytest.raises(CredentialError):
-        asyncio.run(prov.provision(web_url="https://x/", ssh_ip="10.0.0.1", ssh_port=22, sn="SN-1"))
+        asyncio.run(prov.provision(web_url="https://x/", ssh_ip=None, ssh_port=22, sn="SN-1"))

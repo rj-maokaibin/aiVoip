@@ -1,8 +1,8 @@
-#!/bin/sh
-set -eu
+#!/usr/bin/env bash
+set -euo pipefail
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 cd "$ROOT"
-export PYTHONPATH="$ROOT/backend"
+export PYTHONPATH="$ROOT/backend:$ROOT"
 mkdir -p validation
 
 python -m compileall -q backend/app backend/tests deploy tools

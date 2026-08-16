@@ -2,10 +2,12 @@
   "status": "PASS",
   "checks": {
     "tabs": true,
+    "ai_readonly_workbench": true,
     "packet_media_views": true,
     "sse": true,
     "safe_stop": true,
-    "ec02_pending_banner": true,
+    "platform_mode_not_hardcoded": true,
+    "watch_runtime_gate": true,
     "case_reproduction_list_api": true,
     "case_experiment_list_api": true,
     "case_fix_read_api": true,

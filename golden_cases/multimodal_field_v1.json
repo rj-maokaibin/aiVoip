@@ -1,0 +1,55 @@
+{
+  "schema_version": "multimodal-field-golden-v1",
+  "status": "SYNTHETIC_DEVELOPMENT_BASELINE",
+  "field_sample_required": true,
+  "cases": [
+    {
+      "id": "MM-001",
+      "name": "飞书Opus录音可解码",
+      "inputs": ["audio/ogg; codecs=opus"],
+      "expected": ["FIELD_AUDIO", "availability=ANALYZED", "decoded_by=ffmpeg"]
+    },
+    {
+      "id": "MM-002",
+      "name": "设备截图Codec OCR候选",
+      "inputs": ["image/png with Codec: G711A"],
+      "expected": ["FIELD_IMAGE", "ocr_availability=EXTRACTED", "codec=G711A", "evidence_level=L4"]
+    },
+    {
+      "id": "MM-003",
+      "name": "截图敏感行脱敏",
+      "inputs": ["image with password/token line"],
+      "expected": ["REDACTED_SENSITIVE_LINE", "secret_not_persisted"]
+    },
+    {
+      "id": "MM-004",
+      "name": "录音与RTP高相关对齐",
+      "inputs": ["field recording", "matching PCAP RTP audio"],
+      "expected": ["field_media_alignment=ALIGNED", "quality=HIGH", "call_id_mapped"]
+    },
+    {
+      "id": "MM-005",
+      "name": "不匹配录音拒绝对齐",
+      "inputs": ["field recording", "unrelated PCAP"],
+      "expected": ["field_media_alignment=NO_RELIABLE_MATCH", "no_root_cause_claim"]
+    },
+    {
+      "id": "MM-006",
+      "name": "后续新增附件不被旧Run吞掉",
+      "inputs": ["old analyzed audio", "new audio in same Case"],
+      "expected": ["new RUN_FIELD_AUDIO_ANALYSIS", "evidence_id=new"]
+    },
+    {
+      "id": "MM-007",
+      "name": "Raw PCM显式参数导入",
+      "inputs": ["headerless PCM", "sample_rate/width/channels/signed/endian"],
+      "expected": ["availability=ANALYZED", "decoded_by=explicit_pcm_format", "no_format_guess"]
+    },
+    {
+      "id": "MM-008",
+      "name": "截图几何和颜色只生成视觉候选",
+      "inputs": ["image with lines and color regions"],
+      "expected": ["visual_semantics=CANDIDATE_ONLY", "evidence_level=L4", "semantic_labels_assigned=false"]
+    }
+  ]
+}

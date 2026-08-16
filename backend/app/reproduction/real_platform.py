@@ -17,6 +17,8 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import gzip
+import logging
 import queue
 import threading
 import time
@@ -46,6 +48,8 @@ from app.reproduction.pcm_cleanup import (
     parse_tcpdump_packet_count,
 )
 
+log = logging.getLogger(__name__)
+
 
 def _utcnow():
     return datetime.now(timezone.utc)
@@ -56,6 +60,7 @@ class RealCapture:
     pcap: bytes = b''
     debug_log: bytes = b''
     pcap_path: Path | None = None
+    remaining_files: int = 0
 
 
 class _EventLoopBridge:
@@ -97,7 +102,8 @@ class RealReproductionPlatform:
     """
 
     platform_id = 'ruijie-voip-aim-real'
-    version = '0.6.0'
+    version = '0.7.0'
+    supports_segmented_ring = True
 
     # Verified live on the EC-02 APF1250 (2026-08-13).
     DEFAULT_VOICE_GATEWAY = '192.168.3.200'
@@ -135,6 +141,12 @@ class RealReproductionPlatform:
         # waits on these BEFORE merging so the last <=8s of a call (captured by a
         # probe still running when ONHOOK arrived) is not silently dropped.
         self._live_probe_futures: dict[str, list] = {}
+        # A single DUT-side producer rotates full-UDP PCAP files continuously.
+        # Downloads run on independent SSH channels and therefore never pause the
+        # packet producer (the former capture-then-base64 loop created multi-second
+        # holes which looked like RTP sequence loss).
+        self._ring_prefix: str | None = None
+        self._ring_next_no = 1
 
     # -- FXS event streaming -------------------------------------------------------
 
@@ -166,15 +178,23 @@ class RealReproductionPlatform:
         # same adapter (the loser's channel would be closed -> BrokenPipeError on
         # write). Establish the session synchronously through the bridge first.
         self._bridge.run(self._adapter.ensure_aim_session_ready())
-        # Send FULL_DEBUG_ENABLE on THIS connection's AIM PTY. The watcher opens a
-        # fresh AIM session (its own adapter connection), so it cannot rely on the
-        # arm phase having enabled debug on a different, already-closed session —
-        # without it the DUT never emits OFFHOOK/ONHOOK lines and FXS activity is
-        # never detected. FULL_DEBUG_ENABLE is idempotent, so re-sending when arm
-        # did run on the same session is harmless.
-        self.fxs_event_monitor.start(enable_debug=True)
+        # Send FULL_DEBUG_ENABLE on THIS connection's AIM PTY and wait for every
+        # command prompt. Blind writes can overrun/reopen a transient first AIM PTY
+        # while still leaving a live reader which emits no FXS events. Prompt-backed
+        # acknowledgement makes watcher readiness deterministic.
+        for command in FULL_DEBUG_ENABLE:
+            self._bridge.run(self._adapter.execute_cli(command))
+        self.fxs_event_monitor.start(enable_debug=False)
         self._fxs_reader_fut = self._bridge.spawn(self._fxs_reader_loop())
+        time.sleep(0.1)
+        if self._fxs_reader_fut.done():
+            self._fxs_reader_fut.result()
+        log.info('FXS monitor runtime ready: prompt-verified debug and live reader')
         return self.fxs_event_monitor
+
+    def fxs_monitor_healthy(self) -> bool:
+        fut = self._fxs_reader_fut
+        return fut is not None and not fut.done()
 
     def stop_fxs_monitor(self):
         """Stop the background AIM reader; safe to call even when not started."""
@@ -205,7 +225,8 @@ class RealReproductionPlatform:
             try:
                 chunk = await self._adapter.read_aim_chunk(timeout=1.0)
             except Exception:
-                break
+                log.exception('FXS AIM reader stopped unexpectedly')
+                raise
             if chunk:
                 self._fxs_queue.put(chunk)
             else:
@@ -234,6 +255,10 @@ class RealReproductionPlatform:
 
     def disconnect(self):
         try:
+            self.stop_segmented_ring()
+        except Exception:
+            pass
+        try:
             self.stop_fxs_monitor()
         except Exception:
             pass
@@ -261,22 +286,27 @@ class RealReproductionPlatform:
         self._cli(cmd)
 
     def _probe_packets(self, interface: str, port: int) -> int:
-        out = self._shell(build_busybox_tcpdump_probe(voice_interface=interface, port=port, seconds=5))
+        # 1s probe window: a busybox `tcpdump -c 1` returns as soon as the first
+        # PCM packet is seen, and times out in ~1s when the port is silent. The
+        # previous 5s window blocked the watcher loop for up to 5s per port,
+        # which (a) delayed CALL_BOUND so short calls ended before any probe
+        # started, and (b) queued FXS ONHOOK events that then appeared to fire
+        # in the same second as CALL_BOUND. 1s keeps detection snappy so even a
+        # few-second call is bound and captured inside the live-probe window.
+        out = self._shell(build_busybox_tcpdump_probe(voice_interface=interface, port=port, seconds=1))
         try:
             return parse_tcpdump_packet_count(out)
         except ValueError:
             return -1
 
-    # -- real CALL detection (media-binding, no AIM SIP plaintext) --------------------
+    # -- legacy direct media probe -----------------------------------------------------
 
     def pcm_media_active(self, *, context: VoiceRuntimeContext | None = None) -> bool:
-        """Return True when the PCM mirror stream shows live media.
+        """Legacy health probe retained for compatibility; never binds a V1.1 Call.
 
-        A real call is bound on the PCM mirror stream becoming active (UDP
-        40000/50000 carry packets), not on SIP INVITE plaintext: the DUT's AIM SIP
-        debug (`de sip de`) does not emit INVITE/BYE lines on the PTY (verified live
-        2026-08-14), so the verified media-binding signal is used instead — matching
-        the profile's ``media_binding_event = RTP_STREAM_START`` semantics.
+        V1.1 observes the continuously captured full-interface PCAP instead. PCM
+        packets only validate data-plane health; SIP INVITE or progressing RTP is
+        required for deterministic Call binding.
         """
         iface = context.voice_interface if context and context.voice_interface else self.DEFAULT_VOICE_INTERFACE
         for port in (self.DEFAULT_PCM_RX_PORT, self.DEFAULT_PCM_TX_PORT):
@@ -286,7 +316,7 @@ class RealReproductionPlatform:
         return False
 
     def media_binding_call_ref(self) -> str:
-        """Opaque call reference for the media-binding event (no SIP call-id exists)."""
+        """Legacy opaque probe reference; not used by the V1.1 watcher."""
         return f'media-{int(time.monotonic() * 1000)}'
 
     # -- voice runtime context ---------------------------------------------------------
@@ -321,29 +351,146 @@ class RealReproductionPlatform:
         # Real-device arm readiness means "capture facility ready": the PCM mirror
         # commands were accepted and the probe path is live. There is intentionally no
         # real traffic count at arm time — media only appears after an FXS event starts
-        # a call. The reproduction profile's arm_barrier for the real platform uses
-        # min_pcm_packets=0 / min_pcap_packets=0 / require_advancing=false to encode this.
+        # a call. ACTIVITY_GATED readiness treats configured STARTING channels as
+        # capture-path ready and defers packet-count validation to first activity.
+        context = self.resolve_voice_context(device)
+        if not context.voice_gateway_ip or not context.voice_interface:
+            raise AppError('VOICE_RUNTIME_CONTEXT_INCOMPLETE')
         if 'START_PCM_RX' in actions:
-            self._cli(f'voip dsp diag set {self.DEFAULT_VOICE_GATEWAY} {self.DEFAULT_PCM_RX_PORT} 1 pcm_rx on')
-            result['PCM_RX'] = {'status': ChannelHealth.HEALTHY.value, 'packet_count': 0,
-                                'advancing': True, 'enabled': True, 'dst_port': self.DEFAULT_PCM_RX_PORT}
+            self._cli(f'voip dsp diag set {context.voice_gateway_ip} {self.DEFAULT_PCM_RX_PORT} 1 pcm_rx on')
+            result['PCM_RX'] = {'status': ChannelHealth.STARTING.value, 'packet_count': 0,
+                                'advancing': False, 'enabled': True, 'configured': True,
+                                'verification_pending': True, 'readiness_phase': 'CAPTURE_PATH_READY',
+                                'dst_port': self.DEFAULT_PCM_RX_PORT}
         if 'START_PCM_TX' in actions:
-            self._cli(f'voip dsp diag set {self.DEFAULT_VOICE_GATEWAY} {self.DEFAULT_PCM_TX_PORT} 1 pcm_tx on')
-            result['PCM_TX'] = {'status': ChannelHealth.HEALTHY.value, 'packet_count': 0,
-                                'advancing': True, 'enabled': True, 'dst_port': self.DEFAULT_PCM_TX_PORT}
+            self._cli(f'voip dsp diag set {context.voice_gateway_ip} {self.DEFAULT_PCM_TX_PORT} 1 pcm_tx on')
+            result['PCM_TX'] = {'status': ChannelHealth.STARTING.value, 'packet_count': 0,
+                                'advancing': False, 'enabled': True, 'configured': True,
+                                'verification_pending': True, 'readiness_phase': 'CAPTURE_PATH_READY',
+                                'dst_port': self.DEFAULT_PCM_TX_PORT}
         if any(a in actions for a in ('ENABLE_BASIC_VOIP_DEBUG', 'ENABLE_DTMF_DEBUG', 'ENABLE_DSP_DEBUG', 'ENABLE_SIP_PACKET_LOG')):
             for cmd in FULL_DEBUG_ENABLE:
                 self._cli(cmd)
             result['DEBUG'] = {'status': ChannelHealth.HEALTHY.value, 'packet_count': 0,
                                'advancing': True, 'enabled': True, 'reader_alive': True, 'heartbeat': True}
         if 'START_VOICE_PCAP' in actions:
-            probe = self._shell(f"timeout -t 3 tcpdump -ni {self.DEFAULT_VOICE_INTERFACE} -c 1 'udp' 2>&1")
+            probe = self._shell(f"timeout -t 3 tcpdump -ni {context.voice_interface} -c 1 'udp' 2>&1")
             pcap_ok = 'listening' in probe
             result['PCAP'] = {'status': ChannelHealth.HEALTHY.value if pcap_ok else ChannelHealth.FAILED.value,
                               'packet_count': 0, 'advancing': pcap_ok, 'enabled': pcap_ok,
                               'pcap_header_valid': pcap_ok}
         result['LOG'] = {'status': ChannelHealth.HEALTHY.value, 'packet_count': 0, 'advancing': True, 'enabled': True}
         return self._normalize_snapshot(result)
+
+    async def _async_start_ring_producer(self, *, context: VoiceRuntimeContext,
+                                         seconds: int, prefix: str) -> None:
+        root = f'/tmp/aiVoip_ring_{prefix}'
+        pidfile = f'{root}/producer.pid'
+        # One tcpdump process owns packet acquisition and rotates files with -G.
+        # This avoids both download pauses and the ~1s stop/flush/restart hole seen
+        # when a shell loop launched a fresh tcpdump for every segment.
+        pattern = f'{root}/capture_%Y%m%d%H%M%S.pcap'
+        # This BusyBox image has no nohup/setsid; start-stop-daemon is verified.
+        command = (
+            f'rm -rf {root}; mkdir -p {root}; '
+            f'/sbin/start-stop-daemon -S -b -m -p {pidfile} -x /usr/bin/tcpdump -- '
+            f'-ni {context.voice_interface} -G {int(seconds)} -w {pattern} udp'
+        )
+        await self._async_shell(command, timeout=10)
+        self._ring_prefix = prefix
+        self._ring_next_no = 1
+
+    async def _async_ring_segment(self, *, context: VoiceRuntimeContext, seconds: int,
+                                  segment_key: str) -> RealCapture:
+        prefix = segment_key.rsplit('_', 1)[0]
+        if self._ring_prefix != prefix:
+            if self._ring_prefix is not None:
+                await self._async_stop_segmented_ring(self._ring_prefix)
+            await self._async_start_ring_producer(
+                context=context, seconds=seconds, prefix=prefix)
+        self._ring_next_no += 1
+        wait_loops = max(20, int(seconds) * 4)
+        root = f'/tmp/aiVoip_ring_{prefix}'
+        pattern = f'{root}/capture_*.pcap'
+        # tcpdump keeps the newest file open. Once two files exist, the oldest is
+        # immutable and safe to transfer/delete while capture continues in newest.
+        # Transfer one bounded file per command. A long call can legitimately build
+        # backlog when tunnel throughput is lower than packet production; bounded
+        # gzip batches avoid SSH command timeout and the watcher iterates until the
+        # sealed tail reaches remaining_files=0.
+        begin = '__AIVOIP_PCAP_BEGIN__'
+        end = '__AIVOIP_PCAP_END__'
+        remaining_marker = '__AIVOIP_REMAINING__'
+        command = (
+            f'i=0; while [ ! -f {root}/sealed ] '
+            f'&& [ "$(ls {pattern} 2>/dev/null | wc -l)" -lt 2 ] '
+            f'&& [ $i -lt {wait_loops} ]; '
+            f'do sleep 1; i=$((i+1)); done; '
+            f'if [ -f {root}/sealed ]; then f=$(ls {pattern} 2>/dev/null | sort | head -n 1); '
+            f'else f=$(ls {pattern} 2>/dev/null | sort | sed \'$d\' | head -n 1); fi; '
+            f'if [ -n "$f" ]; then printf "{begin}\\n"; gzip -c "$f" 2>/dev/null | base64 || true; '
+            f'printf "\\n{end}\\n"; rm -f "$f"; fi; '
+            f'remaining=$(ls {pattern} 2>/dev/null | wc -l); '
+            f'printf "{remaining_marker}%s\\n" "$remaining"'
+        )
+        payload = await self._async_shell(command, timeout=wait_loops + 10)
+        segments = []
+        for block in payload.split(begin)[1:]:
+            encoded = block.split(end, 1)[0].strip()
+            if encoded:
+                segments.append(gzip.decompress(base64.b64decode(encoded)))
+        # Compatibility for injected transports/tests which return one historical
+        # unframed base64 payload.
+        if not segments and payload.strip() and begin not in payload:
+            segments.append(base64.b64decode(payload.strip()))
+        remaining_files = 0
+        if remaining_marker in payload:
+            try:
+                remaining_files = int(payload.rsplit(remaining_marker, 1)[1].strip().splitlines()[0])
+            except (ValueError, IndexError):
+                remaining_files = 0
+        return RealCapture(
+            pcap=self._merge_pcap_segments(segments), pcap_path=None,
+            remaining_files=remaining_files,
+        )
+
+    async def _async_seal_segmented_ring(self, prefix: str) -> None:
+        """Stop acquisition but retain files so the watcher can drain the tail."""
+        root = f'/tmp/aiVoip_ring_{prefix}'
+        command = (
+            f'[ -f {root}/producer.pid ] && '
+            f'/sbin/start-stop-daemon -K -p {root}/producer.pid -x /usr/bin/tcpdump 2>/dev/null || true; '
+            f'touch {root}/sealed'
+        )
+        await self._async_shell(command, timeout=10)
+
+    def seal_segmented_ring(self, session_id: str | None = None) -> None:
+        prefix = self._ring_prefix or (str(session_id)[:8] if session_id else None)
+        if prefix:
+            self._bridge.run(self._async_seal_segmented_ring(prefix))
+
+    async def _async_stop_segmented_ring(self, prefix: str) -> None:
+        root = f'/tmp/aiVoip_ring_{prefix}'
+        command = (
+            f'[ -f {root}/producer.pid ] && '
+            f'/sbin/start-stop-daemon -K -p {root}/producer.pid -x /usr/bin/tcpdump 2>/dev/null || true; '
+            f'rm -rf {root}'
+        )
+        await self._async_shell(command, timeout=10)
+        if self._ring_prefix == prefix:
+            self._ring_prefix = None
+            self._ring_next_no = 1
+
+    def stop_segmented_ring(self, session_id: str | None = None) -> None:
+        prefix = self._ring_prefix or (str(session_id)[:8] if session_id else None)
+        if prefix:
+            self._bridge.run(self._async_stop_segmented_ring(prefix))
+
+    def spawn_ring_segment(self, *, context: VoiceRuntimeContext, seconds: int,
+                           segment_key: str):
+        """Fetch one sealed file from the continuous DUT-side ring producer."""
+        return self._bridge.spawn(self._async_ring_segment(
+            context=context, seconds=seconds, segment_key=segment_key))
 
     def snapshot(self, session_id: str) -> dict[str, dict[str, Any]]:
         return {}
@@ -371,6 +518,10 @@ class RealReproductionPlatform:
         # method is used standalone (no guard), clean PCM here too.
         # Cleanup issues AIM commands (PCM OFF / debug OFF) whose prompt reads must NOT
         # compete with the FXS AIM reader, so stop the reader first (idempotent).
+        try:
+            self.stop_segmented_ring(session_id)
+        except Exception:
+            pass
         try:
             self.stop_fxs_monitor()
         except Exception:

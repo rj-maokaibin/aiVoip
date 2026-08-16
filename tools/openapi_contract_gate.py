@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -11,6 +12,11 @@ ROOT = Path(__file__).resolve().parents[1]
 BACKEND = ROOT / "backend"
 if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
+
+# The frozen contract must not change merely because a developer's local .env
+# labels the running instance as "local". Explicit process-level APP_VERSION
+# still wins when a deliberate contract-version update is requested.
+os.environ.setdefault("APP_VERSION", "1.0.0-rc1-f3")
 
 from offline_import_bootstrap import install as _install_offline_import_stubs  # noqa: E402
 _install_offline_import_stubs()

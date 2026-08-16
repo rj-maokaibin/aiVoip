@@ -6,15 +6,22 @@ from .triage import triage_summary
 
 class DeterministicDiagnosisReasoner:
     """可解释、可回归的M4基线Reasoner。LLM只能在它之上补充语义，不覆盖确定性事实。"""
-    version='0.3.0'
+    version='0.4.0'
 
     def reason(self, snapshot:dict) -> DiagnosisDecision:
         hypotheses=[]; plan=[]; known=[]; unknown=[]; excluded=[]
         symptoms=triage_summary((snapshot.get('case') or {}).get('summary',''))
         evidences=snapshot.get('evidences',[]); analyzers=snapshot.get('analyzers',{})
         pcap=[e for e in evidences if e.get('type') in {'PCAP','PCAPNG'} or str(e.get('filename','')).lower().endswith(('.pcap','.pcapng'))]
+        field_audio=[e for e in evidences if str(e.get('type','')).startswith('FIELD_AUDIO')]
+        decodable_audio=[e for e in field_audio if e.get('type')!='FIELD_AUDIO_RAW' or
+                         (e.get('metadata') or {}).get('pcm_format')]
+        field_images=[e for e in evidences if e.get('type')=='FIELD_IMAGE' or str((e.get('metadata') or {}).get('message_type','')).lower()=='image']
         media=analyzers.get('media_intelligence')
         packet=analyzers.get('packet_intelligence')
+        field_audio_result=analyzers.get('field_audio_intelligence')
+        image_result=analyzers.get('image_attachment_intelligence')
+        field_alignment=analyzers.get('field_media_alignment')
 
         if not evidences:
             known.append('当前Case尚无可分析Evidence。')
@@ -27,6 +34,84 @@ class DeterministicDiagnosisReasoner:
         if pcap and not media:
             plan.append(PlanAction('RUN_MEDIA_ANALYSIS','发现PCAP但尚未执行统一SIP/RTP/PCM媒体分析。','L0',True,{'evidence_id':pcap[-1]['id'],'profile_id':'ruijie_aim_diag_v1'},5))
             known.append(f'已发现 {len(pcap)} 份PCAP/PCAPNG。')
+        audio_analyzed=set((field_audio_result or {}).get('input_evidence_ids') or [])
+        pending_audio=[e for e in decodable_audio if e.get('id') not in audio_analyzed]
+        image_analyzed=set((image_result or {}).get('input_evidence_ids') or [])
+        pending_images=[e for e in field_images if e.get('id') not in image_analyzed]
+        if pending_audio:
+            plan.append(PlanAction('RUN_FIELD_AUDIO_ANALYSIS','发现现场录音，执行受限解码和本地波形/频谱分析。','L0',True,{'evidence_id':decodable_audio[-1]['id']},6))
+            known.append(f'已收到 {len(decodable_audio)} 份可尝试解码的现场录音。')
+        if pending_images:
+            plan.append(PlanAction('RUN_IMAGE_METADATA_ANALYSIS','发现现场图片，先校验图片容器和基础元数据。','L0',True,{'evidence_id':field_images[-1]['id']},7))
+            known.append(f'已收到 {len(field_images)} 张现场图片。')
+        raw_audio=[e for e in field_audio if e.get('type')=='FIELD_AUDIO_RAW' and
+                   not (e.get('metadata') or {}).get('pcm_format')]
+        if raw_audio and not decodable_audio:
+            unknown.append('Raw PCM 缺少采样率、位宽、声道和字节序，系统未猜测其格式。')
+            plan.append(PlanAction('REQUEST_USER_EVIDENCE','请补充Raw PCM的采样参数，或转换为WAV/OGG/Opus后重新发送。','USER',False,{'need':['pcm_format_metadata_or_audio_container']},35))
+
+        if field_audio_result and field_audio_result.get('result'):
+            ar=field_audio_result['result']; summary=ar.get('summary') or {}; findings=ar.get('findings') or []
+            audio_available=summary.get('availability')=='ANALYZED'
+            if audio_available:
+                known.append(f"现场录音已分析：{summary.get('duration_seconds','?')}秒，{summary.get('sample_rate','?')}Hz，RMS {summary.get('rms_dbfs','?')} dBFS。")
+            else:
+                unknown.append(f"现场录音内容未解码：{summary.get('reason','当前格式不可用')}。")
+            types={x.get('type') for x in findings}
+            if 'FIELD_RECORDING_CLIPPED' in types:
+                hypotheses.append(self._h('FIELD_RECORDING_CLIPPING','现场录音存在削波候选','Field recording',0.62,'OPEN',False,'FIELD_RECORDING_CLIPPED',field_audio_result['run_id'],'现场录音样本接近满幅的比例异常；可能来自现场声源、录音设备或传输转换，不能直接归因于VoIP系统。'))
+            if 'FIELD_RECORDING_CLICK_POP_CANDIDATE' in types:
+                hypotheses.append(self._h('FIELD_RECORDING_CLICK_POP','现场录音存在Click/Pop候选','Field recording',0.58,'OPEN',False,'FIELD_RECORDING_CLICK_POP_CANDIDATE',field_audio_result['run_id'],'现场录音检测到多特征Click/Pop候选；尚未与通话PCM/RTP时间轴对齐。'))
+            if 'FIELD_RECORDING_NARROWBAND_TONE_CANDIDATE' in types:
+                hypotheses.append(self._h('FIELD_RECORDING_NARROWBAND_TONE','现场录音存在窄带音调候选','Field recording',0.60,'OPEN',False,'FIELD_RECORDING_NARROWBAND_TONE_CANDIDATE',field_audio_result['run_id'],'现场录音频谱存在窄带峰值；尚不能区分环境声、录音链路或VoIP通话链路来源。'))
+            alignment_availability=(((field_alignment or {}).get('result') or {}).get('summary') or {}).get('availability')
+            if alignment_availability!='ALIGNED':
+                unknown.append('现场录音尚未与同一通话的SIP/RTP/终端PCM及异常时间点可靠对齐，不能单独定位根因。')
+        if image_result and image_result.get('result'):
+            ir=image_result['result']; summary=ir.get('summary') or {}
+            if summary.get('availability')=='METADATA_ONLY':
+                size=f"，{summary.get('width')}×{summary.get('height')}" if summary.get('width') and summary.get('height') else ''
+                known.append(f"现场图片文件头有效：{summary.get('format','未知格式')}{size}。")
+            else:
+                unknown.append(f"现场图片容器未能解析：{summary.get('reason','当前格式不可用')}。")
+            ocr=ir.get('ocr') or {}; observations=ocr.get('observations') or []
+            if ocr.get('availability')=='EXTRACTED':
+                known.append(f"图片OCR提取到 {summary.get('ocr_character_count',0)} 个字符；平均置信度 {ocr.get('mean_confidence','?')}，仅作为L4候选。")
+                for item in observations[:4]:
+                    known.append(f"截图OCR候选 {item.get('key')}={item.get('value')}（需交叉验证）。")
+            else:
+                unknown.append('图片未提取到可用文字；当前不会推断拓扑、连线或颜色语义。')
+            if not pcap and not field_audio_result:
+                reason=('截图文字已提取为候选；请提供原始日志/配置导出用于核对。' if ocr.get('availability')=='EXTRACTED'
+                        else '图片未提取到可靠文字；请用文字说明关键告警/配置，或补充原始日志/PCAP。')
+                plan.append(PlanAction('REQUEST_USER_EVIDENCE',reason,'USER',False,{'need':['raw_log_or_config_export_or_pcap']},45))
+        if field_audio_result and field_audio_result.get('result') and not pcap:
+            audio_summary=(field_audio_result['result'].get('summary') or {})
+            if audio_summary.get('availability')=='ANALYZED':
+                reason='录音特征已提取；请补充异常发生时间点，并尽量提供同一次通话的PCAP，以便进行跨层对齐。'
+                need=['anomaly_timestamp_and_matching_pcap']
+            else:
+                reason='当前录音格式无法可靠解码；请转换为WAV/OGG/Opus后重新发送。'
+                need=['supported_audio_recording']
+            plan.append(PlanAction('REQUEST_USER_EVIDENCE',reason,'USER',False,{'need':need},46))
+        alignment_inputs=set((field_alignment or {}).get('input_evidence_ids') or [])
+        alignment_config=(field_alignment or {}).get('config_snapshot') or {}
+        alignment_current=bool(decodable_audio and decodable_audio[-1].get('id') in alignment_inputs and alignment_config.get('media_run_id')==media.get('run_id')) if media else False
+        if field_audio_result and media and not alignment_current and decodable_audio and not pending_audio:
+            audio_summary=(field_audio_result.get('result') or {}).get('summary') or {}
+            if audio_summary.get('availability')=='ANALYZED':
+                plan.append(PlanAction('RUN_FIELD_MEDIA_ALIGNMENT','现场录音和PCAP媒体均已完成分析，执行确定性信号相关与时间映射。','L0',True,
+                                       {'evidence_id':decodable_audio[-1]['id'],'media_run_id':media.get('run_id')},8))
+        if field_alignment and field_alignment.get('result'):
+            alignment_result=field_alignment['result']; alignment_summary=alignment_result.get('summary') or {}
+            if alignment_summary.get('availability')=='ALIGNED':
+                best=(alignment_result.get('alignments') or [{}])[0]; corr=best.get('correlation') or {}
+                known.append(f"现场录音已与 {best.get('source')} 媒体对齐：相关质量 {corr.get('quality')}，系数 {corr.get('absolute_correlation')}，偏移 {corr.get('lag_ms')}ms。")
+                mapped=best.get('mapped_events') or []
+                if mapped:
+                    known.append(f"已把 {len(mapped)} 个现场录音事件映射到抓包绝对时间/Call。")
+            else:
+                unknown.append('现场录音与当前PCAP的RTP/PCM未找到可靠信号匹配，不能确认来自同一次通话。')
 
         result=None
         source_run=None
@@ -47,7 +132,7 @@ class DeterministicDiagnosisReasoner:
             self._reason_from_reproduction(repro, hypotheses, known, plan, symptoms)
 
         # 设备文本证据存在，但没有网络/媒体证据时，提示上传/采集PCAP。
-        if not pcap and not result:
+        if not pcap and not result and not field_audio and not field_images:
             plan.append(PlanAction('REQUEST_USER_EVIDENCE','当前只有设备侧文本证据，SIP/RTP媒体问题仍需PCAP才能定量分析。','USER',False,{'need':['pcap_or_pcapng']},20))
             unknown.append('缺少SIP/RTP媒体抓包。')
 
@@ -169,12 +254,15 @@ class DeterministicDiagnosisReasoner:
         if echo_events:
             best=max(echo_events,key=lambda e: float((e.get('details') or {}).get('absolute_correlation',0)))
             det=best.get('details') or {}; corr=float(det.get('absolute_correlation',0)); delay=det.get('delay_ms')
-            status=HypothesisState.SUPPORTED.value if 'ECHO' in symptoms and corr>=0.75 else HypothesisState.OPEN.value
-            conf=min(0.93,0.62+0.35*corr)
-            hypotheses.append(HypothesisProposal('AUDIO_ECHO_PATH','PCM RX/TX之间检测到稳定延迟回声路径','Audio/Echo',conf,status,
-                f'参考播放方向与采集方向检测到延迟约 {delay}ms、相关系数 {corr:.3f} 的延迟副本；支持存在回声路径，但不能单独区分声学耦合、混合电路/SLIC或AEC失效。',False,None,
-                [EvidenceRef('ANALYZER_RUN',run_id,det.get('evidence_level','L2'),'SUPPORT',0.9,'RX/TX延迟相关峰',{'event':best})]))
-            unknown.append('若用户现象为回声，还需结合AEC开关/ERL/ERLE及换话机/端口实验定位具体回声来源。')
+            if 'ECHO' in symptoms:
+                status=HypothesisState.SUPPORTED.value if corr>=0.75 else HypothesisState.OPEN.value
+                conf=min(0.93,0.62+0.35*corr)
+                hypotheses.append(HypothesisProposal('AUDIO_ECHO_PATH','PCM RX/TX之间检测到稳定延迟回声路径','Audio/Echo',conf,status,
+                    f'参考播放方向与采集方向检测到延迟约 {delay}ms、相关系数 {corr:.3f} 的延迟副本；支持存在回声路径，但不能单独区分声学耦合、混合电路/SLIC或AEC失效。',False,None,
+                    [EvidenceRef('ANALYZER_RUN',run_id,det.get('evidence_level','L2'),'SUPPORT',0.9,'RX/TX延迟相关峰',{'event':best})]))
+                unknown.append('若用户现象为回声，还需结合AEC开关/ERL/ERLE及换话机/端口实验定位具体回声来源。')
+            else:
+                known.append(f'检测到RX/TX延迟相关路径（约{delay}ms，相关系数{corr:.3f}）；当前非回声症状，仅作为媒体路径上下文。')
 
         scoped_silence=[e for e in cross if e.get('type')=='UNEXPECTED_SILENCE']
         scoped_click=[e for e in cross if e.get('type')=='CLICK_POP']
@@ -220,8 +308,15 @@ class DeterministicDiagnosisReasoner:
                 click_count += len(sess.get('click_pop_events',[]) or [])
                 silence_long += sum(1 for x in (sess.get('silence_events',[]) or []) if float(x.get('duration_ms',0))>=200)
         if hum_high:
-            conf=0.92 if 'AUDIO_NOISE' in symptoms else 0.82
-            hypotheses.append(self._h('PCM_HUM_INTERFERENCE','PCM音频存在明显工频/谐波干扰','Audio/Analog',conf,'SUPPORTED',False,'PCM_HUM',run_id,f'有 {hum_high} 个PCM Session达到HIGH hum score。'))
+            if 'AUDIO_NOISE' in symptoms:
+                hypotheses.append(self._h(
+                    'PCM_HUM_INTERFERENCE','PCM音频存在明显工频/谐波干扰',
+                    'Audio/Analog',0.92,'SUPPORTED',False,'PCM_HUM',run_id,
+                    f'有 {hum_high} 个PCM Session达到HIGH hum score，且用户症状为噪声/电流音。'))
+            else:
+                known.append(
+                    f'有 {hum_high} 个PCM Session达到HIGH hum score；当前未报告噪声/电流音，'
+                    '仅保留为频谱候选，不提升为故障假设。')
         if click_count and not scoped_click:
             # 未获得SIP Active Media Window时保留全Session候选，但降低为L3。
             hypotheses.append(HypothesisProposal('PCM_CLICK_POP','PCM音频存在Click/Pop候选','Audio/DSP',min(0.68,0.42+0.004*click_count),HypothesisState.OPEN.value,f'检测到 {click_count} 个Click/Pop候选；未与用户感知时刻对齐，暂不作为确认根因。',False,None,[EvidenceRef('ANALYZER_RUN',run_id,'L3','SUPPORT',0.5,'启发式Click/Pop候选',{'count':click_count})]))
@@ -267,6 +362,16 @@ class DeterministicDiagnosisReasoner:
         }
         for finding, (code, title, domain, event, base_conf) in mapping.items():
             if finding not in findings:
+                continue
+            # These findings establish path observability, not a defect by
+            # themselves.  Only promote them when the reported symptom asks the
+            # corresponding diagnostic question; mismatch/anomaly events are
+            # handled independently by the full analyzer above.
+            if finding == 'ECHO_PATH' and 'ECHO' not in symptoms:
+                known.append('自动复现观察到RX/TX延迟相关路径；当前非回声症状，不将路径存在解释为回声故障。')
+                continue
+            if finding == 'DTMF_PATH' and 'DTMF_LOSS' not in symptoms:
+                known.append('自动复现识别到DTMF序列；仅证明拨号路径可观测，不代表丢号或错号。')
                 continue
             conf = base_conf
             if finding == 'PERIODIC_INTERFERENCE' and 'AUDIO_NOISE' not in symptoms:

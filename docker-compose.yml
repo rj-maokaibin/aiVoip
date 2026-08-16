@@ -87,6 +87,8 @@ services:
       - ./profiles:/app/profiles:ro
       - ./rules:/app/rules:ro
       - ./knowledge:/app/knowledge:ro
+      - ${VOIP_DATA_ROOT:-/data/voip}/reproduction/capture:/tmp/voip-reproduction-capture
+      - ${VOIP_DATA_ROOT:-/data/voip}/reproduction/objects:/tmp/voip-reproduction-objects
     depends_on:
       postgres:
         condition: service_healthy
@@ -104,6 +106,8 @@ services:
       - ./profiles:/app/profiles:ro
       - ./rules:/app/rules:ro
       - ./knowledge:/app/knowledge:ro
+      - ${VOIP_DATA_ROOT:-/data/voip}/reproduction/capture:/tmp/voip-reproduction-capture
+      - ${VOIP_DATA_ROOT:-/data/voip}/reproduction/objects:/tmp/voip-reproduction-objects
     depends_on:
       postgres:
         condition: service_healthy
@@ -180,7 +184,51 @@ services:
     env_file: ${VOIP_APP_ENV_FILE:-.env}
     command: >-
       sh -c "ln -sfn /app/profiles /profiles &&
-      celery -A app.workers.celery_app:celery_app worker -Q reproduction --loglevel=INFO --concurrency=2"
+      celery -A app.workers.celery_app:celery_app worker -Q reproduction-control --loglevel=INFO --concurrency=1"
+    volumes:
+      - ./profiles:/app/profiles:ro
+      - ./rules:/app/rules:ro
+      - ./knowledge:/app/knowledge:ro
+      - /home/dev/secret.yaml:/home/dev/secret.yaml:ro
+      - ${VOIP_DATA_ROOT:-/data/voip}/reproduction/capture:/tmp/voip-reproduction-capture
+      - ${VOIP_DATA_ROOT:-/data/voip}/reproduction/objects:/tmp/voip-reproduction-objects
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_started
+
+  reproduction-control-high-worker:
+    build:
+      context: ./backend
+    env_file: ${VOIP_APP_ENV_FILE:-.env}
+    command: >-
+      sh -c "ln -sfn /app/profiles /profiles &&
+      celery -A app.workers.celery_app:celery_app worker -Q reproduction-control-high --loglevel=INFO --concurrency=1"
+    volumes:
+      - ./profiles:/app/profiles:ro
+      - ./rules:/app/rules:ro
+      - ./knowledge:/app/knowledge:ro
+      - /home/dev/secret.yaml:/home/dev/secret.yaml:ro
+      - ${VOIP_DATA_ROOT:-/data/voip}/reproduction/capture:/tmp/voip-reproduction-capture
+      - ${VOIP_DATA_ROOT:-/data/voip}/reproduction/objects:/tmp/voip-reproduction-objects
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_started
+
+  reproduction-watch-worker:
+    build:
+      context: ./backend
+    env_file: ${VOIP_APP_ENV_FILE:-.env}
+    command: >-
+      sh -c "ln -sfn /app/profiles /profiles &&
+      celery -A app.workers.celery_app:celery_app worker -Q reproduction-watch --loglevel=INFO --concurrency=1"
     volumes:
       - ./profiles:/app/profiles:ro
       - ./rules:/app/rules:ro

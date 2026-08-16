@@ -18,11 +18,11 @@ from app.contracts.enums import (
 from app.core.errors import AppError
 from app.db.models import (
     Case, CaseDevice, CaptureChannelHealth, CleanupRun, DiagnosticQuestion, ReproductionAttempt,
-    ReproductionCall, ReproductionEventRecord, ReproductionProfile, ReproductionProfileVersion,
+    ReproductionCall, ReproductionCaptureSegment, ReproductionEventRecord, ReproductionProfile, ReproductionProfileVersion,
     ReproductionSession, VoiceRuntimeContextSnapshot, Evidence,
 )
 from app.reproduction.barriers import ArmReadinessBarrier, CleanupReadinessBarrier
-from app.reproduction.locks import acquire_device_lock, heartbeat_device_lock, release_device_lock
+from app.reproduction.locks import acquire_device_lock, heartbeat_device_lock, quarantine_device_lock, release_device_lock
 from app.reproduction.health import CaptureHealthMonitor
 from app.reproduction.capture_pipeline import ReproductionCapturePipeline
 from app.reproduction.live import LiveReproductionAnalyzer
@@ -67,9 +67,10 @@ def _utcnow():
 
 
 class ReproductionOrchestrator:
-    """Persistent M6.2 orchestration core using a deterministic Mock Platform.
+    """Persistent M6.2 orchestration core shared by Mock and verified EC-02 platforms.
 
-    No real device command exists in this class. Production platform integration is blocked on EC-02.
+    Device commands remain behind the platform adapter; this layer owns the
+    deterministic state machine, evidence boundaries and cleanup guarantees.
     """
 
     def __init__(self, *, registry: ReproductionProfileRegistry | None = None, platform=None, capture_pipeline: ReproductionCapturePipeline | None = None, pcm_cleanup_guard: PcmCleanupGuard | None = None, fxs_event_monitor: FxsEventMonitor | None = None):
@@ -176,6 +177,9 @@ class ReproductionOrchestrator:
             resolver_version=str(raw.get('resolver_version') or '1.0.0'),
         )
 
+    def _platform_event_source(self) -> str:
+        return 'REAL_PLATFORM' if getattr(self.platform, 'supports_segmented_ring', False) else 'MOCK_PLATFORM'
+
     @staticmethod
     def _stage(profile: ReproductionProfileDefinition, stage: CaptureStage | str):
         stage=CaptureStage(stage)
@@ -198,8 +202,12 @@ class ReproductionOrchestrator:
             try:
                 acquire_device_lock(db,session=session,owner_worker=owner_worker,lease_seconds=profile.timeouts.lease_seconds)
             except AppError as exc:
-                if exc.code=='DEVICE_DIAGNOSTIC_LOCKED':
-                    transition_session(db,session,ReproductionEvent.DEVICE_RESOURCE_BUSY,actor=actor,reason='device_busy',payload=exc.details)
+                if exc.code in {'DEVICE_DIAGNOSTIC_LOCKED','DEVICE_DIAGNOSTIC_QUARANTINED'}:
+                    transition_session(
+                        db,session,ReproductionEvent.DEVICE_RESOURCE_BUSY,actor=actor,
+                        reason='device_quarantined' if exc.code=='DEVICE_DIAGNOSTIC_QUARANTINED' else 'device_busy',
+                        payload={'error_code':exc.code,**exc.details},
+                    )
                     return session
                 raise
             transition_session(db,session,ReproductionEvent.START_ARMING,actor=actor,reason='autonomous_reproduction')
@@ -283,15 +291,21 @@ class ReproductionOrchestrator:
         )
         db.add(attempt); db.flush()
         db.add(ReproductionEventRecord(
-            session_id=session.id,attempt_id=attempt.id,case_id=session.case_id,event_type=source_event,source='MOCK_PLATFORM',
+            session_id=session.id,attempt_id=attempt.id,case_id=session.case_id,event_type=source_event,source=self._platform_event_source(),
             anchor_type=AnchorType.PRIMARY_START.value,session_relative_ms=int(relative_ms),
             timestamp_source=TimestampSource.COLLECTOR_MONOTONIC.value,uncertainty_ms=1,payload_json={'runtime_anchor':True},
         ))
-        ctx=self._runtime_context(session); start=max(0,int(relative_ms)-self._profile(session).ring.pretrigger_seconds*1000)
-        pre=self.platform.build_pretrigger_capture(context=ctx,start_ms=start,end_ms=int(relative_ms))
-        self.capture.append_pcap(db,session=session,start_ms=start,end_ms=int(relative_ms),data=pre.pcap,attempt_id=attempt.id)
-        self.capture.append_log(db,session=session,start_ms=start,end_ms=int(relative_ms),data=pre.debug_log,attempt_id=attempt.id)
-        self.capture.freeze(db,session=session,anchor_ms=int(relative_ms),attempt_id=attempt.id)
+        if getattr(self.platform, 'supports_segmented_ring', False):
+            # The real watcher has already been capturing bounded ring segments
+            # before OFFHOOK. Freeze them immediately; never start a forward-looking
+            # blocking "pretrigger" capture after the anchor.
+            self.capture.freeze(db,session=session,anchor_ms=int(relative_ms),attempt_id=attempt.id)
+        else:
+            ctx=self._runtime_context(session); start=max(0,int(relative_ms)-self._profile(session).ring.pretrigger_seconds*1000)
+            pre=self.platform.build_pretrigger_capture(context=ctx,start_ms=start,end_ms=int(relative_ms))
+            self.capture.append_pcap(db,session=session,start_ms=start,end_ms=int(relative_ms),data=pre.pcap,attempt_id=attempt.id)
+            self.capture.append_log(db,session=session,start_ms=start,end_ms=int(relative_ms),data=pre.debug_log,attempt_id=attempt.id)
+            self.capture.freeze(db,session=session,anchor_ms=int(relative_ms),attempt_id=attempt.id)
         transition_session(db,session,ReproductionEvent.ACTIVITY,actor=actor,reason='earliest_low_level_anchor',
                            payload={'attempt_id':attempt.id,'anchor':source_event,'relative_ms':relative_ms})
         emit_event(db,event_type=EventType.REPRODUCTION_ATTEMPT_CHANGED,case_id=session.case_id,
@@ -342,7 +356,7 @@ class ReproductionOrchestrator:
         if attempt.status!=AttemptStatus.ACTIVE.value: return attempt
         attempt.status=AttemptStatus.INVALID.value; attempt.valid=False; attempt.end_anchor_type=end_anchor; attempt.end_anchor_ms=int(relative_ms); attempt.ended_at=_utcnow()
         db.add(ReproductionEventRecord(session_id=session.id,attempt_id=attempt.id,case_id=session.case_id,event_type=end_anchor,
-                                       source='MOCK_PLATFORM',anchor_type=AnchorType.PRIMARY_END.value,session_relative_ms=int(relative_ms),
+                                       source=self._platform_event_source(),anchor_type=AnchorType.PRIMARY_END.value,session_relative_ms=int(relative_ms),
                                        timestamp_source=TimestampSource.COLLECTOR_MONOTONIC.value,uncertainty_ms=1,payload_json={'valid_call':False}))
         self.capture.reset_after_attempt(db,session=session,invalid=True)
         transition_session(db,session,ReproductionEvent.WATCH_STARTED,actor=actor,reason='invalid_attempt_continue_watching',payload={'attempt_id':attempt.id})
@@ -361,17 +375,30 @@ class ReproductionOrchestrator:
             attempt=ReproductionAttempt(session_id=session.id,case_id=session.case_id,attempt_no=attempt_no,status=AttemptStatus.ACTIVE.value,
                                         start_anchor_type='SIP_INVITE_FALLBACK',start_anchor_ms=int(relative_ms),details_json={'low_level_anchor_missed':True})
             db.add(attempt); db.flush()
-            ctx=self._runtime_context(session); start=max(0,int(relative_ms)-self._profile(session).ring.pretrigger_seconds*1000)
-            pre=self.platform.build_pretrigger_capture(context=ctx,start_ms=start,end_ms=int(relative_ms))
-            self.capture.append_pcap(db,session=session,start_ms=start,end_ms=int(relative_ms),data=pre.pcap,attempt_id=attempt.id)
-            self.capture.append_log(db,session=session,start_ms=start,end_ms=int(relative_ms),data=pre.debug_log,attempt_id=attempt.id)
-            self.capture.freeze(db,session=session,anchor_ms=int(relative_ms),attempt_id=attempt.id)
+            if getattr(self.platform, 'supports_segmented_ring', False):
+                self.capture.freeze(db,session=session,anchor_ms=int(relative_ms),attempt_id=attempt.id)
+            else:
+                ctx=self._runtime_context(session); start=max(0,int(relative_ms)-self._profile(session).ring.pretrigger_seconds*1000)
+                pre=self.platform.build_pretrigger_capture(context=ctx,start_ms=start,end_ms=int(relative_ms))
+                self.capture.append_pcap(db,session=session,start_ms=start,end_ms=int(relative_ms),data=pre.pcap,attempt_id=attempt.id)
+                self.capture.append_log(db,session=session,start_ms=start,end_ms=int(relative_ms),data=pre.debug_log,attempt_id=attempt.id)
+                self.capture.freeze(db,session=session,anchor_ms=int(relative_ms),attempt_id=attempt.id)
         if state not in {ReproductionState.WATCHING,ReproductionState.ACTIVITY_DETECTED}:
             raise AppError('REPRODUCTION_TRANSITION_NOT_ALLOWED',details={'state':session.state,'operation':'bind_call'})
         call_no=(db.scalar(select(func.count(ReproductionCall.id)).where(ReproductionCall.session_id==session.id)) or 0)+1
         call=ReproductionCall(session_id=session.id,attempt_id=attempt.id if attempt else None,case_id=session.case_id,
                               call_no=call_no,external_call_ref=external_call_ref,status=ReproductionCallStatus.ACTIVE.value)
         db.add(call); db.flush()
+        if getattr(self.platform, 'supports_segmented_ring', False) and attempt is not None:
+            # Associate every frozen segment from the active attempt with the
+            # deterministic Call. This retains the pre-OFFHOOK/dialing context and
+            # prevents the call merger from selecting only the final RTP segment.
+            for segment in db.scalars(select(ReproductionCaptureSegment).where(
+                ReproductionCaptureSegment.session_id==session.id,
+                ReproductionCaptureSegment.attempt_id==attempt.id,
+                ReproductionCaptureSegment.call_id.is_(None),
+            )):
+                segment.call_id=call.id
         # Cache the dialing-window pretrigger under the new call_id so the real
         # platform's final merged call.pcap includes the dialing DTMF/silence (the
         # pretrigger is captured above, before the call row existed).
@@ -380,20 +407,23 @@ class ReproductionOrchestrator:
         if attempt: attempt.valid=True
         binding = binding_event or self._profile(session).call_binding_event or 'SIP_INVITE'
         db.add(ReproductionEventRecord(session_id=session.id,attempt_id=attempt.id if attempt else None,call_id=call.id,case_id=session.case_id,
-                                       event_type=binding,source='MOCK_PCAP',anchor_type=AnchorType.CALL_BINDING.value,
+                                       event_type=binding,
+                                       source='PCAP_SIGNAL_OBSERVER' if getattr(self.platform, 'supports_segmented_ring', False) else 'MOCK_PCAP',
+                                       anchor_type=AnchorType.CALL_BINDING.value,
                                        session_relative_ms=int(relative_ms),timestamp_source=TimestampSource.PCAP.value,uncertainty_ms=1,
                                        payload_json={'external_call_ref':external_call_ref,'binding_event':binding}))
         transition_session(db,session,ReproductionEvent.CALL_BOUND,actor=actor,reason='call_binding_event',payload={'call_id':call.id,'call_no':call.call_no})
         transition_session(db,session,ReproductionEvent.CAPTURE_STARTED,actor=actor,reason='call_scope_capture')
-        ctx=self._runtime_context(session); probe=self.platform.build_live_probe(context=ctx,start_ms=int(relative_ms),call_id=call.id)
-        pseg=self.capture.append_pcap(db,session=session,start_ms=int(relative_ms),end_ms=int(relative_ms)+500,data=probe.pcap,attempt_id=attempt.id if attempt else None,call_id=call.id,metadata={'mock_probe_only':True,'phase':'LIVE_PROBE'})
-        self.capture.preserve_new_segment(db,session=session,row=pseg)
-        lseg=self.capture.append_log(db,session=session,start_ms=int(relative_ms),end_ms=int(relative_ms)+500,data=probe.debug_log,attempt_id=attempt.id if attempt else None,call_id=call.id,metadata={'phase':'LIVE_PROBE'})
-        self.capture.preserve_new_segment(db,session=session,row=lseg)
-        if pseg.evidence_id:
-            live_ev=db.get(Evidence,pseg.evidence_id)
-            if live_ev:
-                call.live_summary_json=self.live_analyzer.run(db,session=session,call=call,pcap_path=__import__('pathlib').Path(pseg.local_path),input_evidence=live_ev)
+        if not getattr(self.platform, 'supports_segmented_ring', False):
+            ctx=self._runtime_context(session); probe=self.platform.build_live_probe(context=ctx,start_ms=int(relative_ms),call_id=call.id)
+            pseg=self.capture.append_pcap(db,session=session,start_ms=int(relative_ms),end_ms=int(relative_ms)+500,data=probe.pcap,attempt_id=attempt.id if attempt else None,call_id=call.id,metadata={'mock_probe_only':True,'phase':'LIVE_PROBE'})
+            self.capture.preserve_new_segment(db,session=session,row=pseg)
+            lseg=self.capture.append_log(db,session=session,start_ms=int(relative_ms),end_ms=int(relative_ms)+500,data=probe.debug_log,attempt_id=attempt.id if attempt else None,call_id=call.id,metadata={'phase':'LIVE_PROBE'})
+            self.capture.preserve_new_segment(db,session=session,row=lseg)
+            if pseg.evidence_id:
+                live_ev=db.get(Evidence,pseg.evidence_id)
+                if live_ev:
+                    call.live_summary_json=self.live_analyzer.run(db,session=session,call=call,pcap_path=__import__('pathlib').Path(pseg.local_path),input_evidence=live_ev)
         emit_event(db,event_type=EventType.REPRODUCTION_CALL_CHANGED,case_id=session.case_id,entity_type='reproduction_call',entity_id=call.id,
                    payload={'status':call.status,'call_no':call.call_no,'live_summary':call.live_summary_json})
         log.info('[repro %s] CALL_BOUND call=%s attempt=%s binding=%s', session.id[:8], call.id[:8], (attempt.id[:8] if attempt else None), binding)
@@ -428,8 +458,14 @@ class ReproductionOrchestrator:
                 ReproductionCaptureSegment.retained.is_(True),
             ).order_by(ReproductionCaptureSegment.segment_no)))
             paths=[r.local_path for r in rows if r.local_path]
-            merged=merge_classic_pcaps(paths) if paths else b''
-            if merged and len(merged)>24:
+            if paths:
+                merged_path=self.capture._session_dir(session.id)/'calls'/call.id/'compensated.pcap'
+                merged_path.parent.mkdir(parents=True,exist_ok=True)
+                merge_classic_pcaps(paths,merged_path)
+                merged=merged_path.read_bytes()
+            else:
+                merged=b''
+            if len(merged)>24:
                 return RealCapture(pcap=merged, debug_log=b'')
         except Exception:
             pass
@@ -447,20 +483,29 @@ class ReproductionOrchestrator:
             if attempt:
                 attempt.valid=True; attempt.status=AttemptStatus.COMPLETED.value; attempt.end_anchor_type=end_anchor; attempt.end_anchor_ms=int(relative_ms); attempt.ended_at=_utcnow()
         db.add(ReproductionEventRecord(session_id=session.id,attempt_id=call.attempt_id,call_id=call.id,case_id=session.case_id,
-                                       event_type=end_anchor,source='MOCK_PLATFORM',anchor_type=AnchorType.PRIMARY_END.value,
+                                       event_type=end_anchor,source=self._platform_event_source(),anchor_type=AnchorType.PRIMARY_END.value,
                                        session_relative_ms=int(relative_ms),timestamp_source=TimestampSource.COLLECTOR_MONOTONIC.value,
                                        uncertainty_ms=1,payload_json={}))
         transition_session(db,session,ReproductionEvent.CALL_ENDED,actor=actor,reason='call_end_anchor',payload={'call_id':call.id})
         transition_session(db,session,ReproductionEvent.POST_CAPTURE_STARTED,actor=actor,reason='post_capture_window')
         call.status=ReproductionCallStatus.ANALYZING.value
-        bind_event=db.scalar(select(ReproductionEventRecord).where(ReproductionEventRecord.call_id==call.id,ReproductionEventRecord.event_type=='SIP_INVITE').order_by(ReproductionEventRecord.session_relative_ms))
+        bind_event=db.scalar(select(ReproductionEventRecord).where(
+            ReproductionEventRecord.call_id==call.id,
+            ReproductionEventRecord.anchor_type==AnchorType.CALL_BINDING.value,
+        ).order_by(ReproductionEventRecord.session_relative_ms))
         call_start_ms=int(bind_event.session_relative_ms if bind_event and bind_event.session_relative_ms is not None else max(0,int(relative_ms)-1200))
-        ctx=self._runtime_context(session); scenario=self.platform.build_call_capture(context=ctx,start_ms=call_start_ms,end_ms=int(relative_ms),call_id=call.id,profile_id=session.profile_key,signal=signal)
+        scenario=None
+        if not getattr(self.platform, 'supports_segmented_ring', False):
+            ctx=self._runtime_context(session)
+            scenario=self.platform.build_call_capture(
+                context=ctx,start_ms=call_start_ms,end_ms=int(relative_ms),
+                call_id=call.id,profile_id=session.profile_key,signal=signal)
         # Capture-completeness guard: an empty final pcap (mirror stream already
         # stopped at hangup / window landed in a silent gap) must never become the
         # sole CALL_FINAL evidence. Compensate before appending so CALL_QUICK never
         # analyzes an empty capture.
-        if not getattr(scenario,'pcap',None) or len(scenario.pcap)<=24:
+        if (not getattr(self.platform, 'supports_segmented_ring', False)
+                and (not getattr(scenario,'pcap',None) or len(scenario.pcap)<=24)):
             scenario=self._compensate_call_capture(db,session=session,call=call,start_ms=call_start_ms,end_ms=int(relative_ms),signal=signal)
         if scenario is not None:
             pseg=self.capture.append_pcap(db,session=session,start_ms=call_start_ms,end_ms=int(relative_ms)+self._profile(session).timeouts.post_capture_seconds*1000,data=scenario.pcap,attempt_id=call.attempt_id,call_id=call.id,metadata={'mock_final_call':True,'phase':'CALL_FINAL'})
@@ -581,6 +626,13 @@ class ReproductionOrchestrator:
         session.terminal_reason='WATCH_TIMEOUT'
         return self.cleanup(db,session=session,actor=actor)
 
+    def capture_timeout(self, db: Session, *, session: ReproductionSession, actor: str|None=None):
+        if ReproductionState(session.state) not in {ReproductionState.CALL_DETECTED,ReproductionState.CAPTURING}:
+            raise AppError('REPRODUCTION_TRANSITION_NOT_ALLOWED',details={'state':session.state,'operation':'capture_timeout'})
+        transition_session(db,session,ReproductionEvent.CAPTURE_TIMEOUT,actor=actor,reason='capture_timeout')
+        session.terminal_reason='CAPTURE_TIMEOUT'
+        return self.cleanup(db,session=session,actor=actor)
+
     def cancel(self, db: Session, *, session: ReproductionSession, actor: str|None=None):
         state=ReproductionState(session.state)
         if state in TERMINAL_STATES: return session
@@ -609,7 +661,12 @@ class ReproductionOrchestrator:
             final=dict(snapshot.get('final') or {})
             final.update(guard_snapshot)
             snapshot['final']=final
-        run.action_results_json={'actions':actions,'mock_platform':True,'pcm_guard':guard_meta or None}
+        run.action_results_json={
+            'actions': actions,
+            'platform_id': getattr(self.platform, 'platform_id', type(self.platform).__name__),
+            'mock_platform': not getattr(self.platform, 'supports_segmented_ring', False),
+            'pcm_guard': guard_meta or None,
+        }
         decision=CleanupReadinessBarrier.persist(db,session=session,run=run,snapshot=snapshot)
         if decision.verified:
             release_device_lock(db,session=session,cleanup_verified=True)
@@ -621,6 +678,7 @@ class ReproductionOrchestrator:
             return self._finalize(db,session=session,actor=actor)
         transition_session(db,session,ReproductionEvent.CLEANUP_FAILED,actor=actor,reason='cleanup_reverse_validation_failed',
                            payload={'failures':list(decision.failures)})
+        quarantine_device_lock(db,session=session)
         return session
 
     def _prior_pcm_off_state(self, db: Session, *, session: ReproductionSession) -> dict[str, bool]:
