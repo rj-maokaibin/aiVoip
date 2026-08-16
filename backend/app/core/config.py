@@ -37,7 +37,7 @@ class Settings(BaseSettings):
     knowledge_root: Path = Path("/app/knowledge/seed")
     knowledge_similarity_min_score: float = 0.18
     knowledge_similarity_limit: int = 5
-    reasoning_prompt_version: str = "voip-diagnosis-v1"
+    reasoning_prompt_version: str = "voip-diagnosis-v2"
     reasoning_gateway_include_device_identifiers: bool = False
     diagnosis_no_progress_limit: int = 2
     diagnosis_max_cycles: int = 6
@@ -51,7 +51,7 @@ class Settings(BaseSettings):
     reasoning_gateway_model: str = ""
     reasoning_gateway_timeout_seconds: float = 20.0
     ai_shadow_enabled: bool = False
-    ai_shadow_workflow_version: str = "ai-shadow-v1"
+    ai_shadow_workflow_version: str = "ai-shadow-v2"
     # AI promotion is capability-based. OFF/SHADOW/SUGGEST/CONTROLLED_PLANNER.
     # The deterministic reasoner remains formal authority at every stage.
     ai_promotion_stage: str = "OFF"
@@ -97,5 +97,11 @@ class Settings(BaseSettings):
     sse_poll_interval_seconds: float = 0.75
     sse_batch_size: int = 200
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
+    def model_post_init(self, __context) -> None:
+        # Capability promotion implies Shadow capture is on. Legacy deployments may
+        # still use AI_SHADOW_ENABLED=true with stage OFF; that remains supported.
+        if str(self.ai_promotion_stage or "OFF").upper() != "OFF":
+            self.ai_shadow_enabled = True
 
 settings = Settings()
