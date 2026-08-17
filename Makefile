@@ -75,7 +75,7 @@ quality-gate: lint profiles reproduction-profile-gate test rules golden-syntheti
 ai-eval-gate:
 	PYTHONPATH=backend:. python tools/ai_eval_gate.py --out validation/ai_eval_gate.json
 
-# Export only REAL cases with machine-confirmed root cause / fix verification.
+# Export only REAL, GOLDEN_READY cases with machine-confirmed root cause / fix verification.
 ai-export-real-eval:
 	PYTHONPATH=backend:. python tools/export_ai_eval_dataset.py --out validation/ai_eval_field_dataset_v2.json --require-minimum $(if $(AI_EVAL_MIN_SAMPLES),$(AI_EVAL_MIN_SAMPLES),10)
 
@@ -90,9 +90,9 @@ ai-promotion-gate: ai-eval-gate
 	@test -f validation/ai_model_eval.json || (echo "validation/ai_model_eval.json is required; run ai-model-eval first" && exit 2)
 	PYTHONPATH=backend:. python tools/ai_promotion_gate.py --quality-report validation/ai_model_eval.json --out validation/ai_promotion_gate.json
 
-# Source-level E1-E6 contract/regression gate. Does not imply production model promotion.
+# Source-level E1-E6 + Golden Candidate contract/regression gate. Does not imply production model promotion.
 ai-e1-e6-gate:
-	PYTHONPATH=backend:. pytest -q backend/tests/test_ai_eval_gate.py backend/tests/test_ai_proposal_shadow.py backend/tests/test_ai_readonly_workbench.py backend/tests/test_gateway_safety.py backend/tests/test_knowledge_similarity.py backend/tests/test_claim_grounding.py backend/tests/test_ai_e1_e6.py backend/tests/test_ai_promotion_runtime.py backend/tests/test_controlled_ai_selection.py
+	PYTHONPATH=backend:. pytest -q backend/tests/test_ai_eval_gate.py backend/tests/test_ai_proposal_shadow.py backend/tests/test_ai_readonly_workbench.py backend/tests/test_gateway_safety.py backend/tests/test_knowledge_similarity.py backend/tests/test_claim_grounding.py backend/tests/test_ai_e1_e6.py backend/tests/test_ai_promotion_runtime.py backend/tests/test_controlled_ai_selection.py backend/tests/test_golden_candidates.py backend/tests/test_golden_auto.py
 
 # M6.1: real PostgreSQL + Redis + MinIO + Celery + HTTP API full-stack smoke.
 # Uses a generated periodic-audio PCAP so it can run in CI without field evidence.
