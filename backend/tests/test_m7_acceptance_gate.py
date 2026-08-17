@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from tools.m7_acceptance_gate import CRITERIA, _ai_authority_safe, evaluate_signals
+from tools.m7_acceptance_gate import CRITERIA, _ai_authority_safe, _is_real_session, evaluate_signals
 
 
 def _all(value: bool = True) -> dict[str, bool]:
@@ -89,3 +89,9 @@ def test_rejected_or_degraded_ai_rows_do_not_create_false_m7_ai_pass():
         validated_output_json=None,
     )
     assert _ai_authority_safe([rejected, degraded]) is False
+
+
+def test_m7_real_platform_guard_rejects_mock_or_missing_platform_profile():
+    assert _is_real_session(SimpleNamespace(platform_profile_id="ruijie-voip-aim-real")) is True
+    assert _is_real_session(SimpleNamespace(platform_profile_id="ruijie-voip-mock")) is False
+    assert _is_real_session(SimpleNamespace(platform_profile_id=None)) is False
