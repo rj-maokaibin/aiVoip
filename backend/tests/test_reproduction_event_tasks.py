@@ -12,6 +12,7 @@ from app.db.models import Case, CaseDevice, DeviceDiagnosticLock, ReproductionSe
 from app.workers.reproduction_event_tasks import (
     _device_lock_reassigned,
     _latch_first_end_anchor,
+    _onhook_precedes_offhook,
     _session_listening,
     _should_restart_ring_after_end,
     watch_fxs_events,
@@ -35,6 +36,39 @@ def test_watch_fxs_events_task_is_registered():
 def test_first_onhook_end_anchor_wins_over_hook_bounce():
     assert _latch_first_end_anchor(None, 70_204) == 70_204
     assert _latch_first_end_anchor(70_204, 70_736) == 70_204
+
+
+def test_new_offhook_resets_end_anchor_latch_for_fresh_cycle():
+    """A new OFFHOOK starts a fresh activity cycle: the previous End Anchor latch
+    is invalidated (reset=True -> None) so a follow-up ONHOOK after a fast no-DTMF
+    re-off-hook is treated as a new first edge, not as hook bounce of the earlier
+    call. Regression for real session 108d0325 where consecutive fast no-DTMF
+    off/on-hooks were merged into the first call's window."""
+    # First call: first ONHOOK latches the End Anchor; bounce keeps it.
+    assert _latch_first_end_anchor(None, 33_666) == 33_666
+    assert _latch_first_end_anchor(33_666, 33_883) == 33_666
+    # New OFFHOOK (re-off-hook without DTMF) resets the latch.
+    assert _latch_first_end_anchor(33_666, 0, reset=True) is None
+    # The next ONHOOK now becomes a fresh first edge instead of being ignored.
+    assert _latch_first_end_anchor(None, 36_987) == 36_987
+
+
+def test_stale_onhook_before_latest_offhook_is_ignored():
+    """A stale ONHOOK carrying a DUT timestamp no later than the most recent
+    OFFHOOK must be ignored (it is a late-delivered bounce of the previous
+    activity cycle) so it cannot re-latch the End Anchor and swallow the real
+    follow-up ONHOOK. Regression for real session 16300ddf: R04's delayed
+    ONHOOK(61745) was processed after R02's OFFHOOK reset, re-latching the latch
+    and causing R02's real ONHOOK(61967) to be dropped as 'duplicate ONHOOK
+    ignored'."""
+    # No OFFHOOK seen yet -> nothing precedes it.
+    assert _onhook_precedes_offhook('2026-08-17 04:38:01.461000', None) is False
+    # R02's OFFHOOK at 04:38:03.777.
+    last_offhook = '2026-08-17 04:38:03.777000'
+    # R04's stale ONHOOK timestamped 04:38:01 (before that OFFHOOK) -> ignored.
+    assert _onhook_precedes_offhook('2026-08-17 04:38:01.461000', last_offhook) is True
+    # R02's real ONHOOK timestamped 04:38:04 (after that OFFHOOK) -> accepted.
+    assert _onhook_precedes_offhook('2026-08-17 04:38:04.099000', last_offhook) is False
 
 
 def test_no_call_end_restarts_ring_only_when_session_resumes_watching():

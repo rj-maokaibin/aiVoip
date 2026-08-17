@@ -322,3 +322,47 @@ def test_reconcile_pcm_dtmf_records_authoritative_sequences(tmp_path):
             ReproductionEventRecord.session_id==session.id,
             ReproductionEventRecord.event_type=='PCM_DTMF_SEQUENCE')))
         assert len(again)==1
+
+
+def test_bind_call_backfills_fxs_dtmf_call_id(tmp_path):
+    """FXS DTMF events recorded BEFORE the Call row exists (Call binding trails
+    the physical answer by ~1 segment/~8s) must be backfilled with the new call_id
+    once the Call is bound. Regression for real session d60b2f5b (RP-D08): dial and
+    in-call digits (301123#789) were fully captured in PCM but their FXS event
+    call_id stayed NULL, making in-call DTMF unobservable at the event layer."""
+    from app.db.models import ReproductionEventRecord
+    from app.reproduction.profile import ReproductionProfileRegistry
+    from app.reproduction.quick import QuickAnalysisInput
+
+    eng=_engine()
+    with Session(eng) as db:
+        _,_,orch,session,pipe=_setup(db,tmp_path,'AUDIO_NOISE')
+        orch.record_activity(db,session=session,relative_ms=100)
+        attempt=db.scalar(select(ReproductionAttempt).where(
+            ReproductionAttempt.session_id==session.id,ReproductionAttempt.status=='ACTIVE'))
+        assert attempt is not None
+        # Dial DTMF recorded before any Call exists -> call_id must be NULL.
+        class _Ev:
+            timestamp='2026-08-17 04:38:01.461000'
+            event='DTMF'
+            digit='3'
+        class _Ev2:
+            timestamp='2026-08-17 04:38:01.461000'
+            event='DTMF'
+            digit='0'
+        orch.record_fxs_event(db,session=session,event=_Ev(),actor='reproduction-worker')
+        orch.record_fxs_event(db,session=session,event=_Ev2(),actor='reproduction-worker')
+        db.flush()
+        pre=list(db.scalars(select(ReproductionEventRecord).where(
+            ReproductionEventRecord.session_id==session.id,
+            ReproductionEventRecord.event_type=='FXS_DTMF')))
+        assert len(pre)==2 and all(e.call_id is None for e in pre)
+        # Bind the call -> backfill must attribute both DTMF events to the call.
+        call=orch.bind_call(db,session=session,relative_ms=300,
+                            binding_event='SIP_INVITE',actor='reproduction-worker')
+        db.flush()
+        post=list(db.scalars(select(ReproductionEventRecord).where(
+            ReproductionEventRecord.session_id==session.id,
+            ReproductionEventRecord.event_type=='FXS_DTMF')))
+        assert len(post)==2 and all(e.call_id==call.id for e in post)
+        assert all((e.payload_json or {}).get('in_call') is True for e in post)

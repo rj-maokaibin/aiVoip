@@ -64,9 +64,35 @@ def _ring_segment_retainable(observation) -> bool:
     return observation.parse_error is None and observation.udp_packets > 0
 
 
-def _latch_first_end_anchor(current_ms: int | None, observed_ms: int) -> int:
-    """End anchors are edge-triggered: hook bounce must not move the first edge."""
+def _latch_first_end_anchor(current_ms: int | None, observed_ms: int, *, reset: bool = False) -> int | None:
+    """End anchors are edge-triggered: hook bounce must not move the first edge.
+
+    ``reset=True`` starts a fresh activity cycle (a new OFFHOOK was observed), so
+    any previously latched End Anchor is invalidated (returns None) and the next
+    ONHOOK becomes a new first edge. Without this, a hang-up followed quickly by a
+    re-off-hook that carries no DTMF (RP-H02) is misread as hook bounce of the
+    earlier call and the follow-up ONHOOK is swallowed as "duplicate ONHOOK
+    ignored" (real session 108d0325). Hook bounce WITHIN one cycle (no reset)
+    still keeps the first edge.
+    """
+    if reset:
+        return None
     return observed_ms if current_ms is None else current_ms
+
+
+def _onhook_precedes_offhook(onhook_ts: str, last_offhook_ts: str | None) -> bool:
+    """True when an ONHOOK event carries a device timestamp no later than the most
+    recent OFFHOOK. The FXS monitor streams events timestamped by the DUT clock
+    (``YYYY-MM-DD HH:MM:SS.ffffff``); poll() may deliver several events per batch
+    and a *late* ONHOOK from a previous activity cycle can be processed AFTER an
+    OFFHOOK reset. That stale ONHOOK must never re-latch the End Anchor (real
+    session 16300ddf: R04's delayed ONHOOK(61745) re-latched after R02's OFFHOOK
+    reset, so R02's real ONHOOK was swallowed as bounce). String comparison is
+    valid because all timestamps share the DUT clock and fixed-width format.
+    """
+    if last_offhook_ts is None:
+        return False
+    return onhook_ts <= last_offhook_ts
 
 
 def _should_restart_ring_after_end(state: str, active_call_id: str | None) -> bool:
@@ -466,6 +492,7 @@ async def _watch_real_v11(db, session, device, max_seconds: int | None) -> dict:
     events_handled = calls_bound = calls_ended = 0
     active_call_id: str | None = None
     pending_onhook_ms: int | None = None
+    last_offhook_ts: str | None = None
     call_bound_at: float | None = None
     segment_future = None
     segment_is_final_drain = False
@@ -552,6 +579,16 @@ async def _watch_real_v11(db, session, device, max_seconds: int | None) -> dict:
                              f'<{event.digit}>' if event.event == 'DTMF' else '')
                     if event.event == 'ONHOOK':
                         observed_onhook_ms = orch.fxs_event_monitor.relative_ms()
+                        # A poll() batch can deliver a stale ONHOOK from a previous
+                        # activity cycle AFTER a newer OFFHOOK reset (real session
+                        # 16300ddf: R04's delayed ONHOOK re-latched after R02's
+                        # OFFHOOK, so R02's real ONHOOK was swallowed as bounce).
+                        # Such an ONHOOK, whose device timestamp is no later than the
+                        # most recent OFFHOOK, must not re-latch the End Anchor.
+                        if _onhook_precedes_offhook(event.timestamp, last_offhook_ts):
+                            log.info('[repro %s] stale ONHOOK before latest OFFHOOK ignored ts=%s',
+                                     session.id[:8], event.timestamp)
+                            continue
                         first_onhook = pending_onhook_ms is None
                         pending_onhook_ms = _latch_first_end_anchor(
                             pending_onhook_ms, observed_onhook_ms)
@@ -579,6 +616,26 @@ async def _watch_real_v11(db, session, device, max_seconds: int | None) -> dict:
                         if not data_plane_validation_recorded:
                             activity_deadline = time.monotonic() + validation_seconds
                             activity_degraded_reported = False
+                        # A fresh off-hook begins a new activity cycle: the previous
+                        # End Anchor latch must be invalidated, otherwise a follow-up
+                        # hang-up (e.g. H02 "hang then re-offhook 0.5s later" without
+                        # any DTMF) is misclassified as hook bounce of the previous
+                        # call and swallowed as "duplicate ONHOOK ignored". Real
+                        # session 108d0325: consecutive fast no-DTMF off/on-hooks
+                        # were merged into the first call's window because the latch
+                        # stayed non-None after the prior on-hook.
+                        if pending_onhook_ms is not None:
+                            log.info('[repro %s] new OFFHOOK resets previous End Anchor latch ms=%s',
+                                     session.id[:8], pending_onhook_ms)
+                        pending_onhook_ms = _latch_first_end_anchor(
+                            pending_onhook_ms, 0, reset=True)
+                        # Record the latest OFFHOOK device timestamp so a stale
+                        # ONHOOK arriving in a later poll batch (but carrying an
+                        # earlier DUT timestamp) cannot re-latch this cycle's
+                        # End Anchor. The max() guards against out-of-order lines
+                        # within a single poll batch.
+                        if last_offhook_ts is None or event.timestamp > last_offhook_ts:
+                            last_offhook_ts = event.timestamp
                     db.commit()
 
                 now = time.monotonic()
@@ -720,6 +777,7 @@ async def _watch_real_v11(db, session, device, max_seconds: int | None) -> dict:
                                 end_anchor='FXS_ONHOOK', actor='reproduction-worker',
                             )
                         pending_onhook_ms = None
+                        last_offhook_ts = None
                         db.commit()
 
                     row = _session_listening(db, session.id)

@@ -419,12 +419,23 @@ class ReproductionOrchestrator:
                 ReproductionCaptureSegment.call_id.is_(None),
             )):
                 segment.call_id=call.id
-        # NOTE: in-call DTMF attribution cannot be backfilled here. Call binding
-        # trails the physical answer by ~1 segment (~8s) because it waits on
-        # downloaded PCAP, so digits pressed during the call are typically
-        # recorded before the Call row exists. Correct in-call attribution
-        # requires post-hoc reconciliation against the PCAP-analyzed call window,
-        # which is a separate piece of work (see KNOWN-DEFECT in the ledger).
+        # Backfill FXS DTMF events that were recorded BEFORE this Call row existed.
+        # Call binding trails the physical answer by ~1 segment (~8s) because it
+        # waits on downloaded PCAP, so dialing and early in-call digits (IVR input,
+        # in-call keys) are typically recorded with call_id=NULL. Once the Call is
+        # bound, attribute every FXS_DTMF of this attempt to the Call. Real session
+        # d60b2f5b (RP-D08) proved the digits are fully captured in PCM; only the
+        # call_id association was missing, making in-call DTMF unobservable at the
+        # event layer (ledger KNOWN-DEFECT #2).
+        if attempt is not None:
+            for ev in db.scalars(select(ReproductionEventRecord).where(
+                ReproductionEventRecord.session_id==session.id,
+                ReproductionEventRecord.attempt_id==attempt.id,
+                ReproductionEventRecord.event_type=='FXS_DTMF',
+                ReproductionEventRecord.call_id.is_(None),
+            )):
+                ev.call_id=call.id
+                ev.payload_json={**(ev.payload_json or {}), 'in_call': True}
         # Cache the dialing-window pretrigger under the new call_id so the real
         # platform's final merged call.pcap includes the dialing DTMF/silence (the
         # pretrigger is captured above, before the call row existed).

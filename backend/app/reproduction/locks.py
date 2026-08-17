@@ -65,13 +65,17 @@ def acquire_device_lock(
             lease_expires_at=now+timedelta(seconds=lease_seconds),
         )
         db.add(row)
+    # Take the two row locks in the same order as every other lock-bearing
+    # transaction (session -> device_diagnostic_locks) to avoid an AB-BA deadlock
+    # on the DeviceDiagnosticLock.session_id FK parent row (ShareLock on
+    # reproduction_sessions). Write the session mirror first, flush, then the lock.
+    session.owner_worker=owner_worker
+    session.heartbeat_at=now
+    session.lease_expires_at=row.lease_expires_at
     try:
         db.flush()
     except IntegrityError as exc:
         raise AppError('DEVICE_DIAGNOSTIC_LOCKED', details={'device_id':session.device_id}) from exc
-    session.owner_worker=owner_worker
-    session.heartbeat_at=now
-    session.lease_expires_at=row.lease_expires_at
     db.flush()
     return row
 
@@ -88,10 +92,22 @@ def heartbeat_device_lock(db: Session, *, session: ReproductionSession, lease_se
         row.status=LockStatus.EXPIRED.value
         db.flush()
         raise AppError('REPRODUCTION_LEASE_EXPIRED', details={'session_id':session.id})
-    row.heartbeat_at=now
-    row.lease_expires_at=now+timedelta(seconds=lease_seconds)
+    # Mirror the lease on the session row FIRST, then update the lock row. This
+    # forces every lock-bearing transaction to take the two row locks in the same
+    # order (session -> device_diagnostic_locks) as the cancel path does
+    # (transition_session writes the session, then release_device_lock writes the
+    # lock). Previously heartbeat wrote the lock row then the session row, while
+    # cancel wrote the session row then the lock row: the reversed order produced
+    # an AB-BA deadlock on "device_diagnostic_locks" (DeviceDiagnosticLock.session_id
+    # -> reproduction_sessions.id FK takes a ShareLock on the parent row) whenever
+    # cancel raced the 15s heartbeat of a WATCHING session.
     session.heartbeat_at=now
-    session.lease_expires_at=row.lease_expires_at
+    session.lease_expires_at=now+timedelta(seconds=lease_seconds)
+    # Two explicit flushes guarantee the row-lock acquisition ORDER (session first,
+    # then device_diagnostic_locks), matching the cancel path so no AB-BA deadlock.
+    db.flush()
+    row.heartbeat_at=now
+    row.lease_expires_at=session.lease_expires_at
     db.flush()
     return row
 
@@ -106,12 +122,15 @@ def release_device_lock(db: Session, *, session: ReproductionSession, cleanup_ve
     if not row:
         return
     now=_utcnow()
+    # Consistent row-lock order (session first, then lock) avoids the AB-BA
+    # deadlock on the lock's session FK ShareLock.
+    session.lease_expires_at=None
+    db.flush()
     row.status=LockStatus.RELEASED.value
     row.released_at=now
     row.heartbeat_at=now
     # Keep the row for audit but make it immediately reclaimable.
     row.lease_expires_at=now
-    session.lease_expires_at=None
     db.flush()
 
 
@@ -124,9 +143,11 @@ def quarantine_device_lock(db: Session, *, session: ReproductionSession) -> None
     if row is None:
         return
     now=_utcnow()
+    # Consistent row-lock order (session first, then lock).
+    session.lease_expires_at=None
+    db.flush()
     row.status=LockStatus.QUARANTINED.value
     row.heartbeat_at=now
     # Quarantine is a safety interlock, not an expiring operation lease.
     row.lease_expires_at=now
-    session.lease_expires_at=None
     db.flush()
