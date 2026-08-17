@@ -32,6 +32,8 @@ def test_feishu_document_uses_d112_order_and_attachment_slot_before_audit():
     expected=["0. 当前状态 / 快速导航","1. 当前初步结论","2. 当前重点问题","3. 证据完整度","4. 最新一次复现结果","5. 多次复现汇总","6. A/B 对比","7. 历次 Reproduction Session（复现会话）","8. 正常项 / 排除性证据","9. 完整技术证据","10. Evidence Bundle / 附件","11. 报告版本与审计记录"]
     positions=[text.index(x) for x in expected]
     assert positions==sorted(positions)
-    assert positions[-2] < attachment_index < positions[-1]
+    # Inserting at the current section-11 index places new blocks immediately
+    # before section 11, which is exactly the D112 attachment slot.
+    assert positions[-2] < attachment_index == positions[-1]
     assert any("首次可观测于 PCM_RX" in x for x in text)
     assert any("5/5" in x and "100.0%" in x for x in text)
