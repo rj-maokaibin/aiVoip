@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import json
 from datetime import datetime, timezone
 
@@ -13,6 +12,7 @@ from app.integrations.storage import ObjectStorage
 from app.reports.evidence_brief import build_report_payload, canonical_hash, render_report_html
 from app.services.audit import audit
 from app.services.evidence_report_artifacts import build_manifest, generate_visual_artifacts, persist_artifact
+from app.services.evidence_report_source_artifacts import link_source_artifacts
 from app.services.evidence_report_scope import (
     call_dict, case_dict, environment_snapshot, evidence_dict, latest_analyzer_runs,
     load_analyzer_results, resolve_scope, scope_value, scoped_evidences, session_dict,
@@ -84,10 +84,14 @@ def generate_evidence_report(db: Session, *, scope_type, scope_id: str, actor: s
     db.add(report); db.flush()
     if previous and previous.status!=EvidenceReportStatus.SUPERSEDED.value: previous.status=EvidenceReportStatus.SUPERSEDED.value
     finding_rows=_persist_findings(db,report=report,payload=payload)
+    source_artifacts=link_source_artifacts(db,report=report,runs=runs)
     visuals=generate_visual_artifacts(db,storage,report=report,results=results,runs=runs)
-    payload["artifacts"]=[{"artifact_id":a.id,"type":a.type,"filename":a.filename,"content_type":a.content_type,"sha256":a.sha256,"metadata":a.metadata_json or {}} for a in visuals]
+    report_artifacts=source_artifacts+visuals
+    payload["artifacts"]=[{"artifact_id":a.id,"type":a.type,"filename":a.filename,"content_type":a.content_type,"sha256":a.sha256,"metadata":a.metadata_json or {}} for a in report_artifacts]
     for item in payload.get("findings",[]):
-        refs=[{"artifact_id":a.id,"type":a.type,"filename":a.filename} for a in visuals if item.get("finding_id") in ((a.metadata_json or {}).get("finding_ids") or [])]
+        refs=[]
+        for a in report_artifacts:
+            if item.get("finding_id") in ((a.metadata_json or {}).get("finding_ids") or []): refs.append({"artifact_id":a.id,"type":a.type,"filename":a.filename})
         item["artifact_refs"]=refs
         row=next((r for r in finding_rows if r.id==item.get("finding_id")),None)
         if row: row.artifact_refs_json=refs
@@ -97,14 +101,14 @@ def generate_evidence_report(db: Session, *, scope_type, scope_id: str, actor: s
     html_art=persist_artifact(db,storage,report=report,artifact_type=EvidenceReportArtifactType.PRELIMINARY_REPORT_HTML.value,
         filename="preliminary-evidence-report.html",data=html_bytes,content_type="text/html; charset=utf-8",metadata={"schema_version":REPORT_SCHEMA_VERSION},role="REPORT")
     report.json_object_key=json_art.object_key; report.html_object_key=html_art.object_key
-    manifest=build_manifest(report,visuals+[json_art,html_art]); manifest_bytes=json.dumps(manifest,ensure_ascii=False,indent=2).encode("utf-8")
+    manifest=build_manifest(report,report_artifacts+[json_art,html_art]); manifest_bytes=json.dumps(manifest,ensure_ascii=False,indent=2).encode("utf-8")
     manifest_art=persist_artifact(db,storage,report=report,artifact_type=EvidenceReportArtifactType.MANIFEST_JSON.value,filename="manifest.json",
         data=manifest_bytes,content_type="application/json",metadata={"manifest_schema":"evidence-bundle-manifest-v1"},role="MANIFEST")
     report.manifest_object_key=manifest_art.object_key
     report.status=EvidenceReportStatus.COMPLETE.value if payload.get("completeness",{}).get("state")=="COMPLETE" else EvidenceReportStatus.PARTIAL_COMPLETE.value
     report.snapshot_json=payload; report.completed_at=utcnow(); db.flush()
     audit(db,case_id=case.id,actor=actor,event_type="PRELIMINARY_EVIDENCE_REPORT_GENERATED",target_type="preliminary_evidence_report",target_id=report.id,
-          detail={"scope_type":scope_type,"scope_id":scope_id,"version":version,"status":report.status,"finding_count":len(finding_rows),"artifact_count":len(visuals)+3})
+          detail={"scope_type":scope_type,"scope_id":scope_id,"version":version,"status":report.status,"finding_count":len(finding_rows),"artifact_count":len(report_artifacts)+3})
     return report,payload,False
 
 
