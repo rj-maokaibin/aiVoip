@@ -34,3 +34,15 @@ def link_source_artifacts(db:Session,*,report:PreliminaryEvidenceReport,runs:dic
                                               role="FINDING" if related else "SOURCE"))
         out.append(artifact)
     db.flush(); return out
+
+
+def finding_artifact_refs(db:Session,*,report_id:str,finding_id:str) -> list[dict]:
+    links=list(db.scalars(select(EvidenceReportArtifactLink).where(EvidenceReportArtifactLink.report_id==report_id).order_by(EvidenceReportArtifactLink.created_at.asc())))
+    refs=[]
+    for link in links:
+        if finding_id not in (link.finding_ids_json or []):
+            continue
+        artifact=db.get(Artifact,link.artifact_id)
+        if artifact:
+            refs.append({"artifact_id":artifact.id,"type":artifact.type,"filename":artifact.filename,"content_type":artifact.content_type,"role":link.role})
+    return refs
