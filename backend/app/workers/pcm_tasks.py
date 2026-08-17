@@ -35,6 +35,10 @@ def _profile_path(profile_id: str) -> Path:
         raise ValueError("PCM_PROFILE_NOT_FOUND")
     return path
 
+def _notify_reports(case_id:str,reason:str) -> None:
+    from app.workers.evidence_report_tasks import notify_evidence_report_changed
+    notify_evidence_report_changed(case_id,reason)
+
 @celery_app.task(name="pcm.analyze_evidence", bind=True, autoretry_for=(), max_retries=0)
 def analyze_pcm_evidence(self, job_id: str, evidence_id: str, profile_id: str):
     db = SessionLocal(); run = None
@@ -67,7 +71,7 @@ def analyze_pcm_evidence(self, job_id: str, evidence_id: str, profile_id: str):
               detail={"evidence_id": evidence.id, "profile_id": profile.id, "summary": result.get("summary"), "analyzer_version": run.analyzer_version})
         db.commit()
         from app.workers.diagnosis_tasks import notify_case_changed
-        notify_case_changed(job.case_id)
+        notify_case_changed(job.case_id); _notify_reports(job.case_id,'pcm_analysis_complete')
         return {"status": final_status, "job_id": job.id, "analyzer_run_id": run.id, "summary": result.get("summary")}
     except Exception as exc:
         log.exception("pcm analysis failed")
@@ -80,7 +84,7 @@ def analyze_pcm_evidence(self, job_id: str, evidence_id: str, profile_id: str):
         db.commit()
         if "job" in locals() and job:
             from app.workers.diagnosis_tasks import notify_case_changed
-            notify_case_changed(job.case_id)
+            notify_case_changed(job.case_id); _notify_reports(job.case_id,'pcm_analysis_failed')
         raise
     finally:
         db.close()
