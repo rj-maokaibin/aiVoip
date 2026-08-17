@@ -169,6 +169,10 @@ class RtpStreamAnalyzer:
 
         high_delta_events = [e for e in events if e.type == "HIGH_DELTA"]
         jitter_ms = [v * 1000.0 / clock_rate for v in jitter_values] if clock_rate else []
+        avg_jitter = round(mean(jitter_ms), 6) if jitter_ms else None
+        p95_jitter = round(_percentile(jitter_ms, 0.95), 6) if jitter_ms else None
+        max_jitter = round(max(jitter_ms), 6) if jitter_ms else None
+        loss_rate_value = round(loss_rate, 6)
         return {
             "stream_id": _stream_id(key),
             "src_ip": src_ip,
@@ -187,7 +191,8 @@ class RtpStreamAnalyzer:
             "last_sequence_ext": last_seq,
             "expected_packets": expected,
             "lost_packets": lost,
-            "loss_rate_percent": round(loss_rate, 6),
+            "loss_rate_percent": loss_rate_value,
+            "loss_rate": loss_rate_value,
             "duplicate_packets": duplicates,
             "out_of_order_packets": reordered,
             "max_consecutive_loss": max((e.details["lost_packets"] for e in burst_events), default=0),
@@ -197,9 +202,12 @@ class RtpStreamAnalyzer:
             "max_delta_ms": round(max(deltas_ms), 6) if deltas_ms else None,
             "high_delta_count": len(high_delta_events),
             "max_excess_delay_ms": round(max((e.details.get("excess_delay_ms",0.0) for e in high_delta_events), default=0.0), 6),
-            "avg_jitter_ms": round(mean(jitter_ms), 6) if jitter_ms else None,
-            "p95_jitter_ms": round(_percentile(jitter_ms, 0.95), 6) if jitter_ms else None,
-            "max_jitter_ms": round(max(jitter_ms), 6) if jitter_ms else None,
+            "avg_jitter_ms": avg_jitter,
+            "p95_jitter_ms": p95_jitter,
+            "max_jitter_ms": max_jitter,
+            "avg_rfc3550_jitter_ms": avg_jitter,
+            "p95_rfc3550_jitter_ms": p95_jitter,
+            "max_rfc3550_jitter_ms": max_jitter,
             "payload_type": dominant_pt,
             "payload_types": sorted(set(payload_types)),
             "payload_change_count": payload_changes,
