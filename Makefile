@@ -179,3 +179,14 @@ production-verify:
 production-release:
 	@test -n "$(PRODUCTION_ENV)" || (echo "PRODUCTION_ENV is required" && exit 2)
 	./deploy/voip-ai --env "$(PRODUCTION_ENV)" $(if $(FIELD_PCAP),--field-pcap "$(FIELD_PCAP)",) release
+
+# M7: read-only Case-level real-DUT closed-loop acceptance.
+# M7 is separate from ROOT_CAUSE/Golden READY/model-promotion gates.
+.PHONY: m7-acceptance-report m7-acceptance
+m7-acceptance-report:
+	@test -n "$(M7_CASE)" || (echo "M7_CASE (case_no or case_id) is required" && exit 2)
+	PYTHONPATH=backend:. python tools/m7_acceptance_gate.py --case "$(M7_CASE)" --out-json validation/m7_acceptance_report.json --out-md validation/m7_acceptance_report.md
+
+m7-acceptance:
+	@test -n "$(M7_CASE)" || (echo "M7_CASE (case_no or case_id) is required" && exit 2)
+	PYTHONPATH=backend:. python tools/m7_acceptance_gate.py --case "$(M7_CASE)" --strict --out-json validation/m7_acceptance_report.json --out-md validation/m7_acceptance_report.md
