@@ -91,20 +91,54 @@ def _baseline_ready(db: Session, case_id: str) -> bool:
     return bool(row and row.decision_json and isinstance(row.decision_json, dict))
 
 
-def _audit_state(db: Session, case_id: str, *, has_evidence: bool, root_confirmed: bool, fix_verified: bool) -> tuple[bool, list[str], list[str]]:
-    events = list(
-        db.scalars(select(AuditLog.event_type).where(AuditLog.case_id == case_id))
-    )
+def _audit_state(
+    db: Session,
+    case_id: str,
+    *,
+    has_evidence: bool,
+    has_analyzer: bool,
+    root_confirmed: bool,
+    fix_verified: bool,
+) -> tuple[bool, list[str], list[str]]:
+    events = list(db.scalars(select(AuditLog.event_type).where(AuditLog.case_id == case_id)))
     event_set = {str(x) for x in events}
     gaps: list[str] = []
-    required_groups: list[tuple[str, set[str]]] = [("AUDIT_CASE_CREATED_MISSING", {"CASE_CREATED"})]
+    required_groups: list[tuple[str, set[str]]] = [
+        ("AUDIT_CASE_CREATED_MISSING", {"CASE_CREATED"})
+    ]
     if has_evidence:
-        required_groups.append(("AUDIT_EVIDENCE_MISSING", {"EVIDENCE_CREATED", "EVIDENCE_UPLOADED"}))
-    required_groups.append(("AUDIT_DIAGNOSIS_MISSING", {"DIAGNOSIS_STARTED", "DIAGNOSIS_CYCLE", "DIAGNOSIS_UPDATED"}))
+        required_groups.append(
+            ("AUDIT_EVIDENCE_MISSING", {"EVIDENCE_CREATED", "EVIDENCE_UPLOADED"})
+        )
+    if has_analyzer:
+        required_groups.append(
+            (
+                "AUDIT_ANALYZER_MISSING",
+                {
+                    "ANALYZER_COMPLETED",
+                    "PACKET_ANALYSIS_FINISHED",
+                    "MEDIA_ANALYSIS_FINISHED",
+                    "PCM_ANALYSIS_FINISHED",
+                },
+            )
+        )
+    required_groups.append(
+        (
+            "AUDIT_DIAGNOSIS_MISSING",
+            {"DIAGNOSIS_STARTED", "DIAGNOSIS_CYCLE", "DIAGNOSIS_UPDATED"},
+        )
+    )
     if root_confirmed:
-        required_groups.append(("AUDIT_ROOT_CAUSE_MISSING", {"HYPOTHESIS_CONFIRMED", "ROOT_CAUSE_CAUSALLY_CONFIRMED"}))
+        required_groups.append(
+            (
+                "AUDIT_ROOT_CAUSE_MISSING",
+                {"HYPOTHESIS_CONFIRMED", "ROOT_CAUSE_CAUSALLY_CONFIRMED"},
+            )
+        )
     if fix_verified:
-        required_groups.append(("AUDIT_FIX_VERIFICATION_MISSING", {"FIX_VERIFICATION_UPDATED"}))
+        required_groups.append(
+            ("AUDIT_FIX_VERIFICATION_MISSING", {"FIX_VERIFICATION_UPDATED"})
+        )
     for code, alternatives in required_groups:
         if not (event_set & alternatives):
             gaps.append(code)
@@ -115,10 +149,12 @@ def _normalize(text: Any) -> str:
     return re.sub(r"\s+", " ", str(text or "")).strip().lower()
 
 
-def _answer_leakage(case: Case, evidences: list[Evidence], hypotheses: list[Hypothesis]) -> list[dict]:
+def _answer_leakage(
+    case: Case, evidences: list[Evidence], hypotheses: list[Hypothesis]
+) -> list[dict]:
     """Conservative leak detector.
 
-    Symptoms are allowed in the prompt.  We only flag root-cause-like disclosure:
+    Symptoms are allowed in the prompt. We only flag root-cause-like disclosure:
     exact confirmed hypothesis identifiers in filenames/metadata, or explicit root
     cause language in the Case summary coupled with a confirmed hypothesis title/code.
     Analyzer findings are intentionally not scanned because deterministic facts are
@@ -139,48 +175,123 @@ def _answer_leakage(case: Case, evidences: list[Evidence], hypotheses: list[Hypo
     if any(marker in summary for marker in root_markers):
         for label_type, label in labels:
             if label in summary:
-                findings.append({"source": "CASE_SUMMARY", "label_type": label_type, "match": label})
+                findings.append(
+                    {"source": "CASE_SUMMARY", "label_type": label_type, "match": label}
+                )
 
     for evidence in evidences:
         filename = _normalize(evidence.filename)
-        metadata = _normalize(json.dumps(evidence.metadata_json or {}, ensure_ascii=False, sort_keys=True))
+        metadata = _normalize(
+            json.dumps(evidence.metadata_json or {}, ensure_ascii=False, sort_keys=True)
+        )
         for label_type, label in labels:
             if label in filename:
-                findings.append({
-                    "source": "EVIDENCE_FILENAME",
-                    "evidence_id": evidence.id,
-                    "label_type": label_type,
-                    "match": label,
-                })
+                findings.append(
+                    {
+                        "source": "EVIDENCE_FILENAME",
+                        "evidence_id": evidence.id,
+                        "label_type": label_type,
+                        "match": label,
+                    }
+                )
             elif label in metadata and any(marker in metadata for marker in root_markers):
-                findings.append({
-                    "source": "EVIDENCE_METADATA",
-                    "evidence_id": evidence.id,
-                    "label_type": label_type,
-                    "match": label,
-                })
+                findings.append(
+                    {
+                        "source": "EVIDENCE_METADATA",
+                        "evidence_id": evidence.id,
+                        "label_type": label_type,
+                        "match": label,
+                    }
+                )
     return findings
 
 
-def _next_steps(*, evidence_count: int, analyzer_count: int, baseline_ready: bool, root_confirmed: bool,
-                direct_l1: bool, audit_complete: bool, leakage: bool, fix_verified: bool) -> list[dict]:
+def _next_steps(
+    *,
+    evidence_count: int,
+    complete_count: int,
+    l1_count: int,
+    analyzer_count: int,
+    baseline_ready: bool,
+    root_confirmed: bool,
+    direct_l1: bool,
+    audit_complete: bool,
+    leakage: bool,
+    fix_verified: bool,
+) -> list[dict]:
     steps: list[dict] = []
     if evidence_count == 0:
-        steps.append({"code": "ADD_REAL_EVIDENCE", "priority": "P0", "action": "上传或自动采集当前Case的PCAP/PCM/日志等真实证据。"})
+        steps.append(
+            {
+                "code": "ADD_REAL_EVIDENCE",
+                "priority": "P0",
+                "action": "上传或自动采集当前Case的PCAP/PCM/日志等真实证据。",
+            }
+        )
+    elif complete_count == 0 or l1_count == 0:
+        steps.append(
+            {
+                "code": "ADD_COMPLETE_L1_EVIDENCE",
+                "priority": "P0",
+                "action": "补齐至少一份COMPLETE且L1的当前Case真实证据。",
+            }
+        )
     if evidence_count and analyzer_count == 0:
-        steps.append({"code": "RUN_DETERMINISTIC_ANALYZERS", "priority": "P0", "action": "对已有关联证据运行Packet/PCM/Media等确定性Analyzer。"})
+        steps.append(
+            {
+                "code": "RUN_DETERMINISTIC_ANALYZERS",
+                "priority": "P0",
+                "action": "对已有关联证据运行Packet/PCM/Media等确定性Analyzer。",
+            }
+        )
     if not baseline_ready:
-        steps.append({"code": "RUN_DIAGNOSIS", "priority": "P0", "action": "运行确定性Diagnosis并形成可回放baseline。"})
+        steps.append(
+            {
+                "code": "RUN_DIAGNOSIS",
+                "priority": "P0",
+                "action": "运行确定性Diagnosis并形成可回放baseline。",
+            }
+        )
     if not root_confirmed:
-        steps.append({"code": "CONFIRM_ROOT_CAUSE", "priority": "P0", "action": "在直接证据支持后，由现有根因确认门禁完成ROOT_CAUSE_CONFIRMED。"})
+        steps.append(
+            {
+                "code": "CONFIRM_ROOT_CAUSE",
+                "priority": "P0",
+                "action": "在直接证据支持后，由现有根因确认门禁完成ROOT_CAUSE_CONFIRMED。",
+            }
+        )
     elif not direct_l1:
-        steps.append({"code": "ADD_DIRECT_L1_SUPPORT", "priority": "P0", "action": "为已确认Hypothesis补齐当前Case的L1 Evidence/AnalyzerRun支持关系。"})
+        steps.append(
+            {
+                "code": "ADD_DIRECT_L1_SUPPORT",
+                "priority": "P0",
+                "action": "为已确认Hypothesis补齐当前Case的L1 Evidence/AnalyzerRun支持关系。",
+            }
+        )
     if leakage:
-        steps.append({"code": "REMOVE_ANSWER_LEAKAGE", "priority": "P0", "action": "从Case summary、Evidence文件名或metadata中移除最终根因答案泄漏，再重新评估。"})
+        steps.append(
+            {
+                "code": "REMOVE_ANSWER_LEAKAGE",
+                "priority": "P0",
+                "action": "从Case summary、Evidence文件名或metadata中移除最终根因答案泄漏，再重新评估。",
+            }
+        )
     if not audit_complete:
-        steps.append({"code": "COMPLETE_AUDIT_TRAIL", "priority": "P1", "action": "补齐Case/Evidence/Diagnosis/根因确认相关审计链。"})
+        steps.append(
+            {
+                "code": "COMPLETE_AUDIT_TRAIL",
+                "priority": "P1",
+                "action": "补齐Case/Evidence/Analyzer/Diagnosis/根因确认相关审计链。",
+            }
+        )
     if root_confirmed and not fix_verified:
-        steps.append({"code": "RUN_FIX_VERIFICATION", "priority": "P2", "action": "建议完成同环境Fix Verification，将B级Golden提升为A级。"})
+        steps.append(
+            {
+                "code": "RUN_FIX_VERIFICATION",
+                "priority": "P2",
+                "action": "建议完成同环境Fix Verification，将B级Golden提升为A级。",
+            }
+        )
     return steps
 
 
@@ -192,7 +303,9 @@ class GoldenCandidateService:
         if not case:
             raise ValueError("CASE_NOT_FOUND")
 
-        evidences = list(db.scalars(select(Evidence).where(Evidence.case_id == case_id)))
+        evidences = list(
+            db.scalars(select(Evidence).where(Evidence.case_id == case_id))
+        )
         hypotheses = _confirmed_hypotheses(db, case_id)
         evidence_count = len(evidences)
         complete_count = sum(str(x.completeness) == "COMPLETE" for x in evidences)
@@ -212,7 +325,11 @@ class GoldenCandidateService:
         leakage_findings = _answer_leakage(case, evidences, hypotheses)
         leakage = bool(leakage_findings)
         audit_complete, audit_gaps, audit_events = _audit_state(
-            db, case_id, has_evidence=bool(evidence_count), root_confirmed=root_confirmed,
+            db,
+            case_id,
+            has_evidence=bool(evidence_count),
+            has_analyzer=bool(analyzer_count),
+            root_confirmed=root_confirmed,
             fix_verified=fix_verified,
         )
 
@@ -221,6 +338,7 @@ class GoldenCandidateService:
         if evidence_count or analyzer_count or baseline_ready:
             try:
                 from app.diagnosis.snapshot import CaseEvidenceSnapshotBuilder
+
                 CaseEvidenceSnapshotBuilder().build(db, case_id)
                 snapshot_ready = True
             except Exception as exc:
@@ -230,6 +348,10 @@ class GoldenCandidateService:
         gaps: list[str] = []
         if evidence_count == 0:
             gaps.append("NO_CASE_EVIDENCE")
+        if complete_count == 0:
+            gaps.append("NO_COMPLETE_EVIDENCE")
+        if l1_count == 0:
+            gaps.append("NO_L1_EVIDENCE")
         if analyzer_count == 0:
             gaps.append("NO_SUCCESSFUL_ANALYZER")
         if not baseline_ready:
@@ -245,7 +367,19 @@ class GoldenCandidateService:
         if leakage:
             blockers.append("ANSWER_LEAKAGE_RISK")
 
-        ready = all((root_confirmed, direct_l1, baseline_ready, snapshot_ready, audit_complete)) and not leakage
+        ready = all(
+            (
+                evidence_count > 0,
+                complete_count > 0,
+                l1_count > 0,
+                analyzer_count > 0,
+                root_confirmed,
+                direct_l1,
+                baseline_ready,
+                snapshot_ready,
+                audit_complete,
+            )
+        ) and not leakage
         if ready:
             status = "GOLDEN_READY"
         elif root_confirmed:
@@ -258,6 +392,8 @@ class GoldenCandidateService:
         verification_tier = "A" if fix_verified else ("B" if root_confirmed else None)
         score = 0
         score += min(20, evidence_count * 4)
+        score += 5 if complete_count else 0
+        score += 5 if l1_count else 0
         score += 15 if analyzer_count else 0
         score += 15 if baseline_ready else 0
         score += 20 if root_confirmed else 0
@@ -268,9 +404,16 @@ class GoldenCandidateService:
             score = max(0, score - 30)
 
         next_steps = _next_steps(
-            evidence_count=evidence_count, analyzer_count=analyzer_count, baseline_ready=baseline_ready,
-            root_confirmed=root_confirmed, direct_l1=direct_l1, audit_complete=audit_complete,
-            leakage=leakage, fix_verified=fix_verified,
+            evidence_count=evidence_count,
+            complete_count=complete_count,
+            l1_count=l1_count,
+            analyzer_count=analyzer_count,
+            baseline_ready=baseline_ready,
+            root_confirmed=root_confirmed,
+            direct_l1=direct_l1,
+            audit_complete=audit_complete,
+            leakage=leakage,
+            fix_verified=fix_verified,
         )
         return {
             "schema_version": ASSESSMENT_VERSION,
@@ -302,15 +445,26 @@ class GoldenCandidateService:
                 "confirmed_fault_domains": sorted({x.fault_domain for x in hypotheses}),
                 "audit_event_types": audit_events,
                 "snapshot_error": snapshot_error,
-                "golden_ready_rule": "ROOT_CAUSE_CONFIRMED + DIRECT_L1_SUPPORT + DETERMINISTIC_BASELINE + SNAPSHOT + AUDIT_COMPLETE + NO_ANSWER_LEAKAGE",
-                "verification_tier_rule": {"A": "FIX_VERIFIED", "B": "ROOT_CAUSE_CONFIRMED"},
+                "golden_ready_rule": "COMPLETE_L1_EVIDENCE + SUCCESSFUL_ANALYZER + ROOT_CAUSE_CONFIRMED + DIRECT_L1_SUPPORT + DETERMINISTIC_BASELINE + SNAPSHOT + AUDIT_COMPLETE + NO_ANSWER_LEAKAGE",
+                "verification_tier_rule": {
+                    "A": "FIX_VERIFIED",
+                    "B": "ROOT_CAUSE_CONFIRMED",
+                },
             },
         }
 
-    def refresh(self, db: Session, case_id: str, *, actor: str = "golden-candidate-engine") -> GoldenCandidateAssessment:
+    def refresh(
+        self,
+        db: Session,
+        case_id: str,
+        *,
+        actor: str = "golden-candidate-engine",
+    ) -> GoldenCandidateAssessment:
         result = self.assess(db, case_id)
         row = db.scalar(
-            select(GoldenCandidateAssessment).where(GoldenCandidateAssessment.case_id == case_id)
+            select(GoldenCandidateAssessment).where(
+                GoldenCandidateAssessment.case_id == case_id
+            )
         )
         old_status = row.status if row else None
         if row is None:
@@ -324,7 +478,9 @@ class GoldenCandidateService:
         row.root_cause_confirmed = int(signals["root_cause_confirmed"])
         row.fix_verified = int(signals["fix_verified"])
         row.direct_l1_support = int(signals["direct_l1_support"])
-        row.deterministic_baseline_ready = int(signals["deterministic_baseline_ready"])
+        row.deterministic_baseline_ready = int(
+            signals["deterministic_baseline_ready"]
+        )
         row.snapshot_ready = int(signals["snapshot_ready"])
         row.audit_coverage_complete = int(signals["audit_coverage_complete"])
         row.answer_leakage_risk = int(signals["answer_leakage_risk"])
@@ -344,6 +500,7 @@ class GoldenCandidateService:
 
         if old_status != row.status:
             from app.services.audit import audit
+
             audit(
                 db,
                 case_id=case_id,
@@ -378,7 +535,9 @@ class GoldenCandidateService:
                 "root_cause_confirmed": bool(row.root_cause_confirmed),
                 "fix_verified": bool(row.fix_verified),
                 "direct_l1_support": bool(row.direct_l1_support),
-                "deterministic_baseline_ready": bool(row.deterministic_baseline_ready),
+                "deterministic_baseline_ready": bool(
+                    row.deterministic_baseline_ready
+                ),
                 "snapshot_ready": bool(row.snapshot_ready),
                 "audit_coverage_complete": bool(row.audit_coverage_complete),
                 "answer_leakage_risk": bool(row.answer_leakage_risk),
