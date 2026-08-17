@@ -84,6 +84,39 @@ Current Case Evidence
 - 导出完整 Case AuditLog；
 - 不会把 synthetic case 标记为 REAL。
 
+### 2.4 Case 自动沉淀 / Golden Candidate
+
+为了支持“当前没有大量整理历史 Case”的冷启动场景，AI-E1 上游增加 `golden-candidate-v1` 自动沉淀机制。每个 Case 在正常排障事务提交后自动重算并持久化：
+
+```text
+NOT_ELIGIBLE
+ -> PARTIAL_GOLDEN
+ -> GOLDEN_CANDIDATE
+ -> GOLDEN_READY
+```
+
+`GOLDEN_READY` 要求：
+
+```text
+ROOT_CAUSE_CONFIRMED
++ DIRECT_L1_SUPPORT
++ DETERMINISTIC_BASELINE
++ CASE_EVIDENCE_SNAPSHOT_READY
++ AUDIT_COVERAGE_COMPLETE
++ NO_ANSWER_LEAKAGE
+```
+
+验证等级：
+
+- Tier B = ROOT_CAUSE_CONFIRMED；
+- Tier A = FIX_VERIFIED（推荐的更高等级）。
+
+真实 AI Eval 默认只导出 `GOLDEN_READY`，非 Ready Case 会返回 blocker/gap/next_steps，不再由工程师人工维护一份 Golden 清单。
+
+完整设计、API、状态规则、Backfill 与操作说明见：
+
+`docs/02_Core_Documents/VOIP_AI_Golden_Candidate_自动沉淀与管理机制.md`
+
 ## 3. AI-E2 — Runtime Convergence
 
 正式诊断工厂统一为：
@@ -313,6 +346,14 @@ make ai-e1-e6-gate
 make ai-eval-gate
 ```
 
+### Golden Candidate 状态/Backfill
+
+```text
+GET  /api/v1/golden-candidates/summary
+GET  /api/v1/golden-candidates?status=GOLDEN_READY
+POST /api/v1/golden-candidates/backfill?limit=500
+```
+
 ### 导出真实 Golden
 
 ```bash
@@ -320,6 +361,8 @@ PYTHONPATH=backend:. python tools/export_ai_eval_dataset.py \
   --out validation/ai_eval_field_dataset_v2.json \
   --require-minimum 10
 ```
+
+默认只导出 `GOLDEN_READY`。
 
 ### 真实 Reasoning Gateway Eval
 
@@ -347,6 +390,7 @@ AI_PROMOTION_GATE_ARTIFACT=/app/validation/ai_promotion_gate.json
 ### 已完成
 
 - AI-E1 Eval Framework
+- Case 自动沉淀 / Golden Candidate V1
 - AI-E2 Runtime Convergence
 - AI-E3 Claim Graph / Evidence Grounding
 - AI-E4 RAG 2.0 / VOIP Ontology
@@ -360,7 +404,7 @@ AI_PROMOTION_GATE_ARTIFACT=/app/validation/ai_promotion_gate.json
 代码完成不等于真实模型已获得生产权限。当前仓库无法自行产生以下外部事实：
 
 1. 真实 Reasoning Gateway 的在线质量、延迟、成本；
-2. 足量真实历史 `ROOT_CAUSE_CONFIRMED/FIX_VERIFIED` Case；
+2. 足量真实 `GOLDEN_READY` Case；
 3. Production 完整 Audit 流中的 Hard-Zero 实测结果。
 
 因此默认：
@@ -372,4 +416,4 @@ AI_SHADOW_ENABLED=false
 
 或者在接入真实 Gateway 后先运行 `SHADOW`。
 
-**在真实 Eval + Promotion Gate PASS 之前，系统不会把 AI 提升为生产受控 Planner。**
+**在足量 GOLDEN_READY + 真实 Eval + Promotion Gate PASS 之前，系统不会把 AI 提升为生产受控 Planner。**
