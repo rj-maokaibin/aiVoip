@@ -65,11 +65,11 @@ class EvidenceFindingOut(BaseModel):
     representative_time: float | None = None
     scope_json: dict | None = None
     metrics_json: dict | None = None
-    evidence_refs_json: list = []
-    artifact_refs_json: list = []
-    event_refs_json: list = []
+    evidence_refs_json: list = Field(default_factory=list)
+    artifact_refs_json: list = Field(default_factory=list)
+    event_refs_json: list = Field(default_factory=list)
     correlation_json: dict | None = None
-    source_analyzer_run_ids: list = []
+    source_analyzer_run_ids: list = Field(default_factory=list)
     occurrence_count: int
     first_seen_report_version: int
     last_seen_report_version: int
