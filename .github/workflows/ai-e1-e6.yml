@@ -5,7 +5,14 @@ on:
     paths:
       - "backend/app/diagnosis/**"
       - "backend/app/knowledge/**"
+      - "backend/app/golden/**"
+      - "backend/app/db/golden_models.py"
+      - "backend/app/db/session.py"
+      - "backend/app/api/v1/golden_candidates.py"
+      - "backend/app/services/audit.py"
+      - "backend/app/main.py"
       - "backend/app/core/config.py"
+      - "backend/migrations/versions/**"
       - "backend/tests/**"
       - "tools/ai_*.py"
       - "tools/export_ai_eval_dataset.py"
@@ -19,7 +26,14 @@ on:
     paths:
       - "backend/app/diagnosis/**"
       - "backend/app/knowledge/**"
+      - "backend/app/golden/**"
+      - "backend/app/db/golden_models.py"
+      - "backend/app/db/session.py"
+      - "backend/app/api/v1/golden_candidates.py"
+      - "backend/app/services/audit.py"
+      - "backend/app/main.py"
       - "backend/app/core/config.py"
+      - "backend/migrations/versions/**"
       - "backend/tests/**"
       - "tools/ai_*.py"
       - "tools/export_ai_eval_dataset.py"
@@ -71,8 +85,8 @@ jobs:
           sudo apt-get install -y ffmpeg tesseract-ocr
           python -m pip install --upgrade pip
           pip install -r backend/requirements.txt
-      - name: Compile AI modules
-        run: python -m compileall -q backend/app/diagnosis backend/app/knowledge tools
+      - name: Compile AI and Golden modules
+        run: python -m compileall -q backend/app/diagnosis backend/app/knowledge backend/app/golden backend/app/api/v1/golden_candidates.py tools
       - name: AI contract coverage gate
         run: make ai-eval-gate
       - name: AI E1-E6 regression gate
