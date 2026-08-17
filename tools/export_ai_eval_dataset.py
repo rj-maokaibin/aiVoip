@@ -21,6 +21,7 @@ from app.db.models import (
 from app.db.session import SessionLocal
 from app.diagnosis.discriminating_planner import infer_symptom
 from app.diagnosis.snapshot import CaseEvidenceSnapshotBuilder
+from app.golden.service import GoldenCandidateService
 
 
 _CATEGORY_MAP = {
@@ -117,7 +118,8 @@ def _audit_rows(db, case_ids: list[str]) -> list[dict]:
     ]
 
 
-def export_dataset(*, limit: int = 100, case_nos: list[str] | None = None) -> dict:
+def export_dataset(*, limit: int = 100, case_nos: list[str] | None = None,
+                   require_golden_ready: bool = True) -> dict:
     db = SessionLocal()
     try:
         query = select(Case).order_by(Case.updated_at.desc()).limit(limit)
@@ -125,10 +127,22 @@ def export_dataset(*, limit: int = 100, case_nos: list[str] | None = None) -> di
             query = select(Case).where(Case.case_no.in_(case_nos)).order_by(Case.updated_at.desc()).limit(limit)
         cases = list(db.scalars(query))
         builder = CaseEvidenceSnapshotBuilder()
+        golden = GoldenCandidateService()
         exported = []
         selected_case_ids: list[str] = []
         skipped = []
         for case in cases:
+            assessment = golden.assess(db, case.id)
+            if require_golden_ready and assessment["status"] != "GOLDEN_READY":
+                skipped.append({
+                    "case_no": case.case_no,
+                    "reason": f"GOLDEN_NOT_READY:{assessment['status']}",
+                    "blocker_codes": assessment["blocker_codes"],
+                    "gap_codes": assessment["gap_codes"],
+                    "next_steps": assessment["next_steps"],
+                })
+                continue
+
             verification = _verification_status(db, case.id)
             hypotheses = _confirmed_hypotheses(db, case.id)
             if not verification or not hypotheses:
@@ -153,6 +167,9 @@ def export_dataset(*, limit: int = 100, case_nos: list[str] | None = None) -> di
                     "category": _category(case.summary),
                     "source_kind": "REAL",
                     "verification_status": verification,
+                    "verification_tier": assessment["verification_tier"],
+                    "golden_status": assessment["status"],
+                    "golden_assessment_version": assessment["schema_version"],
                     "expected_hypothesis_codes": [row.code for row in hypotheses],
                     "expected_fault_domains": sorted({row.fault_domain for row in hypotheses}),
                     "allowed_evidence_ids": evidence_ids,
@@ -178,7 +195,8 @@ def export_dataset(*, limit: int = 100, case_nos: list[str] | None = None) -> di
                 "selected_count": len(exported),
                 "skipped_count": len(skipped),
                 "skipped": skipped,
-                "quality_rule": "REAL + CONFIRMED hypothesis + ROOT_CAUSE_CONFIRMED/FIX_VERIFIED",
+                "quality_rule": "GOLDEN_READY + REAL + CONFIRMED hypothesis + ROOT_CAUSE_CONFIRMED/FIX_VERIFIED",
+                "require_golden_ready": require_golden_ready,
             },
         }
     finally:
@@ -191,9 +209,17 @@ def main() -> int:
     parser.add_argument("--limit", type=int, default=100)
     parser.add_argument("--case-no", action="append", dest="case_nos")
     parser.add_argument("--require-minimum", type=int, default=0)
+    parser.add_argument(
+        "--allow-non-ready",
+        action="store_true",
+        help="Debug-only compatibility mode. Production Eval should export GOLDEN_READY only.",
+    )
     args = parser.parse_args()
 
-    payload = export_dataset(limit=max(1, args.limit), case_nos=args.case_nos)
+    payload = export_dataset(
+        limit=max(1, args.limit), case_nos=args.case_nos,
+        require_golden_ready=not args.allow_non_ready,
+    )
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
