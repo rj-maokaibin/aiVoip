@@ -60,7 +60,7 @@ CRITERIA = (
     ("M7-11", "ai_shadow_present", "AI SHADOW 已实际运行", "配置真实 Reasoning Gateway，并保持 AI_PROMOTION_STAGE=SHADOW。"),
     ("M7-12", "ai_grounded", "AI Proposal 通过 grounding/contract 校验", "修复 Evidence 引用、Schema 或注册项问题，使至少一个 SHADOW proposal ACCEPTED。"),
     ("M7-13", "ai_authority_safe", "AI 未越权改变正式诊断", "确保 ACCEPTED AI hypothesis 仍为 L5/OPEN/non-confirmable 且 formal_result_changed=false。"),
-    ("M7-14", "reproduction_armed", "自动复现已成功 ARMED/WATCHING", "由现有 Reproduction Orchestrator 完成 arm validation。"),
+    ("M7-14", "reproduction_armed", "真实平台自动复现已成功 ARMED/WATCHING", "由 real Reproduction Platform 和现有 Orchestrator 完成 arm validation。"),
     ("M7-15", "call_detected", "真实 Call 已识别、绑定并结束", "完成一次真实拨号/通话，使 Call 生命周期可审计。"),
     ("M7-16", "cleanup_verified", "临时采集状态 Cleanup Verified", "让 Orchestrator 完成 PCM/debug/tcpdump cleanup 并校验。"),
     ("M7-17", "no_active_lock", "无残留诊断锁", "清理 ACTIVE/QUARANTINED DeviceDiagnosticLock。"),
@@ -133,6 +133,11 @@ def _audit_group(event_set: set[str], alternatives: set[str]) -> bool:
     return bool(event_set & alternatives)
 
 
+def _is_real_session(row: ReproductionSession) -> bool:
+    profile = str(row.platform_profile_id or "").lower()
+    return bool(profile and "real" in profile and "mock" not in profile)
+
+
 def _ai_authority_safe(proposals: list[AIProposalRecord]) -> bool:
     accepted = [row for row in proposals if row.mode == "SHADOW" and row.status == "ACCEPTED"]
     if not accepted:
@@ -170,7 +175,9 @@ def collect_case_signals(db: Session, case: Case) -> tuple[dict[str, bool], dict
     sessions = list(
         db.scalars(select(ReproductionSession).where(ReproductionSession.case_id == case_id).order_by(ReproductionSession.created_at.desc()))
     )
+    real_sessions = [row for row in sessions if _is_real_session(row)]
     session_ids = [row.id for row in sessions]
+    real_session_ids = {row.id for row in real_sessions}
     device_ids = [row.id for row in devices]
 
     def _by_sessions(model):
@@ -232,27 +239,33 @@ def collect_case_signals(db: Session, case: Case) -> tuple[dict[str, bool], dict
     )
 
     voice_context_ready = any(
-        bool(row.interface_up and row.voice_interface and row.voice_gateway_ip)
+        row.session_id in real_session_ids
+        and bool(row.interface_up and row.voice_interface and row.voice_gateway_ip)
         for row in voice_contexts
     )
-    reproduction_armed = bool(sessions) and (
-        any(str(row.status).upper() == "PASSED" for row in arm_results)
+    real_arm_results = [row for row in arm_results if row.session_id in real_session_ids]
+    reproduction_armed = bool(real_sessions) and (
+        any(str(row.status).upper() == "PASSED" for row in real_arm_results)
         or "REPRODUCTION_ARM_VALIDATED" in event_set
     )
     call_detected = any(
-        bool(row.ended_at)
-        or str(row.status or "").upper() in TERMINAL_CALL_STATUSES
-        or bool(row.quick_analysis_json)
+        row.session_id in real_session_ids
+        and (
+            bool(row.ended_at)
+            or str(row.status or "").upper() in TERMINAL_CALL_STATUSES
+            or bool(row.quick_analysis_json)
+        )
         for row in calls
     )
 
-    cleanup_required_sessions = [row for row in sessions if bool(row.cleanup_required)]
+    cleanup_required_sessions = [row for row in real_sessions if bool(row.cleanup_required)]
     cleanup_verified = bool(cleanup_required_sessions) and all(
         str(row.cleanup_status or "").upper() in VERIFIED_CLEANUP_STATUSES
         for row in cleanup_required_sessions
     )
-    if cleanup_runs:
-        cleanup_verified = cleanup_verified and any(str(row.status).upper() == "VERIFIED" for row in cleanup_runs)
+    real_cleanup_runs = [row for row in cleanup_runs if row.session_id in real_session_ids]
+    if real_cleanup_runs:
+        cleanup_verified = cleanup_verified and any(str(row.status).upper() == "VERIFIED" for row in real_cleanup_runs)
 
     no_active_lock = not any(str(row.status or "").upper() in ACTIVE_LOCK_STATUSES for row in locks)
     report_generated = any(
@@ -322,8 +335,9 @@ def collect_case_signals(db: Session, case: Case) -> tuple[dict[str, bool], dict
             {"id": row.id, "status": row.status, "model": row.model_name, "prompt_version": row.prompt_version, "validation_errors": row.validation_errors or []}
             for row in shadow[:10]
         ],
+        "real_platform_session_count": len(real_sessions),
         "reproduction": [
-            {"id": row.id, "state": row.state, "profile": row.profile_key, "cleanup_status": row.cleanup_status, "capture_completeness": row.capture_completeness}
+            {"id": row.id, "state": row.state, "profile": row.profile_key, "platform_profile_id": row.platform_profile_id, "cleanup_status": row.cleanup_status, "capture_completeness": row.capture_completeness}
             for row in sessions[:10]
         ],
         "calls": [{"id": row.id, "status": row.status, "verdict": row.verdict, "role": row.role} for row in calls[:20]],
