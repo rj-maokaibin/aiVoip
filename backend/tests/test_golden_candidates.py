@@ -6,7 +6,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.db.base import Base
 from app.db.golden_models import GoldenCandidateAssessment  # noqa: F401 - register metadata
-from app.db.models import AuditLog, Case, DiagnosisRun, Evidence, Hypothesis, HypothesisEvidence
+from app.db.models import AnalyzerRun, AuditLog, Case, DiagnosisRun, Evidence, Hypothesis, HypothesisEvidence
 from app.diagnosis.snapshot import CaseEvidenceSnapshotBuilder
 from app.golden.service import GoldenCandidateService
 
@@ -33,6 +33,20 @@ def _evidence(db: Session, case_id: str, filename: str = 'call_01.pcap') -> Evid
         type='PCAP', source='USER_UPLOAD', kind='RAW', source_scope='CASE', level='L1',
         completeness='COMPLETE', filename=filename, object_key=f'cases/{case_id}/{filename}',
         size_bytes=123, sha256='a' * 64, content_type='application/vnd.tcpdump.pcap',
+    )
+    db.add(row); db.flush()
+    return row
+
+
+def _analyzer(db: Session, case_id: str, evidence_id: str) -> AnalyzerRun:
+    row = AnalyzerRun(
+        case_id=case_id,
+        analyzer_name='packet',
+        analyzer_version='test-v1',
+        status='SUCCESS',
+        input_evidence_ids=[evidence_id],
+        output_evidence_ids=[],
+        summary_json={'findings': ['DTMF_PATH_OBSERVED']},
     )
     db.add(row); db.flush()
     return row
@@ -85,9 +99,10 @@ def test_case_with_evidence_but_no_confirmed_root_is_partial(monkeypatch):
     eng = _engine()
     with Session(eng) as db:
         case = _case(db)
-        _evidence(db, case.id)
+        evidence = _evidence(db, case.id)
+        _analyzer(db, case.id, evidence.id)
         _baseline(db, case.id)
-        _audit(db, case.id, 'CASE_CREATED', 'EVIDENCE_UPLOADED', 'DIAGNOSIS_CYCLE')
+        _audit(db, case.id, 'CASE_CREATED', 'EVIDENCE_UPLOADED', 'ANALYZER_COMPLETED', 'DIAGNOSIS_CYCLE')
         result = GoldenCandidateService().assess(db, case.id)
         assert result['status'] == 'PARTIAL_GOLDEN'
         assert 'ROOT_CAUSE_NOT_CONFIRMED' in result['gap_codes']
@@ -100,16 +115,33 @@ def test_confirmed_grounded_case_becomes_golden_ready_tier_b(monkeypatch):
     with Session(eng) as db:
         case = _case(db)
         evidence = _evidence(db, case.id)
+        _analyzer(db, case.id, evidence.id)
         _baseline(db, case.id)
         _confirmed(db, case.id, evidence.id)
-        _audit(db, case.id, 'CASE_CREATED', 'EVIDENCE_UPLOADED', 'DIAGNOSIS_CYCLE', 'HYPOTHESIS_CONFIRMED')
+        _audit(db, case.id, 'CASE_CREATED', 'EVIDENCE_UPLOADED', 'ANALYZER_COMPLETED', 'DIAGNOSIS_CYCLE', 'HYPOTHESIS_CONFIRMED')
         result = GoldenCandidateService().assess(db, case.id)
         assert result['status'] == 'GOLDEN_READY'
         assert result['verification_tier'] == 'B'
         assert result['signals']['root_cause_confirmed'] is True
         assert result['signals']['direct_l1_support'] is True
+        assert result['signals']['successful_analyzer_count'] == 1
         assert result['signals']['audit_coverage_complete'] is True
         assert result['signals']['answer_leakage_risk'] is False
+
+
+def test_confirmed_case_without_analyzer_stays_candidate(monkeypatch):
+    monkeypatch.setattr(CaseEvidenceSnapshotBuilder, 'build', lambda self, db, case_id: {'case': {'id': case_id}})
+    eng = _engine()
+    with Session(eng) as db:
+        case = _case(db)
+        evidence = _evidence(db, case.id)
+        _baseline(db, case.id)
+        _confirmed(db, case.id, evidence.id)
+        _audit(db, case.id, 'CASE_CREATED', 'EVIDENCE_UPLOADED', 'DIAGNOSIS_CYCLE', 'HYPOTHESIS_CONFIRMED')
+        result = GoldenCandidateService().assess(db, case.id)
+        assert result['status'] == 'GOLDEN_CANDIDATE'
+        assert 'NO_SUCCESSFUL_ANALYZER' in result['gap_codes']
+        assert any(x['code'] == 'RUN_DETERMINISTIC_ANALYZERS' for x in result['next_steps'])
 
 
 def test_answer_leakage_blocks_ready(monkeypatch):
@@ -118,9 +150,10 @@ def test_answer_leakage_blocks_ready(monkeypatch):
     with Session(eng) as db:
         case = _case(db, '问题已确认，根因 H_DTMF_PATH 导致首次拨号丢号')
         evidence = _evidence(db, case.id)
+        _analyzer(db, case.id, evidence.id)
         _baseline(db, case.id)
         _confirmed(db, case.id, evidence.id)
-        _audit(db, case.id, 'CASE_CREATED', 'EVIDENCE_UPLOADED', 'DIAGNOSIS_CYCLE', 'HYPOTHESIS_CONFIRMED')
+        _audit(db, case.id, 'CASE_CREATED', 'EVIDENCE_UPLOADED', 'ANALYZER_COMPLETED', 'DIAGNOSIS_CYCLE', 'HYPOTHESIS_CONFIRMED')
         result = GoldenCandidateService().assess(db, case.id)
         assert result['status'] == 'GOLDEN_CANDIDATE'
         assert 'ANSWER_LEAKAGE_RISK' in result['blocker_codes']
