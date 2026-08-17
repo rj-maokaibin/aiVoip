@@ -11,6 +11,7 @@ from app.db.evidence_report_models import EvidenceFinding, PreliminaryEvidenceRe
 from app.integrations.storage import ObjectStorage
 from app.reports.evidence_brief import build_report_payload, canonical_hash, render_report_html
 from app.services.audit import audit
+from app.services.evidence_boundary import apply_first_observable_boundaries
 from app.services.evidence_report_aggregation import enrich_aggregate_payload
 from app.services.evidence_report_artifacts import build_manifest, generate_visual_artifacts, persist_artifact
 from app.services.evidence_report_source_artifacts import finding_artifact_refs, link_source_artifacts
@@ -75,11 +76,11 @@ def generate_evidence_report(db: Session, *, scope_type, scope_id: str, actor: s
     environment=environment_snapshot(db,case,session)
     payload=build_report_payload(case=case_dict(case),scope_type=scope_type,scope_id=scope_id,session=session_dict(session),call=call_dict(call),
                                  environment=environment,evidences=[evidence_dict(e) for e in evidences],analyzer_states=states,results=results,report_version=version)
+    apply_first_observable_boundaries(payload)
     enrich_aggregate_payload(db,payload=payload,scope_type=scope_type,case_id=case.id,session_id=session.id if session else None)
-    # Session/Case idempotency must include lower-level report aggregation, otherwise
-    # a new Call could arrive without changing the latest AnalyzerRun IDs.
-    payload["input_snapshot_hash"]=canonical_hash({"base":payload["input_snapshot_hash"],"multi_call_summary":payload.get("multi_call_summary"),
-                                                     "environment_groups":payload.get("environment_groups"),"ab_comparison":payload.get("ab_comparison")})
+    payload["input_snapshot_hash"]=canonical_hash({"base":payload["input_snapshot_hash"],"findings":payload.get("findings"),
+                                                     "multi_call_summary":payload.get("multi_call_summary"),"environment_groups":payload.get("environment_groups"),
+                                                     "ab_comparison":payload.get("ab_comparison")})
     idem=report_idempotency_key(scope_type,scope_id,payload["input_snapshot_hash"],states,forced_version=version if force else None)
     if not force:
         same=db.scalar(select(PreliminaryEvidenceReport).where(PreliminaryEvidenceReport.idempotency_key==idem).limit(1))
