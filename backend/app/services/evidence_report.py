@@ -11,8 +11,9 @@ from app.db.evidence_report_models import EvidenceFinding, PreliminaryEvidenceRe
 from app.integrations.storage import ObjectStorage
 from app.reports.evidence_brief import build_report_payload, canonical_hash, render_report_html
 from app.services.audit import audit
+from app.services.evidence_report_aggregation import enrich_aggregate_payload
 from app.services.evidence_report_artifacts import build_manifest, generate_visual_artifacts, persist_artifact
-from app.services.evidence_report_source_artifacts import link_source_artifacts
+from app.services.evidence_report_source_artifacts import finding_artifact_refs, link_source_artifacts
 from app.services.evidence_report_scope import (
     call_dict, case_dict, environment_snapshot, evidence_dict, latest_analyzer_runs,
     load_analyzer_results, resolve_scope, scope_value, scoped_evidences, session_dict,
@@ -28,10 +29,13 @@ def latest_report(db: Session, scope_type: str, scope_id: str) -> PreliminaryEvi
     ).order_by(PreliminaryEvidenceReport.version.desc()).limit(1))
 
 
-def report_idempotency_key(scope_type: str, scope_id: str, input_hash: str, analyzer_states: dict) -> str:
+def report_idempotency_key(scope_type: str, scope_id: str, input_hash: str, analyzer_states: dict, *, forced_version: int|None=None) -> str:
     versions={k:{"run_id":v.get("run_id"),"analyzer_version":v.get("analyzer_version"),"config_version":v.get("config_version")} for k,v in analyzer_states.items()}
-    return canonical_hash({"scope_type":scope_type,"scope_id":scope_id,"input_snapshot_hash":input_hash,"schema_version":REPORT_SCHEMA_VERSION,
-                           "composer_version":REPORT_COMPOSER_VERSION,"analyzer_versions":versions})
+    material={"scope_type":scope_type,"scope_id":scope_id,"input_snapshot_hash":input_hash,"schema_version":REPORT_SCHEMA_VERSION,
+              "composer_version":REPORT_COMPOSER_VERSION,"analyzer_versions":versions}
+    if forced_version is not None:
+        material["forced_rebuild_version"]=forced_version
+    return canonical_hash(material)
 
 
 def _persist_findings(db: Session, *, report: PreliminaryEvidenceReport, payload: dict) -> list[EvidenceFinding]:
@@ -71,7 +75,12 @@ def generate_evidence_report(db: Session, *, scope_type, scope_id: str, actor: s
     environment=environment_snapshot(db,case,session)
     payload=build_report_payload(case=case_dict(case),scope_type=scope_type,scope_id=scope_id,session=session_dict(session),call=call_dict(call),
                                  environment=environment,evidences=[evidence_dict(e) for e in evidences],analyzer_states=states,results=results,report_version=version)
-    idem=report_idempotency_key(scope_type,scope_id,payload["input_snapshot_hash"],states)
+    enrich_aggregate_payload(db,payload=payload,scope_type=scope_type,case_id=case.id,session_id=session.id if session else None)
+    # Session/Case idempotency must include lower-level report aggregation, otherwise
+    # a new Call could arrive without changing the latest AnalyzerRun IDs.
+    payload["input_snapshot_hash"]=canonical_hash({"base":payload["input_snapshot_hash"],"multi_call_summary":payload.get("multi_call_summary"),
+                                                     "environment_groups":payload.get("environment_groups"),"ab_comparison":payload.get("ab_comparison")})
+    idem=report_idempotency_key(scope_type,scope_id,payload["input_snapshot_hash"],states,forced_version=version if force else None)
     if not force:
         same=db.scalar(select(PreliminaryEvidenceReport).where(PreliminaryEvidenceReport.idempotency_key==idem).limit(1))
         if same: return same,same.snapshot_json or payload,True
@@ -89,9 +98,7 @@ def generate_evidence_report(db: Session, *, scope_type, scope_id: str, actor: s
     report_artifacts=source_artifacts+visuals
     payload["artifacts"]=[{"artifact_id":a.id,"type":a.type,"filename":a.filename,"content_type":a.content_type,"sha256":a.sha256,"metadata":a.metadata_json or {}} for a in report_artifacts]
     for item in payload.get("findings",[]):
-        refs=[]
-        for a in report_artifacts:
-            if item.get("finding_id") in ((a.metadata_json or {}).get("finding_ids") or []): refs.append({"artifact_id":a.id,"type":a.type,"filename":a.filename})
+        refs=finding_artifact_refs(db,report_id=report.id,finding_id=item.get("finding_id"))
         item["artifact_refs"]=refs
         row=next((r for r in finding_rows if r.id==item.get("finding_id")),None)
         if row: row.artifact_refs_json=refs
@@ -108,7 +115,7 @@ def generate_evidence_report(db: Session, *, scope_type, scope_id: str, actor: s
     report.status=EvidenceReportStatus.COMPLETE.value if payload.get("completeness",{}).get("state")=="COMPLETE" else EvidenceReportStatus.PARTIAL_COMPLETE.value
     report.snapshot_json=payload; report.completed_at=utcnow(); db.flush()
     audit(db,case_id=case.id,actor=actor,event_type="PRELIMINARY_EVIDENCE_REPORT_GENERATED",target_type="preliminary_evidence_report",target_id=report.id,
-          detail={"scope_type":scope_type,"scope_id":scope_id,"version":version,"status":report.status,"finding_count":len(finding_rows),"artifact_count":len(report_artifacts)+3})
+          detail={"scope_type":scope_type,"scope_id":scope_id,"version":version,"status":report.status,"finding_count":len(finding_rows),"artifact_count":len(report_artifacts)+3,"forced":force})
     return report,payload,False
 
 
