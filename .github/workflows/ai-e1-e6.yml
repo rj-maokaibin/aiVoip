@@ -1,4 +1,4 @@
-name: AI E1-E6 Gate
+name: AI E1-E6 + M7 Gate
 
 on:
   pull_request:
@@ -15,14 +15,16 @@ on:
       - "backend/migrations/versions/**"
       - "backend/tests/**"
       - "tools/ai_*.py"
+      - "tools/m7_*.py"
       - "tools/export_ai_eval_dataset.py"
+      - "docs/02_Core_Documents/VOIP_AI_M7_*.md"
       - "knowledge/seed/**"
       - "golden_cases/ai_*.json"
       - "Makefile"
       - ".github/workflows/ai-e1-e6.yml"
   push:
     branches:
-      - "agent/ai-e1-real-eval-grounding"
+      - "agent/**"
     paths:
       - "backend/app/diagnosis/**"
       - "backend/app/knowledge/**"
@@ -36,7 +38,9 @@ on:
       - "backend/migrations/versions/**"
       - "backend/tests/**"
       - "tools/ai_*.py"
+      - "tools/m7_*.py"
       - "tools/export_ai_eval_dataset.py"
+      - "docs/02_Core_Documents/VOIP_AI_M7_*.md"
       - "knowledge/seed/**"
       - "golden_cases/ai_*.json"
       - "Makefile"
@@ -85,12 +89,14 @@ jobs:
           sudo apt-get install -y ffmpeg tesseract-ocr
           python -m pip install --upgrade pip
           pip install -r backend/requirements.txt
-      - name: Compile AI and Golden modules
+      - name: Compile AI, Golden, and M7 modules
         run: python -m compileall -q backend/app/diagnosis backend/app/knowledge backend/app/golden backend/app/api/v1/golden_candidates.py tools
       - name: AI contract coverage gate
         run: make ai-eval-gate
       - name: AI E1-E6 regression gate
         run: make ai-e1-e6-gate
+      - name: M7 acceptance contract gate
+        run: PYTHONPATH=backend:. pytest -q backend/tests/test_m7_acceptance_gate.py
       - name: Prepare regression database
         env:
           DATABASE_URL: postgresql+psycopg://voip:voip@localhost:5432/voip

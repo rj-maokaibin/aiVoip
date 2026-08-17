@@ -325,3 +325,33 @@ AI_SHADOW_ENABLED=false
 ```
 
 或接入真实 Gateway 后先运行 SHADOW。只有足量 Golden Ready + Real Eval + Promotion Gate PASS 后才晋级受控 Planner。
+
+## 12. 下一阶段：M7 真实 DUT 智能诊断闭环验收
+
+AI-E1～E6 + Golden Candidate 已作为 V1.0 RC 基线收口后，下一阶段不再以继续扩功能为主，而是验证正常系统在真实 DUT 上能否完整跑通：
+
+```text
+Case
+→ DUT / Voice Context
+→ PCAP + PCM RX/TX + Debug
+→ Analyzer
+→ Deterministic Diagnosis
+→ Reasoning Gateway / AI SHADOW
+→ Auto Reproduction / Call Detection
+→ Cleanup
+→ Diagnosis Report
+→ Golden Candidate Auto Materialization
+```
+
+正式只读验收入口：
+
+```bash
+make m7-acceptance-report M7_CASE=<case_no或case_id>
+make m7-acceptance M7_CASE=<case_no或case_id>
+```
+
+M7 共 20 个必选闭环项。M7 PASS 仅表示该真实 DUT Case 的系统闭环完整，**不等于 ROOT_CAUSE_CONFIRMED、GOLDEN_READY 或 AI Promotion PASS**。
+
+完整 M7 合同、实验室场景与操作方式见：
+
+`docs/02_Core_Documents/VOIP_AI_M7_真实DUT智能诊断闭环验收.md`
