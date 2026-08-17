@@ -1,92 +1,67 @@
 # VOIP AI 故障助手 — AI-E1～AI-E6 实施终稿
 
-> 状态：代码实施完成，生产 AI Promotion 默认阻断  
-> 原则：Evidence First / Deterministic Authority / AI Proposal Only / Registry-Only Planning / Auditable Promotion
+> 状态：AI-E1～AI-E6 与 Golden Candidate V1 已代码化；生产 AI Promotion 默认阻断  
+> 原则：Evidence First / Analyzer First / Deterministic Authority / AI Proposal Only / Registry-Only Planning / Auditable Promotion
 
 ## 1. 最终架构
 
 ```text
-Current Case Evidence
+Operational Case
     │
-    ├─ L1/L2 Analyzer / Rule / Reproduction / Experiment / Fix Verification
-    │          │
-    │          └──────────────► Deterministic DiagnosisDecision（唯一正式结论源）
+    ├─ PCAP / PCM / Log / FXS / Reproduction / Experiment
     │
-    ├─ Structured Knowledge + Similar Historical Cases(L4)
+    ▼
+Deterministic Analyzers / Rules
     │
-    └─ Reasoning Gateway
-             │
-             ▼
-       AIProposal v2 (L5)
-        ├─ Candidate Hypothesis
-        ├─ DiagnosticClaim
-        ├─ Contradiction Critic
-        ├─ Discriminating Question
-        └─ Registered Profile / Experiment Recommendation
-             │
-             ▼
-      Validator + Claim Grounding + Registry Check
-             │
-             ├─ Shadow / Suggest
-             └─ Controlled Planner（必须通过 Promotion Gate）
-
-任何阶段：AI 均不能直接确认根因、不能生成并执行裸设备命令、不能把历史 Case 当当前 Case 证据。
+    ├────────────► Deterministic DiagnosisDecision（唯一正式结论源）
+    │
+    ├────────────► Golden Candidate Engine
+    │                    │
+    │                    └─ GOLDEN_READY → Real AI Eval Dataset
+    │
+    └────────────► Reasoning Gateway
+                         │
+                         ▼
+                    AIProposal v2 (L5)
+                     ├─ Hypothesis
+                     ├─ DiagnosticClaim
+                     ├─ Critic
+                     ├─ Discriminating Question
+                     └─ Registered Profile/Experiment Recommendation
+                         │
+                         ▼
+                  Validator + Grounding + Registry Check
+                         │
+                         ├─ SHADOW / SUGGEST
+                         └─ CONTROLLED_PLANNER（Promotion Gate 后）
 ```
+
+任何阶段：AI 不能直接确认根因、不能执行裸设备命令、不能把历史 Case 当成当前 Case 的 L1/L2 Evidence。
 
 ## 2. AI-E1 — Real Model Eval
 
-### 2.1 变化
+旧 `ai_eval_gate.py` 只证明 Eval 合同/场景覆盖，不再被解释为模型质量通过。
 
-旧 `ai_eval_gate.py` 只证明 19 类场景合同存在，不再被视为模型质量通过。
+当前分为三道门：
 
-现在分为：
+1. **AI Eval Contract Gate**：场景覆盖、Hard-Zero 合同、真实历史要求；
+2. **AI Model Quality Eval**：真实/fixture Reasoning Gateway 回放，对 Ground Truth 逐 Case 计算质量指标；
+3. **AI Promotion Gate**：Contract PASS + Model Quality PASS + 完整 Audit + Hard-Zero 全 0，才允许 `CONTROLLED_PLANNER`。
 
-1. `AI Eval Contract Gate`
-   - 19 类场景覆盖；
-   - hard-zero 合同；
-   - real history requirement；
-   - 输出 `promotion_eligible=false`。
-2. `AI Model Quality Eval`
-   - 输入 `ai-model-eval-dataset-v2`；
-   - fixture 或真实 Reasoning Gateway；
-   - 对 Ground Truth 逐 Case 评分；
-   - 只有 REAL + ROOT_CAUSE_CONFIRMED / FIX_VERIFIED Case 计入 Production Quality。
-3. `AI Promotion Gate`
-   - Contract PASS；
-   - Model Quality PASS；
-   - 实际审计覆盖完整；
-   - Hard-Zero 全为 0；
-   - 才允许 `CONTROLLED_PLANNER`。
+主要指标：
 
-### 2.2 指标
+- Top-1 / Top-3 Hypothesis Recall；
+- Fault Domain Recall；
+- Evidence Reference Precision；
+- Unsupported Claim Rate；
+- Unauthorized Suggestion Rate；
+- Required Behavior Pass；
+- Latency / Cost；
+- Hard-Zero runtime safety metrics。
 
-- Top-1 Hypothesis Recall
-- Top-3 Hypothesis Recall
-- Fault Domain Recall
-- Evidence Reference Precision
-- Unsupported Claim Rate
-- Unauthorized Suggestion Rate
-- Required Behavior Pass
-- Latency
-- Cost（数据源提供时）
-- Hard-Zero runtime safety metrics
+### 2.1 Case 自动沉淀 / Golden Candidate V1
 
-### 2.3 Real Golden 导出
-
-新增 `tools/export_ai_eval_dataset.py`：
-
-- 从 Case DB 导出真实历史 Case；
-- 必须存在机器可确认的 CONFIRMED Hypothesis；
-- 优先 FIX_VERIFIED；其次 ROOT_CAUSE_CONFIRMED；
-- 导出当前 Case Evidence IDs；
-- 导出 CaseEvidenceSnapshot；
-- 导出最新 deterministic baseline；
-- 导出完整 Case AuditLog；
-- 不会把 synthetic case 标记为 REAL。
-
-### 2.4 Case 自动沉淀 / Golden Candidate
-
-为了支持“当前没有大量整理历史 Case”的冷启动场景，AI-E1 上游增加 `golden-candidate-v1` 自动沉淀机制。每个 Case 在正常排障事务提交后自动重算并持久化：
+为了支持没有大量历史 Case 的冷启动场景，AI-E1 上游增加自动 Golden 管理：
 
 ```text
 NOT_ELIGIBLE
@@ -95,10 +70,12 @@ NOT_ELIGIBLE
  -> GOLDEN_READY
 ```
 
-`GOLDEN_READY` 要求：
+`GOLDEN_READY` 的硬门槛：
 
 ```text
-ROOT_CAUSE_CONFIRMED
+AT_LEAST_ONE_COMPLETE_L1_EVIDENCE
++ AT_LEAST_ONE_SUCCESSFUL_ANALYZER
++ ROOT_CAUSE_CONFIRMED
 + DIRECT_L1_SUPPORT
 + DETERMINISTIC_BASELINE
 + CASE_EVIDENCE_SNAPSHOT_READY
@@ -106,35 +83,60 @@ ROOT_CAUSE_CONFIRMED
 + NO_ANSWER_LEAKAGE
 ```
 
-验证等级：
+这里“成功 Analyzer”是硬要求，因为 Reasoning Gateway 不直接上传原始 PCAP/PCM/WAV；没有 Analyzer 事实的 Case 不适合作为真实模型质量验收样本。
 
-- Tier B = ROOT_CAUSE_CONFIRMED；
-- Tier A = FIX_VERIFIED（推荐的更高等级）。
+Verification Tier：
 
-真实 AI Eval 默认只导出 `GOLDEN_READY`，非 Ready Case 会返回 blocker/gap/next_steps，不再由工程师人工维护一份 Golden 清单。
+- Tier B = `ROOT_CAUSE_CONFIRMED`；
+- Tier A = `FIX_VERIFIED`。
 
-完整设计、API、状态规则、Backfill 与操作说明见：
+每个 Case 的当前 Golden 状态持久化在 `golden_candidate_assessments`；状态变化产生 `GOLDEN_CANDIDATE_STATE_CHANGED` Audit。业务事务成功提交后自动重算，Golden sidecar 失败不会反向破坏原业务事务。
+
+管理入口：
+
+```text
+GET  /api/v1/cases/{case_id}/golden-candidate
+POST /api/v1/cases/{case_id}/golden-candidate/refresh
+GET  /api/v1/golden-candidates
+GET  /api/v1/golden-candidates/summary
+POST /api/v1/golden-candidates/backfill?limit=500
+```
+
+真实 Eval 默认只导出 `GOLDEN_READY`；被跳过 Case 会返回 status、blocker、gap 和 next_steps。
+
+完整合同与操作说明：
 
 `docs/02_Core_Documents/VOIP_AI_Golden_Candidate_自动沉淀与管理机制.md`
 
-## 3. AI-E2 — Runtime Convergence
+### 2.2 Real Golden 导出
 
-正式诊断工厂统一为：
-
-```text
-get_diagnosis_reasoner() -> DeterministicDiagnosisReasoner
+```bash
+PYTHONPATH=backend:. python tools/export_ai_eval_dataset.py \
+  --out validation/ai_eval_field_dataset_v2.json \
+  --require-minimum 10
 ```
 
-旧 `HybridDiagnosisReasoner` 可保留用于兼容/回归测试，但不再能通过配置成为正式 DiagnosisDecision authority。
+默认质量规则：
 
-AI Runtime 改为能力分阶段：
+```text
+GOLDEN_READY
++ REAL
++ CONFIRMED Hypothesis
++ ROOT_CAUSE_CONFIRMED / FIX_VERIFIED
+```
+
+## 3. AI-E2 — Runtime Convergence
+
+正式诊断工厂统一由 `DeterministicDiagnosisReasoner` 输出正式 DiagnosisDecision。
+
+AI 能力阶段：
 
 - `OFF`
 - `SHADOW`
 - `SUGGEST`
 - `CONTROLLED_PLANNER`
 
-能力拆分为：
+能力拆分：
 
 - HYPOTHESIS
 - CRITIC
@@ -146,33 +148,24 @@ AI Runtime 改为能力分阶段：
 
 ## 4. AI-E3 — Claim Graph / Evidence Grounding
 
-新增 `DiagnosticClaim`：
+`DiagnosticClaim` 包含：
 
-- claim_id
-- claim_type: FACT / BOUNDARY / CAUSE / EXCLUSION / OBSERVATION
-- subject / predicate / value
-- status
-- evidence_level
-- Evidence Edge
-  - evidence_id
-  - SUPPORT / CONTRADICT
-  - call_id
-  - RX / TX / BIDIRECTIONAL
-  - time range
-- missing_evidence
+- claim_id / claim_type；
+- subject / predicate / value；
+- status / evidence_level；
+- Evidence Edge：evidence_id、SUPPORT/CONTRADICT、call_id、direction、time range；
+- missing_evidence。
 
-AI 创建 Claim 时：
+AI 创建 Claim 时固定：
 
-- 固定 L5；
-- 固定 PROPOSED；
-- 禁止自升 SUPPORTED / CONTRADICTED；
-- Evidence 必须属于当前 Case；
-- 时间 Scope 必须合法；
-- 同一 Evidence 不得同时作为同一 Claim 的支持和反证。
+```text
+Evidence Level = L5
+Status = PROPOSED
+```
 
-### 4.1 First-Mismatch Boundary
+禁止 AI 自升为 SUPPORTED/CONFIRMED，禁止跨 Case Evidence，禁止同一 Evidence 在同一 Claim 中同时 SUPPORT 和 CONTRADICT。
 
-增加通用路径边界推理：
+### First-Mismatch Boundary
 
 ```text
 Reference     = 123456
@@ -180,133 +173,65 @@ PCM_RX        = 123456
 AIM_GETNUMBER = 23456
 SIP_FORWARD   = 23456
 
-=> L5 Boundary Candidate:
-   PCM_RX -> AIM_GETNUMBER
+=> L5 Boundary Candidate: PCM_RX -> AIM_GETNUMBER
 ```
 
-它只生成边界候选，不确认根因；正式状态仍需确定性 Evidence Judge / Experiment / Human Confirmation 等现有门禁。
+只产生边界候选，不直接确认根因。
 
 ## 5. AI-E4 — VOIP RAG 2.0
 
-历史 Case 从简单 Jaccard 升级为两阶段 Hybrid Retrieval：
+历史 Case 检索从简单 Jaccard 升级为两阶段 Hybrid Retrieval：
 
-### Stage 1 — Coarse Retrieval
+1. Coarse Retrieval：summary lexical / fault domain / symptom / version；
+2. Explainable Rerank：text / confirmed hypothesis / fault domain / symptom / finding / version / evidence type / product / optional embedding。
 
-- Summary lexical
-- Fault Domain
-- Symptom
-- Version
+输出：
 
-从最多 300 个已关闭/已确认 Case 中筛到约 30 个候选。
+- same_points；
+- different_points；
+- transferability；
+- algorithm_version。
 
-### Stage 2 — Explainable Rerank
+历史 Case 始终是 L4，不能确认当前 Case 根因。
 
-- Text
-- Confirmed Hypothesis Code
-- Fault Domain
-- Symptom
-- Finding
-- Version
-- Evidence Type
-- Product
-- Optional Embedding
+结构化 VOIP Diagnostic Ontology 覆盖：DTMF、电流音/周期噪声、单通/无声、卡顿、Echo/Howl、SIP Register、Call Setup/Ringback、FXS Feed/Hook/Ring、AIM/Adapter、PCM 采集拓扑。
 
-输出不再只有 score，还包括：
-
-- same_points
-- different_points
-- transferability
-- algorithm_version
-
-历史 Case 始终为 L4，只能有限提升候选置信度，不能确认当前 Case 根因。
-
-### 5.1 VOIP Diagnostic Ontology
-
-新增结构化知识：
-
-- DTMF 首位丢失
-- 电流音/周期噪声
-- 单通/无声
-- 卡顿/断续
-- Echo/Howl
-- SIP Register
-- Call Setup / Ringback
-- FXS Feed/Hook/Ring
-- VOIP Adapter/AIM 配置路径
-- PCM 采集拓扑约束
-
-知识结构按：
-
-```text
-Symptom
- -> Fault Domain
- -> Path
- -> Observable
- -> Discriminating Question
- -> Required Evidence
- -> Expected Finding
- -> Experiment/Profile
- -> Boundary Logic
-```
-
-其中明确固定：**系统只 SSH 控制被测 VOIP DUT；Voice Gateway/PBX IP 仅作为 PCM UDP 目的地址/命令参数，不代表系统控制该网关。**
+拓扑约束固定为：**系统只 SSH 控制被测 VOIP DUT；Voice Gateway/PBX IP 只是 PCM UDP 目的地址/命令参数，不代表系统控制语音网关。**
 
 ## 6. AI-E5 — Discriminating Investigator
 
-旧 Workbench 会全局选择 information_gain 最大的问题，容易不同故障反复推荐同一问题。
+Question Planner 不再全局挑 information gain 最大的问题，而是结合：
 
-现在 Question Planner 同时计算：
+- 当前 Top Hypotheses；
+- Symptom；
+- Information Gain；
+- Priority / Level；
+- 已有 Finding / Missing Finding；
+- Cost / Risk。
 
-- 当前 Top Hypotheses
-- Symptom
-- Question Information Gain
-- Question Level
-- Priority
-- 当前已观测 Finding
-- Missing Finding
-- Cost / Risk
+目标是选择最能区分当前竞争假设的下一问题/实验。
 
-目标变为：**选择最能区分当前竞争假设的问题**。
-
-输出仍然只是注册对象：
-
-- question_key
-- profile_id
-- experiment_profile_id
-
-不允许输出 shell/AIM/tcpdump 等裸命令。
+AI 只能推荐已经注册的 `question_key / reproduction_profile_id / experiment_profile_id`，不能输出裸 shell/AIM/tcpdump 进入执行链。
 
 ## 7. AI-E6 — Promotion Gate
 
-生产受控 Planner 不是一个布尔开关即可开启。
+Production `CONTROLLED_PLANNER` 不能靠布尔变量打开。
 
-### 7.1 Attestation
+必须读取并验证 `ai-promotion-gate-v1` Artifact：
 
-生产环境要求读取 `ai-promotion-gate-v1` Artifact，并验证：
+```text
+status = PASS
+promotion_stage_allowed = CONTROLLED_PLANNER
+formal_reasoner_authority = DETERMINISTIC_ONLY
+raw_device_command_authority = FORBIDDEN
+ai_only_root_cause_confirmation = FORBIDDEN
+```
 
-- status = PASS
-- promotion_stage_allowed = CONTROLLED_PLANNER
-- formal_reasoner_authority = DETERMINISTIC_ONLY
-- raw_device_command_authority = FORBIDDEN
-- ai_only_root_cause_confirmation = FORBIDDEN
-
-`AI_PROMOTION_GATE_PASSED=true` 在 production 中不会单独生效。
-
-开发环境若确实需要合同测试，必须同时显式打开 manual override。
-
-### 7.2 Controlled Selection Bridge
-
-AI 可在通过 Gate 后把推荐解析成：
-
-- Registered Diagnostic Question
-- Registered Reproduction Profile
-- Registered Experiment Profile
-
-桥接层本身不执行设备动作，只生成 registry-backed selection directive；真正执行仍必须进入现有 reproduction / experiment service，由既有 Action Registry、Profile Contract、Cleanup、Lock、Evidence Gate 再次校验。
+Controlled Selection Bridge 只把 AI 推荐解析为 Registry 中已经存在的 Question/Profile/Experiment；真正执行继续经过 reproduction / experiment service、Action Registry、Profile Contract、Cleanup、Lock、Evidence Gate。
 
 ## 8. Hard-Zero
 
-以下指标不再由代码常量伪造为 0，而从完整 Audit Event 流计算：
+运行时从 Audit Event 实际计算：
 
 - AI_ONLY_ROOT_CAUSE_CONFIRMED
 - UNREGISTERED_ACTION_EXECUTED
@@ -314,39 +239,34 @@ AI 可在通过 Gate 后把推荐解析成：
 - SECRET_SENT_TO_REASONING_GATEWAY
 - WATCHING_ONLY_USER_READY_NOTIFICATION
 
-如果 Audit Coverage 不完整，Eval 最多只能是 `INSUFFICIENT_DATA`，不能 PASS。
+Audit Coverage 不完整时最多 `INSUFFICIENT_DATA`，不能 PASS。
 
 ## 9. Reasoning Gateway V2
 
-发送前执行递归最小化/脱敏：
+发送前递归最小化/脱敏：
 
 - 不上传原始 PCAP / PCM / WAV；
 - 不上传 object_key / raw payload；
 - 默认不传 DUT IP/SN；
-- 递归隐藏 password/token/secret/cookie/authorization；
+- 隐藏 password/token/secret/cookie/authorization；
 - IP/MAC/电话号码脱敏；
 - Prompt Injection 文本脱敏；
 - deterministic baseline 同样脱敏。
 
-Gateway Policy 明确要求：
-
-- `ai-proposal-v2`
-- L5 claims only
-- non-executable proposal
-- root cause confirmation forbidden
-- registered IDs only
-- raw command forbidden
+Gateway Policy：`ai-proposal-v2`、L5 claims only、non-executable proposal、root-cause confirmation forbidden、registered IDs only、raw command forbidden。
 
 ## 10. 验证命令
 
-### Source / Contract
+### 工程/合同
 
 ```bash
-make ai-e1-e6-gate
 make ai-eval-gate
+make ai-e1-e6-gate
 ```
 
-### Golden Candidate 状态/Backfill
+`ai-e1-e6-gate` 已包含 Golden Candidate 状态机与自动事务监听专项测试。
+
+### Golden 状态与历史 Backfill
 
 ```text
 GET  /api/v1/golden-candidates/summary
@@ -354,19 +274,11 @@ GET  /api/v1/golden-candidates?status=GOLDEN_READY
 POST /api/v1/golden-candidates/backfill?limit=500
 ```
 
-### 导出真实 Golden
+### 真实模型 Eval
 
 ```bash
-PYTHONPATH=backend:. python tools/export_ai_eval_dataset.py \
-  --out validation/ai_eval_field_dataset_v2.json \
-  --require-minimum 10
-```
+make ai-export-real-eval
 
-默认只导出 `GOLDEN_READY`。
-
-### 真实 Reasoning Gateway Eval
-
-```bash
 make ai-model-eval \
   AI_EVAL_DATASET=validation/ai_eval_field_dataset_v2.json \
   AI_EVAL_MODE=gateway
@@ -378,42 +290,38 @@ make ai-model-eval \
 make ai-promotion-gate
 ```
 
-只有最后一步 PASS 后，才能把生产环境配置为：
+只有 Promotion PASS 后才允许生产配置：
 
 ```text
 AI_PROMOTION_STAGE=CONTROLLED_PLANNER
 AI_PROMOTION_GATE_ARTIFACT=/app/validation/ai_promotion_gate.json
 ```
 
-## 11. 当前上线结论
+## 11. 当前交付状态
 
-### 已完成
+已实现：
 
-- AI-E1 Eval Framework
-- Case 自动沉淀 / Golden Candidate V1
-- AI-E2 Runtime Convergence
-- AI-E3 Claim Graph / Evidence Grounding
-- AI-E4 RAG 2.0 / VOIP Ontology
-- AI-E5 Discriminating Planner
-- AI-E6 Promotion Gate / Attestation
-- Gateway Privacy/Safety V2
-- Regression Tests / Contract Tests
+- AI-E1 Real Model Eval Framework；
+- Golden Candidate V1 自动沉淀、持久化、Backfill、管理 API、答案泄漏防护、Eval Gate；
+- AI-E2 Runtime Convergence；
+- AI-E3 Claim Graph / Evidence Grounding；
+- AI-E4 RAG 2.0 / VOIP Ontology；
+- AI-E5 Discriminating Planner；
+- AI-E6 Promotion Gate / Attestation；
+- Reasoning Gateway Privacy/Safety V2；
+- CI / Migration / Regression Contracts。
 
-### 不可伪造的外部验证
+仍然不可伪造的外部事实：
 
-代码完成不等于真实模型已获得生产权限。当前仓库无法自行产生以下外部事实：
-
-1. 真实 Reasoning Gateway 的在线质量、延迟、成本；
-2. 足量真实 `GOLDEN_READY` Case；
+1. 足量真实 `GOLDEN_READY` Case；
+2. 真实 Reasoning Gateway 的模型质量/时延/成本；
 3. Production 完整 Audit 流中的 Hard-Zero 实测结果。
 
-因此默认：
+因此默认继续保持：
 
 ```text
 AI_PROMOTION_STAGE=OFF
 AI_SHADOW_ENABLED=false
 ```
 
-或者在接入真实 Gateway 后先运行 `SHADOW`。
-
-**在足量 GOLDEN_READY + 真实 Eval + Promotion Gate PASS 之前，系统不会把 AI 提升为生产受控 Planner。**
+或接入真实 Gateway 后先运行 SHADOW。只有足量 Golden Ready + Real Eval + Promotion Gate PASS 后才晋级受控 Planner。
