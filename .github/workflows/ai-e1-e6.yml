@@ -1,0 +1,116 @@
+name: AI E1-E6 Gate
+
+on:
+  pull_request:
+    paths:
+      - "backend/app/diagnosis/**"
+      - "backend/app/knowledge/**"
+      - "backend/app/golden/**"
+      - "backend/app/db/golden_models.py"
+      - "backend/app/db/session.py"
+      - "backend/app/api/v1/golden_candidates.py"
+      - "backend/app/services/audit.py"
+      - "backend/app/main.py"
+      - "backend/app/core/config.py"
+      - "backend/migrations/versions/**"
+      - "backend/tests/**"
+      - "tools/ai_*.py"
+      - "tools/export_ai_eval_dataset.py"
+      - "knowledge/seed/**"
+      - "golden_cases/ai_*.json"
+      - "Makefile"
+      - ".github/workflows/ai-e1-e6.yml"
+  push:
+    branches:
+      - "agent/ai-e1-real-eval-grounding"
+    paths:
+      - "backend/app/diagnosis/**"
+      - "backend/app/knowledge/**"
+      - "backend/app/golden/**"
+      - "backend/app/db/golden_models.py"
+      - "backend/app/db/session.py"
+      - "backend/app/api/v1/golden_candidates.py"
+      - "backend/app/services/audit.py"
+      - "backend/app/main.py"
+      - "backend/app/core/config.py"
+      - "backend/migrations/versions/**"
+      - "backend/tests/**"
+      - "tools/ai_*.py"
+      - "tools/export_ai_eval_dataset.py"
+      - "knowledge/seed/**"
+      - "golden_cases/ai_*.json"
+      - "Makefile"
+      - ".github/workflows/ai-e1-e6.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  ai-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: voip
+          POSTGRES_USER: voip
+          POSTGRES_PASSWORD: voip
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U voip -d voip"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - name: Install backend and media dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg tesseract-ocr
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt
+      - name: Compile AI and Golden modules
+        run: python -m compileall -q backend/app/diagnosis backend/app/knowledge backend/app/golden backend/app/api/v1/golden_candidates.py tools
+      - name: AI contract coverage gate
+        run: make ai-eval-gate
+      - name: AI E1-E6 regression gate
+        run: make ai-e1-e6-gate
+      - name: Prepare regression database
+        env:
+          DATABASE_URL: postgresql+psycopg://voip:voip@localhost:5432/voip
+        run: cd backend && alembic upgrade head
+      - name: Full backend regression
+        shell: bash
+        env:
+          DATABASE_URL: postgresql+psycopg://voip:voip@localhost:5432/voip
+          REDIS_URL: redis://localhost:6379/0
+          REPRODUCTION_PLATFORM_MODE: real
+        run: |
+          set +e
+          PYTHONPATH=backend:. pytest -q backend/tests --tb=line 2>&1 | tee /tmp/backend-pytest.log
+          status=${PIPESTATUS[0]}
+          if [ "$status" -ne 0 ]; then
+            python - <<'PY'
+          from pathlib import Path
+          text = Path('/tmp/backend-pytest.log').read_text(encoding='utf-8', errors='replace')[-12000:]
+          text = text.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
+          print(f'::error title=Full backend regression failed::{text}')
+          PY
+          fi
+          exit "$status"

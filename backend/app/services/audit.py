@@ -17,10 +17,21 @@ def audit(
     target_id=None,
     before: dict | None = None,
     after: dict | None = None,
+    before_json: dict | None = None,
+    after_json: dict | None = None,
     reason: str | None = None,
     trace_id: str | None = None,
     detail=None,
 ):
+    # ``before``/``after`` remain the canonical API.  The *_json aliases make
+    # materialized state-machine sidecars explicit without forcing callers to
+    # know the AuditLog storage column names.  Supplying both is rejected.
+    if before is not None and before_json is not None:
+        raise ValueError('AUDIT_BEFORE_DUPLICATE')
+    if after is not None and after_json is not None:
+        raise ValueError('AUDIT_AFTER_DUPLICATE')
+    before = before if before is not None else before_json
+    after = after if after is not None else after_json
     actor_type_value = actor_type.value if isinstance(actor_type, ActorType) else actor_type
     if actor_type_value is None:
         actor_type_value = ActorType.SYSTEM.value if actor is None else ActorType.USER.value

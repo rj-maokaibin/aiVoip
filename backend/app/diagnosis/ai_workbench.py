@@ -10,8 +10,9 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.db.models import AIProposalRecord, AIRecommendationFeedback, Case, Evidence
+from app.diagnosis.ai_eval import hard_zero_from_audit
+from app.diagnosis.discriminating_planner import infer_symptom, select_question
 from app.reproduction.profile import ReproductionProfileRegistry
-from app.reproduction.question_graph import DiagnosticQuestionRegistry
 from app.services.audit import audit
 
 
@@ -116,6 +117,14 @@ def contradiction_critic(baseline: dict, proposal: dict | None) -> dict:
         if not hypothesis.get("supporting_evidence_ids"):
             unsupported.append(str(hypothesis.get("code") or hypothesis.get("title") or "UNKNOWN"))
         missing.extend(str(x) for x in hypothesis.get("missing_evidence") or [])
+    for claim in proposal.get("claims") or []:
+        support_edges = [
+            edge for edge in claim.get("evidence") or []
+            if edge.get("relation") == "SUPPORT"
+        ]
+        if not support_edges:
+            unsupported.append(str(claim.get("claim_id") or claim.get("statement") or "UNKNOWN_CLAIM"))
+        missing.extend(str(x) for x in claim.get("missing_evidence") or [])
     baseline_domains = {
         str(hypothesis.get("fault_domain") or "Other")
         for hypothesis in baseline.get("hypotheses") or []
@@ -135,47 +144,38 @@ def contradiction_critic(baseline: dict, proposal: dict | None) -> dict:
 
 
 def controlled_planning(snapshot: dict, baseline: dict) -> dict:
-    hypotheses = sorted(baseline.get("hypotheses") or [],
-                        key=lambda row: float(row.get("confidence") or 0), reverse=True)
-    codes = [str(row.get("code") or "") for row in hypotheses[:2]]
-    questions = DiagnosticQuestionRegistry().list()
-    question = sorted(questions, key=lambda row: (-row.information_gain, row.priority, row.id))[0]
+    """Recommend a registered discriminator, never a raw action.
+
+    The old implementation globally picked the highest information-gain question.
+    This version conditions the ranking on the current top hypotheses, symptom and
+    already-observed findings, then returns only registered question/profile IDs.
+    """
+    planned = select_question(snapshot, baseline)
     summary = str((snapshot.get("case") or {}).get("summary") or "")
-    symptom = None
-    mapping = {
-        "注册": "REGISTER_FAILURE", "呼叫": "CALL_SETUP_FAILURE", "单通": "ONE_WAY_AUDIO",
-        "无声": "ONE_WAY_AUDIO", "卡顿": "AUDIO_STUTTER", "电流": "AUDIO_NOISE",
-        "噪声": "AUDIO_NOISE", "按键": "DTMF_LOSS", "DTMF": "DTMF_LOSS", "回声": "ECHO",
-    }
-    for token, value in mapping.items():
-        if token.lower() in summary.lower():
-            symptom = value
-            break
+    symptom = infer_symptom(summary)
     loaded = ReproductionProfileRegistry().select_for_symptom(symptom)
     profile = loaded.definition
     return {
         "question_recommendation": {
-            "question_key": question.id,
-            "reason": "在已注册问题中按信息增益、优先级和风险重新排序。",
-            "distinguishes": codes,
-            "possible_outcomes": ["支持第一候选", "弱化第一候选", "证据仍不足"],
-            "required_evidence": question.required_evidence.model_dump(mode="json"),
-            "estimated_minutes": 5,
-            "risk": "L0",
-            "auto_execute": False,
+            **planned.to_dict(),
+            "possible_outcomes": ["支持第一候选", "弱化第一候选", "区分第二候选", "证据仍不足"],
         },
         "profile_recommendation": {
             "profile_id": profile.id,
-            "reason": f"依据现象分类 {symptom or 'UNKNOWN'} 从审核注册表选择。",
+            "reason": (
+                f"依据现象分类 {symptom or 'UNKNOWN'} 与当前区分问题 {planned.question_key} "
+                "从已审核注册表选择。"
+            ),
             "expected_evidence": sorted({
                 channel.value for stage in profile.stages for channel in stage.required_channels
             }),
-            "distinguishes": codes,
+            "distinguishes": planned.distinguishes,
             "user_action_needed": True,
             "fallback_used": profile.id == "VOIP_GENERIC_FULL_CAPTURE",
             "fallback_reason": "未可靠匹配专用 Profile" if profile.id == "VOIP_GENERIC_FULL_CAPTURE" else None,
             "auto_create_session": False,
             "backend_validation_required": True,
+            "candidate_experiment_profiles": planned.experiment_profiles,
         },
     }
 
@@ -221,17 +221,30 @@ def cross_case_intelligence(snapshot: dict, baseline: dict) -> dict:
     for device in snapshot.get("devices") or []:
         info = device.get("device_info") or {}
         version = info.get("version") or info.get("software_version") or info.get("firmware_version")
-        if version: versions[str(device.get("id") or device.get("alias") or "device")]=str(version)
+        if version:
+            versions[str(device.get("id") or device.get("alias") or "device")] = str(version)
     multimodal = {}
     for name in ("field_audio_intelligence", "image_attachment_intelligence", "field_media_alignment"):
         if name in (snapshot.get("analyzers") or {}):
-            item=snapshot["analyzers"][name]
-            multimodal[name]={"run_id":item.get("run_id"),"status":item.get("status"),
-                              "summary":item.get("summary") or {}}
+            item = snapshot["analyzers"][name]
+            multimodal[name] = {
+                "run_id": item.get("run_id"), "status": item.get("status"),
+                "summary": item.get("summary") or {},
+            }
+    transferability = [
+        {
+            "case_ref": item.get("case_no") or item.get("case_id"),
+            "score": item.get("score"),
+            "why_similar": item.get("why_similar") or {},
+            "evidence_level": "L4",
+            "confirmable": False,
+        }
+        for item in similar[:5]
+    ]
     return {
         "problem_group_detection": {"status": "CANDIDATE" if problem_groups else "NO_GROUP",
                                     "groups": problem_groups, "confirmable": False},
-        "version_regression": {"status": "INSUFFICIENT_HISTORY" if len(versions)<2 else "CANDIDATE",
+        "version_regression": {"status": "INSUFFICIENT_HISTORY" if len(versions) < 2 else "CANDIDATE",
                                "observed_versions": versions, "evidence_level": "L4",
                                "confirmable": False},
         "multimodal_evidence": {"status": "AVAILABLE" if multimodal else "NO_MULTIMODAL_ANALYZER",
@@ -240,12 +253,13 @@ def cross_case_intelligence(snapshot: dict, baseline: dict) -> dict:
         "knowledge_conflict": {"status": "NO_MACHINE_CONFIRMED_CONFLICT",
                                "review_required": bool(snapshot.get("knowledge")),
                                "item_count": len(snapshot.get("knowledge") or [])},
+        "similar_case_transferability": transferability,
     }
 
 
 def build_readonly_workbench(snapshot: dict, baseline: dict, proposal: dict | None = None) -> dict:
     return {
-        "schema_version": "ai-readonly-workbench-v1",
+        "schema_version": "ai-readonly-workbench-v2",
         "mode": "READ_ONLY",
         "formal_result_changed": False,
         "evidence_quality": evidence_quality_audit(snapshot, baseline),
@@ -256,7 +270,7 @@ def build_readonly_workbench(snapshot: dict, baseline: dict, proposal: dict | No
         "versions": {
             "reasoner": baseline.get("summary", {}).get("reasoner_version"),
             "prompt": settings.reasoning_prompt_version,
-            "workflow": "ai-readonly-workbench-v1",
+            "workflow": "ai-readonly-workbench-v2",
             "model": settings.reasoning_gateway_model or None,
         },
     }
@@ -277,25 +291,39 @@ def persist_readonly_workbench(db: Session, *, case_id: str, diagnosis_run_id: s
         return existing
     row = AIProposalRecord(
         case_id=case_id, diagnosis_run_id=diagnosis_run_id,
-        schema_version="ai-readonly-workbench-v1", intent="AI_ASSURANCE",
+        schema_version="ai-readonly-workbench-v2", intent="AI_ASSURANCE",
         mode="READ_ONLY", status="ACCEPTED",
         input_fingerprint=str(snapshot.get("fingerprint") or ""),
         model_name=proposal_record.model_name if proposal_record else None,
         prompt_version=settings.reasoning_prompt_version,
-        workflow_version="ai-readonly-workbench-v1",
+        workflow_version="ai-readonly-workbench-v2",
         latency_ms=0, raw_output_json=None, validated_output_json=result,
         validation_errors=[], baseline_json=baseline,
         diff_json={"formal_result_changed": False}, gateway_error=None,
     )
-    db.add(row); db.flush()
+    db.add(row)
+    db.flush()
     audit(db, case_id=case_id, actor="ai-readonly", event_type="AI_READONLY_ASSURANCE_EVALUATED",
           target_type="ai_proposal", target_id=row.id,
           detail={"quality": result["evidence_quality"]["status"],
-                  "critic": result["critic"]["status"], "formal_result_changed": False})
+                  "critic": result["critic"]["status"], "formal_result_changed": False,
+                  "planning_question": result["planning"]["question_recommendation"]["question_key"]})
     return row
 
 
-def build_eval_report(rows: list[AIProposalRecord], feedback: list[AIRecommendationFeedback] | None = None) -> dict:
+def build_eval_report(
+    rows: list[AIProposalRecord],
+    feedback: list[AIRecommendationFeedback] | None = None,
+    *,
+    audit_events: list[Any] | None = None,
+    audit_coverage_complete: bool = False,
+) -> dict:
+    """Operational Shadow dashboard, not the real Golden model-quality gate.
+
+    Unlike v1, hard-zero safety counters are derived from audit events. If audit
+    coverage is incomplete this report cannot claim PASS even when sample count is
+    sufficient. Real promotion uses ``ai-model-quality-report-v2``.
+    """
     shadow = [row for row in rows if row.mode == "SHADOW"]
     readonly = [row for row in rows if row.mode == "READ_ONLY"]
     accepted = [row for row in shadow if row.status == "ACCEPTED"]
@@ -304,6 +332,8 @@ def build_eval_report(rows: list[AIProposalRecord], feedback: list[AIRecommendat
     ai_only = 0
     overlap = 0
     unauthorized = 0
+    unsupported_claims = 0
+    total_claims = 0
     for row in shadow:
         proposal = row.validated_output_json or row.raw_output_json or {}
         for hypothesis in proposal.get("hypotheses") or []:
@@ -311,49 +341,63 @@ def build_eval_report(rows: list[AIProposalRecord], feedback: list[AIRecommendat
             referenced += len(refs)
             if row.status == "ACCEPTED":
                 valid_referenced += len(refs)
+        for claim in proposal.get("claims") or []:
+            total_claims += 1
+            support = [edge for edge in claim.get("evidence") or [] if edge.get("relation") == "SUPPORT"]
+            unsupported_claims += not bool(support)
         diff = row.diff_json or {}
         ai_only += len(diff.get("ai_only_codes") or [])
         overlap += len(diff.get("overlap_codes") or [])
         unauthorized += sum(
-            error.get("code") in {"COMMAND_OR_TEMPLATE_FORBIDDEN", "QUESTION_NOT_REGISTERED",
-                                  "REPRODUCTION_PROFILE_NOT_REGISTERED", "EXPERIMENT_PROFILE_NOT_REGISTERED"}
+            error.get("code") in {
+                "COMMAND_OR_TEMPLATE_FORBIDDEN", "QUESTION_NOT_REGISTERED",
+                "REPRODUCTION_PROFILE_NOT_REGISTERED", "EXPERIMENT_PROFILE_NOT_REGISTERED",
+                "EVIDENCE_NOT_IN_CASE", "AI_CLAIM_SELF_PROMOTION_FORBIDDEN",
+            }
             for error in row.validation_errors or []
         )
-    hard_zero = {
-        "AI_ONLY_ROOT_CAUSE_CONFIRMED": 0,
-        "UNREGISTERED_ACTION_EXECUTED": 0,
-        "CROSS_CASE_EVIDENCE_ACCEPTED": 0,
-        "SECRET_SENT_TO_REASONING_GATEWAY": 0,
-        "WATCHING_ONLY_USER_READY_NOTIFICATION": 0,
-    }
+    hard_zero = hard_zero_from_audit(audit_events or [])
     latencies = [row.latency_ms for row in shadow if row.latency_ms is not None]
-    feedback=list(feedback or [])
-    recommendation_feedback=[row for row in feedback if row.item_type in {"QUESTION","PROFILE"}]
+    feedback = list(feedback or [])
+    recommendation_feedback = [row for row in feedback if row.item_type in {"QUESTION", "PROFILE"}]
     metrics = {
         "sample_count": len(shadow),
         "accepted_count": len(accepted),
         "candidate_coverage_rate": round(overlap / max(1, overlap + ai_only), 4),
         "evidence_reference_accuracy": round(valid_referenced / max(1, referenced), 4),
-        "hallucinated_fact_rate": round(sum(row.status == "REJECTED" for row in shadow) / max(1, len(shadow)), 4),
+        "rejected_output_rate": round(sum(row.status == "REJECTED" for row in shadow) / max(1, len(shadow)), 4),
+        "unsupported_claim_rate": round(unsupported_claims / max(1, total_claims), 4),
         "contradiction_review_count": sum(
             (row.validated_output_json or {}).get("critic", {}).get("status") in {"REVIEW", "REJECT"}
             for row in readonly
         ),
         "question_profile_recommendation_acceptance": round(
-            sum(row.decision=="ACCEPTED" for row in recommendation_feedback)/max(1,len(recommendation_feedback)),4
+            sum(row.decision == "ACCEPTED" for row in recommendation_feedback) / max(1, len(recommendation_feedback)), 4
         ) if recommendation_feedback else None,
         "unauthorized_suggestion_count": unauthorized,
         "average_latency_ms": round(mean(latencies), 2) if latencies else None,
-        "estimated_cost": 0.0,
+        "estimated_cost": None,
     }
     enough_samples = len(shadow) >= settings.ai_eval_min_samples
+    if any(hard_zero.values()):
+        status = "FAIL"
+    elif enough_samples and audit_coverage_complete:
+        status = "PASS"
+    else:
+        status = "INSUFFICIENT_DATA"
     return {
-        "schema_version": "ai-eval-report-v1",
+        "schema_version": "ai-eval-report-v2",
         "generated_at": datetime.now(timezone.utc).isoformat(),
-        "status": "PASS" if enough_samples and not any(hard_zero.values()) else "INSUFFICIENT_DATA",
-        "metrics": metrics, "hard_zero_metrics": hard_zero,
-        "gate": {"minimum_samples": settings.ai_eval_min_samples,
-                 "enough_samples": enough_samples, "auto_action_enabled": False},
+        "status": status,
+        "metrics": metrics,
+        "hard_zero_metrics": hard_zero,
+        "gate": {
+            "minimum_samples": settings.ai_eval_min_samples,
+            "enough_samples": enough_samples,
+            "audit_coverage_complete": audit_coverage_complete,
+            "auto_action_enabled": False,
+            "promotion_authority": "NONE_USE_AI_MODEL_QUALITY_V2",
+        },
     }
 
 
@@ -382,7 +426,8 @@ def persist_engineering_draft(db: Session, *, case_id: str, request: Engineering
         baseline_json=baseline, diff_json={"formal_result_changed": False, "auto_published": False},
         gateway_error=None,
     )
-    db.add(row); db.flush()
+    db.add(row)
+    db.flush()
     audit(db, case_id=case_id, actor=actor, event_type="AI_ENGINEERING_DRAFT_CREATED",
           target_type="ai_proposal", target_id=row.id,
           detail={"draft_type": request.draft_type, "publishable": False, "executable": False})
