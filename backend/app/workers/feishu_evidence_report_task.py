@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+
 from celery.utils.log import get_task_logger
 from sqlalchemy import select
 
@@ -7,6 +9,7 @@ from app.core.config import settings
 from app.db.evidence_report_models import FeishuEvidenceDocumentBinding, PreliminaryEvidenceReport
 from app.db.session import SessionLocal
 from app.integrations.feishu.evidence_document import FeishuEvidenceDocumentService
+from app.integrations.feishu.service import FeishuCaseCardService
 from app.services.audit import audit
 from app.workers.celery_app import celery_app
 
@@ -23,8 +26,24 @@ def project_case_evidence_document(self,case_id:str,report_id:str):
         if not report or report.case_id!=case_id:
             return {"status":"NOT_FOUND","case_id":case_id,"report_id":report_id}
         binding=FeishuEvidenceDocumentService().project(db,case_id=case_id,report_id=report_id)
+        card_status="NOT_BOUND"
+        try:
+            asyncio.run(FeishuCaseCardService().sync_case_card(db,case_id=case_id))
+            card_status="SYNCED"
+        except ValueError as exc:
+            if str(exc)=="FEISHU_RECEIVE_ID_NOT_CONFIGURED":
+                card_status="NOT_BOUND"
+            else:
+                card_status="FAILED"
+                log.exception("Feishu evidence summary card sync failed case=%s",case_id)
+        except Exception as exc:
+            card_status="FAILED"
+            log.exception("Feishu evidence summary card sync failed case=%s",case_id)
+            audit(db,case_id=case_id,actor="feishu-evidence-document",event_type="FEISHU_EVIDENCE_CARD_SYNC_FAILED",
+                  target_type="preliminary_evidence_report",target_id=report_id,detail={"error_code":type(exc).__name__,"error_message":str(exc)[:1000]})
         db.commit()
-        return {"status":"SYNCED","case_id":case_id,"report_id":report_id,"document_id":binding.document_id,"document_url":binding.document_url,"projection_version":binding.projection_version}
+        return {"status":"SYNCED","case_id":case_id,"report_id":report_id,"document_id":binding.document_id,"document_url":binding.document_url,
+                "projection_version":binding.projection_version,"case_card":card_status}
     except Exception as exc:
         db.rollback(); log.exception("Feishu evidence report projection failed case=%s report=%s",case_id,report_id)
         try:
