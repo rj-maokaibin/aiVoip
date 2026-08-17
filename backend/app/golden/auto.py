@@ -22,7 +22,7 @@ def _case_id(obj):
     return None
 
 
-def _before_flush(session: Session, flush_context, instances):
+def _collect_case_ids(session: Session) -> None:
     if session.info.get("golden_candidate_refreshing"):
         return
     pending = session.info.setdefault("golden_candidate_case_ids", set())
@@ -30,6 +30,19 @@ def _before_flush(session: Session, flush_context, instances):
         case_id = _case_id(obj)
         if case_id:
             pending.add(case_id)
+
+
+def _before_flush(session: Session, flush_context, instances):
+    # Captures updates to already-persisted Case-owned rows.
+    _collect_case_ids(session)
+
+
+def _after_flush(session: Session, flush_context):
+    # SQLAlchemy column defaults such as Case.id are assigned during flush.  A new
+    # Case therefore has no id in before_flush but does have one here, while it is
+    # still present in session.new.  Collecting in both phases makes Case creation
+    # participate in automatic Golden accumulation as well.
+    _collect_case_ids(session)
 
 
 def _refresh_after_commit(session: Session, session_factory):
@@ -73,6 +86,7 @@ def install_golden_candidate_session_hooks(session_factory) -> None:
     if key in _INSTALLED_FACTORIES:
         return
     event.listen(session_factory, "before_flush", _before_flush)
+    event.listen(session_factory, "after_flush", _after_flush)
     event.listen(
         session_factory,
         "after_commit",
