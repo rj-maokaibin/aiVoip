@@ -22,6 +22,11 @@ log=get_task_logger(__name__)
 def utcnow(): return datetime.now(timezone.utc)
 
 
+def _notify_reports(case_id:str,reason:str) -> None:
+    from app.workers.evidence_report_tasks import notify_evidence_report_changed
+    notify_evidence_report_changed(case_id,reason)
+
+
 @celery_app.task(name='packet.analyze_evidence', bind=True, autoretry_for=(), max_retries=0)
 def analyze_evidence(self, job_id:str, evidence_id:str):
     db=SessionLocal()
@@ -57,7 +62,7 @@ def analyze_evidence(self, job_id:str, evidence_id:str):
               detail={'evidence_id':evidence.id,'summary':result.get('summary'),'analyzer_version':run.analyzer_version})
         db.commit()
         from app.workers.diagnosis_tasks import notify_case_changed
-        notify_case_changed(job.case_id)
+        notify_case_changed(job.case_id); _notify_reports(job.case_id,'packet_analysis_complete')
         return {'status':JobStatus.SUCCESS.value,'job_id':job.id,'analyzer_run_id':run.id,'summary':result.get('summary')}
     except Exception as exc:
         log.exception('packet analysis failed')
@@ -70,7 +75,7 @@ def analyze_evidence(self, job_id:str, evidence_id:str):
         db.commit()
         if 'job' in locals() and job:
             from app.workers.diagnosis_tasks import notify_case_changed
-            notify_case_changed(job.case_id)
+            notify_case_changed(job.case_id); _notify_reports(job.case_id,'packet_analysis_failed')
         raise
     finally:
         db.close()
