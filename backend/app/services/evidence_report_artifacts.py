@@ -105,39 +105,84 @@ def report_artifacts(db: Session, report_id: str) -> list[Artifact]:
     return [a for a in (db.get(Artifact,l.artifact_id) for l in links) if a]
 
 
+_FULL_AUDIO_TYPES={"PCM_WAV","RTP_WAV","AUDIO_WAV"}
+_CLIP_TYPES={"AUDIO_CLIP","PERIODIC_AUDIO_CLIP"}
+_IMAGE_TYPES={"WAVEFORM_PNG","SPECTRUM_PNG","SPECTROGRAM_PNG","RTP_TIMELINE_PNG","SIP_CALL_FLOW_PNG"}
+_REPORT_TYPES={"PRELIMINARY_REPORT_HTML","PRELIMINARY_REPORT_JSON","MANIFEST_JSON"}
+
+
+def _artifact_allowed_for_profile(artifact:Artifact,profile:str)->bool:
+    if artifact.type==EvidenceReportArtifactType.EVIDENCE_BUNDLE.value:
+        return False
+    if profile=="INTERNAL_FULL":
+        return True
+    # SHARE_SAFE intentionally excludes full WAV artifacts. Abnormal clips,
+    # deterministic images and structured analysis remain available.
+    return artifact.type not in _FULL_AUDIO_TYPES
+
+
+def _artifact_bundle_path(artifact:Artifact)->str:
+    prefix=artifact.id[:8]
+    if artifact.type in _CLIP_TYPES:
+        return f"audio/clips/{prefix}_{artifact.filename}"
+    if artifact.type in _FULL_AUDIO_TYPES:
+        return f"audio/full/{prefix}_{artifact.filename}"
+    if artifact.type in _IMAGE_TYPES or artifact.content_type=="image/png":
+        return f"images/{prefix}_{artifact.filename}"
+    if artifact.type in _REPORT_TYPES or "REPORT" in str(artifact.type):
+        return f"report/{prefix}_{artifact.filename}"
+    return f"analysis/{prefix}_{artifact.filename}"
+
+
+def _evidence_bundle_path(evidence:Evidence)->str:
+    lower=str(evidence.filename).lower(); prefix=evidence.id[:8]
+    if lower.endswith((".pcap",".pcapng")):
+        return f"pcap/{prefix}_{evidence.filename}"
+    if lower.endswith((".wav",".pcm")):
+        return f"audio/full/{prefix}_{evidence.filename}"
+    return f"debug/{prefix}_{evidence.filename}"
+
+
+def _share_safe_evidence(evidence:Evidence)->bool:
+    # No raw capture/full audio is copied from Evidence into SHARE_SAFE. Abnormal
+    # clips are represented by linked AUDIO_CLIP/PERIODIC_AUDIO_CLIP Artifacts.
+    return False
+
+
 def build_evidence_bundle(db: Session, *, report_id: str, profile: str="INTERNAL_FULL", actor: str|None=None, storage) -> Artifact:
     report=db.get(PreliminaryEvidenceReport,report_id)
     if not report: raise ValueError("EVIDENCE_REPORT_NOT_FOUND")
     profile=str(profile).upper()
     if profile not in {"INTERNAL_FULL","SHARE_SAFE"}: raise ValueError("EVIDENCE_BUNDLE_PROFILE_INVALID")
-    artifacts=report_artifacts(db,report.id)
+    artifacts=[a for a in report_artifacts(db,report.id) if _artifact_allowed_for_profile(a,profile)]
     stmt=select(Evidence).where(Evidence.case_id==report.case_id)
     if report.scope_type==EvidenceReportScope.CALL.value and report.call_id:
         stmt=stmt.where((Evidence.call_id==report.call_id)|((Evidence.call_id.is_(None))&(Evidence.session_id==report.session_id)))
     elif report.scope_type==EvidenceReportScope.SESSION.value and report.session_id:
         stmt=stmt.where(Evidence.session_id==report.session_id)
     evidences=list(db.scalars(stmt.order_by(Evidence.created_at.asc())))
-    included=evidences if profile=="INTERNAL_FULL" else [e for e in evidences if str(e.kind).upper()=="DERIVED" or "CLIP" in str(e.type).upper()]
-    buf=io.BytesIO(); sums=[]
+    included=evidences if profile=="INTERNAL_FULL" else [e for e in evidences if _share_safe_evidence(e)]
+    buf=io.BytesIO(); sums=[]; files=[]
     with zipfile.ZipFile(buf,"w",compression=zipfile.ZIP_DEFLATED,compresslevel=6) as zf:
-        for a in artifacts:
-            if a.type==EvidenceReportArtifactType.EVIDENCE_BUNDLE.value: continue
-            try: data=storage.get_bytes(a.object_key)
-            except Exception: continue
-            folder="report" if "REPORT" in a.type else "images" if a.content_type=="image/png" else "analysis"
-            path=f"{folder}/{a.filename}"; zf.writestr(path,data); sums.append((hashlib.sha256(data).hexdigest(),path))
-        for e in included:
-            try: data=storage.get_bytes(e.object_key)
-            except Exception: continue
-            lower=str(e.filename).lower(); folder="pcap" if lower.endswith((".pcap",".pcapng")) else "audio" if lower.endswith((".wav",".pcm")) else "debug"
-            path=f"{folder}/{e.filename}"; zf.writestr(path,data); sums.append((hashlib.sha256(data).hexdigest(),path))
+        for artifact in artifacts:
+            try:data=storage.get_bytes(artifact.object_key)
+            except Exception:continue
+            path=_artifact_bundle_path(artifact); zf.writestr(path,data); sha=hashlib.sha256(data).hexdigest(); sums.append((sha,path))
+            files.append({"path":path,"sha256":sha,"source":"artifact","id":artifact.id,"type":artifact.type})
+        for evidence in included:
+            try:data=storage.get_bytes(evidence.object_key)
+            except Exception:continue
+            path=_evidence_bundle_path(evidence); zf.writestr(path,data); sha=hashlib.sha256(data).hexdigest(); sums.append((sha,path))
+            files.append({"path":path,"sha256":sha,"source":"evidence","id":evidence.id,"type":evidence.type})
         manifest=json.dumps({"schema_version":"evidence-bundle-v1","report_id":report.id,"profile":profile,"created_at":utcnow().isoformat(),
-                             "scope":{"type":report.scope_type,"id":report.scope_id},"artifact_count":len(artifacts),"evidence_count":len(included)},ensure_ascii=False,indent=2).encode()
+                             "scope":{"type":report.scope_type,"id":report.scope_id},"artifact_count":len(artifacts),"evidence_count":len(included),
+                             "profile_boundary":"SHARE_SAFE excludes raw capture and full WAV audio; INTERNAL_FULL includes available scoped raw evidence.",
+                             "files":files},ensure_ascii=False,indent=2).encode()
         zf.writestr("manifest.json",manifest); sums.append((hashlib.sha256(manifest).hexdigest(),"manifest.json"))
         zf.writestr("SHA256SUMS","\n".join(f"{sha}  {path}" for sha,path in sorted(sums))+"\n")
     data=buf.getvalue(); row=persist_artifact(db,storage,report=report,artifact_type=EvidenceReportArtifactType.EVIDENCE_BUNDLE.value,
         filename=f"evidence-bundle-{profile.lower()}.zip",data=data,content_type="application/zip",metadata={"profile":profile},role="BUNDLE")
     report.bundle_object_key=row.object_key
     audit(db,case_id=report.case_id,actor=actor,event_type="EVIDENCE_BUNDLE_GENERATED",target_type="artifact",target_id=row.id,
-          detail={"report_id":report.id,"profile":profile,"size_bytes":len(data)})
+          detail={"report_id":report.id,"profile":profile,"size_bytes":len(data),"artifact_count":len(artifacts),"evidence_count":len(included)})
     db.flush(); return row
