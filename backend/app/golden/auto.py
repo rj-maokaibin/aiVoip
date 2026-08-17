@@ -3,7 +3,7 @@ from __future__ import annotations
 from sqlalchemy import event
 from sqlalchemy.orm import Session
 
-_INSTALLED = False
+_INSTALLED_FACTORIES: set[int] = set()
 
 
 def _case_id(obj):
@@ -32,14 +32,8 @@ def _before_flush(session: Session, flush_context, instances):
             pending.add(case_id)
 
 
-def _after_commit(session: Session):
-    """Materialize Golden state after the business transaction is durable.
-
-    Assessment runs in a fresh transaction.  This avoids performing a nested flush
-    from SQLAlchemy flush events and, importantly, means a failed business commit can
-    never advance Golden state.  The refresh transaction is marked so its own writes
-    do not recursively schedule another refresh.
-    """
+def _refresh_after_commit(session: Session, session_factory):
+    """Materialize Golden state only after the business transaction is durable."""
     if session.info.get("golden_candidate_refreshing"):
         return
     case_ids = set(session.info.pop("golden_candidate_case_ids", set()))
@@ -47,10 +41,9 @@ def _after_commit(session: Session):
         return
 
     from app.db.models import Case
-    from app.db.session import SessionLocal
     from app.golden.service import GoldenCandidateService
 
-    db = SessionLocal()
+    db = session_factory()
     db.info["golden_candidate_refreshing"] = True
     try:
         service = GoldenCandidateService()
@@ -60,9 +53,8 @@ def _after_commit(session: Session):
         db.commit()
     except Exception:
         db.rollback()
-        # Golden accumulation is an observability/quality sidecar.  It must never
-        # turn an already-committed Case operation into a user-visible failure.
-        # The next Case change, API refresh, backfill or Eval export repairs state.
+        # Sidecar failure never changes the already-committed Case result.  A later
+        # Case change, explicit refresh, backfill or Eval export repairs the state.
     finally:
         db.close()
 
@@ -71,11 +63,20 @@ def _after_rollback(session: Session):
     session.info.pop("golden_candidate_case_ids", None)
 
 
-def install_golden_candidate_session_hooks() -> None:
-    global _INSTALLED
-    if _INSTALLED:
+def install_golden_candidate_session_hooks(session_factory) -> None:
+    """Bind hooks only to the application's SessionLocal factory.
+
+    This deliberately avoids global Session-class listeners so isolated test/tool
+    sessions do not unexpectedly open the production database after commit.
+    """
+    key = id(session_factory)
+    if key in _INSTALLED_FACTORIES:
         return
-    event.listen(Session, "before_flush", _before_flush)
-    event.listen(Session, "after_commit", _after_commit)
-    event.listen(Session, "after_rollback", _after_rollback)
-    _INSTALLED = True
+    event.listen(session_factory, "before_flush", _before_flush)
+    event.listen(
+        session_factory,
+        "after_commit",
+        lambda session: _refresh_after_commit(session, session_factory),
+    )
+    event.listen(session_factory, "after_rollback", _after_rollback)
+    _INSTALLED_FACTORIES.add(key)
