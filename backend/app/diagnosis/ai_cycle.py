@@ -144,12 +144,12 @@ class AIDiagnosticCycleService:
         *,
         case_id: str,
         diagnosis_run_id: str | None,
-        evidence_fingerprint: str,
+        snapshot_fingerprint: str,
     ) -> AIProposalRecord | None:
         stmt = select(AIProposalRecord).where(
             AIProposalRecord.case_id == case_id,
             AIProposalRecord.mode == "SHADOW",
-            AIProposalRecord.input_fingerprint == evidence_fingerprint,
+            AIProposalRecord.input_fingerprint == snapshot_fingerprint,
         )
         if diagnosis_run_id is None:
             stmt = stmt.where(AIProposalRecord.diagnosis_run_id.is_(None))
@@ -238,7 +238,7 @@ class AIDiagnosticCycleService:
                 db,
                 case_id=case_id,
                 diagnosis_run_id=baseline.get("diagnosis_run_id"),
-                evidence_fingerprint=evidence_fingerprint,
+                snapshot_fingerprint=str(snapshot.get("fingerprint") or snapshot_fingerprint),
             )
             if proposal_record is None:
                 proposal_record = run_ai_shadow(
