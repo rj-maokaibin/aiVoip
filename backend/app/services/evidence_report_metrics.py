@@ -4,7 +4,7 @@ from collections import Counter
 from datetime import datetime, timedelta, timezone
 from math import ceil
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -43,7 +43,13 @@ def evidence_report_pipeline_metrics(db: Session, *, window_days: int | None = N
     links = list(db.scalars(select(EvidenceReportArtifactLink).where(EvidenceReportArtifactLink.report_id.in_(report_ids)))) if report_ids else []
     artifact_ids = [x.artifact_id for x in links]
     artifacts = list(db.scalars(select(Artifact).where(Artifact.id.in_(artifact_ids)))) if artifact_ids else []
-    feishu = list(db.scalars(select(FeishuEvidenceDocumentBinding).where(FeishuEvidenceDocumentBinding.updated_at >= since)))
+    # Feishu binding has immutable created_at plus last_synced_at; there is no
+    # generic updated_at column. Count documents created or synchronized in the
+    # observation window so long-lived Case documents remain observable.
+    feishu = list(db.scalars(select(FeishuEvidenceDocumentBinding).where(or_(
+        FeishuEvidenceDocumentBinding.created_at >= since,
+        FeishuEvidenceDocumentBinding.last_synced_at >= since,
+    ))))
 
     report_latency = [
         (r.completed_at - r.created_at).total_seconds()
