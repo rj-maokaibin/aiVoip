@@ -298,7 +298,6 @@ class AIDiagnosticCycleService:
                         if selection is None:
                             raise ControlledAISelectionError("AI2_NO_REGISTERED_DISCRIMINATOR")
                         selection_json = selection.to_dict()
-                        # SUGGEST never dispatches, even if future runtime plumbing changes.
                         selection_json["dispatch_allowed"] = False
                         next_action = _next_action_from_selection(
                             selection,
@@ -317,6 +316,11 @@ class AIDiagnosticCycleService:
             continue_recommendation = "STOP"
             stop_reason = "MAX_CYCLES_REACHED"
 
+        suggestion_state = (
+            "PROPOSED"
+            if runtime.stage is AIPromotionStage.SUGGEST and status == "COMPLETED" and bool(next_action)
+            else "NONE"
+        )
         row = AIDiagnosticCycle(
             case_id=case_id,
             cycle_no=cycle_no,
@@ -338,6 +342,7 @@ class AIDiagnosticCycleService:
             formal_result_changed=False,
             dispatch_attempted=False,
             dispatch_allowed=False,
+            suggestion_state=suggestion_state,
             error_code=error_code,
         )
         db.add(row)
@@ -360,6 +365,7 @@ class AIDiagnosticCycleService:
                 "no_progress_count": no_progress_count,
                 "proposal_id": row.proposal_id,
                 "registered_id": next_action.get("registered_id"),
+                "suggestion_state": suggestion_state,
                 "formal_result_changed": False,
                 "dispatch_attempted": False,
                 "dispatch_allowed": False,
