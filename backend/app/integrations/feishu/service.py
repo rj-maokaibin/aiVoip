@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import select
+from sqlalchemy import event, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -13,6 +13,9 @@ from app.integrations.feishu.case_resolver import (
     normalize_tenant_key,
 )
 from app.integrations.feishu.transport import FeishuLiveTransport
+
+
+_CONFLICT_INFO_KEY = "feishu_active_case_conflict"
 
 
 class FeishuActiveCaseConflict(RuntimeError):
@@ -29,10 +32,45 @@ class FeishuCaseAlreadyBound(RuntimeError):
         super().__init__(f"FEISHU_CASE_ALREADY_BOUND:{case_id}:{existing_chat_id}")
 
 
-def _raise_active_case_conflict(*, chat_id: str, existing_case_id: str) -> None:
-    # This low-level service must never roll back the caller's whole Session: it
-    # may be running inside an idempotent message transaction. The transaction
-    # owner (provision/attachment workflow) decides rollback scope.
+@event.listens_for(Session, "before_commit")
+def _reject_commit_after_active_case_conflict(session: Session) -> None:
+    """Make a swallowed G1 conflict rollback-only without rolling back for callers.
+
+    Some legacy workers intentionally catch best-effort Feishu binding exceptions.
+    For an Active Case conflict, continuing and committing would persist a newly
+    created but unbound loser Case. Marking only this Session transaction blocks
+    that commit while preserving the caller's right to decide the rollback scope.
+    """
+    payload = session.info.get(_CONFLICT_INFO_KEY)
+    if payload:
+        raise FeishuActiveCaseConflict(
+            chat_id=str(payload["chat_id"]),
+            existing_case_id=str(payload["existing_case_id"]),
+        )
+
+
+@event.listens_for(Session, "after_rollback")
+def _clear_active_case_conflict_after_rollback(session: Session) -> None:
+    session.info.pop(_CONFLICT_INFO_KEY, None)
+
+
+@event.listens_for(Session, "after_soft_rollback")
+def _clear_active_case_conflict_after_soft_rollback(session: Session, _previous_transaction) -> None:
+    # Nested SAVEPOINT rollback after a unique conflict must not accidentally
+    # clear a conflict that has already been promoted to the outer transaction.
+    if not session.in_transaction():
+        session.info.pop(_CONFLICT_INFO_KEY, None)
+
+
+def _raise_active_case_conflict(db: Session, *, chat_id: str, existing_case_id: str) -> None:
+    # Never call db.rollback() here: this function may execute inside a larger
+    # idempotent Feishu message transaction. Instead mark the transaction
+    # rollback-only; even a legacy caller that catches this exception cannot
+    # commit an orphan loser Case.
+    db.info[_CONFLICT_INFO_KEY] = {
+        "chat_id": chat_id,
+        "existing_case_id": existing_case_id,
+    }
     raise FeishuActiveCaseConflict(chat_id=chat_id, existing_case_id=existing_case_id)
 
 
@@ -78,7 +116,7 @@ def bind_case_to_chat(db: Session, *, case_id: str, chat_id: str, chat_type: str
         if receive_id_type == 'chat_id':
             active_case, _ = active_case_for_chat(db, tenant_key=tenant_key, chat_id=chat_id)
             if active_case is not None and active_case.id != case_id:
-                _raise_active_case_conflict(chat_id=chat_id, existing_case_id=active_case.id)
+                _raise_active_case_conflict(db, chat_id=chat_id, existing_case_id=active_case.id)
             activate_binding_lifecycle(
                 db, binding_id=binding.id, tenant_key=tenant_key, chat_id=chat_id,
                 created_by_open_id=created_by_open_id,
@@ -88,7 +126,7 @@ def bind_case_to_chat(db: Session, *, case_id: str, chat_id: str, chat_type: str
     if receive_id_type == 'chat_id':
         active_case, _ = active_case_for_chat(db, tenant_key=tenant_key, chat_id=chat_id)
         if active_case is not None and active_case.id != case_id:
-            _raise_active_case_conflict(chat_id=chat_id, existing_case_id=active_case.id)
+            _raise_active_case_conflict(db, chat_id=chat_id, existing_case_id=active_case.id)
 
     candidate = FeishuCaseBinding(
         case_id=case_id, receive_id=chat_id, receive_id_type=receive_id_type,
@@ -97,8 +135,8 @@ def bind_case_to_chat(db: Session, *, case_id: str, chat_id: str, chat_type: str
     apply_source_context(candidate)
     try:
         # The nested transaction limits a true concurrent partial-unique conflict
-        # to the bind itself; the caller can then decide whether to roll back its
-        # larger Case-creation transaction.
+        # to the bind itself; the caller can then roll back the larger Case-create
+        # transaction after this method marks it rollback-only.
         with db.begin_nested():
             db.add(candidate)
             db.flush()
@@ -106,7 +144,7 @@ def bind_case_to_chat(db: Session, *, case_id: str, chat_id: str, chat_type: str
         if receive_id_type == 'chat_id':
             active_case, _ = active_case_for_chat(db, tenant_key=tenant_key, chat_id=chat_id)
             if active_case is not None and active_case.id != case_id:
-                _raise_active_case_conflict(chat_id=chat_id, existing_case_id=active_case.id)
+                _raise_active_case_conflict(db, chat_id=chat_id, existing_case_id=active_case.id)
         existing = db.scalar(select(FeishuCaseBinding).where(FeishuCaseBinding.case_id == case_id).limit(1))
         if existing is not None:
             return existing
