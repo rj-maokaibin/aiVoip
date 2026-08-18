@@ -12,6 +12,7 @@ BACKEND = ROOT / "backend"
 if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 
+from app.contracts.evidence_report import P0_FINDING_TYPES  # noqa: E402
 from app.core.config import settings  # noqa: E402
 from app.reports.finding_composer import compose_findings, derive_first_observable_layer  # noqa: E402
 
@@ -38,6 +39,13 @@ def evaluate(dataset: dict) -> dict:
     rows = dataset.get("cases") or []
     if not rows:
         raise ValueError("GOLDEN_DATASET_EMPTY")
+
+    labelled_types = Counter(
+        str(ftype)
+        for row in rows
+        for ftype in ((row.get("expected") or {}).get("finding_types") or [])
+    )
+    missing_p0_types = sorted(P0_FINDING_TYPES - set(labelled_types))
 
     by_type = defaultdict(lambda: Counter(tp=0, fp=0, fn=0))
     totals = Counter(tp=0, fp=0, fn=0)
@@ -120,17 +128,19 @@ def evaluate(dataset: dict) -> dict:
             "recall": round(_safe_div(c["tp"], c["tp"] + c["fn"]), 6),
             "precision": round(_safe_div(c["tp"], c["tp"] + c["fp"]), 6),
         }
-    per_type_pass = all(
-        item["recall"] >= settings.evidence_report_golden_min_recall
-        and item["precision"] >= settings.evidence_report_golden_min_precision
-        for item in per_type.values()
+    per_p0_type_pass = not missing_p0_types and all(
+        ftype in per_type
+        and per_type[ftype]["recall"] >= settings.evidence_report_golden_min_recall
+        and per_type[ftype]["precision"] >= settings.evidence_report_golden_min_precision
+        for ftype in P0_FINDING_TYPES
     )
 
     gates = {
         "no_answer_leakage": not leakage,
+        "p0_dataset_coverage": not missing_p0_types,
         "recall": recall >= settings.evidence_report_golden_min_recall,
         "precision": precision >= settings.evidence_report_golden_min_precision,
-        "per_finding_type_recall_precision": per_type_pass,
+        "per_p0_finding_type_recall_precision": per_p0_type_pass,
         "serious_false_positive_regression": not serious_false_positives,
         "boundary_correctness": boundary_correctness >= settings.evidence_report_boundary_min_correctness,
         "wrong_boundary_rate": wrong_rate < settings.evidence_report_boundary_max_wrong_rate,
@@ -143,6 +153,9 @@ def evaluate(dataset: dict) -> dict:
         "evaluated_case_count": len(case_results),
         "status": "PASS" if all(gates.values()) else "FAIL",
         "gates": gates,
+        "p0_required_types": sorted(P0_FINDING_TYPES),
+        "p0_labelled_types": sorted(set(labelled_types) & P0_FINDING_TYPES),
+        "p0_missing_types": missing_p0_types,
         "thresholds": {
             "min_recall": settings.evidence_report_golden_min_recall,
             "min_precision": settings.evidence_report_golden_min_precision,
@@ -153,6 +166,8 @@ def evaluate(dataset: dict) -> dict:
         "metrics": {
             "tp": totals["tp"], "fp": totals["fp"], "fn": totals["fn"],
             "recall": round(recall, 6), "precision": round(precision, 6),
+            "p0_required_type_count": len(P0_FINDING_TYPES),
+            "p0_covered_type_count": len(P0_FINDING_TYPES) - len(missing_p0_types),
             "boundary_total": boundary_total,
             "boundary_correctness": round(boundary_correctness, 6),
             "wrong_boundary_rate": round(wrong_rate, 6),
@@ -177,7 +192,7 @@ def main() -> int:
     result = evaluate(payload)
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    print(json.dumps({"status": result["status"], "metrics": result["metrics"], "out": str(args.out)}, ensure_ascii=False, indent=2))
+    print(json.dumps({"status": result["status"], "metrics": result["metrics"], "p0_missing_types": result["p0_missing_types"], "out": str(args.out)}, ensure_ascii=False, indent=2))
     return 0 if result["status"] == "PASS" else 2
 
 
