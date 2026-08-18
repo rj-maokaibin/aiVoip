@@ -65,6 +65,7 @@ def _cycle(case_id: str, *, stage: str = "SUGGEST") -> AIDiagnosticCycle:
         formal_result_changed=False,
         dispatch_attempted=False,
         dispatch_allowed=False,
+        suggestion_state="PROPOSED" if stage == "SUGGEST" else "NONE",
     )
 
 
@@ -80,6 +81,7 @@ def test_list_cycles_returns_non_executing_authority_contract():
         assert item["formal_result_changed"] is False
         assert item["dispatch_attempted"] is False
         assert item["dispatch_allowed"] is False
+        assert item["suggestion_state"] == "PROPOSED"
         assert item["next_action"]["registered_id"] == "AUDIO_NOISE_FAULT_LAYER"
         assert item["root_cause_authority"] == "DETERMINISTIC_OR_HUMAN_CONFIRMED_ONLY"
 
@@ -100,11 +102,50 @@ def test_next_cycle_api_returns_suggest_only_result_and_commits(monkeypatch):
         case = _case(db)
         result = api.run_next_ai_cycle(case.id, db=db, identity=_identity())
         assert result["runtime_stage"] == "SUGGEST"
+        assert result["suggestion_state"] == "PROPOSED"
         assert result["dispatch_attempted"] is False
         assert result["dispatch_allowed"] is False
         assert result["formal_result_changed"] is False
         assert seen == {"case_id": case.id, "actor": "actor-ai2"}
         assert db.get(AIDiagnosticCycle, result["id"]) is not None
+
+
+def test_metrics_make_safety_invariants_observable():
+    with _db() as db:
+        case = _case(db)
+        suggest = _cycle(case.id)
+        shadow = AIDiagnosticCycle(
+            case_id=case.id,
+            cycle_no=2,
+            runtime_stage="SHADOW",
+            snapshot_fingerprint="b" * 64,
+            evidence_fingerprint="f" * 64,
+            proposal_id=None,
+            status="STOPPED",
+            known_json=[],
+            unknown_json=[],
+            excluded_json=[],
+            hypotheses_json=[],
+            critic_json={"status": "NOT_RUN"},
+            next_action_json={},
+            selection_json={},
+            continue_recommendation="STOP",
+            stop_reason="NO_PROGRESS_LIMIT",
+            no_progress_count=2,
+            formal_result_changed=False,
+            dispatch_attempted=False,
+            dispatch_allowed=False,
+            suggestion_state="NONE",
+        )
+        db.add_all([suggest, shadow])
+        db.commit()
+        metrics = api.ai_diagnostic_loop_metrics(db=db, identity=_identity())
+        assert metrics["total_cycles"] == 2
+        assert metrics["by_stage"] == {"SHADOW": 1, "SUGGEST": 1}
+        assert metrics["by_suggestion_state"]["PROPOSED"] == 1
+        assert metrics["by_stop_reason"]["NO_PROGRESS_LIMIT"] == 1
+        assert metrics["ai_formal_result_changes"] == 0
+        assert metrics["ai_dispatch_attempts"] == 0
 
 
 def test_next_cycle_api_fails_closed_when_controlled_stage_is_not_allowed(monkeypatch):
