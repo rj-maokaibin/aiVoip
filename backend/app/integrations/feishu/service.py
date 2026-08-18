@@ -29,6 +29,14 @@ class FeishuCaseAlreadyBound(RuntimeError):
         super().__init__(f"FEISHU_CASE_ALREADY_BOUND:{case_id}:{existing_chat_id}")
 
 
+def _abort_active_case_conflict(db: Session, *, chat_id: str, existing_case_id: str) -> None:
+    # A conflicting source-chat bind invalidates the caller's Case-creation
+    # transaction. Roll it back here because legacy provision code deliberately
+    # catches binding exceptions and otherwise could commit an orphan Case.
+    db.rollback()
+    raise FeishuActiveCaseConflict(chat_id=chat_id, existing_case_id=existing_case_id)
+
+
 def bind_case_to_chat(db: Session, *, case_id: str, chat_id: str, chat_type: str | None = None,
                       receive_id_type: str | None = None,
                       source_context: dict | None = None) -> FeishuCaseBinding | None:
@@ -49,8 +57,6 @@ def bind_case_to_chat(db: Session, *, case_id: str, chat_id: str, chat_type: str
     created_by_open_id = source_context.get('sender_open_id')
 
     def apply_source_context(row: FeishuCaseBinding) -> None:
-        # A binding represents the Case's original/main thread. Later correlated
-        # messages must not move that anchor; follow-ups are stored as Evidence.
         row.source_event_id = row.source_event_id or source_context.get('event_id')
         row.source_message_id = row.source_message_id or source_context.get('message_id')
         row.source_root_message_id = row.source_root_message_id or source_context.get('root_message_id')
@@ -62,7 +68,6 @@ def bind_case_to_chat(db: Session, *, case_id: str, chat_id: str, chat_type: str
         row.source_normalized_text = row.source_normalized_text or source_context.get('normalized_text')
         row.source_attachment_refs = row.source_attachment_refs or source_context.get('attachments')
 
-    # The same Case cannot be silently moved to another source conversation.
     binding = db.scalar(select(FeishuCaseBinding).where(FeishuCaseBinding.case_id == case_id).limit(1))
     if binding is not None:
         if binding.receive_id_type == 'chat_id' and binding.receive_id and binding.receive_id != chat_id:
@@ -74,7 +79,7 @@ def bind_case_to_chat(db: Session, *, case_id: str, chat_id: str, chat_type: str
         if receive_id_type == 'chat_id':
             active_case, _ = active_case_for_chat(db, tenant_key=tenant_key, chat_id=chat_id)
             if active_case is not None and active_case.id != case_id:
-                raise FeishuActiveCaseConflict(chat_id=chat_id, existing_case_id=active_case.id)
+                _abort_active_case_conflict(db, chat_id=chat_id, existing_case_id=active_case.id)
             activate_binding_lifecycle(
                 db, binding_id=binding.id, tenant_key=tenant_key, chat_id=chat_id,
                 created_by_open_id=created_by_open_id,
@@ -84,7 +89,7 @@ def bind_case_to_chat(db: Session, *, case_id: str, chat_id: str, chat_type: str
     if receive_id_type == 'chat_id':
         active_case, _ = active_case_for_chat(db, tenant_key=tenant_key, chat_id=chat_id)
         if active_case is not None and active_case.id != case_id:
-            raise FeishuActiveCaseConflict(chat_id=chat_id, existing_case_id=active_case.id)
+            _abort_active_case_conflict(db, chat_id=chat_id, existing_case_id=active_case.id)
 
     candidate = FeishuCaseBinding(
         case_id=case_id, receive_id=chat_id, receive_id_type=receive_id_type,
@@ -92,8 +97,6 @@ def bind_case_to_chat(db: Session, *, case_id: str, chat_id: str, chat_type: str
     )
     apply_source_context(candidate)
     try:
-        # A savepoint lets us recover from the PostgreSQL partial-unique race
-        # without poisoning the caller's outer transaction.
         with db.begin_nested():
             db.add(candidate)
             db.flush()
@@ -101,8 +104,7 @@ def bind_case_to_chat(db: Session, *, case_id: str, chat_id: str, chat_type: str
         if receive_id_type == 'chat_id':
             active_case, _ = active_case_for_chat(db, tenant_key=tenant_key, chat_id=chat_id)
             if active_case is not None and active_case.id != case_id:
-                raise FeishuActiveCaseConflict(chat_id=chat_id, existing_case_id=active_case.id)
-        # Preserve the pre-existing one-binding-per-Case idempotency contract.
+                _abort_active_case_conflict(db, chat_id=chat_id, existing_case_id=active_case.id)
         existing = db.scalar(select(FeishuCaseBinding).where(FeishuCaseBinding.case_id == case_id).limit(1))
         if existing is not None:
             return existing
@@ -136,8 +138,6 @@ class FeishuCaseCardService:
             binding.card_version += 1
         else:
             result = await transport.send_card(receive_id=rid, receive_id_type=rtype, card=built.card)
-            # Re-check after the network await: a concurrent sync_case_card in
-            # another worker may have created the binding while we were waiting.
             if binding is None:
                 binding = db.scalar(select(FeishuCaseBinding).where(FeishuCaseBinding.case_id == case_id).limit(1))
             if binding is None:
