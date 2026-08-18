@@ -99,3 +99,21 @@ def test_role_capability_matrix_keeps_control_away_from_viewer():
         assert authorize_capability(
             db, identity=engineer, capability=FeishuCapability.CONTROL_REPRODUCTION, case_id=case.id,
         ).allowed is True
+
+
+def test_stale_or_forged_case_id_is_denied_without_invalid_audit_fk():
+    with _db() as db:
+        _identity(db, tenant="tenant-a", open_id="ou-engineer", role=UserRole.ENGINEER)
+        engineer = resolve_feishu_identity(db, tenant_key="tenant-a", open_id="ou-engineer")
+        decision = authorize_capability(
+            db,
+            identity=engineer,
+            capability=FeishuCapability.CONTROL_REPRODUCTION,
+            case_id="missing-case-id",
+        )
+        assert decision.allowed is False
+        assert decision.reason == "CASE_NOT_FOUND"
+        assert decision.case_id == "missing-case-id"
+        # Audit uses case_id=None internally when the requested Case does not exist,
+        # so flushing the decision must remain valid on FK-enforcing databases.
+        db.flush()
