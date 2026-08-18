@@ -119,9 +119,6 @@ def _authorize_message(db: Session, payload: dict):
     case = resolution.case
     final_intake = route_intake(text=text_value, attachments=attachments, has_thread_case=case is not None)
 
-    # AI1 runs only after G1 has established Case authority. In SHADOW V1 its
-    # proposal is persisted/evaluated but cannot change `final_intake`, Case, or
-    # any authorization/execution decision below.
     if message_id:
         shadow_semantic_route(
             db,
@@ -140,6 +137,98 @@ def _authorize_message(db: Session, payload: dict):
         result = _permission_denied_result(decision=decision, identity_status=identity.status)
         return identity, decision, _persist_message_denial(db, payload=payload, result=result, message_id=message_id, event_id=event_id)
     return identity, decision, None
+
+
+def _maybe_dispatch_case_copilot(db: Session, *, payload: dict, identity) -> dict | None:
+    """Handle an authorized, Case-bound GENERAL_QUESTION with AI3.
+
+    This is intentionally outside ``dispatch_event`` so legacy/non-G2 paths keep
+    their verified-knowledge behavior. G2 authorization has already completed.
+    """
+    if not settings.ai_case_copilot_enabled or not identity.active or identity.role is None:
+        return None
+    header = payload.get("header") if isinstance(payload.get("header"), dict) else {}
+    event = payload.get("event") if isinstance(payload.get("event"), dict) else {}
+    message = event.get("message") if isinstance(event.get("message"), dict) else {}
+    message_id = str(message.get("message_id") or "")
+    event_id = str(header.get("event_id") or "")
+    text, attachments = extract_message_content(message)
+    if attachments:
+        return None
+    tenant = _tenant_key(payload)
+    chat_id = str(event.get("chat_id") or message.get("chat_id") or "")
+    preliminary = route_intake(text=text, attachments=[], has_thread_case=False)
+    resolution = resolve_case(
+        db,
+        tenant_key=tenant,
+        chat_id=chat_id,
+        case_ref=preliminary.case_ref,
+        message_id=message_id,
+        root_message_id=str(message.get("root_id") or message.get("root_message_id") or ""),
+        parent_message_id=str(message.get("parent_id") or message.get("parent_message_id") or ""),
+        device_refs=preliminary.device_refs,
+        symptoms=preliminary.symptoms,
+    )
+    case = resolution.case
+    if case is None:
+        return None
+    intake = route_intake(text=text, attachments=[], has_thread_case=True)
+    if intake.intent != "GENERAL_QUESTION":
+        return None
+
+    key = message_id or event_id
+    try:
+        handle = begin_idempotent(
+            db,
+            scope="FEISHU_CASE_COPILOT_EVENT",
+            key=key or None,
+            payload={"case_id": case.id, "message_id": message_id, "event_id": event_id, "text_hash": hashlib.sha256(text.encode()).hexdigest()},
+        )
+    except AppError as exc:
+        if exc.code == "IDEMPOTENCY_IN_PROGRESS":
+            return {"handled": "case_copilot", "case_id": case.id, "duplicate": True}
+        raise
+    if handle.replay is not None:
+        return {**handle.replay, "duplicate": True}
+
+    from app.copilot.service import CaseCopilotService
+
+    answer = CaseCopilotService().answer(
+        db,
+        case_id=case.id,
+        question=text,
+        request_key=f"feishu:{key or hashlib.sha256(text.encode()).hexdigest()}",
+        actor_id=identity.actor_id,
+        actor_role=identity.role,
+    )
+    if answer.status == "ANSWERED":
+        reply = answer.answer
+    elif answer.status == "CONTROL_INTENT_REQUIRED":
+        reply = answer.answer
+    elif answer.status == "GATEWAY_FAILED":
+        reply = "Case Copilot 当前不可用；确定性诊断和当前证据未受影响，请查看 Case 主卡或稍后重试。"
+    else:
+        reply = "本次 AI 回答未通过当前 Case 证据约束，因此没有返回该回答。请查看确定性报告或补充证据。"
+    if message_id:
+        enqueue_reply(message_id, reply)
+    result = {
+        "handled": "case_copilot",
+        "case_id": case.id,
+        "case_no": case.case_no,
+        "copilot_status": answer.status,
+        "copilot_record_id": answer.record_id,
+        "routed_control_intent": answer.routed_control_intent,
+        "read_only": True,
+    }
+    complete_idempotent(
+        db,
+        handle,
+        response=result,
+        status_code=200,
+        resource_type="ai_case_copilot",
+        resource_id=answer.record_id,
+    )
+    return result
 
 
 def _card_case_and_capability(db: Session, payload: dict):
@@ -172,7 +261,7 @@ def _authorize_card_action(db: Session, payload: dict):
 
 
 def dispatch_authorized_event(db: Session, *, payload: dict, actor: str = "feishu:callback") -> dict:
-    """Feishu entry gateway: Identity/RBAC first, G1 business handler second."""
+    """Feishu entry gateway: Identity/RBAC first, optional read-only AI, then business handler."""
     if not settings.feishu_identity_rbac_enabled:
         return dispatch_event(db, payload=payload, actor=actor)
 
@@ -182,6 +271,9 @@ def dispatch_authorized_event(db: Session, *, payload: dict, actor: str = "feish
         identity, _decision, denied = _authorize_message(db, payload)
         if denied is not None:
             return denied
+        copilot = _maybe_dispatch_case_copilot(db, payload=payload, identity=identity)
+        if copilot is not None:
+            return copilot
         return dispatch_event(db, payload=payload, actor=identity.actor_id or actor)
 
     if event_type in CARD_ACTION_EVENT_TYPES:
