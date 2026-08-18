@@ -25,7 +25,7 @@
         "pcm": {
           "streams": [{
             "tap": {"name": "pcm_rx", "direction": "RX"},
-            "sessions": [{"session_index": 0, "start_time": 2.0, "end_time": 5.0, "hum": {"level": "HIGH", "dominant_family": "50Hz", "score": 0.92}, "signal": {"rms_dbfs": -21.4, "peak_dbfs": -5.8}, "gap_events": [], "silence_events": [], "click_pop_events": []}]
+            "sessions": [{"session_index": 0, "start_time": 2.0, "end_time": 5.0, "hum": {"level": "HIGH", "dominant_family": "50Hz", "score": 0.92}, "signal": {"rms_dbfs": -21.4, "peak_dbfs": -5.8}, "gap_events": [], "silence_events": [], "click_pop_events": [], "dtmf_quality_events": []}]
           }]
         },
         "layer_observations": [
@@ -52,7 +52,8 @@
               "hum": {"level": "LOW"},
               "gap_events": [{"time": 10.2, "gap_ms": 80}],
               "silence_events": [{"start_seconds": 0.5, "end_seconds": 1.0, "duration_seconds": 0.5}],
-              "click_pop_events": [{"time_seconds": 1.5, "score": 4.0}]
+              "click_pop_events": [{"time_seconds": 1.5, "score": 4.0}],
+              "dtmf_quality_events": []
             }]
           }]
         },
@@ -64,6 +65,34 @@
       "expected": {
         "finding_types": ["PCM_GAP", "UNEXPECTED_SILENCE", "CLICK_POP"],
         "boundary": {"status": "OBSERVED_BOUNDARY", "first_observable_layer": "PCM_TX"}
+      }
+    },
+    {
+      "id": "pcm-dtmf-quality",
+      "input": {
+        "pcm": {
+          "streams": [{
+            "tap": {"name": "pcm_rx", "direction": "RX"},
+            "sessions": [{
+              "session_index": 2,
+              "start_time": 20.0,
+              "end_time": 22.0,
+              "hum": {"level": "LOW"},
+              "gap_events": [],
+              "silence_events": [],
+              "click_pop_events": [],
+              "dtmf_quality_events": [{"type": "DTMF_LOW_CONFIDENCE", "severity": "MEDIUM", "digit": "5", "start_seconds": 0.4, "end_seconds": 0.5, "duration_ms": 100.0, "confidence": 0.42, "threshold": 0.55}]
+            }]
+          }]
+        },
+        "layer_observations": [
+          {"layer": "RTP_DOWNSTREAM", "available": true, "abnormal": false},
+          {"layer": "PCM_RX", "available": true, "abnormal": true}
+        ]
+      },
+      "expected": {
+        "finding_types": ["DTMF_ABNORMAL"],
+        "boundary": {"status": "OBSERVED_BOUNDARY", "first_observable_layer": "PCM_RX"}
       }
     },
     {
