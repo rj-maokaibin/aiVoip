@@ -70,6 +70,9 @@ class Settings(BaseSettings):
     ai_semantic_router_enabled: bool = False
     ai_semantic_router_mode: str = "SHADOW"
     ai_semantic_router_min_confidence: float = 0.80
+    # AI3 is read-only. Enabling it permits grounded Case Q&A only; it never
+    # enables device/reproduction/experiment/fix execution.
+    ai_case_copilot_enabled: bool = False
     auth_allow_anonymous_dev: bool = True
     production_auth_provider: str = "pending"
     auth_gateway_hmac_secret: str = ""
