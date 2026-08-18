@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, ForeignKey, JSON, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, ForeignKey, JSON, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.ids import new_id
@@ -32,7 +32,7 @@ class EvidenceRetentionState(Base):
     locked_by: Mapped[str | None] = mapped_column(String(128), nullable=True)
     lock_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     locked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    golden_exempt: Mapped[bool] = mapped_column(default=False, index=True)
+    golden_exempt: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     expired_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
     object_deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     status: Mapped[str] = mapped_column(String(32), default="ACTIVE", index=True)
