@@ -8,18 +8,17 @@ behave identically no matter how the event arrived (webhook vs long connection
 """
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
-from typing import Any
+from dataclasses import replace
 
-from sqlalchemy import or_, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.errors import AppError
 from app.db.models import (
-    Case, CaseDevice, DiagnosticExperiment, ExperimentRun, FeishuCaseBinding,
-    Hypothesis, ReproductionCall, ReproductionSession,
+    DiagnosticExperiment, ExperimentRun, Hypothesis, ReproductionCall, ReproductionSession,
 )
 from app.experiments.orchestrator import DiagnosticExperimentOrchestrator
+from app.integrations.feishu.case_resolver import is_explicit_new_fault, resolve_case
 from app.integrations.feishu.intake import extract_message_content, route_intake
 from app.integrations.feishu.feedback import accepted_text, enqueue_reply, status_text
 from app.services.idempotency import begin_idempotent, complete_idempotent
@@ -54,73 +53,6 @@ def callback_actor(payload: dict) -> str:
 # the legacy `card.action.trigger_v1`). For these the callback must answer with
 # a toast (and optionally an updated card) to give the user immediate feedback.
 CARD_ACTION_EVENT_TYPES = {"card.action.trigger", "card.action.trigger_v1"}
-
-
-def _correlated_case(db: Session, *, chat_id: str, case_ref: str | None,
-                     message_id: str, root_message_id: str,
-                     parent_message_id: str, device_refs: list[dict] | None = None,
-                     symptoms: list[str] | None = None) -> tuple[Case | None, list[Case], str]:
-    if case_ref:
-        row = db.scalar(select(Case).where(Case.case_no == case_ref).limit(1))
-        if row:
-            return row, [], 'EXPLICIT_CASE_REF'
-    keys = {x for x in (message_id, root_message_id, parent_message_id) if x}
-    if chat_id and keys:
-        row = db.scalar(
-            select(Case).join(FeishuCaseBinding, FeishuCaseBinding.case_id == Case.id)
-            .where(
-                FeishuCaseBinding.receive_id == chat_id,
-                or_(
-                    FeishuCaseBinding.source_message_id.in_(keys),
-                    FeishuCaseBinding.source_root_message_id.in_(keys),
-                    FeishuCaseBinding.source_parent_message_id.in_(keys),
-                ),
-            ).order_by(Case.created_at.desc()).limit(1)
-        )
-        if row:
-            return row, [], 'THREAD'
-
-    # Cross-thread correlation is deliberately conservative: an exact device
-    # identity AND a specific symptom must agree inside the same chat/time
-    # window. Generic words such as "problem" never contribute to the score.
-    specific = {str(x).lower() for x in (symptoms or [])
-                if str(x).lower() not in {'故障', '异常', '问题'}}
-    refs = device_refs or []
-    if not chat_id or not refs or not specific:
-        return None, [], 'NO_SAFE_MATCH'
-    since = datetime.now(timezone.utc) - timedelta(hours=24)
-    cases = list(db.scalars(
-        select(Case).join(FeishuCaseBinding, FeishuCaseBinding.case_id == Case.id)
-        .where(
-            FeishuCaseBinding.receive_id == chat_id,
-            Case.created_at >= since,
-            Case.status.not_in(['RESOLVED', 'CLOSED', 'FAILED']),
-        ).order_by(Case.created_at.desc())
-    ))
-    scored: list[tuple[int, Case]] = []
-    for candidate in cases:
-        devices = list(db.scalars(select(CaseDevice).where(CaseDevice.case_id == candidate.id)))
-        device_score = 0
-        for ref in refs:
-            for device in devices:
-                info = device.device_info or {}
-                if ref.get('sn') and str(ref['sn']).lower() == str(device.sn).lower():
-                    device_score = max(device_score, 5)
-                elif ref.get('ssh_ip') and str(ref['ssh_ip']) == str(device.ip):
-                    device_score = max(device_score, 4)
-                elif ref.get('mac') and str(ref['mac']).lower() == str(info.get('mac') or '').lower():
-                    device_score = max(device_score, 4)
-        symptom_score = 2 * sum(1 for token in specific if token in candidate.summary.lower())
-        if device_score >= 4 and symptom_score >= 2:
-            scored.append((device_score + symptom_score, candidate))
-    if not scored:
-        return None, [], 'NO_SAFE_MATCH'
-    scored.sort(key=lambda item: (item[0], item[1].created_at), reverse=True)
-    top_score = scored[0][0]
-    top = [item[1] for item in scored if item[0] == top_score]
-    if len(top) > 1:
-        return None, top, 'AMBIGUOUS_FINGERPRINT'
-    return top[0], [], 'DEVICE_SYMPTOM_TIME_WINDOW'
 
 
 def _reply_intake(message_id: str, text: str) -> None:
@@ -168,12 +100,21 @@ def _fix_action_type(text: str) -> str:
     return 'OTHER'
 
 
-def dispatch_event(db: Session, *, payload: dict, actor: str = "feishu:callback") -> dict:
-    """Handle a normalized Feishu event payload (im.message.receive_v1 text /
-    card actions). Returns an out-dict with a human-readable summary.
+def _complete_message(db: Session, handle, result: dict, message_id: str, event_id: str) -> dict:
+    complete_idempotent(
+        db, handle, response=result, status_code=200,
+        resource_type='feishu_message', resource_id=message_id or event_id or None,
+    )
+    return result
 
-    actor is used for STOP_REPRODUCTION / EXTERNAL_ACTION_COMPLETED actions; the
-    caller should pass the extracted operator when available.
+
+def dispatch_event(db: Session, *, payload: dict, actor: str = "feishu:callback") -> dict:
+    """Handle a normalized Feishu event payload (message / card action).
+
+    Message handling follows the frozen G1 resolver order:
+    explicit Case -> reply Thread -> tenant/chat Active Case -> device+symptom
+    fingerprint -> fail closed. AI/RBAC layers are intentionally not introduced
+    in this PR.
     """
     header = payload.get("header") if isinstance(payload.get("header"), dict) else {}
     event_type = str(header.get("event_type") or payload.get("type") or "")
@@ -182,8 +123,6 @@ def dispatch_event(db: Session, *, payload: dict, actor: str = "feishu:callback"
         event = payload.get("event") or {}
         msg = event.get("message") or {}
         chat_id = str(event.get("chat_id") or msg.get("chat_id") or "")
-        # Both group and p2p events carry a conversation chat_id (oc_*). Keep
-        # chat_type for policy/UX, but always bind delivery to that chat_id.
         chat_type = str(event.get("chat_type") or msg.get("chat_type") or "")
         text, attachments = extract_message_content(msg)
         if not text and not attachments:
@@ -196,8 +135,9 @@ def dispatch_event(db: Session, *, payload: dict, actor: str = "feishu:callback"
         sender_id = sender.get('sender_id') if isinstance(sender.get('sender_id'), dict) else {}
         operator = payload.get('operator') if isinstance(payload.get('operator'), dict) else {}
         sender_open_id = str(sender_id.get('open_id') or operator.get('open_id') or '')
+        tenant_key = str(header.get('tenant_key') or sender.get('tenant_key') or '')
         source_context = {
-            'tenant_key': str(header.get('tenant_key') or sender.get('tenant_key') or '') or None,
+            'tenant_key': tenant_key or None,
             'event_id': event_id or None,
             'message_id': message_id or None,
             'root_message_id': root_message_id or None,
@@ -208,11 +148,10 @@ def dispatch_event(db: Session, *, payload: dict, actor: str = "feishu:callback"
             'normalized_text': text,
             'attachments': attachments,
         }
-        # Feishu explicitly recommends message_id for duplicate delivery
-        # suppression; event_id may change for a redelivery.
         idempotency_key = message_id or event_id or None
         semantic_payload = {
-            'event_type': event_type, 'chat_id': chat_id, 'chat_type': chat_type,
+            'event_type': event_type, 'tenant_key': tenant_key,
+            'chat_id': chat_id, 'chat_type': chat_type,
             'message_id': message_id, 'root_message_id': root_message_id,
             'parent_message_id': parent_message_id, 'text': text,
             'attachments': attachments,
@@ -231,39 +170,85 @@ def dispatch_event(db: Session, *, payload: dict, actor: str = "feishu:callback"
             return {**handle.replay, 'duplicate': True}
 
         preliminary = route_intake(text=text, attachments=attachments, has_thread_case=False)
-        case, ambiguous_cases, correlation_reason = _correlated_case(
-            db, chat_id=chat_id, case_ref=preliminary.case_ref,
-            message_id=message_id, root_message_id=root_message_id,
-            parent_message_id=parent_message_id,
+        resolution = resolve_case(
+            db, tenant_key=tenant_key, chat_id=chat_id,
+            case_ref=preliminary.case_ref, message_id=message_id,
+            root_message_id=root_message_id, parent_message_id=parent_message_id,
             device_refs=preliminary.device_refs, symptoms=preliminary.symptoms,
         )
+        case = resolution.case
+        ambiguous_cases = resolution.ambiguous_cases
+        correlation_reason = resolution.reason
+
+        if correlation_reason == 'EXPLICIT_CASE_NOT_FOUND':
+            result = {
+                'chat_id': chat_id, 'chat_type': chat_type,
+                'event_id': event_id or None, 'message_id': message_id or None,
+                'intent': preliminary.intent, 'intake': preliminary.to_dict(),
+                'case_id': None, 'correlation_reason': correlation_reason,
+                'handled': 'needs_clarification',
+                'missing_user_inputs': ['valid_case_reference'],
+            }
+            _reply_intake(message_id, f'未找到你指定的 Case：{preliminary.case_ref}。请确认 Case 编号后重试。')
+            return _complete_message(db, handle, result, message_id, event_id)
+
         intake = route_intake(text=text, attachments=attachments, has_thread_case=case is not None)
-        base = {'chat_id': chat_id, 'chat_type': chat_type, 'event_id': event_id or None,
-                'message_id': message_id or None, 'intent': intake.intent,
-                'intake': intake.to_dict(), 'case_id': case.id if case else None,
-                'correlation_reason': correlation_reason}
+
+        # One Group One Active Case: an ordinary diagnosis-style message in a
+        # bound chat is a follow-up. If the user explicitly says this is another
+        # independent fault, fail closed and require a new group (ADMIN rebind is
+        # intentionally deferred to G2).
+        if case and correlation_reason == 'CHAT_ACTIVE_CASE' and intake.intent == 'NEW_DIAGNOSIS':
+            if is_explicit_new_fault(text):
+                result = {
+                    'chat_id': chat_id, 'chat_type': chat_type,
+                    'event_id': event_id or None, 'message_id': message_id or None,
+                    'intent': intake.intent, 'intake': intake.to_dict(),
+                    'case_id': case.id, 'case_no': case.case_no,
+                    'correlation_reason': correlation_reason,
+                    'handled': 'active_case_conflict',
+                    'missing_user_inputs': ['new_group_or_admin_rebind'],
+                }
+                _reply_intake(
+                    message_id,
+                    f'当前群已绑定 Active Case {case.case_no}。如果这是新的独立故障，请新建故障群；'
+                    '如果是当前 Case 的补充，请直接继续提交现象或附件。',
+                )
+                return _complete_message(db, handle, result, message_id, event_id)
+            intake = replace(
+                intake, intent='CASE_FOLLOW_UP', confidence=max(intake.confidence, 0.95),
+                missing_user_inputs=[], requires_device_access=False,
+                reason='active_chat_case_follow_up',
+            )
+
+        base = {
+            'chat_id': chat_id, 'chat_type': chat_type,
+            'event_id': event_id or None, 'message_id': message_id or None,
+            'intent': intake.intent, 'intake': intake.to_dict(),
+            'case_id': case.id if case else None,
+            'correlation_reason': correlation_reason,
+        }
 
         if ambiguous_cases:
             case_nos = [row.case_no for row in ambiguous_cases[:3]]
             result = {**base, 'handled': 'needs_case_disambiguation',
                       'candidate_case_nos': case_nos,
                       'missing_user_inputs': ['explicit_case_reference']}
-            _reply_intake(
-                message_id,
-                f'找到多个可能的 Case：{" / ".join(case_nos)}。请回复具体 Case 编号。',
-            )
-            complete_idempotent(db, handle, response=result, status_code=200,
-                                resource_type='feishu_message',
-                                resource_id=message_id or event_id or None)
-            return result
+            _reply_intake(message_id, f'找到多个可能的 Case：{" / ".join(case_nos)}。请回复具体 Case 编号。')
+            return _complete_message(db, handle, result, message_id, event_id)
 
-        if case and correlation_reason == 'DEVICE_SYMPTOM_TIME_WINDOW':
+        if case and correlation_reason in {'DEVICE_SYMPTOM_TIME_WINDOW', 'CHAT_ACTIVE_CASE'}:
             from app.services.audit import audit
-            audit(db, case_id=case.id, actor=actor, event_type='FEISHU_CASE_CORRELATED',
-                  target_type='case', target_id=case.id,
-                  detail={'reason': correlation_reason, 'message_id': message_id,
-                          'device_refs': preliminary.device_refs,
-                          'symptoms': preliminary.symptoms})
+            audit(
+                db, case_id=case.id, actor=actor, event_type='FEISHU_CASE_CORRELATED',
+                target_type='case', target_id=case.id,
+                detail={
+                    'reason': correlation_reason, 'message_id': message_id,
+                    'tenant_key': tenant_key, 'chat_id': chat_id,
+                    'device_refs': preliminary.device_refs,
+                    'symptoms': preliminary.symptoms,
+                },
+            )
         if case:
             source_context['correlated_case_id'] = case.id
 
@@ -326,9 +311,7 @@ def dispatch_event(db: Session, *, payload: dict, actor: str = "feishu:callback"
                 _reply_intake(message_id, '请回复对应 Case 主卡，或提供 Case 编号。')
             elif case.status != 'ROOT_CAUSE_CONFIRMED':
                 from app.workers.device_provision_task import ingest_feishu_follow_up
-                ingest_feishu_follow_up.apply_async(
-                    args=[case.id, text, source_context], queue='diagnosis'
-                )
+                ingest_feishu_follow_up.apply_async(args=[case.id, text, source_context], queue='diagnosis')
                 result = {**base, 'handled': 'fix_not_ready',
                           'reason': 'ROOT_CAUSE_CONFIRMATION_REQUIRED'}
                 _reply_intake(message_id, f'Case {case.case_no} 尚未确认根因；已将这条修复信息作为诊断补充，暂不启动修复验证。')
@@ -344,10 +327,7 @@ def dispatch_event(db: Session, *, payload: dict, actor: str = "feishu:callback"
                     result = {**base, 'handled': 'fix_not_ready',
                               'reason': 'ROOT_CAUSE_REFERENCE_MISSING'}
                     _reply_intake(message_id, f'Case {case.case_no} 状态显示已确认根因，但未找到可引用的根因记录；已停止自动创建修复验证，请由研发检查 Case 证据。')
-                    complete_idempotent(db, handle, response=result, status_code=200,
-                                        resource_type='feishu_message',
-                                        resource_id=message_id or event_id or None)
-                    return result
+                    return _complete_message(db, handle, result, message_id, event_id)
                 from app.experiments.fix_verification import FixVerificationService
                 service = FixVerificationService()
                 fix = service.create_fix_action(
@@ -390,8 +370,7 @@ def dispatch_event(db: Session, *, payload: dict, actor: str = "feishu:callback"
             from app.knowledge.answering import answer_verified_question
             answer = answer_verified_question(db, text)
             result = {**base, 'handled': 'general_question',
-                      'answered': answer['answered'],
-                      'citations': answer['citations']}
+                      'answered': answer['answered'], 'citations': answer['citations']}
             _reply_intake(message_id, answer['text'])
             from app.services.audit import audit
             audit(db, case_id=case.id if case else None, actor=actor,
@@ -422,20 +401,28 @@ def dispatch_event(db: Session, *, payload: dict, actor: str = "feishu:callback"
             result = {**base, 'handled': 'diagnosis_intake_dispatched', 'text': text[:80]}
             _reply_intake(message_id, accepted_text())
         elif intake.intent == 'CASE_FOLLOW_UP':
-            from app.workers.device_provision_task import ingest_feishu_follow_up
-            ingest_feishu_follow_up.apply_async(
-                args=[case.id, text, source_context], queue='diagnosis'
-            )
-            result = {**base, 'handled': 'case_follow_up', 'follow_up_dispatched': True}
+            if attachments:
+                from app.workers.device_provision_task import ingest_feishu_attachments
+                ingest_feishu_attachments.apply_async(
+                    args=[text, chat_id, chat_type, source_context, attachments], queue='diagnosis'
+                )
+            if text:
+                from app.workers.device_provision_task import ingest_feishu_follow_up
+                ingest_feishu_follow_up.apply_async(
+                    args=[case.id, text, source_context], queue='diagnosis'
+                )
+            result = {
+                **base, 'handled': 'case_follow_up',
+                'follow_up_dispatched': bool(text),
+                'attachment_follow_up_dispatched': bool(attachments),
+            }
             _reply_intake(message_id, f'已将补充信息关联到 Case {case.case_no}。')
         else:
             result = {**base, 'handled': 'needs_clarification',
                       'missing_user_inputs': intake.missing_user_inputs or ['clarify_intent']}
             _reply_intake(message_id, '请说明要诊断的现象，并提供设备信息或上传抓包附件。')
 
-        complete_idempotent(db, handle, response=result, status_code=200,
-                            resource_type='feishu_message', resource_id=message_id or event_id or None)
-        return result
+        return _complete_message(db, handle, result, message_id, event_id)
 
     value = action_value(payload)
     action = str(value.get("action") or "").upper()
