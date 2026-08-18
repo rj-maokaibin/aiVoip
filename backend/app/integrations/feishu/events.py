@@ -13,6 +13,7 @@ from dataclasses import replace
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.errors import AppError
 from app.db.models import (
     DiagnosticExperiment, ExperimentRun, Hypothesis, ReproductionCall, ReproductionSession,
@@ -22,7 +23,7 @@ from app.integrations.feishu.case_resolver import is_explicit_new_fault, resolve
 from app.integrations.feishu.intake import extract_message_content, route_intake
 from app.integrations.feishu.feedback import accepted_text, enqueue_reply, status_text
 from app.services.idempotency import begin_idempotent, complete_idempotent
-from app.workers.reproduction_tasks import cancel_reproduction
+from app.workers.reproduction_tasks import cancel_reproduction, start_reproduction
 
 
 def action_value(payload: dict) -> dict:
@@ -49,9 +50,6 @@ def callback_actor(payload: dict) -> str:
     return "feishu:callback"
 
 
-# Card action-trigger event types (both the v2 schema `card.action.trigger` and
-# the legacy `card.action.trigger_v1`). For these the callback must answer with
-# a toast (and optionally an updated card) to give the user immediate feedback.
 CARD_ACTION_EVENT_TYPES = {"card.action.trigger", "card.action.trigger_v1"}
 
 
@@ -60,26 +58,29 @@ def _reply_intake(message_id: str, text: str) -> None:
 
 
 def _card_action_response(result: dict) -> dict:
-    """Map an action result to a Feishu card-action callback response.
-
-    Adds a user-visible ``toast`` and, when the action mutates the case, an
-    ``updated_card`` so the card is refreshed immediately (both formats are
-    supported by card.action.trigger / card.action.trigger_v1).
-    """
     handled = result.get("handled")
     if handled == "error":
-        toast = {"type": "error", "content": "操作失败：请稍后重试"}
+        toast = {"type": "error", "content": str(result.get("message") or "操作失败：请稍后重试")}
     elif handled == "stop_reproduction":
         toast = {"type": "info", "content": "已请求安全停止自动复现"}
     elif handled == "external_action_completed":
         toast = {"type": "success", "content": "已记录现场操作完成"}
+    elif handled == "ai2_suggestion_accepted":
+        toast = {"type": "success", "content": str(result.get("message") or "已采纳 AI2 建议")}
     elif handled == "open_case":
         toast = {"type": "info", "content": "请在网页端查看 Case 详情"}
     else:
         toast = {"type": "info", "content": "已收到操作请求"}
     out = {"handled": handled, "toast": toast}
-    if handled in {"stop_reproduction", "external_action_completed"}:
+    if handled in {"stop_reproduction", "external_action_completed", "ai2_suggestion_accepted"}:
         out["updated_card"] = True
+    if result.get("reason"):
+        out["reason"] = result["reason"]
+    if result.get("execution_ref_type"):
+        out["execution_ref_type"] = result["execution_ref_type"]
+        out["execution_ref_id"] = result.get("execution_ref_id")
+    if result.get("idempotent_replay"):
+        out["idempotent_replay"] = True
     return out
 
 
@@ -109,13 +110,6 @@ def _complete_message(db: Session, handle, result: dict, message_id: str, event_
 
 
 def dispatch_event(db: Session, *, payload: dict, actor: str = "feishu:callback") -> dict:
-    """Handle a normalized Feishu event payload (message / card action).
-
-    Message handling follows the frozen G1 resolver order:
-    explicit Case -> reply Thread -> tenant/chat Active Case -> device+symptom
-    fingerprint -> fail closed. AI/RBAC layers are intentionally not introduced
-    in this PR.
-    """
     header = payload.get("header") if isinstance(payload.get("header"), dict) else {}
     event_type = str(header.get("event_type") or payload.get("type") or "")
 
@@ -194,10 +188,6 @@ def dispatch_event(db: Session, *, payload: dict, actor: str = "feishu:callback"
 
         intake = route_intake(text=text, attachments=attachments, has_thread_case=case is not None)
 
-        # One Group One Active Case: an ordinary diagnosis-style message in a
-        # bound chat is a follow-up. If the user explicitly says this is another
-        # independent fault, fail closed and require a new group (ADMIN rebind is
-        # intentionally deferred to G2).
         if case and correlation_reason == 'CHAT_ACTIVE_CASE' and intake.intent == 'NEW_DIAGNOSIS':
             if is_explicit_new_fault(text):
                 result = {
@@ -427,6 +417,48 @@ def dispatch_event(db: Session, *, payload: dict, actor: str = "feishu:callback"
     value = action_value(payload)
     action = str(value.get("action") or "").upper()
     is_card_action = event_type in CARD_ACTION_EVENT_TYPES
+
+    if action == "AI2_ACCEPT_SUGGESTION":
+        if not settings.feishu_identity_rbac_enabled:
+            result = {"handled": "error", "reason": "AI2_SUGGESTION_RBAC_REQUIRED", "message": "AI2 建议采纳要求 Feishu Identity/RBAC 开启。"}
+            return _card_action_response(result) if is_card_action else result
+        case_id = str(value.get("case_id") or "")
+        cycle_id = str(value.get("cycle_id") or "")
+        from app.diagnosis.ai_suggest_bridge import AISuggestionBridge, AISuggestionBridgeError
+        try:
+            with db.begin_nested():
+                execution = AISuggestionBridge().accept(
+                    db,
+                    case_id=case_id,
+                    cycle_id=cycle_id,
+                    actor=actor,
+                    explicit_user_confirmation=True,
+                )
+            db.commit()
+        except AISuggestionBridgeError as exc:
+            result = {"handled": "error", "reason": str(exc), "message": f"无法采纳该 AI2 建议：{exc}"}
+            return _card_action_response(result) if is_card_action else result
+        except Exception as exc:
+            result = {"handled": "error", "reason": type(exc).__name__, "message": "AI2 建议未进入确定性工作流，请检查 Case 状态后重试。"}
+            return _card_action_response(result) if is_card_action else result
+
+        if execution.enqueue_after_commit and execution.execution_ref_type == "reproduction_session" and execution.execution_ref_id:
+            start_reproduction.apply_async(args=[execution.execution_ref_id], queue="reproduction-control")
+        from app.workers.device_provision_task import sync_case_card
+        sync_case_card.apply_async(args=[case_id, 'ai2_suggestion_accepted'], queue='diagnosis')
+        result = {
+            "handled": "ai2_suggestion_accepted",
+            "case_id": case_id,
+            "cycle_id": cycle_id,
+            "kind": execution.kind,
+            "registered_id": execution.registered_id,
+            "execution_ref_type": execution.execution_ref_type,
+            "execution_ref_id": execution.execution_ref_id,
+            "message": execution.user_message,
+            "idempotent_replay": execution.idempotent_replay,
+            "ai_dispatch_authority": False,
+        }
+        return _card_action_response(result) if is_card_action else result
 
     if action == "STOP_REPRODUCTION":
         session_id = str(value.get("session_id") or "")
