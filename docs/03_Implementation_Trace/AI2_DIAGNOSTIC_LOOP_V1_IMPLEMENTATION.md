@@ -2,30 +2,33 @@
 
 ## Scope
 
-This change implements the frozen VOIP AI Intelligence Layer V1.0 AI2 software boundary for **SHADOW** and **SUGGEST** only.
+This change implements the frozen VOIP AI Intelligence Layer V1.0 AI2 software boundary for **SHADOW** and **SUGGEST**.
 
-AI2 reuses the existing Case Intelligence Snapshot, deterministic diagnosis baseline, AI Proposal validator, contradiction critic, discriminating planner, registered Question/Reproduction/Experiment registries, and AI promotion runtime. It does not create a second diagnosis authority.
+AI2 reuses the existing Case Intelligence Snapshot, deterministic diagnosis baseline, AI Proposal validator, contradiction critic, discriminating planner, registered Question/Reproduction/Experiment registries, Feishu G2 Identity/RBAC, and deterministic Reproduction/Experiment orchestrators. It does not create a second diagnosis or execution authority.
 
-## Runtime flow
+## Automatic runtime flow
 
-`CaseIntelligenceSnapshot`
-→ deterministic baseline
-→ AI hypothesis proposal
-→ strict schema/current-Case Evidence validation
+`Deterministic Diagnosis`
+→ persist current Hypothesis revisions
+→ AI2 sidecar SAVEPOINT
+→ `CaseIntelligenceSnapshot`
+→ reuse existing accepted SHADOW proposal when possible, otherwise Reasoning Gateway
+→ strict current-Case Evidence validation
 → contradiction critic
+→ bounded stop decision
 → optional registered recommendation in SUGGEST
 → persisted `AIDiagnosticCycle`
-→ audit
+→ audit / metrics
 
-V1 deliberately stops before Policy/Orchestrator dispatch.
+AI2 sidecar failure rolls back only the sidecar savepoint. The deterministic diagnosis transaction remains authoritative and continues.
 
 ## Stage behavior
 
 ### SHADOW
 
-- model may generate hypotheses/critique/explanation under the existing `AIProposal` contract;
-- cycle persists `known / unknown / excluded / hypotheses / critic`;
-- no `next_action` is exposed by the cycle;
+- records AI hypothesis / known / unknown / excluded / critic;
+- AI hypotheses remain OPEN, L5 and non-confirmable under the existing AI Proposal contract;
+- no cycle-level next action is exposed;
 - `formal_result_changed = false`;
 - `dispatch_attempted = false`;
 - `dispatch_allowed = false`.
@@ -33,16 +36,49 @@ V1 deliberately stops before Policy/Orchestrator dispatch.
 ### SUGGEST
 
 - includes SHADOW behavior;
-- an AI recommendation must resolve to an existing registered Question/Reproduction/Experiment identifier;
-- if the model gives no registered recommendation, the deterministic discriminating planner may select an existing registered question/profile;
-- suggestion remains non-executing;
-- `dispatch_attempted = false` and `dispatch_allowed = false` are immutable V1 behavior.
+- recommendation must resolve to an existing registered Question / Reproduction Profile / Experiment Profile;
+- if the model has no usable registered recommendation, the deterministic discriminating planner may select an existing registered discriminator;
+- actionable recommendations persist with `suggestion_state=PROPOSED`;
+- the Case card displays the latest actionable suggestion and a **采纳 AI2 建议** button;
+- the card explicitly states that the suggestion is not Root Cause and is not auto-executed by AI.
+
+### Explicit user-confirmation bridge
+
+Clicking **采纳 AI2 建议** is not AI execution.
+
+The callback path is:
+
+`Feishu card click`
+→ G2 active Identity
+→ `RUN_AI_SUGGESTION`
+→ underlying capability re-check
+→ latest SUGGEST Cycle check
+→ persisted registered ID check
+→ deterministic registry / orchestrator re-validation
+→ database commit
+→ asynchronous worker enqueue only after commit where needed.
+
+Underlying capability checks are:
+
+- Question / user evidence request → `ADD_EVIDENCE`;
+- Reproduction Profile → `CONTROL_REPRODUCTION`;
+- Experiment Profile → `RUN_REGISTERED_EXPERIMENT`.
+
+A Case ACL `DENY` on the underlying capability still blocks the suggestion even if the user has `RUN_AI_SUGGESTION` globally.
+
+Suggestion lifecycle is persisted as:
+
+`NONE | PROPOSED | ACCEPTED | DISPATCHED | FAILED`
+
+with `accepted_by`, `accepted_at`, `execution_ref_type`, `execution_ref_id`, and error metadata. Duplicate callback after `DISPATCHED` is idempotent and does not create a second workflow object.
 
 ### CONTROLLED_PLANNER
 
-Not enabled by this V1 software gate. Calling the AI2 cycle service with CONTROLLED_PLANNER fails closed with `AI2_CONTROLLED_PLANNER_NOT_ENABLED_BY_V1_GATE`.
+Not enabled by this V1 software gate. Calling the AI2 cycle service with CONTROLLED_PLANNER fails closed with:
 
-Existing machine-generated promotion attestation, RBAC, Policy, registry and deterministic Orchestrator remain the only future path to execution.
+`AI2_CONTROLLED_PLANNER_NOT_ENABLED_BY_V1_GATE`
+
+Existing machine-generated promotion attestation, Policy, registry and deterministic Orchestrator remain the only future path to controlled autonomous execution.
 
 ## Persistence
 
@@ -53,39 +89,40 @@ Table: `ai_diagnostic_cycles`
 Important invariants:
 
 - unique `(case_id, cycle_no)`;
-- unique `(case_id, snapshot_fingerprint, runtime_stage)` for idempotency;
-- runtime stage limited to `SHADOW | SUGGEST`;
-- cycle status limited to `COMPLETED | DEGRADED | STOPPED | REQUIRE_HUMAN`;
-- every row records snapshot/evidence fingerprints, proposal link, critic, registered recommendation, stop reason and no-progress counter;
-- every row explicitly records `formal_result_changed=false`, `dispatch_attempted=false`, `dispatch_allowed=false`.
+- unique `(case_id, snapshot_fingerprint, runtime_stage)`;
+- stage limited to `SHADOW | SUGGEST`;
+- status limited to `COMPLETED | DEGRADED | STOPPED | REQUIRE_HUMAN`;
+- persisted snapshot/evidence fingerprints, proposal link, critic, recommendation, stop reason and no-progress count;
+- explicit AI authority fields remain false even after a user-confirmed deterministic workflow is created.
 
 ## Stop conditions
 
-Implemented in the cycle service:
+- Case already `ROOT_CAUSE_CONFIRMED / RESOLVED / CLOSED`;
+- Evidence sufficient / complete;
+- unchanged Evidence fingerprint reaches `diagnosis_no_progress_limit`;
+- `diagnosis_max_cycles` reached;
+- AI proposal unavailable or invalid;
+- hard deterministic contradiction;
+- no useful registered discriminator.
 
-- current Case already `ROOT_CAUSE_CONFIRMED / RESOLVED / CLOSED` → STOP;
-- reproduction Evidence sufficiency is sufficient/complete → STOP;
-- unchanged Evidence fingerprint reaches configured `diagnosis_no_progress_limit` → STOP;
-- configured `diagnosis_max_cycles` reached → STOP;
-- AI proposal unavailable/invalid → REQUIRE_HUMAN / degraded;
-- hard deterministic contradiction → REQUIRE_HUMAN;
-- no useful registered discriminator in SUGGEST → REQUIRE_HUMAN.
-
-## API
+## API and observability
 
 - `GET /api/v1/cases/{case_id}/ai/cycles`
-  - requires `CASE_READ + DIAGNOSIS_READ`;
-  - returns persisted cycles and immutable authority boundary fields.
+  - `CASE_READ + DIAGNOSIS_READ`;
+  - includes suggestion lifecycle and deterministic execution references.
 - `POST /api/v1/cases/{case_id}/ai/cycles/next`
-  - requires `CASE_READ + DIAGNOSIS_RUN`;
-  - triggers one bounded cognitive cycle;
-  - does not dispatch any device/reproduction/experiment action.
+  - `CASE_READ + DIAGNOSIS_RUN`;
+  - one bounded cycle; no direct device action.
+- `GET /api/v1/ai/diagnostic-loop/metrics`
+  - cycle count by stage/status/continue decision/stop reason/suggestion state;
+  - accepted suggestion count;
+  - exposes hard-zero counters for AI formal-result changes and AI dispatch attempts.
 
 ## Feature flags
 
 - `AI_DIAGNOSTIC_LOOP_ENABLED=false` by default;
-- existing `AI_PROMOTION_STAGE` selects OFF/SHADOW/SUGGEST/CONTROLLED_PLANNER;
-- AI2 V1 accepts SHADOW/SUGGEST only;
+- existing `AI_PROMOTION_STAGE` selects OFF / SHADOW / SUGGEST / CONTROLLED_PLANNER;
+- this V1 implementation accepts SHADOW/SUGGEST only;
 - `AI_DIAGNOSTIC_LOOP_WORKFLOW_VERSION=ai-diagnostic-loop-v1`.
 
 ## Dedicated software gate
@@ -95,41 +132,50 @@ CI includes:
 ```bash
 PYTHONPATH=backend:. pytest -q \
   backend/tests/test_ai2_diagnostic_loop_v1.py \
-  backend/tests/test_ai2_cycles_api_v1.py
+  backend/tests/test_ai2_cycles_api_v1.py \
+  backend/tests/test_ai2_diagnosis_sidecar_v1.py \
+  backend/tests/test_ai2_suggest_bridge_v1.py \
+  backend/tests/test_ai2_feishu_suggest_v1.py
 ```
 
-Focused contract coverage includes:
+Focused coverage includes:
 
-- SHADOW hypothesis/critic persistence without planning/dispatch;
-- SUGGEST registered recommendation without dispatch authority;
-- same Snapshot+Stage idempotency;
-- no-progress stop;
-- Evidence-sufficient stop;
-- formally confirmed Root Cause stop;
-- max-cycle stop;
+- SHADOW no planning/dispatch/formal result mutation;
+- SUGGEST registered recommendation with `PROPOSED` lifecycle;
+- Snapshot+Stage idempotency and proposal reuse;
+- no-progress, Evidence-sufficient, Root Cause terminal and max-cycle stops;
 - CONTROLLED_PLANNER fail-closed;
-- unregistered model recommendation fail-closed;
-- API authority contract.
+- unregistered recommendation and raw-command marker fail-closed;
+- deterministic sidecar automatic invocation and failure isolation;
+- explicit user confirmation required;
+- stale suggestion rejected;
+- duplicate click idempotent;
+- Viewer denied;
+- Engineer still constrained by Case ACL on underlying action;
+- G2 RBAC disabled → suggestion acceptance fail-closed;
+- Case card contains no raw command authority;
+- metrics hard-zero observability.
 
 ## Authority invariants
 
 AI2 must never:
 
-- write a formal `DiagnosisDecision`;
-- promote an AI hypothesis beyond OPEN/L5/non-confirmable;
-- confirm Root Cause;
-- elevate Evidence Level;
+- write/replace a formal `DiagnosisDecision`;
+- promote AI hypothesis beyond OPEN/L5/non-confirmable;
+- confirm Root Cause or elevate Evidence Level;
 - generate/execute raw shell, SSH or AIM commands;
-- bypass RBAC/Policy;
-- dispatch an unregistered action;
-- use SUGGEST as implicit approval for execution.
+- bypass Identity/RBAC, Case ACL, Registry, Policy or Orchestrator;
+- execute an unregistered model-invented action;
+- treat SUGGEST as implicit user approval.
 
 Formal diagnosis remains deterministic. Root Cause authority remains deterministic causal confirmation / authorized human review / fix verification.
 
-## Software acceptance status
+## Current validation status
 
-Implementation is present on `agent/ai2-diagnostic-loop-v1`.
+Implementation is committed on `agent/ai2-diagnostic-loop-v1`, Draft PR #10.
 
-Final PASS requires the repository workflow to execute the dedicated AI2 gate, migration through `0026_ai_diagnostic_loop_v1`, full backend regression, Evidence Report release gate and frontend production build. Those results must be recorded in the PR before it is marked Ready.
+GitHub Actions run `32168965959` / run #429 failed before any workflow step was created: `ai-contracts` returned `steps=null` and `logs_url=null`. The same pre-step failure also occurred on the AI3 branch and earlier AI2 runs. Therefore no pytest, migration, backend regression, Evidence Report gate, or frontend-build failure has been observed from those runs, but **software PASS is not claimed**.
 
-External production gates remain separate: live Reasoning Gateway/real Case behavior, real Golden/Eval data, and real DUT end-to-end validation.
+PR #10 remains Draft until GitHub Actions can actually execute and the dedicated AI2 gate, migration through `0026_ai_diagnostic_loop_v1`, full backend regression, Evidence Report release gate and frontend production build all PASS.
+
+External production gates remain separate: live Reasoning Gateway/real Case behavior, real Golden/Eval data, real Feishu tenant and real DUT end-to-end validation.
