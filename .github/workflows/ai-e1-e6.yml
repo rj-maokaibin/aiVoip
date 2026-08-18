@@ -15,7 +15,7 @@ on:
       - ".github/workflows/ai-e1-e6.yml"
   push:
     branches:
-      - "agent/**"
+      - "master"
     paths:
       - "backend/**"
       - "frontend/**"
@@ -32,15 +32,7 @@ permissions:
   contents: read
 
 jobs:
-  runner-smoke:
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - name: Runner reached workflow steps
-        run: echo "runner-smoke-ok"
-
   ai-contracts:
-    needs: runner-smoke
     runs-on: ubuntu-latest
     timeout-minutes: 25
     services:
