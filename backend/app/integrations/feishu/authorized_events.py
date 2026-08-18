@@ -142,8 +142,9 @@ def _authorize_message(db: Session, payload: dict):
 def _maybe_dispatch_case_copilot(db: Session, *, payload: dict, identity) -> dict | None:
     """Handle an authorized, Case-bound GENERAL_QUESTION with AI3.
 
-    This is intentionally outside ``dispatch_event`` so legacy/non-G2 paths keep
-    their verified-knowledge behavior. G2 authorization has already completed.
+    AI3 is an optional read-only sidecar. Its work runs inside a SAVEPOINT so an
+    unexpected model/grounding/persistence exception cannot poison the parent
+    Feishu/G1/G2 transaction. G2 authorization has already completed.
     """
     if not settings.ai_case_copilot_enabled or not identity.active or identity.role is None:
         return None
@@ -193,14 +194,55 @@ def _maybe_dispatch_case_copilot(db: Session, *, payload: dict, identity) -> dic
 
     from app.copilot.service import CaseCopilotService
 
-    answer = CaseCopilotService().answer(
-        db,
-        case_id=case.id,
-        question=text,
-        request_key=f"feishu:{key or hashlib.sha256(text.encode()).hexdigest()}",
-        actor_id=identity.actor_id,
-        actor_role=identity.role,
-    )
+    try:
+        with db.begin_nested():
+            answer = CaseCopilotService().answer(
+                db,
+                case_id=case.id,
+                question=text,
+                request_key=f"feishu:{key or hashlib.sha256(text.encode()).hexdigest()}",
+                actor_id=identity.actor_id,
+                actor_role=identity.role,
+            )
+    except Exception as exc:
+        error_code = type(exc).__name__[:128]
+        audit(
+            db,
+            case_id=case.id,
+            actor=identity.actor_id,
+            event_type="AI_CASE_COPILOT_RUNTIME_FAILED",
+            target_type="ai_case_copilot",
+            target_id=None,
+            detail={
+                "schema_version": "ai-case-copilot-runtime-failure-v1",
+                "error_code": error_code,
+                "read_only": True,
+                "parent_transaction_preserved": True,
+            },
+        )
+        reply = "Case Copilot 当前不可用；确定性诊断和当前证据未受影响，请查看 Case 主卡或稍后重试。"
+        if message_id:
+            enqueue_reply(message_id, reply)
+        result = {
+            "handled": "case_copilot",
+            "case_id": case.id,
+            "case_no": case.case_no,
+            "copilot_status": "RUNTIME_FAILED",
+            "copilot_record_id": None,
+            "routed_control_intent": None,
+            "read_only": True,
+            "error_code": error_code,
+        }
+        complete_idempotent(
+            db,
+            handle,
+            response=result,
+            status_code=200,
+            resource_type="ai_case_copilot_runtime_failure",
+            resource_id=case.id,
+        )
+        return result
+
     if answer.status == "ANSWERED":
         reply = answer.answer
     elif answer.status == "CONTROL_INTENT_REQUIRED":
