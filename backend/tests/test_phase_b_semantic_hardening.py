@@ -47,7 +47,9 @@ def _write_pcap(path: Path, packets: list[tuple[float, bytes]]) -> None:
 def test_analyzer_profile_is_versioned_calibrated_and_checksummed():
     profile=get_default_analyzer_profile()
     assert profile.id == 'voip_analyzer_v1'
-    assert profile.version == '1.0.0'
+    # DTMF quality thresholds are part of the frozen Preliminary Evidence Report V1.0
+    # contract, so the calibrated analyzer profile is intentionally version-bumped.
+    assert profile.version == '1.1.0'
     assert profile.status == 'GOLDEN_CALIBRATED'
     assert profile.confirmable is True
     assert len(profile.checksum) == 64
