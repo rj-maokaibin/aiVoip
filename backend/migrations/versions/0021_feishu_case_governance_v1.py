@@ -26,15 +26,9 @@ def upgrade() -> None:
     op.add_column("feishu_case_bindings", sa.Column("created_by_open_id", sa.String(128), nullable=True))
     op.add_column("feishu_case_bindings", sa.Column("close_reason", sa.String(128), nullable=True))
 
-    # Legacy/default-delivery bindings may not have tenant identity. Keep them as
-    # empty-tenant history, but only real tenant-bound source chats participate in
-    # the G1 partial unique invariant. Live Feishu message events always carry a
-    # tenant_key; this avoids breaking old single-default-group card delivery.
-    op.execute("UPDATE feishu_case_bindings SET source_tenant_key = '' WHERE source_tenant_key IS NULL")
-    op.alter_column(
-        "feishu_case_bindings", "source_tenant_key", existing_type=sa.String(256),
-        nullable=False, server_default="",
-    )
+    # Legacy/default-delivery bindings may not have tenant identity. Keep the
+    # existing nullable column contract so old card-only paths remain compatible.
+    # G1 uniqueness applies only to real source-chat bindings carrying tenant_key.
 
     op.execute(
         """
@@ -68,6 +62,8 @@ def upgrade() -> None:
         """
     )
 
+    # Reconcile only tenant-bound source chats. NULL/empty tenant rows are legacy
+    # delivery bindings and intentionally excluded from the G1 business key.
     op.execute(
         """
         WITH active_ranked AS (
@@ -79,6 +75,7 @@ def upgrade() -> None:
             FROM feishu_case_bindings
             WHERE receive_id_type = 'chat_id'
               AND binding_state = 'ACTIVE'
+              AND source_tenant_key IS NOT NULL
               AND source_tenant_key <> ''
         )
         UPDATE feishu_case_bindings AS b
@@ -95,7 +92,8 @@ def upgrade() -> None:
         "uq_feishu_active_case_per_chat", "feishu_case_bindings",
         ["source_tenant_key", "receive_id"], unique=True,
         postgresql_where=sa.text(
-            "binding_state = 'ACTIVE' AND receive_id_type = 'chat_id' AND source_tenant_key <> ''"
+            "binding_state = 'ACTIVE' AND receive_id_type = 'chat_id' "
+            "AND source_tenant_key IS NOT NULL AND source_tenant_key <> ''"
         ),
     )
     op.create_index("ix_feishu_case_bindings_binding_state", "feishu_case_bindings", ["binding_state"])
@@ -104,10 +102,6 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.drop_index("ix_feishu_case_bindings_binding_state", table_name="feishu_case_bindings")
     op.drop_index("uq_feishu_active_case_per_chat", table_name="feishu_case_bindings")
-    op.alter_column(
-        "feishu_case_bindings", "source_tenant_key", existing_type=sa.String(256),
-        nullable=True, server_default=None,
-    )
     op.drop_column("feishu_case_bindings", "close_reason")
     op.drop_column("feishu_case_bindings", "created_by_open_id")
     op.drop_column("feishu_case_bindings", "closed_at")
