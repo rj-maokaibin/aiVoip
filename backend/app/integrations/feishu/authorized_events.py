@@ -14,17 +14,13 @@ from app.core.config import settings
 from app.core.errors import AppError
 from app.db.models import DiagnosticExperiment, ReproductionSession
 from app.integrations.feishu.case_resolver import resolve_case
-from app.integrations.feishu.events import (
-    CARD_ACTION_EVENT_TYPES,
-    action_value,
-    dispatch_event,
-)
+from app.integrations.feishu.events import CARD_ACTION_EVENT_TYPES, action_value, dispatch_event
 from app.integrations.feishu.feedback import enqueue_reply
 from app.integrations.feishu.identity import resolve_feishu_identity
 from app.integrations.feishu.intake import extract_message_content, route_intake
+from app.integrations.feishu.semantic_router import shadow_semantic_route
 from app.services.audit import audit
 from app.services.idempotency import begin_idempotent, complete_idempotent
-
 
 _CARD_CAPABILITIES = {
     "STOP_REPRODUCTION": FeishuCapability.CONTROL_REPRODUCTION,
@@ -36,11 +32,7 @@ _DENIED_MESSAGE = "当前飞书账号未完成权限映射、已被禁用，或�
 
 def _operator_open_id(payload: dict) -> str:
     event = payload.get("event") if isinstance(payload.get("event"), dict) else {}
-    candidates = [
-        payload.get("operator"),
-        event.get("operator") if isinstance(event, dict) else None,
-        event.get("sender") if isinstance(event, dict) else None,
-    ]
+    candidates = [payload.get("operator"), event.get("operator") if isinstance(event, dict) else None, event.get("sender") if isinstance(event, dict) else None]
     for candidate in candidates:
         if not isinstance(candidate, dict):
             continue
@@ -59,50 +51,24 @@ def _tenant_key(payload: dict) -> str:
 
 def _audit_identity_resolution(db: Session, identity, *, open_id: str, case_id: str | None = None) -> None:
     digest = hashlib.sha256(str(open_id or "").encode("utf-8")).hexdigest()[:20] if open_id else None
-    audit(
-        db,
-        case_id=case_id,
-        actor=identity.actor_id or "feishu-identity-resolver",
-        event_type="FEISHU_IDENTITY_RESOLVED",
-        target_type="feishu_user_identity",
-        target_id=identity.identity_id,
-        detail={
-            "schema_version": "feishu-identity-resolution-v1",
-            "tenant_key": identity.tenant_key,
-            "open_id_hash": digest,
-            "actor_id": identity.actor_id,
-            "role": identity.role.value if identity.role else None,
-            "status": identity.status,
-            "resolution_source": identity.resolution_source,
-        },
-    )
+    audit(db, case_id=case_id, actor=identity.actor_id or "feishu-identity-resolver", event_type="FEISHU_IDENTITY_RESOLVED", target_type="feishu_user_identity", target_id=identity.identity_id, detail={
+        "schema_version": "feishu-identity-resolution-v1", "tenant_key": identity.tenant_key,
+        "open_id_hash": digest, "actor_id": identity.actor_id,
+        "role": identity.role.value if identity.role else None, "status": identity.status,
+        "resolution_source": identity.resolution_source,
+    })
 
 
-def _permission_denied_result(
-    *, decision: FeishuAuthorizationDecision | None,
-    identity_status: str,
-    card_action: bool = False,
-) -> dict:
+def _permission_denied_result(*, decision: FeishuAuthorizationDecision | None, identity_status: str, card_action: bool = False) -> dict:
     capability = decision.capability.value if decision and decision.capability else None
     reason = decision.reason if decision else "IDENTITY_NOT_ACTIVE"
-    result = {
-        "handled": "permission_denied",
-        "reason": reason,
-        "capability": capability,
-        "identity_status": identity_status,
-    }
+    result = {"handled": "permission_denied", "reason": reason, "capability": capability, "identity_status": identity_status}
     if card_action:
-        result["toast"] = {
-            "type": "error",
-            "content": "当前飞书账号没有执行该操作的权限，请联系 Case 负责人或管理员。",
-        }
+        result["toast"] = {"type": "error", "content": "当前飞书账号没有执行该操作的权限，请联系 Case 负责人或管理员。"}
     return result
 
 
-def _persist_message_denial(
-    db: Session, *, payload: dict, result: dict,
-    message_id: str, event_id: str,
-) -> dict:
+def _persist_message_denial(db: Session, *, payload: dict, result: dict, message_id: str, event_id: str) -> dict:
     """Idempotently persist a denial and reply exactly once."""
     key = message_id or event_id or None
     if not key:
@@ -110,16 +76,10 @@ def _persist_message_denial(
             enqueue_reply(message_id, _DENIED_MESSAGE)
         return result
     try:
-        handle = begin_idempotent(
-            db, scope="FEISHU_RBAC_DENIED_EVENT", key=key,
-            payload={
-                "event_type": ((payload.get("header") or {}).get("event_type") if isinstance(payload.get("header"), dict) else None),
-                "message_id": message_id,
-                "event_id": event_id,
-                "reason": result.get("reason"),
-                "capability": result.get("capability"),
-            },
-        )
+        handle = begin_idempotent(db, scope="FEISHU_RBAC_DENIED_EVENT", key=key, payload={
+            "event_type": ((payload.get("header") or {}).get("event_type") if isinstance(payload.get("header"), dict) else None),
+            "message_id": message_id, "event_id": event_id, "reason": result.get("reason"), "capability": result.get("capability"),
+        })
     except AppError as exc:
         if exc.code == "IDEMPOTENCY_IN_PROGRESS":
             return {**result, "duplicate": True}
@@ -128,11 +88,7 @@ def _persist_message_denial(
         return {**handle.replay, "duplicate": True}
     if message_id:
         enqueue_reply(message_id, _DENIED_MESSAGE)
-    complete_idempotent(
-        db, handle, response=result, status_code=200,
-        resource_type="feishu_authorization_denial",
-        resource_id=message_id or event_id or None,
-    )
+    complete_idempotent(db, handle, response=result, status_code=200, resource_type="feishu_authorization_denial", resource_id=message_id or event_id or None)
     return result
 
 
@@ -142,52 +98,47 @@ def _authorize_message(db: Session, payload: dict):
     message = event.get("message") if isinstance(event.get("message"), dict) else {}
     tenant = _tenant_key(payload)
     open_id = _operator_open_id(payload)
-    identity = resolve_feishu_identity(
-        db, tenant_key=tenant, open_id=open_id,
-        discover_unmapped=settings.feishu_identity_discover_unmapped,
-    )
+    identity = resolve_feishu_identity(db, tenant_key=tenant, open_id=open_id, discover_unmapped=settings.feishu_identity_discover_unmapped)
     event_id = str(header.get("event_id") or "")
     message_id = str(message.get("message_id") or "")
     _audit_identity_resolution(db, identity, open_id=open_id)
     if not identity.active:
-        result = _permission_denied_result(
-            decision=None, identity_status=identity.status,
-        )
-        return identity, None, _persist_message_denial(
-            db, payload=payload, result=result,
-            message_id=message_id, event_id=event_id,
-        )
+        result = _permission_denied_result(decision=None, identity_status=identity.status)
+        return identity, None, _persist_message_denial(db, payload=payload, result=result, message_id=message_id, event_id=event_id)
 
     text_value, attachments = extract_message_content(message)
     preliminary = route_intake(text=text_value, attachments=attachments, has_thread_case=False)
     chat_id = str(event.get("chat_id") or message.get("chat_id") or "")
     resolution = resolve_case(
-        db,
-        tenant_key=tenant,
-        chat_id=chat_id,
-        case_ref=preliminary.case_ref,
+        db, tenant_key=tenant, chat_id=chat_id, case_ref=preliminary.case_ref,
         message_id=message_id,
         root_message_id=str(message.get("root_id") or message.get("root_message_id") or ""),
         parent_message_id=str(message.get("parent_id") or message.get("parent_message_id") or ""),
-        device_refs=preliminary.device_refs,
-        symptoms=preliminary.symptoms,
+        device_refs=preliminary.device_refs, symptoms=preliminary.symptoms,
     )
     case = resolution.case
-    final_intake = route_intake(
-        text=text_value, attachments=attachments, has_thread_case=case is not None,
-    )
-    decision = authorize_intent(
-        db, identity=identity, intent=final_intake.intent,
-        case_id=case.id if case else None,
-    )
+    final_intake = route_intake(text=text_value, attachments=attachments, has_thread_case=case is not None)
+
+    # AI1 runs only after G1 has established Case authority. In SHADOW V1 its
+    # proposal is persisted/evaluated but cannot change `final_intake`, Case, or
+    # any authorization/execution decision below.
+    if message_id:
+        shadow_semantic_route(
+            db,
+            message_id=message_id,
+            text=text_value,
+            attachments=attachments,
+            deterministic=final_intake,
+            case_id=case.id if case else None,
+            case_no=case.case_no if case else None,
+            tenant_key=tenant or None,
+            chat_id=chat_id or None,
+        )
+
+    decision = authorize_intent(db, identity=identity, intent=final_intake.intent, case_id=case.id if case else None)
     if not decision.allowed:
-        result = _permission_denied_result(
-            decision=decision, identity_status=identity.status,
-        )
-        return identity, decision, _persist_message_denial(
-            db, payload=payload, result=result,
-            message_id=message_id, event_id=event_id,
-        )
+        result = _permission_denied_result(decision=decision, identity_status=identity.status)
+        return identity, decision, _persist_message_denial(db, payload=payload, result=result, message_id=message_id, event_id=event_id)
     return identity, decision, None
 
 
@@ -207,32 +158,20 @@ def _card_case_and_capability(db: Session, payload: dict):
 
 def _authorize_card_action(db: Session, payload: dict):
     open_id = _operator_open_id(payload)
-    identity = resolve_feishu_identity(
-        db, tenant_key=_tenant_key(payload), open_id=open_id,
-        discover_unmapped=settings.feishu_identity_discover_unmapped,
-    )
+    identity = resolve_feishu_identity(db, tenant_key=_tenant_key(payload), open_id=open_id, discover_unmapped=settings.feishu_identity_discover_unmapped)
     action, case_id, capability = _card_case_and_capability(db, payload)
     _audit_identity_resolution(db, identity, open_id=open_id, case_id=case_id)
     if not identity.active:
-        return identity, _permission_denied_result(
-            decision=None, identity_status=identity.status, card_action=True,
-        )
+        return identity, _permission_denied_result(decision=None, identity_status=identity.status, card_action=True)
     if capability is None:
-        # Unknown card actions are non-executable in the underlying handler.
         return identity, None
-    decision = authorize_capability(
-        db, identity=identity, capability=capability, case_id=case_id,
-    )
+    decision = authorize_capability(db, identity=identity, capability=capability, case_id=case_id)
     if not decision.allowed:
-        return identity, _permission_denied_result(
-            decision=decision, identity_status=identity.status, card_action=True,
-        )
+        return identity, _permission_denied_result(decision=decision, identity_status=identity.status, card_action=True)
     return identity, None
 
 
-def dispatch_authorized_event(
-    db: Session, *, payload: dict, actor: str = "feishu:callback",
-) -> dict:
+def dispatch_authorized_event(db: Session, *, payload: dict, actor: str = "feishu:callback") -> dict:
     """Feishu entry gateway: Identity/RBAC first, G1 business handler second."""
     if not settings.feishu_identity_rbac_enabled:
         return dispatch_event(db, payload=payload, actor=actor)
