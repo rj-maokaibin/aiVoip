@@ -73,6 +73,11 @@ class Settings(BaseSettings):
     # AI3 is read-only. Enabling it permits grounded Case Q&A only; it never
     # enables device/reproduction/experiment/fix execution.
     ai_case_copilot_enabled: bool = False
+    # AI2 V1 exposes only SHADOW/SUGGEST software behavior. CONTROLLED_PLANNER
+    # remains guarded by the existing machine-generated promotion artifact and the
+    # deterministic Policy/Orchestrator path.
+    ai_diagnostic_loop_enabled: bool = False
+    ai_diagnostic_loop_workflow_version: str = "ai-diagnostic-loop-v1"
     auth_allow_anonymous_dev: bool = True
     production_auth_provider: str = "pending"
     auth_gateway_hmac_secret: str = ""
