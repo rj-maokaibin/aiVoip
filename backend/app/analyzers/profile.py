@@ -129,6 +129,10 @@ def validate_analyzer_profile(raw: dict[str, Any]) -> None:
     _positive(dtmf, "hop_ms")
     if float(dtmf["min_duration_ms"]) < float(dtmf["frame_ms"]):
         raise AnalyzerProfileError("ANALYZER_PROFILE_DTMF_DURATION_INVALID")
+    _positive(dtmf, "min_interdigit_gap_ms")
+    quality = float(dtmf["quality_min_confidence"])
+    if not 0.0 <= quality <= 1.0:
+        raise AnalyzerProfileError("ANALYZER_PROFILE_DTMF_QUALITY_CONFIDENCE_INVALID")
 
 
 def load_analyzer_profile(path: str | Path) -> AnalyzerProfile:
