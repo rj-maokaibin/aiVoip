@@ -5,6 +5,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.db.ai_intelligence_models import AIDiagnosticCycle
 from app.db.models import (
     Case, DiagnosisRun, Hypothesis, ReproductionSession, ReproductionAttempt, ReproductionCall,
     CaptureChannelHealth, DiagnosticExperiment, CausalAssessment, FixVerificationRun,
@@ -28,6 +29,15 @@ def _md(text: str) -> dict[str, Any]:
 
 def _kv_line(label: str, value: Any) -> str:
     return f"**{label}**：{value if value not in (None, '') else '-'}"
+
+
+def _ai2_kind_label(kind: str) -> str:
+    return {
+        "QUESTION": "诊断问题",
+        "REPRODUCTION_PROFILE": "注册复现 Profile",
+        "EXPERIMENT_PROFILE": "注册 A/B Experiment",
+        "USER_EVIDENCE_REQUEST": "补充现场证据",
+    }.get(kind, kind or "-")
 
 
 @dataclass(frozen=True)
@@ -59,6 +69,14 @@ class FeishuCaseCardBuilder:
             PreliminaryEvidenceReport.status.in_(["COMPLETE", "PARTIAL_COMPLETE"]),
         ).order_by(PreliminaryEvidenceReport.version.desc()).limit(1))
         evidence_doc = db.scalar(select(FeishuEvidenceDocumentBinding).where(FeishuEvidenceDocumentBinding.case_id == case_id).limit(1))
+        ai2_cycle = db.scalar(
+            select(AIDiagnosticCycle).where(
+                AIDiagnosticCycle.case_id == case_id,
+                AIDiagnosticCycle.runtime_stage == "SUGGEST",
+                AIDiagnosticCycle.status == "COMPLETED",
+            ).order_by(AIDiagnosticCycle.cycle_no.desc(), AIDiagnosticCycle.created_at.desc()).limit(1)
+        )
+        ai2_action = dict(ai2_cycle.next_action_json or {}) if ai2_cycle else {}
 
         target_count = sum(1 for c in calls if c.role == "TARGET" or c.verdict == "MATCH")
         control_count = sum(1 for c in calls if c.role == "CONTROL" or c.verdict == "NO_MATCH")
@@ -105,13 +123,38 @@ class FeishuCaseCardBuilder:
             {"tag":"div","text":_md("\n".join(report_lines))},
             {"tag":"hr"},
             {"tag":"div","text":_md("\n".join(["**诊断进度**",_kv_line("当前结论",diagnosis_state),_kv_line("因果状态",causal.state if causal else "-"),_kv_line("修复验证",fix.status if fix else "-")]))},
+        ]
+
+        if ai2_cycle and ai2_action:
+            suggestion_state = ai2_cycle.suggestion_state or "NONE"
+            ai2_lines = [
+                "**AI2 下一步建议（SUGGEST）**",
+                _kv_line("类型", _ai2_kind_label(str(ai2_action.get("type") or ""))),
+                _kv_line("注册 ID", ai2_action.get("registered_id")),
+                _kv_line("理由", ai2_action.get("reason")),
+                _kv_line("状态", "已采纳并进入确定性工作流" if suggestion_state == "DISPATCHED" else suggestion_state),
+                "_这是 AI 建议，不是 Root Cause，也不会由 AI 自动执行；点击采纳后仍会重新经过用户 RBAC、Case ACL、Registry 与确定性 Orchestrator。_",
+            ]
+            elements.extend([
+                {"tag":"hr"},
+                {"tag":"div","text":_md("\n".join(ai2_lines))},
+            ])
+
+        elements.extend([
             {"tag":"hr"},
             {"tag":"div","text":_md("\n".join(["**自动复现**",_kv_line("Session",f"{repro.id[:8]} · {repro.state}" if repro else "尚未创建"),_kv_line("Attempt / Call",f"{len(attempts)} / {len(calls)}"),_kv_line("CONTROL / TARGET",f"{control_count} / {target_count}"),_kv_line("Capture",capture),_kv_line("Evidence Sufficiency",suff),_kv_line("Cleanup",cleanup),_kv_line("现场操作",operation_status)]))},
-        ]
+        ])
 
         actions = [{"tag":"button","text":_plain("查看详情"),"type":"default","value":{"action":"OPEN_CASE","case_id":case_id}}]
         if evidence_doc and evidence_doc.document_url:
             actions.insert(0,{"tag":"button","text":_plain("查看完整证据报告"),"type":"primary","url":evidence_doc.document_url})
+        if ai2_cycle and ai2_action and (ai2_cycle.suggestion_state or "NONE") in {"NONE", "PROPOSED"}:
+            actions.append({
+                "tag":"button",
+                "text":_plain("采纳 AI2 建议"),
+                "type":"primary",
+                "value":{"action":"AI2_ACCEPT_SUGGESTION","case_id":case_id,"cycle_id":ai2_cycle.id},
+            })
         if repro and repro.state not in {"COMPLETED", "FAILED", "CANCELLED"}:
             actions.append({"tag":"button","text":_plain("停止自动复现"),"type":"danger","value":{"action":"STOP_REPRODUCTION","case_id":case_id,"session_id":repro.id}})
         if exp and exp.state == "WAITING_EXTERNAL_ACTION":
