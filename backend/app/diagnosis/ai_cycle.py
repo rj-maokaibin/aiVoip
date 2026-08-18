@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app.contracts.enums import ActorType, CaseStatus
 from app.core.config import settings
 from app.db.ai_intelligence_models import AIDiagnosticCycle
+from app.db.models import AIProposalRecord
 from app.diagnosis.ai_proposal import run_ai_shadow
 from app.diagnosis.ai_runtime import AIPromotionStage, AIRuntimePolicy
 from app.diagnosis.ai_workbench import contradiction_critic, controlled_planning
@@ -57,6 +58,23 @@ def _deterministic_baseline(snapshot: dict) -> dict:
         "decision": decision,
         "formal_authority": "DETERMINISTIC_ONLY",
     }
+
+
+def _normalize_baseline(snapshot: dict, supplied: dict | None) -> dict:
+    if not supplied:
+        return _deterministic_baseline(snapshot)
+    baseline = dict(supplied)
+    diagnoses = snapshot.get("diagnoses") or []
+    diagnosis = diagnoses[0] if diagnoses else {}
+    baseline.setdefault("schema_version", "deterministic-diagnosis-baseline-v1")
+    baseline.setdefault("diagnosis_run_id", diagnosis.get("id"))
+    baseline.setdefault("hypotheses", list(snapshot.get("hypotheses") or []))
+    baseline.setdefault("known", [])
+    baseline.setdefault("unknown", [])
+    baseline.setdefault("excluded", [])
+    baseline.setdefault("summary", {})
+    baseline.setdefault("formal_authority", "DETERMINISTIC_ONLY")
+    return baseline
 
 
 def _evidence_sufficient(snapshot: dict) -> bool:
@@ -120,7 +138,33 @@ class AIDiagnosticCycleService:
         self.gateway = gateway or ReasoningGatewayClient()
         self.runtime = runtime
 
-    def run_next(self, db: Session, *, case_id: str, actor: str = "ai2-cycle") -> CycleExecution:
+    def _existing_shadow_proposal(
+        self,
+        db: Session,
+        *,
+        case_id: str,
+        diagnosis_run_id: str | None,
+        evidence_fingerprint: str,
+    ) -> AIProposalRecord | None:
+        stmt = select(AIProposalRecord).where(
+            AIProposalRecord.case_id == case_id,
+            AIProposalRecord.mode == "SHADOW",
+            AIProposalRecord.input_fingerprint == evidence_fingerprint,
+        )
+        if diagnosis_run_id is None:
+            stmt = stmt.where(AIProposalRecord.diagnosis_run_id.is_(None))
+        else:
+            stmt = stmt.where(AIProposalRecord.diagnosis_run_id == diagnosis_run_id)
+        return db.scalar(stmt.order_by(AIProposalRecord.created_at.desc()).limit(1))
+
+    def run_next(
+        self,
+        db: Session,
+        *,
+        case_id: str,
+        actor: str = "ai2-cycle",
+        deterministic_baseline: dict | None = None,
+    ) -> CycleExecution:
         if not settings.ai_diagnostic_loop_enabled:
             raise AIDiagnosticCycleError("AI_DIAGNOSTIC_LOOP_DISABLED")
 
@@ -159,11 +203,11 @@ class AIDiagnosticCycleService:
         if previous and previous[-1].evidence_fingerprint == evidence_fingerprint:
             no_progress_count = int(previous[-1].no_progress_count or 0) + 1
 
-        baseline = _deterministic_baseline(snapshot)
+        baseline = _normalize_baseline(snapshot, deterministic_baseline)
         status = "COMPLETED"
         continue_recommendation = "CONTINUE"
         stop_reason: str | None = None
-        proposal_record = None
+        proposal_record: AIProposalRecord | None = None
         proposal: dict = {}
         critic: dict = {
             "status": "NOT_RUN",
@@ -190,19 +234,21 @@ class AIDiagnosticCycleService:
             continue_recommendation = "STOP"
             stop_reason = "NO_PROGRESS_LIMIT"
         else:
-            proposal_record = run_ai_shadow(
+            proposal_record = self._existing_shadow_proposal(
                 db,
                 case_id=case_id,
                 diagnosis_run_id=baseline.get("diagnosis_run_id"),
-                snapshot=snapshot,
-                deterministic_baseline=baseline,
-                gateway=self.gateway,
+                evidence_fingerprint=evidence_fingerprint,
             )
-            # Reuse the existing immutable proposal contract; the AI2 cycle records
-            # the effective promotion stage separately. For SUGGEST, marking this
-            # sidecar record as SUGGEST is audit metadata only and never increases
-            # execution or formal diagnosis authority.
-            proposal_record.mode = runtime.stage.value
+            if proposal_record is None:
+                proposal_record = run_ai_shadow(
+                    db,
+                    case_id=case_id,
+                    diagnosis_run_id=baseline.get("diagnosis_run_id"),
+                    snapshot=snapshot,
+                    deterministic_baseline=baseline,
+                    gateway=self.gateway,
+                )
             proposal = dict(proposal_record.validated_output_json or {})
             if proposal_record.status != "ACCEPTED" or not proposal:
                 status = "DEGRADED"
