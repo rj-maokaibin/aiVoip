@@ -17,8 +17,11 @@ class FakeEvidenceBuilder:
         return {
             "case": {"id": case_id, "case_no": "CASE-COPILOT", "summary": "周期性电流音", "status": "ANALYZING"},
             "devices": [{"id": "dev-1", "ip": "192.168.1.2", "ssh_port": 22, "sn": "SN-SECRET", "platform_id": "p1", "device_info": {"product": "T18", "secret": "x"}}],
-            "evidences": [{"id": "ev-1", "type": "PCAP", "source": "UPLOAD", "filename": "private.pcap", "sha256": "abc", "kind": "RAW", "scope": "CALL", "level": "L2", "completeness": "COMPLETE", "metadata": {"secret": "meta"}}],
-            "analyzers": {"PACKET": {"run_id": "run-1", "status": "SUCCESS", "version": "1", "input_evidence_ids": ["ev-1"], "summary": {"loss": 1}, "result": {"raw": "hidden"}}},
+            "evidences": [
+                {"id": "ev-raw", "type": "PCAP", "source": "UPLOAD", "filename": "private.pcap", "sha256": "abc", "kind": "RAW", "scope": "CALL", "level": "L1", "completeness": "COMPLETE", "metadata": {"secret": "meta"}},
+                {"id": "ev-1", "type": "PACKET_ANALYSIS", "source": "ANALYZER", "filename": "packet.json", "sha256": "def", "kind": "DERIVED", "scope": "CASE", "level": "L2", "completeness": "COMPLETE", "metadata": {"summary": True}},
+            ],
+            "analyzers": {"PACKET": {"run_id": "run-1", "status": "SUCCESS", "version": "1", "input_evidence_ids": ["ev-raw", "ev-1"], "summary": {"loss": 1}, "result": {"raw": "hidden"}}},
             "fingerprint": "f" * 64,
         }
 
@@ -31,7 +34,7 @@ class FakeSnapshotBuilder:
             "viewer_role": role.value,
             "raw_evidence_visible": role != UserRole.VIEWER,
             "devices": [],
-            "evidences": [{"id": "ev-1", "type": "PCAP", "level": "L2", "completeness": "COMPLETE"}],
+            "evidences": [{"id": "ev-1", "type": "PACKET_ANALYSIS", "kind": "DERIVED", "level": "L2", "completeness": "COMPLETE"}],
             "analyzers": {},
             "preliminary_report": None,
             "diagnosis": None,
@@ -99,20 +102,24 @@ def _proposal(*, evidence_id="ev-1", evidence_level="L5", status="PROPOSED", ans
     }
 
 
-def test_snapshot_viewer_strips_raw_evidence_and_device_access_identifiers():
+def test_snapshot_viewer_cannot_see_raw_evidence_and_device_access_identifiers():
     with _db() as db:
         case = _case(db)
         builder = CaseIntelligenceSnapshotBuilder(FakeEvidenceBuilder())
         viewer = builder.build(db, case.id, role=UserRole.VIEWER)
         engineer = builder.build(db, case.id, role=UserRole.ENGINEER)
         assert viewer["raw_evidence_visible"] is False
+        assert [x["id"] for x in viewer["evidences"]] == ["ev-1"]
+        assert all(str(x.get("kind")).upper() != "RAW" for x in viewer["evidences"])
         assert "filename" not in viewer["evidences"][0]
         assert "sha256" not in viewer["evidences"][0]
+        assert viewer["analyzers"]["PACKET"]["input_evidence_ids"] == ["ev-1"]
         assert "result" not in viewer["analyzers"]["PACKET"]
         assert "ip" not in viewer["devices"][0]
         assert "sn" not in viewer["devices"][0]
         assert engineer["raw_evidence_visible"] is True
-        assert engineer["evidences"][0]["filename"] == "private.pcap"
+        assert {x["id"] for x in engineer["evidences"]} == {"ev-raw", "ev-1"}
+        assert next(x for x in engineer["evidences"] if x["id"] == "ev-raw")["filename"] == "private.pcap"
         assert engineer["analyzers"]["PACKET"]["result"]["raw"] == "hidden"
 
 
