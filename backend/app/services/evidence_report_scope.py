@@ -101,6 +101,29 @@ def analyzer_state(run: AnalyzerRun | None) -> dict:
             "error_code":run.error_code,"error_message":run.error_message}
 
 
+def _normalize_packet_result(payload: dict) -> dict:
+    """Keep report consumers compatible across RTP Analyzer field migrations.
+
+    The canonical V1 report accepts the newer short jitter names while preserving
+    the earlier RFC3550-qualified aliases already used by the report composer.
+    No metric value is recalculated or upgraded here.
+    """
+    for stream in payload.get("rtp_streams", []) or []:
+        pairs=(
+            ("avg_rfc3550_jitter_ms","avg_jitter_ms"),
+            ("p95_rfc3550_jitter_ms","p95_jitter_ms"),
+            ("max_rfc3550_jitter_ms","max_jitter_ms"),
+        )
+        for legacy,current in pairs:
+            if stream.get(legacy) is None and stream.get(current) is not None:
+                stream[legacy]=stream.get(current)
+            if stream.get(current) is None and stream.get(legacy) is not None:
+                stream[current]=stream.get(legacy)
+        if stream.get("loss_rate") is None and stream.get("loss_rate_percent") is not None:
+            stream["loss_rate"]=stream.get("loss_rate_percent")
+    return payload
+
+
 def load_analyzer_results(storage, runs: dict[str, AnalyzerRun]) -> tuple[dict[str,dict|None],dict[str,dict]]:
     results={}; states={}
     for name in sorted(REPORT_ANALYZERS):
@@ -108,7 +131,10 @@ def load_analyzer_results(storage, runs: dict[str, AnalyzerRun]) -> tuple[dict[s
         if not run or run.status not in {"SUCCESS","PARTIAL_SUCCESS"} or not run.result_object_key:
             results[name]=None; continue
         try:
-            results[name]=json.loads(storage.get_bytes(run.result_object_key).decode("utf-8"))
+            payload=json.loads(storage.get_bytes(run.result_object_key).decode("utf-8"))
+            if name=="packet_intelligence" and isinstance(payload,dict):
+                payload=_normalize_packet_result(payload)
+            results[name]=payload
             if results[name] and results[name].get("degraded_reason"): state["degraded_reason"]=results[name]["degraded_reason"]
         except Exception as exc:
             results[name]=None; state.update({"status":"FAILED","terminal":True,"error_code":type(exc).__name__,"error_message":str(exc)})
