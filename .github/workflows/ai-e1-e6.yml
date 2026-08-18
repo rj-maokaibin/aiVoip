@@ -90,6 +90,13 @@ jobs:
           backend/tests/test_ai1_semantic_eval_gate_v1.py
           backend/tests/test_ai1_semantic_api_v1.py
           backend/tests/test_ai1_semantic_real_corpus_eval_v1.py
+      - name: AI3 Case Copilot software gate
+        run: >-
+          PYTHONPATH=backend:. pytest -q
+          backend/tests/test_ai3_case_copilot_v1.py
+          backend/tests/test_ai3_copilot_gateway_v1.py
+          backend/tests/test_ai3_copilot_api_v1.py
+          backend/tests/test_ai3_feishu_copilot_v1.py
       - name: M7 acceptance contract gate
         run: PYTHONPATH=backend:. pytest -q backend/tests/test_m7_acceptance_gate.py
       - name: Prepare regression database through latest migration
