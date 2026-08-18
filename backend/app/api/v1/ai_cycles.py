@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db, require_permissions
@@ -50,6 +50,39 @@ def _serialize(row: AIDiagnosticCycle, *, replay: bool = False) -> dict:
         "created_at": row.created_at.isoformat() if row.created_at else None,
         "root_cause_authority": "DETERMINISTIC_OR_HUMAN_CONFIRMED_ONLY",
         "execution_authority": "DETERMINISTIC_RBAC_POLICY_ORCHESTRATOR",
+    }
+
+
+def _counts(db: Session, column) -> dict[str, int]:
+    rows = db.execute(select(column, func.count()).group_by(column)).all()
+    return {str(key or "NONE"): int(count) for key, count in rows}
+
+
+@router.get("/ai/diagnostic-loop/metrics")
+def ai_diagnostic_loop_metrics(
+    db: Session = Depends(get_db),
+    identity: AuthIdentity = Depends(_reader),
+):
+    total = int(db.scalar(select(func.count()).select_from(AIDiagnosticCycle)) or 0)
+    accepted = int(db.scalar(
+        select(func.count()).select_from(AIDiagnosticCycle).where(AIDiagnosticCycle.accepted_by.is_not(None))
+    ) or 0)
+    return {
+        "schema_version": "ai-diagnostic-loop-metrics-v1",
+        "total_cycles": total,
+        "by_stage": _counts(db, AIDiagnosticCycle.runtime_stage),
+        "by_status": _counts(db, AIDiagnosticCycle.status),
+        "by_continue_recommendation": _counts(db, AIDiagnosticCycle.continue_recommendation),
+        "by_stop_reason": _counts(db, AIDiagnosticCycle.stop_reason),
+        "by_suggestion_state": _counts(db, AIDiagnosticCycle.suggestion_state),
+        "accepted_suggestions": accepted,
+        "ai_formal_result_changes": int(db.scalar(
+            select(func.count()).select_from(AIDiagnosticCycle).where(AIDiagnosticCycle.formal_result_changed.is_(True))
+        ) or 0),
+        "ai_dispatch_attempts": int(db.scalar(
+            select(func.count()).select_from(AIDiagnosticCycle).where(AIDiagnosticCycle.dispatch_attempted.is_(True))
+        ) or 0),
+        "actor_id": identity.actor_id,
     }
 
 
