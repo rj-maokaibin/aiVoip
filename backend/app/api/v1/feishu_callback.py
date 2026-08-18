@@ -7,7 +7,8 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_db
 from app.core.errors import AppError
 from app.core.config import settings
-from app.integrations.feishu.events import CARD_ACTION_EVENT_TYPES, callback_actor, dispatch_event
+from app.integrations.feishu.authorized_events import dispatch_authorized_event
+from app.integrations.feishu.events import CARD_ACTION_EVENT_TYPES, callback_actor
 from app.integrations.feishu.transport import FeishuCallbackVerifier, FeishuTransportError
 
 router = APIRouter(tags=["feishu-callback"])
@@ -47,18 +48,14 @@ async def feishu_callback(
         # not guessed without a separately frozen crypto contract/library.
         raise AppError("FEISHU_CALLBACK_INVALID", details={"reason": "ENCRYPTED_CALLBACK_BODY_NOT_SUPPORTED"})
 
-    # Shared dispatch: im.message.receive_v1 text -> provision (with source
-    # chat_id), card actions -> stop/experiment-complete. Same handler is used by
-    # the WebSocket long-connection listener, so behaviour is identical either way.
+    # Shared authorized dispatch: Identity/RBAC is evaluated before the existing
+    # business handler whenever G2 is enabled. Webhook and WebSocket paths use the
+    # same gateway, so control actions cannot bypass authorization by transport.
     header = payload.get("header") if isinstance(payload.get("header"), dict) else {}
     event_type = str(header.get("event_type") or payload.get("type") or "")
-    result = dispatch_event(db, payload=payload, actor=callback_actor(payload))
+    result = dispatch_authorized_event(db, payload=payload, actor=callback_actor(payload))
     if result.get("handled") == "error":
         raise AppError(result.get("reason", "FEISHU_CALLBACK_INVALID"), details=result)
-    # Card action-trigger callbacks (v2 `card.action.trigger` / legacy
-    # `card.action.trigger_v1`) must answer with a toast so the user sees the
-    # click feedback immediately. Updated card content is produced by the async
-    # diagnosis/cleanup worker pushing the next sync_case_card.
     if event_type in CARD_ACTION_EVENT_TYPES:
         return {"code": 0, "msg": "ok", "toast": (result.get("toast") or {})}
     return {"code": 0, "msg": "ok"}
