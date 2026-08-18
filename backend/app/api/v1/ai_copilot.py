@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_db, require_permissions
 from app.auth.providers import AuthIdentity
 from app.contracts.enums import PermissionName
+from app.core.config import settings
 from app.core.ids import new_id
 from app.db.models import Case
 from app.copilot.service import CaseCopilotService
@@ -28,6 +29,8 @@ def ask_case_copilot(
     db: Session = Depends(get_db),
     identity: AuthIdentity = Depends(_reader),
 ):
+    if not settings.ai_case_copilot_enabled:
+        raise HTTPException(503, "AI_CASE_COPILOT_DISABLED")
     case = db.get(Case, case_id)
     if case is None:
         raise HTTPException(404, "CASE_NOT_FOUND")
