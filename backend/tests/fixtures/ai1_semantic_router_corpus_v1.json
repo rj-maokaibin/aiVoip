@@ -1,0 +1,59 @@
+{
+  "schema_version": "ai1-semantic-router-corpus-v1",
+  "cases": [
+    {
+      "id": "control-stop-deterministic",
+      "text": "停止复现",
+      "attachments": [],
+      "has_thread_case": true,
+      "expected_intent": "STOP_REPRODUCTION",
+      "semantic_fallback": false,
+      "dangerous_control": true
+    },
+    {
+      "id": "status-deterministic",
+      "text": "现在状态到哪了？",
+      "attachments": [],
+      "has_thread_case": true,
+      "expected_intent": "STATUS_QUERY",
+      "semantic_fallback": false,
+      "dangerous_control": false
+    },
+    {
+      "id": "obvious-attachment-diagnosis",
+      "text": "帮我分析这个新的抓包",
+      "attachments": [{"file_key": "pcap-1", "filename": "new.pcap", "message_type": "file"}],
+      "has_thread_case": true,
+      "expected_intent": "NEW_DIAGNOSIS",
+      "semantic_fallback": false,
+      "dangerous_control": false
+    },
+    {
+      "id": "environment-ab-comparison",
+      "text": "又复现了，换回原装就正常，附件是新的包，帮我和上一次对比",
+      "attachments": [{"file_key": "pcap-2", "filename": "new2.pcap", "message_type": "file"}],
+      "has_thread_case": true,
+      "expected_intent": "NEW_DIAGNOSIS",
+      "semantic_fallback": true,
+      "dangerous_control": false
+    },
+    {
+      "id": "ambiguous-followup",
+      "text": "这个情况又出现了，接下来怎么看？",
+      "attachments": [],
+      "has_thread_case": true,
+      "expected_intent": "GENERAL_QUESTION",
+      "semantic_fallback": true,
+      "dangerous_control": false
+    },
+    {
+      "id": "unsupported-needs-semantics",
+      "text": "昨天那个和今天这个不太一样",
+      "attachments": [],
+      "has_thread_case": false,
+      "expected_intent": "UNSUPPORTED",
+      "semantic_fallback": true,
+      "dangerous_control": false
+    }
+  ]
+}
