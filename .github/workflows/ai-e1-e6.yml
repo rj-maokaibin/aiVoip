@@ -70,8 +70,10 @@ jobs:
           node-version: "22"
           cache: npm
           cache-dependency-path: frontend/package-lock.json
-      - name: Install backend dependencies
+      - name: Install backend and attachment-analysis dependencies
         run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ffmpeg tesseract-ocr
           python -m pip install --upgrade pip
           pip install -r backend/requirements.txt
       - name: Compile backend and release tools
