@@ -76,7 +76,7 @@ jobs:
           git fetch origin "${GITHUB_HEAD_REF}"
           git checkout -B "${GITHUB_HEAD_REF}" "origin/${GITHUB_HEAD_REF}"
           cd frontend
-          npm install --package-lock-only --save-dev vite@7.3.6
+          npm install --package-lock-only --save-dev vite@7.3.6 esbuild@0.28.1
           npm audit --audit-level=low
           cd ..
           if ! git diff --quiet -- frontend/package.json frontend/package-lock.json; then
