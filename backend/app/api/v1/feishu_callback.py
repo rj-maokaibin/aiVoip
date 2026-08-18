@@ -40,22 +40,25 @@ async def feishu_callback(
     except FeishuTransportError as exc:
         raise AppError("FEISHU_CALLBACK_INVALID", details={"reason": str(exc)}) from exc
 
-    # URL verification callback used when registering a request URL.
     if payload.get("type") == "url_verification" and payload.get("challenge"):
         return {"challenge": payload["challenge"]}
     if "encrypt" in payload:
-        # Security verification is supported; encrypted-body decryption is deliberately
-        # not guessed without a separately frozen crypto contract/library.
         raise AppError("FEISHU_CALLBACK_INVALID", details={"reason": "ENCRYPTED_CALLBACK_BODY_NOT_SUPPORTED"})
 
-    # Shared authorized dispatch: Identity/RBAC is evaluated before the existing
-    # business handler whenever G2 is enabled. Webhook and WebSocket paths use the
-    # same gateway, so control actions cannot bypass authorization by transport.
     header = payload.get("header") if isinstance(payload.get("header"), dict) else {}
     event_type = str(header.get("event_type") or payload.get("type") or "")
-    result = dispatch_authorized_event(db, payload=payload, actor=callback_actor(payload))
-    if result.get("handled") == "error":
-        raise AppError(result.get("reason", "FEISHU_CALLBACK_INVALID"), details=result)
+    try:
+        result = dispatch_authorized_event(db, payload=payload, actor=callback_actor(payload))
+        if result.get("handled") == "error":
+            raise AppError(result.get("reason", "FEISHU_CALLBACK_INVALID"), details=result)
+        # HTTP callback uses a request-scoped Session; unlike the WebSocket path,
+        # there is no outer dispatcher to commit it. Persist Identity discovery,
+        # authorization audit/idempotency and ordinary message workflow updates here.
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+
     if event_type in CARD_ACTION_EVENT_TYPES:
         return {"code": 0, "msg": "ok", "toast": (result.get("toast") or {})}
     return {"code": 0, "msg": "ok"}
