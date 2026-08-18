@@ -16,8 +16,19 @@ class _Response:
             "proposal": {
                 "schema_version": "ai-case-copilot-v1",
                 "answer": "当前证据仅支持异常观察，根因尚未确认。",
-                "claims": [],
-                "cited_evidence_ids": [],
+                "claims": [{
+                    "claim_id": "c1",
+                    "claim_type": "OBSERVATION",
+                    "statement": "当前证据存在异常观察",
+                    "subject": "media",
+                    "predicate": "has_observation",
+                    "value": True,
+                    "status": "PROPOSED",
+                    "evidence_level": "L5",
+                    "evidence": [{"evidence_id": "ev-1", "relation": "SUPPORT", "direction": "UNKNOWN"}],
+                    "missing_evidence": [],
+                }],
+                "cited_evidence_ids": ["ev-1"],
                 "uncertainty": ["根因尚未确认"],
                 "next_steps": [],
                 "root_cause_confirmed_by_ai": False,
@@ -61,7 +72,13 @@ def test_copilot_gateway_redacts_question_and_snapshot_and_keeps_read_only_polic
             "sn": "SN-SECRET-001",
             "mac": "aa:bb:cc:dd:ee:ff",
             "platform_id": "p1",
-            "device_info": {"product": "T18", "password": "device-password"},
+            "device_info": {
+                "product": "T18",
+                "firmware_version": "1.2.3",
+                "password": "device-password",
+                "api_token": "device-api-token",
+                "custom_private_field": "must-not-leave-process",
+            },
         }],
         "evidences": [{"id": "ev-1", "type": "PCAP", "level": "L2", "completeness": "COMPLETE"}],
         "analyzers": {},
@@ -84,9 +101,15 @@ def test_copilot_gateway_redacts_question_and_snapshot_and_keeps_read_only_polic
     assert "aa:bb:cc:dd:ee:ff" not in rendered
     assert "SN-SECRET-001" not in rendered
     assert "device-password" not in rendered
+    assert "device-api-token" not in rendered
+    assert "must-not-leave-process" not in rendered
     assert "ask-secret" not in rendered
     assert "gateway-secret" not in rendered
     assert captured["headers"]["Authorization"] == "Bearer gateway-secret"
+    assert captured["json"]["case_snapshot"]["devices"][0]["device_info"] == {
+        "product": "T18",
+        "firmware_version": "1.2.3",
+    }
     policy = captured["json"]["policy"]
     assert policy["read_only"] is True
     assert policy["current_case_only"] is True
