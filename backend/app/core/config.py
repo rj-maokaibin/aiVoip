@@ -92,6 +92,10 @@ class Settings(BaseSettings):
     feishu_verification_token_env: str = ""
     feishu_timeout_seconds: float = 8.0
     feishu_attachment_max_bytes: int = 100 * 1024 * 1024
+    # Feishu Case Gateway G2. Development defaults keep legacy callback tests
+    # backward-compatible; production live Feishu is forbidden unless RBAC is on.
+    feishu_identity_rbac_enabled: bool = False
+    feishu_identity_discover_unmapped: bool = True
     auth_default_actor: str = "dev-admin"
     auth_default_role: str = "ADMIN"
     idempotency_ttl_hours: int = 24
