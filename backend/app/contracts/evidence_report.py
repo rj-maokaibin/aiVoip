@@ -70,28 +70,26 @@ class EvidenceReportArtifactType(StrEnum):
     MANIFEST_JSON = "MANIFEST_JSON"
 
 
+# Frozen Q92 core V1.0 anomaly coverage. This set intentionally names the
+# concrete Finding types emitted by the deterministic analyzers/composer rather
+# than future/aspirational taxonomy entries. The software Golden Gate requires
+# every item below to appear in labelled regression data and meet per-type gates.
 P0_FINDING_TYPES = {
     "SIP_REGISTRATION_FAILED",
     "SIP_CALL_FAILED",
-    "SIP_CONFLICTING_FINAL_RESPONSE",
     "CODEC_NEGOTIATION_MISMATCH",
-    "PTIME_NEGOTIATION_MISMATCH",
     "ONE_WAY_RTP_MEDIA",
     "PACKET_LOSS",
     "BURST_LOSS",
     "HIGH_DELTA",
-    "PAYLOAD_CHANGE",
-    "RTP_JITTER_HIGH",
     "PCM_GAP",
     "UNEXPECTED_SILENCE",
     "CLICK_POP",
-    "LOCAL_CAPTURE_PERIODIC_INTERFERENCE",
     "PERIODIC_LOW_FREQUENCY_INTERFERENCE",
+    "LOCAL_CAPTURE_PERIODIC_INTERFERENCE",
     "ECHO_PATH_DETECTED",
     "DTMF_ABNORMAL",
-    "AUDIO_LEVEL_ABNORMAL",
-    "CROSS_LAYER_MISMATCH",
-    "EVIDENCE_INCOMPLETE",
+    "PERIODIC_INTERFERENCE_PATH_COMPARISON",
 }
 
 
