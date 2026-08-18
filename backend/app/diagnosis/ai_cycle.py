@@ -188,8 +188,12 @@ class AIDiagnosticCycleService:
                 snapshot=snapshot,
                 deterministic_baseline=baseline,
                 gateway=self.gateway,
-                mode=runtime.stage.value,
             )
+            # Reuse the existing immutable proposal contract; the AI2 cycle records
+            # the effective promotion stage separately. For SUGGEST, marking this
+            # sidecar record as SUGGEST is audit metadata only and never increases
+            # execution or formal diagnosis authority.
+            proposal_record.mode = runtime.stage.value
             proposal = dict(proposal_record.validated_output_json or {})
             if proposal_record.status != "ACCEPTED" or not proposal:
                 status = "DEGRADED"
