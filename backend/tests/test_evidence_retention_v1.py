@@ -18,6 +18,14 @@ def _engine():
     return eng
 
 
+def _utc_naive(value: datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        return value
+    return value.astimezone(timezone.utc).replace(tzinfo=None)
+
+
 def _case(db: Session, no: str = 'RET-1') -> Case:
     row = Case(case_no=no, summary='retention test', status='ANALYZING')
     db.add(row); db.flush(); return row
@@ -40,7 +48,7 @@ def test_raw_evidence_defaults_to_90_day_policy():
         ev = _evidence(db, case.id, created_at=now)
         state = ensure_retention_state(db, ev)
         assert state.policy == 'STANDARD_90D'
-        assert state.retain_until == now + timedelta(days=settings.evidence_retention_raw_days)
+        assert _utc_naive(state.retain_until) == _utc_naive(now + timedelta(days=settings.evidence_retention_raw_days))
         assert state.status == 'ACTIVE'
 
 
@@ -111,4 +119,4 @@ def test_expiry_deletes_payload_semantics_but_keeps_metadata_row():
         assert (ev.metadata_json or {})['retention_status'] == 'EXPIRED'
         state = db.scalar(select(EvidenceRetentionState).where(EvidenceRetentionState.evidence_id == ev.id))
         assert state is not None and state.status == 'EXPIRED'
-        assert state.expired_at == now
+        assert _utc_naive(state.expired_at) == _utc_naive(now)
