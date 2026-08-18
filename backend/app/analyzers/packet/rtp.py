@@ -39,13 +39,7 @@ class RtpStreamAnalyzer:
         for packet in packets:
             if not packet.rtp or packet.rtp.sequence is None:
                 continue
-            key = (
-                packet.src_ip,
-                packet.src_port,
-                packet.dst_ip,
-                packet.dst_port,
-                packet.rtp.ssrc,
-            )
+            key = (packet.src_ip, packet.src_port, packet.dst_ip, packet.dst_port, packet.rtp.ssrc)
             grouped[key].append(packet)
         results = []
         for key, group in grouped.items():
@@ -65,7 +59,9 @@ class RtpStreamAnalyzer:
         duplicates = 0
         reordered = 0
         payload_changes = 0
+        payload_change_events: list[dict] = []
         last_payload: int | None = None
+        last_payload_packet: NormalizedPacket | None = None
         deltas_ms: list[float] = []
         arrival_prev: float | None = None
         unique_packets: dict[int, NormalizedPacket] = {}
@@ -92,7 +88,16 @@ class RtpStreamAnalyzer:
             timestamp_exts.append(ts_ext)
             if last_payload is not None and packet.rtp.payload_type != last_payload:
                 payload_changes += 1
+                payload_change_events.append({
+                    "previous_payload_type": last_payload,
+                    "new_payload_type": packet.rtp.payload_type,
+                    "previous_frame_number": last_payload_packet.frame_number if last_payload_packet else None,
+                    "current_frame_number": packet.frame_number,
+                    "previous_timestamp": last_payload_packet.timestamp if last_payload_packet else None,
+                    "current_timestamp": packet.timestamp,
+                })
             last_payload = packet.rtp.payload_type
+            last_payload_packet = packet
             if arrival_prev is not None:
                 deltas_ms.append(max(0.0, (packet.timestamp - arrival_prev) * 1000.0))
             arrival_prev = packet.timestamp
@@ -113,9 +118,6 @@ class RtpStreamAnalyzer:
             clock_rate = None
         else:
             codec, clock_rate = mapping
-        # EC-04: SDP ptime is authoritative when a temporally valid media-endpoint hint
-        # exists. Otherwise infer from RTP timestamps only when clock rate is known.
-        # Unknown/dynamic PT without an SDP mapping remains UNAVAILABLE.
         sdp_ptime = self._sdp_ptime_hint(key, dominant_pt, packets[0].timestamp)
         if sdp_ptime is not None:
             ptime_ms = sdp_ptime
@@ -129,28 +131,48 @@ class RtpStreamAnalyzer:
             event.details["estimated_audio_loss_ms"] = round(event.details["lost_packets"] * ptime_ms, 3) if ptime_ms else None
 
         jitter_values = _rfc3550_jitter(packets, clock_rate, float(self.config["jitter_filter_divisor"])) if clock_rate else []
-        gap_events = list(burst_events)
-        events = list(gap_events)
+        events = list(burst_events)
         if deltas_ms and ptime_ms:
             high_threshold = max(ptime_ms * float(self.config["high_delta_multiplier"]), ptime_ms + float(self.config["high_delta_additive_ms"]))
             for idx, delta in enumerate(deltas_ms, start=1):
                 if delta >= high_threshold:
+                    previous_packet = packets[idx - 1]
+                    current_packet = packets[idx]
                     events.append(RtpEvent(
                         type="HIGH_DELTA",
-                        start_time=packets[idx].timestamp,
+                        start_time=current_packet.timestamp,
                         severity="MEDIUM",
-                        details={"delta_ms": round(delta, 3), "expected_ptime_ms": round(ptime_ms, 3), "excess_delay_ms": round(max(0.0, delta-ptime_ms), 3)},
+                        details={
+                            "delta_ms": round(delta, 3),
+                            "expected_ptime_ms": round(ptime_ms, 3),
+                            "excess_delay_ms": round(max(0.0, delta-ptime_ms), 3),
+                            "previous_frame_number": previous_packet.frame_number,
+                            "current_frame_number": current_packet.frame_number,
+                            "previous_timestamp": previous_packet.timestamp,
+                            "current_timestamp": current_packet.timestamp,
+                            "previous_sequence": previous_packet.rtp.sequence,
+                            "current_sequence": current_packet.rtp.sequence,
+                        },
                     ))
         if payload_changes:
             events.append(RtpEvent(
                 type="PAYLOAD_CHANGE",
-                start_time=packets[0].timestamp,
+                start_time=payload_change_events[0]["current_timestamp"] if payload_change_events else packets[0].timestamp,
                 severity="MEDIUM",
-                details={"change_count": payload_changes, "payload_types": sorted(set(payload_types))},
+                details={
+                    "change_count": payload_changes,
+                    "payload_types": sorted(set(payload_types)),
+                    "changes": payload_change_events,
+                    "frame_numbers": [x["current_frame_number"] for x in payload_change_events],
+                },
             ))
 
         high_delta_events = [e for e in events if e.type == "HIGH_DELTA"]
         jitter_ms = [v * 1000.0 / clock_rate for v in jitter_values] if clock_rate else []
+        avg_jitter = round(mean(jitter_ms), 6) if jitter_ms else None
+        p95_jitter = round(_percentile(jitter_ms, 0.95), 6) if jitter_ms else None
+        max_jitter = round(max(jitter_ms), 6) if jitter_ms else None
+        loss_rate_value = round(loss_rate, 6)
         return {
             "stream_id": _stream_id(key),
             "src_ip": src_ip,
@@ -163,23 +185,29 @@ class RtpStreamAnalyzer:
             "duration_seconds": round(packets[-1].timestamp - packets[0].timestamp, 6),
             "start_time": packets[0].timestamp,
             "end_time": packets[-1].timestamp,
+            "first_frame_number": packets[0].frame_number,
+            "last_frame_number": packets[-1].frame_number,
             "first_sequence_ext": first_seq,
             "last_sequence_ext": last_seq,
             "expected_packets": expected,
             "lost_packets": lost,
-            "loss_rate_percent": round(loss_rate, 6),
+            "loss_rate_percent": loss_rate_value,
+            "loss_rate": loss_rate_value,
             "duplicate_packets": duplicates,
             "out_of_order_packets": reordered,
-            "max_consecutive_loss": max((e.details["lost_packets"] for e in gap_events), default=0),
-            "burst_loss_count": len(gap_events),
+            "max_consecutive_loss": max((e.details["lost_packets"] for e in burst_events), default=0),
+            "burst_loss_count": len(burst_events),
             "avg_delta_ms": round(mean(deltas_ms), 6) if deltas_ms else None,
             "p95_delta_ms": round(_percentile(deltas_ms, 0.95), 6) if deltas_ms else None,
             "max_delta_ms": round(max(deltas_ms), 6) if deltas_ms else None,
             "high_delta_count": len(high_delta_events),
             "max_excess_delay_ms": round(max((e.details.get("excess_delay_ms",0.0) for e in high_delta_events), default=0.0), 6),
-            "avg_jitter_ms": round(mean(jitter_ms), 6) if jitter_ms else None,
-            "p95_jitter_ms": round(_percentile(jitter_ms, 0.95), 6) if jitter_ms else None,
-            "max_jitter_ms": round(max(jitter_ms), 6) if jitter_ms else None,
+            "avg_jitter_ms": avg_jitter,
+            "p95_jitter_ms": p95_jitter,
+            "max_jitter_ms": max_jitter,
+            "avg_rfc3550_jitter_ms": avg_jitter,
+            "p95_rfc3550_jitter_ms": p95_jitter,
+            "max_rfc3550_jitter_ms": max_jitter,
             "payload_type": dominant_pt,
             "payload_types": sorted(set(payload_types)),
             "payload_change_count": payload_changes,
@@ -193,6 +221,7 @@ class RtpStreamAnalyzer:
                 "ptime": "AVAILABLE" if ptime_ms is not None else "UNAVAILABLE",
                 "rfc3550_jitter": "AVAILABLE" if jitter_ms else "UNAVAILABLE",
                 "estimated_audio_loss": "AVAILABLE" if ptime_ms is not None else "UNAVAILABLE",
+                "frame_level_evidence": "AVAILABLE",
             },
             "analyzer_profile": self.profile.metadata(),
             "events": [asdict(e) for e in sorted(events, key=lambda e: e.start_time)],
@@ -217,7 +246,6 @@ class RtpStreamAnalyzer:
         return None
 
 
-
 def _extend_mod(value: int, reference: int | None, modulus: int) -> int:
     if reference is None:
         return value
@@ -231,15 +259,23 @@ def _burst_events(unique_sorted: list[int], packet_by_seq: dict[int, NormalizedP
     for prev, current in zip(unique_sorted, unique_sorted[1:]):
         gap = current - prev - 1
         if gap > 0:
-            packet = packet_by_seq[current]
+            previous_packet = packet_by_seq[prev]
+            next_packet = packet_by_seq[current]
             events.append(RtpEvent(
                 type="BURST_LOSS" if gap > 1 else "PACKET_LOSS",
-                start_time=packet.timestamp,
+                start_time=next_packet.timestamp,
                 severity="HIGH" if gap >= high_loss_threshold else "MEDIUM",
                 details={
                     "previous_sequence_ext": prev,
                     "next_sequence_ext": current,
                     "lost_packets": gap,
+                    "missing_sequence_ext_start": prev + 1,
+                    "missing_sequence_ext_end": current - 1,
+                    "previous_frame_number": previous_packet.frame_number,
+                    "next_frame_number": next_packet.frame_number,
+                    "previous_timestamp": previous_packet.timestamp,
+                    "next_timestamp": next_packet.timestamp,
+                    "frame_evidence_note": "丢失的 RTP 包本身没有可引用 Frame；previous/next Frame 是丢包边界证据。",
                 },
             ))
     return events
@@ -295,6 +331,7 @@ def _percentile(values: list[float], q: float) -> float | None:
     lo=int(pos); hi=min(lo+1,len(ordered)-1)
     frac=pos-lo
     return ordered[lo]*(1-frac)+ordered[hi]*frac
+
 
 def _stream_id(key: tuple) -> str:
     src_ip, src_port, dst_ip, dst_port, ssrc = key

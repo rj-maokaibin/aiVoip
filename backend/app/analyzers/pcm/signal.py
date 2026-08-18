@@ -22,16 +22,21 @@ def basic_stats(samples: np.ndarray) -> dict:
     x = samples.astype(np.float64, copy=False)
     rms = float(np.sqrt(np.mean(x * x)))
     peak = float(np.max(np.abs(x)))
-    dbfs = 20.0 * math.log10(rms / 32768.0) if rms > 0 else None
+    rms_dbfs = 20.0 * math.log10(rms / 32768.0) if rms > 0 else None
+    peak_dbfs = 20.0 * math.log10(peak / 32768.0) if peak > 0 else None
     clip_threshold=float(get_default_analyzer_profile().section("basic_metrics")["clipping_abs_threshold"])
     return {
         "sample_count": int(samples.size),
         "rms": round(rms, 6),
-        "dbfs": round(dbfs, 6) if dbfs is not None else None,
+        "dbfs": round(rms_dbfs, 6) if rms_dbfs is not None else None,
+        "rms_dbfs": round(rms_dbfs, 6) if rms_dbfs is not None else None,
         "peak": round(peak, 6),
+        "peak_dbfs": round(peak_dbfs, 6) if peak_dbfs is not None else None,
         "dc_offset": round(float(np.mean(x)), 6),
         "clipping_percent": round(float(np.mean(np.abs(x) >= clip_threshold) * 100.0), 8),
         "clipping_abs_threshold": clip_threshold,
+        "level_unit": "dBFS",
+        "level_boundary": "dBFS为相对于数字满量程的数字电平，不等价于实际声压级dB SPL。",
     }
 
 

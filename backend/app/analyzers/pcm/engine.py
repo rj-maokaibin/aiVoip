@@ -7,6 +7,7 @@ import statistics
 
 import numpy as np
 
+from .dtmf_quality import dtmf_quality_events
 from .pcap_udp import UdpDatagram, iter_udp_datagrams
 from .profile import PcmProfile
 from .signal import basic_stats, detect_dtmf, dtmf_sequence, hum_analysis
@@ -17,7 +18,7 @@ from app.analyzers.profile import get_default_analyzer_profile
 
 class PcmIntelligenceEngine:
     analyzer_name = "pcm_intelligence"
-    analyzer_version = "0.4.0"
+    analyzer_version = "0.5.0"
 
     def __init__(self, profile: PcmProfile):
         self.profile = profile
@@ -121,6 +122,7 @@ class PcmIntelligenceEngine:
             ]
         assert self.profile.sample_rate is not None and self.profile.channels is not None
         dtmf_events = detect_dtmf(samples, self.profile.sample_rate)
+        quality_events = dtmf_quality_events(dtmf_events)
         return {
             "session_index": index,
             "start_time": packets[0].timestamp,
@@ -141,4 +143,6 @@ class PcmIntelligenceEngine:
             "click_pop_events": detect_click_pop_robust(samples, self.profile.sample_rate),
             "dtmf_events": dtmf_events,
             "dtmf_sequences": dtmf_sequence(dtmf_events),
+            "dtmf_quality_events": quality_events,
+            "dtmf_quality_event_count": len(quality_events),
         }
