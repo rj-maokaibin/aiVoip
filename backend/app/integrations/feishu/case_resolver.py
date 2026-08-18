@@ -67,7 +67,10 @@ def _tenant_filter(tenant_key: str):
 
 
 def _raw_active_binding(db: Session, *, tenant_key: str, chat_id: str) -> ActiveChatBinding | None:
-    if not lifecycle_columns_available(db) or not chat_id:
+    # G1's one-group-one-active-case invariant is tenant-bound. Empty-tenant rows
+    # are legacy/default-delivery history and must not be promoted into the new
+    # Active Case routing context; they continue through thread/fingerprint rules.
+    if not tenant_key or not lifecycle_columns_available(db) or not chat_id:
         return None
     row = db.execute(
         text(
