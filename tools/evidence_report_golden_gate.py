@@ -17,6 +17,7 @@ from app.reports.finding_composer import compose_findings, derive_first_observab
 
 
 FORBIDDEN_INPUT_KEYS = {"expected", "ground_truth", "answer", "expected_findings", "expected_boundary"}
+SERIOUS_SEVERITIES = {"HIGH", "CRITICAL"}
 
 
 def _contains_forbidden(value) -> bool:
@@ -42,6 +43,7 @@ def evaluate(dataset: dict) -> dict:
     totals = Counter(tp=0, fp=0, fn=0)
     boundary_total = boundary_correct = wrong_boundary = unknown_expected = unknown_correct = 0
     leakage = []
+    serious_false_positives: list[dict] = []
     case_results = []
 
     for row in rows:
@@ -66,6 +68,14 @@ def evaluate(dataset: dict) -> dict:
             fn = max(0, expected_types[ftype] - actual_types[ftype])
             by_type[ftype].update(tp=tp, fp=fp, fn=fn)
             totals.update(tp=tp, fp=fp, fn=fn)
+        remaining_expected = Counter(expected_types)
+        for finding in findings:
+            ftype = str(finding.get("type"))
+            if remaining_expected[ftype] > 0:
+                remaining_expected[ftype] -= 1
+                continue
+            if str(finding.get("severity") or "INFO").upper() in SERIOUS_SEVERITIES:
+                serious_false_positives.append({"case_id": case_id, "type": ftype, "severity": finding.get("severity")})
 
         boundary_actual = derive_first_observable_layer(input_payload.get("layer_observations") or [])
         boundary_expected = expected.get("boundary")
@@ -110,11 +120,18 @@ def evaluate(dataset: dict) -> dict:
             "recall": round(_safe_div(c["tp"], c["tp"] + c["fn"]), 6),
             "precision": round(_safe_div(c["tp"], c["tp"] + c["fp"]), 6),
         }
+    per_type_pass = all(
+        item["recall"] >= settings.evidence_report_golden_min_recall
+        and item["precision"] >= settings.evidence_report_golden_min_precision
+        for item in per_type.values()
+    )
 
     gates = {
         "no_answer_leakage": not leakage,
         "recall": recall >= settings.evidence_report_golden_min_recall,
         "precision": precision >= settings.evidence_report_golden_min_precision,
+        "per_finding_type_recall_precision": per_type_pass,
+        "serious_false_positive_regression": not serious_false_positives,
         "boundary_correctness": boundary_correctness >= settings.evidence_report_boundary_min_correctness,
         "wrong_boundary_rate": wrong_rate < settings.evidence_report_boundary_max_wrong_rate,
         "unknown_safety": unknown_expected == unknown_correct,
@@ -131,6 +148,7 @@ def evaluate(dataset: dict) -> dict:
             "min_precision": settings.evidence_report_golden_min_precision,
             "min_boundary_correctness": settings.evidence_report_boundary_min_correctness,
             "max_wrong_boundary_rate": settings.evidence_report_boundary_max_wrong_rate,
+            "serious_false_positive_allowed": 0,
         },
         "metrics": {
             "tp": totals["tp"], "fp": totals["fp"], "fn": totals["fn"],
@@ -140,8 +158,10 @@ def evaluate(dataset: dict) -> dict:
             "wrong_boundary_rate": round(wrong_rate, 6),
             "unknown_expected": unknown_expected,
             "unknown_correct": unknown_correct,
+            "serious_false_positive_count": len(serious_false_positives),
         },
         "per_type": per_type,
+        "serious_false_positives": serious_false_positives,
         "answer_leakage_cases": leakage,
         "cases": case_results,
         "environment_gate_note": "Synthetic/Lab/Field composition is required for production release; real dataset acceptance is intentionally external to this software-only gate.",
