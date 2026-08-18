@@ -1,0 +1,31 @@
+name: Runner Pool Probe
+
+on:
+  push:
+    branches:
+      - "agent/**"
+  pull_request:
+    paths:
+      - ".github/workflows/runner-pool-probe.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  ubuntu22:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - run: echo ubuntu22-ok
+
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 5
+    steps:
+      - run: echo windows-ok
+
+  macos:
+    runs-on: macos-latest
+    timeout-minutes: 5
+    steps:
+      - run: echo macos-ok
