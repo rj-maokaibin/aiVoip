@@ -20,6 +20,9 @@
 | dBFS ≠ dB SPL boundary | `signal.py`, report content | authority/non-goal tests |
 | Silence / Click-Pop / low-frequency interference | PCM/Media Analyzer + Finding Composer | report/golden regression |
 | Echo path evidence | Media Analyzer + Finding Composer | report/golden regression |
+| DTMF signal quality anomaly | `analyzers/pcm/dtmf_quality.py`, PCM Analyzer, Finding Composer | `test_dtmf_finding_v1.py` + Golden gate |
+| DTMF thresholds governed by versioned Profile | `profiles/analyzers/voip_v1.yaml` v1.1.0 + `analyzers/profile.py` validation | DTMF P0/profile contract test |
+| DTMF evidence boundary | only low-confidence / short inter-digit timing facts; never invents a missing dialed digit without authoritative comparison | `test_dtmf_finding_v1.py` |
 | First observable layer | `services/evidence_boundary.py` | authority/boundary tests |
 | Missing upstream evidence → UNKNOWN | deterministic boundary implementation | boundary safety tests |
 | Cross-Call aggregation/reproduction rate | `evidence_report_aggregation.py` | D112/rate tests |
@@ -49,6 +52,7 @@
 | MANAGE_RETENTION | reviewer/admin/service only | permission test |
 | Raw PCAP/WAV 90-day retention | `services/evidence_retention.py` | `test_evidence_retention_v1.py` |
 | Golden/manual-lock retention exemption | same | retention tests |
+| Late Golden promotion rechecked before expiry | retention sweep refreshes stale STANDARD_90D rows before deletion | late-Golden retention test |
 | Delete Payload, retain provenance metadata | same | retention expiry tests |
 | Expired raw Evidence shown as unavailable | `evidence_report_scope.py`, `evidence_report.py` | `test_evidence_report_retention_expiry_v1.py` |
 | Automatic report refresh after expiry | `workers/evidence_retention_tasks.py` | worker/full regression |
@@ -59,6 +63,7 @@
 | Golden Dataset framework | `tools/evidence_report_golden_gate.py` | CI software release gate |
 | Answer Leakage protection | Golden gate input/expected separation | Golden gate |
 | Recall / Precision metrics | Golden gate | final real values remain environment gate |
+| Per-P0 type Recall/Precision + serious false-positive gate | Golden gate | CI software release gate |
 | Boundary correctness / wrong-boundary metrics | Golden gate | final real values remain environment gate |
 | Software-core performance benchmark | `tools/evidence_report_performance_gate.py` | CI software release gate |
 | Strict software Release Gate | `tools/evidence_report_release_gate.py` | CI |
@@ -84,6 +89,7 @@ Unknown/deep Artifact types fail closed and require `VIEW_RAW_EVIDENCE`.
 - Raw Evidence defaults to `STANDARD_90D`.
 - Derived structured results, reports, key images/clips remain long-lived under Case lifecycle policy.
 - `GOLDEN_CANDIDATE` / `GOLDEN_READY` Case raw Evidence is retention-exempt.
+- Golden status is re-evaluated immediately before expiry selection so a Case promoted after Evidence creation cannot be deleted by a stale 90-day snapshot.
 - Expert Reviewer/Admin/Service may manually lock raw Evidence.
 - Expiry removes the storage Payload only. Evidence ID, SHA256, size, source, timestamps, audit and historical reports remain.
 - Expiry triggers a new immutable Report version; the new report explicitly marks expired raw Evidence and does not count it as available capture evidence.
@@ -95,7 +101,7 @@ Unknown/deep Artifact types fail closed and require `VIEW_RAW_EVIDENCE`.
 It verifies:
 
 1. Synthetic deterministic Golden regression.
-2. Recall / Precision calculation contract.
+2. Recall / Precision calculation contract, including per-Finding-Type thresholds and HIGH/CRITICAL false-positive regression.
 3. Evidence Boundary correctness / UNKNOWN safety contract.
 4. Answer Leakage prohibition.
 5. Software-core Finding + PNG performance benchmark.
