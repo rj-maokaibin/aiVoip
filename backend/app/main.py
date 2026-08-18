@@ -23,6 +23,7 @@ from app.api.v1.experiments import router as experiments_router
 from app.api.v1.feishu import router as feishu_router
 from app.api.v1.feishu_callback import router as feishu_callback_router
 from app.api.v1.feishu_governance import router as feishu_governance_router
+from app.api.v1.feishu_document_acl import router as feishu_document_acl_router
 from app.api.v1.system import router as system_router
 from app.api.v1.golden_candidates import router as golden_candidates_router
 from app.api.deps import get_identity
@@ -73,6 +74,7 @@ app.include_router(experiments_router, prefix='/api/v1', dependencies=[Depends(g
 app.include_router(golden_candidates_router, prefix='/api/v1', dependencies=[Depends(get_identity)])
 app.include_router(feishu_router, prefix='/api/v1', dependencies=[Depends(get_identity)])
 app.include_router(feishu_governance_router, prefix='/api/v1', dependencies=[Depends(get_identity)])
+app.include_router(feishu_document_acl_router, prefix='/api/v1', dependencies=[Depends(get_identity)])
 # Feishu callbacks are authenticated by Feishu signature/token, not by user auth headers.
 app.include_router(feishu_callback_router, prefix='/api/v1')
 app.include_router(system_router, prefix='/api/v1', dependencies=[Depends(get_identity)])
