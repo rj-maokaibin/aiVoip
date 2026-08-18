@@ -29,7 +29,7 @@ def test_pipeline_metrics_report_latency_status_analyzers_and_feishu():
         )
         db.add(report)
         db.add(AnalyzerRun(case_id=case.id, analyzer_name='packet_intelligence', analyzer_version='v1', status='SUCCESS', input_evidence_ids=[]))
-        db.add(FeishuEvidenceDocumentBinding(case_id=case.id, status='SYNCED', projection_version=1, last_synced_at=now, created_at=now-timedelta(days=1)))
+        db.add(FeishuEvidenceDocumentBinding(case_id=case.id, status='SYNCED', projection_version=1, updated_at=now, created_at=now-timedelta(days=1)))
         db.flush()
         out = evidence_report_pipeline_metrics(db, window_days=30)
         assert out['schema_version'] == 'evidence-report-pipeline-metrics-v1'
