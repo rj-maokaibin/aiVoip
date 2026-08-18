@@ -1,0 +1,118 @@
+{
+  "schema_version": "evidence-report-golden-dataset-v1",
+  "description": "Software-only deterministic regression set. Expected labels are kept outside input and never passed to analyzers/composers.",
+  "cases": [
+    {
+      "id": "packet-burst-loss",
+      "input": {
+        "packet": {
+          "rtp_streams": [{"stream_id": "rtp-1", "src_ip": "10.0.0.1", "src_port": 10000, "dst_ip": "10.0.0.2", "dst_port": 20000, "packet_count": 100, "lost_packets": 3, "loss_rate": 0.03, "codec": "PCMU", "ptime_ms": 20}],
+          "anomalies": [{"type": "BURST_LOSS", "severity": "HIGH", "start_time": 1.2, "evidence": {"stream_id": "rtp-1", "lost_packets": 3, "previous_frame_number": 100, "next_frame_number": 101}}]
+        },
+        "layer_observations": [
+          {"layer": "RTP_DOWNSTREAM", "available": true, "abnormal": true},
+          {"layer": "PCM_RX", "available": true, "abnormal": true}
+        ]
+      },
+      "expected": {
+        "finding_types": ["BURST_LOSS"],
+        "boundary": {"status": "OBSERVED_BOUNDARY", "first_observable_layer": "RTP_DOWNSTREAM"}
+      }
+    },
+    {
+      "id": "pcm-rx-hum",
+      "input": {
+        "pcm": {
+          "streams": [{
+            "tap": {"name": "pcm_rx", "direction": "RX"},
+            "sessions": [{"session_index": 0, "start_time": 2.0, "end_time": 5.0, "hum": {"level": "HIGH", "dominant_family": "50Hz", "score": 0.92}, "signal": {"rms_dbfs": -21.4, "peak_dbfs": -5.8}, "gap_events": [], "silence_events": [], "click_pop_events": []}]
+          }]
+        },
+        "layer_observations": [
+          {"layer": "RTP_DOWNSTREAM", "available": true, "abnormal": false},
+          {"layer": "PCM_RX", "available": true, "abnormal": true},
+          {"layer": "PCM_TX", "available": true, "abnormal": false}
+        ]
+      },
+      "expected": {
+        "finding_types": ["PERIODIC_LOW_FREQUENCY_INTERFERENCE"],
+        "boundary": {"status": "OBSERVED_BOUNDARY", "first_observable_layer": "PCM_RX"}
+      }
+    },
+    {
+      "id": "pcm-gap-silence-click",
+      "input": {
+        "pcm": {
+          "streams": [{
+            "tap": {"name": "pcm_tx", "direction": "TX"},
+            "sessions": [{
+              "session_index": 1,
+              "start_time": 10.0,
+              "end_time": 13.0,
+              "hum": {"level": "LOW"},
+              "gap_events": [{"time": 10.2, "gap_ms": 80}],
+              "silence_events": [{"start_seconds": 0.5, "end_seconds": 1.0, "duration_seconds": 0.5}],
+              "click_pop_events": [{"time_seconds": 1.5, "score": 4.0}]
+            }]
+          }]
+        },
+        "layer_observations": [
+          {"layer": "RTP_UPSTREAM", "available": true, "abnormal": false},
+          {"layer": "PCM_TX", "available": true, "abnormal": true}
+        ]
+      },
+      "expected": {
+        "finding_types": ["PCM_GAP", "UNEXPECTED_SILENCE", "CLICK_POP"],
+        "boundary": {"status": "OBSERVED_BOUNDARY", "first_observable_layer": "PCM_TX"}
+      }
+    },
+    {
+      "id": "media-echo",
+      "input": {
+        "media": {
+          "cross_layer_events": [{"type": "ECHO_PATH_DETECTED", "severity": "MEDIUM", "evidence_level": "L2", "time": 3.4, "scope": {"pcm_tap": "pcm_rx"}, "details": {"interpretation": "检测到稳定回声路径特征。", "correlation": {"quality": "HIGH"}}}],
+          "periodic_interference_paths": []
+        },
+        "layer_observations": [
+          {"layer": "RTP_DOWNSTREAM", "available": true, "abnormal": false},
+          {"layer": "PCM_RX", "available": true, "abnormal": false}
+        ]
+      },
+      "expected": {
+        "finding_types": ["ECHO_PATH_DETECTED"],
+        "boundary": {"status": "NO_COMPARABLE_ANOMALY"}
+      }
+    },
+    {
+      "id": "boundary-unknown-upstream-missing",
+      "input": {
+        "packet": {"rtp_streams": [], "anomalies": []},
+        "pcm": {"streams": []},
+        "layer_observations": [
+          {"layer": "RTP_DOWNSTREAM", "available": false, "abnormal": false},
+          {"layer": "PCM_RX", "available": true, "abnormal": true}
+        ]
+      },
+      "expected": {
+        "finding_types": [],
+        "boundary": {"status": "UNKNOWN"}
+      }
+    },
+    {
+      "id": "normal-negative",
+      "input": {
+        "packet": {"rtp_streams": [{"stream_id": "rtp-ok", "packet_count": 100, "loss_rate": 0}], "anomalies": []},
+        "pcm": {"streams": []},
+        "media": {"cross_layer_events": [], "periodic_interference_paths": []},
+        "layer_observations": [
+          {"layer": "RTP_DOWNSTREAM", "available": true, "abnormal": false},
+          {"layer": "PCM_RX", "available": true, "abnormal": false}
+        ]
+      },
+      "expected": {
+        "finding_types": [],
+        "boundary": {"status": "NO_COMPARABLE_ANOMALY"}
+      }
+    }
+  ]
+}
