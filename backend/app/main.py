@@ -13,6 +13,7 @@ from app.api.v1.rules import router as rules_router
 from app.api.v1.knowledge import router as knowledge_router
 from app.api.v1.reports import router as reports_router
 from app.api.v1.evidence_reports import router as evidence_reports_router
+from app.api.v1.evidence_retention import router as evidence_retention_router
 from app.api.health import router as health_router
 from app.api.v1.audit import router as audit_router
 from app.api.v1.events import router as events_router
@@ -59,6 +60,7 @@ app.include_router(rules_router, prefix='/api/v1', dependencies=[Depends(get_ide
 app.include_router(knowledge_router, prefix='/api/v1', dependencies=[Depends(get_identity)])
 app.include_router(reports_router, prefix='/api/v1', dependencies=[Depends(get_identity)])
 app.include_router(evidence_reports_router, prefix='/api/v1', dependencies=[Depends(get_identity)])
+app.include_router(evidence_retention_router, prefix='/api/v1', dependencies=[Depends(get_identity)])
 app.include_router(audit_router, prefix='/api/v1', dependencies=[Depends(get_identity)])
 app.include_router(events_router, prefix='/api/v1', dependencies=[Depends(get_identity)])
 app.include_router(reproduction_router, prefix='/api/v1', dependencies=[Depends(get_identity)])
