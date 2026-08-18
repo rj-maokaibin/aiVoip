@@ -112,10 +112,11 @@ jobs:
           DATABASE_URL: postgresql+psycopg://voip:voip@localhost:5432/voip
           REDIS_URL: redis://localhost:6379/0
         run: PYTHONPATH=backend:. python tools/evidence_report_release_gate.py --skip-tests
-      - name: Frontend production build gate
+      - name: Frontend dependency security and production build gate
         run: |
           cd frontend
           npm ci
+          npm audit --audit-level=high
           npm run build
           test -s dist/index.html
           test -s dist/evidence-report.html
