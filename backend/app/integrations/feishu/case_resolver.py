@@ -10,8 +10,6 @@ from app.db.models import Case, CaseDevice, FeishuCaseBinding
 
 
 TERMINAL_CASE_STATES = {"RESOLVED", "CLOSED", "FAILED"}
-_ACTIVE_BINDING = "ACTIVE"
-_CLOSED_BINDING = "CLOSED"
 _GENERIC_SYMPTOMS = {"故障", "异常", "问题"}
 _EXPLICIT_NEW_CASE_PHRASES = (
     "新问题", "新的问题", "另一个问题", "另外一个问题", "新故障", "新的故障",
@@ -45,21 +43,23 @@ def normalize_tenant_key(value: str | None) -> str:
 def lifecycle_columns_available(db: Session) -> bool:
     """Return whether migration 0021 is present on this database.
 
-    Full production/runtime behavior requires 0021. The fallback keeps source-level
-    unit tests and pre-migration developer databases readable instead of crashing
-    while still preserving the old conservative correlation semantics.
+    IMPORTANT: inspect the Session's *current Connection*, not the Engine. Unit
+    tests use a SQLite StaticPool; opening/closing a second Engine connection can
+    reuse the same DBAPI connection and roll back the Session's uncommitted work.
+    Keeping schema inspection on ``db.connection()`` makes introspection part of
+    the current transaction and preserves message/idempotency/Case state.
     """
     try:
-        columns = {row["name"] for row in inspect(db.get_bind()).get_columns("feishu_case_bindings")}
+        columns = {
+            row["name"]
+            for row in inspect(db.connection()).get_columns("feishu_case_bindings")
+        }
     except Exception:
         return False
     return {"binding_state", "binding_generation", "activated_at", "closed_at"}.issubset(columns)
 
 
 def _tenant_filter(tenant_key: str):
-    # Before 0021, source_tenant_key was nullable. Empty-tenant legacy rows are
-    # treated as the same legacy tenant only; a non-empty tenant never consumes a
-    # binding belonging to another tenant.
     return (
         or_(FeishuCaseBinding.source_tenant_key == "", FeishuCaseBinding.source_tenant_key.is_(None))
         if not tenant_key else FeishuCaseBinding.source_tenant_key == tenant_key
