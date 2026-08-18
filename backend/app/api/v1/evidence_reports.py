@@ -118,7 +118,7 @@ def links(report_id:str,db:Session=Depends(get_db),identity=Depends(require_evid
     storage=ObjectStorage(); ttl=timedelta(minutes=settings.artifact_url_ttl_minutes)
     def url(key): return storage.presigned_get(key,ttl) if key else None
     bundle_url=url(row.bundle_object_key) if row.bundle_object_key and has_evidence_permission(identity,EvidencePermission.DOWNLOAD_EVIDENCE_BUNDLE) else None
-    return {"html_url":url(row.html_object_key),"json_url":url(row.json_object_key),"manifest_url":url(row.manifest_object_key),
+    return {"web_url":f"/evidence-report.html?case_id={row.case_id}","html_url":url(row.html_object_key),"json_url":url(row.json_object_key),"manifest_url":url(row.manifest_object_key),
             "bundle_url":bundle_url,"expires_minutes":settings.artifact_url_ttl_minutes,
             "permissions":{"view_report":True,"view_raw_evidence":has_evidence_permission(identity,EvidencePermission.VIEW_RAW_EVIDENCE),
                            "download_evidence_bundle":has_evidence_permission(identity,EvidencePermission.DOWNLOAD_EVIDENCE_BUNDLE),
@@ -130,9 +130,10 @@ def create_bundle(report_id:str,req:EvidenceBundleRequest,db:Session=Depends(get
     _enabled()
     try:
         storage=ObjectStorage(); artifact=build_evidence_bundle(db,report_id=report_id,profile=req.profile,actor=identity.actor_id,storage=storage)
-        audit(db,case_id=artifact.case_id,actor=identity.actor_id,event_type="EVIDENCE_BUNDLE_DOWNSTREAM_READY",target_type="artifact",target_id=artifact.id,
-              detail={"report_id":report_id,"profile":req.profile})
-        db.commit(); return {"artifact_id":artifact.id,"profile":req.profile,"download_url":storage.presigned_get(artifact.object_key),"expires_minutes":settings.artifact_url_ttl_minutes}
+        download_url=storage.presigned_get(artifact.object_key)
+        audit(db,case_id=artifact.case_id,actor=identity.actor_id,event_type="EVIDENCE_BUNDLE_DOWNLOAD_URL_ISSUED",target_type="artifact",target_id=artifact.id,
+              detail={"report_id":report_id,"profile":req.profile,"ttl_minutes":settings.artifact_url_ttl_minutes})
+        db.commit(); return {"artifact_id":artifact.id,"profile":req.profile,"download_url":download_url,"expires_minutes":settings.artifact_url_ttl_minutes}
     except ValueError as exc:
         db.rollback(); raise HTTPException(404,str(exc))
     except Exception as exc:
