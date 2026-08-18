@@ -41,7 +41,7 @@ def _ctx(tenant: str, message: str, sender: str = "ou-engineer") -> dict:
     }
 
 
-def test_bind_rejects_second_active_case_and_rolls_back_uncommitted_loser():
+def test_bind_rejects_second_active_case_and_transaction_owner_rolls_back_loser():
     eng = _engine()
     with Session(eng) as db:
         winner = _case(db, "CASE-WINNER")
@@ -60,6 +60,10 @@ def test_bind_rejects_second_active_case_and_rolls_back_uncommitted_loser():
                 source_context=_ctx("tenant-a", "m-2"),
             )
         assert exc.value.existing_case_id == winner_id
+        # Binding is a low-level service and must not roll back unrelated caller
+        # state. The workflow owning Case creation rolls back the whole operation.
+        assert db.get(Case, loser_id) is not None
+        db.rollback()
         assert db.get(Case, loser_id) is None
         assert db.scalar(select(func.count()).select_from(FeishuCaseBinding)) == 1
 
