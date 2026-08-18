@@ -12,12 +12,35 @@ class CopilotGatewayError(RuntimeError):
     pass
 
 
+_DEVICE_INFO_ALLOWLIST = {
+    "product",
+    "model",
+    "version",
+    "software_version",
+    "firmware_version",
+    "hardware_version",
+    "platform",
+}
+
+
+def _safe_device_info(value: Any) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        return {}
+    return {
+        str(key): item
+        for key, item in value.items()
+        if str(key) in _DEVICE_INFO_ALLOWLIST
+    }
+
+
 def compact_copilot_snapshot(snapshot: dict[str, Any]) -> dict[str, Any]:
     """Keep only current-Case evidence semantics needed for Q&A.
 
     Direct device access identifiers and raw analyzer payloads are intentionally
-    excluded even for engineering roles. Evidence IDs remain because every claim
-    must cite exact current-Case Evidence and pass ClaimGroundingValidator.
+    excluded even for engineering roles. Device metadata is allowlisted before
+    generic redaction is applied, so secrets/credentials cannot rely on regex
+    detection alone. Evidence IDs remain because every claim must cite exact
+    current-Case Evidence and pass ClaimGroundingValidator.
     """
     case = snapshot.get("case") or {}
     preliminary = snapshot.get("preliminary_report") or None
@@ -34,7 +57,7 @@ def compact_copilot_snapshot(snapshot: dict[str, Any]) -> dict[str, Any]:
             {
                 "alias": f"device_{index + 1}",
                 "platform_id": item.get("platform_id"),
-                "device_info": item.get("device_info") or {},
+                "device_info": _safe_device_info(item.get("device_info")),
             }
             for index, item in enumerate((snapshot.get("devices") or [])[:10])
         ],
