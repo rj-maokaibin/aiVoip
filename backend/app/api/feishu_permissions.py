@@ -25,6 +25,7 @@ class FeishuCapability(StrEnum):
     COMPLETE_EXTERNAL_ACTION = "COMPLETE_EXTERNAL_ACTION"
     MARK_FIX_APPLIED = "MARK_FIX_APPLIED"
     RUN_REGISTERED_EXPERIMENT = "RUN_REGISTERED_EXPERIMENT"
+    RUN_AI_SUGGESTION = "RUN_AI_SUGGESTION"
     MANAGE_CASE_BINDING = "MANAGE_CASE_BINDING"
     MANAGE_FEISHU_IDENTITY = "MANAGE_FEISHU_IDENTITY"
     MANAGE_DOCUMENT_ACL = "MANAGE_DOCUMENT_ACL"
@@ -49,6 +50,7 @@ ROLE_CAPABILITIES: dict[UserRole, frozenset[FeishuCapability]] = {
         FeishuCapability.COMPLETE_EXTERNAL_ACTION,
         FeishuCapability.MARK_FIX_APPLIED,
         FeishuCapability.RUN_REGISTERED_EXPERIMENT,
+        FeishuCapability.RUN_AI_SUGGESTION,
     }),
     UserRole.EXPERT_REVIEWER: frozenset({
         FeishuCapability.VIEW_CASE,
@@ -61,6 +63,7 @@ ROLE_CAPABILITIES: dict[UserRole, frozenset[FeishuCapability]] = {
         FeishuCapability.COMPLETE_EXTERNAL_ACTION,
         FeishuCapability.MARK_FIX_APPLIED,
         FeishuCapability.RUN_REGISTERED_EXPERIMENT,
+        FeishuCapability.RUN_AI_SUGGESTION,
         FeishuCapability.MANAGE_RETENTION,
         FeishuCapability.REVIEW_ROOT_CAUSE,
     }),
@@ -139,8 +142,6 @@ def authorize_capability(
             None, is_owner, "IDENTITY_NOT_ACTIVE",
         )
     elif case_id and case is None:
-        # A stale/forged card may carry a Case id that no longer exists. Never
-        # authorize it and never copy that invalid id into AuditLog.case_id.
         decision = FeishuAuthorizationDecision(
             False, capability, identity.actor_id, role_value, identity.status,
             case_id, None, False, "CASE_NOT_FOUND",
@@ -166,8 +167,6 @@ def authorize_capability(
                 case_id, acl_effect, is_owner, "CASE_ACL_DENY",
             )
         else:
-            # ALLOW never elevates beyond global role capability. Case Owner is
-            # metadata/UX overlay only in V1 and cannot grant high authority.
             decision = FeishuAuthorizationDecision(
                 True, capability, identity.actor_id, role_value, identity.status,
                 case_id, acl_effect, is_owner,
@@ -195,9 +194,6 @@ def authorize_intent(
 ) -> FeishuAuthorizationDecision:
     capability = capability_for_intent(intent)
     if capability is None:
-        # Unknown/unsupported intents do not execute a workflow, so do not turn
-        # them into an implicit capability. The handler may safely ask for
-        # clarification, but must not call a side-effecting service.
         return FeishuAuthorizationDecision(
             True, None, identity.actor_id, identity.role.value if identity.role else None,
             identity.status, case_id, None, False, "NO_WORKFLOW_CAPABILITY_REQUIRED",
