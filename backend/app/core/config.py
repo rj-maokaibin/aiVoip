@@ -97,6 +97,22 @@ class Settings(BaseSettings):
     idempotency_ttl_hours: int = 24
     sse_poll_interval_seconds: float = 0.75
     sse_batch_size: int = 200
+
+    # Preliminary Evidence Report V1.0. These are operational controls only;
+    # Analyzer thresholds remain governed by versioned Analyzer Profiles.
+    preliminary_evidence_report_enabled: bool = True
+    evidence_retention_raw_days: int = 90
+    evidence_retention_batch_size: int = 200
+    evidence_retention_worker_enabled: bool = True
+    evidence_report_metrics_window_days: int = 30
+    evidence_report_basic_sla_seconds: float = 10.0
+    evidence_report_full_p95_seconds: float = 30.0
+    evidence_report_large_p95_seconds: float = 60.0
+    evidence_report_golden_min_recall: float = 0.95
+    evidence_report_golden_min_precision: float = 0.95
+    evidence_report_boundary_min_correctness: float = 0.95
+    evidence_report_boundary_max_wrong_rate: float = 0.01
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     def model_post_init(self, __context) -> None:
