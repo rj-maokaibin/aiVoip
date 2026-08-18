@@ -138,6 +138,13 @@ def authorize_capability(
             False, capability, None, role_value, identity.status, case_id,
             None, is_owner, "IDENTITY_NOT_ACTIVE",
         )
+    elif case_id and case is None:
+        # A stale/forged card may carry a Case id that no longer exists. Never
+        # authorize it and never copy that invalid id into AuditLog.case_id.
+        decision = FeishuAuthorizationDecision(
+            False, capability, identity.actor_id, role_value, identity.status,
+            case_id, None, False, "CASE_NOT_FOUND",
+        )
     elif capability not in ROLE_CAPABILITIES.get(identity.role, frozenset()):
         decision = FeishuAuthorizationDecision(
             False, capability, identity.actor_id, role_value, identity.status,
@@ -169,7 +176,7 @@ def authorize_capability(
 
     audit(
         db,
-        case_id=case_id,
+        case_id=case.id if case is not None else None,
         actor=identity.actor_id or audit_actor,
         event_type="AUTHORIZATION_DECIDED",
         target_type="feishu_authorization",
