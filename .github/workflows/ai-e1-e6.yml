@@ -15,7 +15,7 @@ on:
       - ".github/workflows/ai-e1-e6.yml"
   push:
     branches:
-      - "agent/**"
+      - "master"
     paths:
       - "backend/**"
       - "frontend/**"
