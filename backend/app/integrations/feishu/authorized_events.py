@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+
 from sqlalchemy.orm import Session
 
 from app.api.feishu_permissions import (
@@ -20,6 +22,7 @@ from app.integrations.feishu.events import (
 from app.integrations.feishu.feedback import enqueue_reply
 from app.integrations.feishu.identity import resolve_feishu_identity
 from app.integrations.feishu.intake import extract_message_content, route_intake
+from app.services.audit import audit
 from app.services.idempotency import begin_idempotent, complete_idempotent
 
 
@@ -28,6 +31,7 @@ _CARD_CAPABILITIES = {
     "EXTERNAL_ACTION_COMPLETED": FeishuCapability.COMPLETE_EXTERNAL_ACTION,
     "OPEN_CASE": FeishuCapability.VIEW_CASE,
 }
+_DENIED_MESSAGE = "当前飞书账号未完成权限映射、已被禁用，或没有执行该操作的权限。请联系 VOIP AI 管理员。"
 
 
 def _operator_open_id(payload: dict) -> str:
@@ -53,9 +57,30 @@ def _tenant_key(payload: dict) -> str:
     return str(header.get("tenant_key") or sender.get("tenant_key") or "")
 
 
+def _audit_identity_resolution(db: Session, identity, *, open_id: str, case_id: str | None = None) -> None:
+    digest = hashlib.sha256(str(open_id or "").encode("utf-8")).hexdigest()[:20] if open_id else None
+    audit(
+        db,
+        case_id=case_id,
+        actor=identity.actor_id or "feishu-identity-resolver",
+        event_type="FEISHU_IDENTITY_RESOLVED",
+        target_type="feishu_user_identity",
+        target_id=identity.identity_id,
+        detail={
+            "schema_version": "feishu-identity-resolution-v1",
+            "tenant_key": identity.tenant_key,
+            "open_id_hash": digest,
+            "actor_id": identity.actor_id,
+            "role": identity.role.value if identity.role else None,
+            "status": identity.status,
+            "resolution_source": identity.resolution_source,
+        },
+    )
+
+
 def _permission_denied_result(
     *, decision: FeishuAuthorizationDecision | None,
-    identity_status: str, message_id: str | None = None,
+    identity_status: str,
     card_action: bool = False,
 ) -> dict:
     capability = decision.capability.value if decision and decision.capability else None
@@ -71,20 +96,18 @@ def _permission_denied_result(
             "type": "error",
             "content": "当前飞书账号没有执行该操作的权限，请联系 Case 负责人或管理员。",
         }
-    elif message_id:
-        enqueue_reply(
-            message_id,
-            "当前飞书账号未完成权限映射、已被禁用，或没有执行该操作的权限。请联系 VOIP AI 管理员。",
-        )
     return result
 
 
-def _denial_idempotency(
+def _persist_message_denial(
     db: Session, *, payload: dict, result: dict,
     message_id: str, event_id: str,
 ) -> dict:
+    """Idempotently persist a denial and reply exactly once."""
     key = message_id or event_id or None
     if not key:
+        if message_id:
+            enqueue_reply(message_id, _DENIED_MESSAGE)
         return result
     try:
         handle = begin_idempotent(
@@ -103,6 +126,8 @@ def _denial_idempotency(
         raise
     if handle.replay is not None:
         return {**handle.replay, "duplicate": True}
+    if message_id:
+        enqueue_reply(message_id, _DENIED_MESSAGE)
     complete_idempotent(
         db, handle, response=result, status_code=200,
         resource_type="feishu_authorization_denial",
@@ -123,11 +148,12 @@ def _authorize_message(db: Session, payload: dict):
     )
     event_id = str(header.get("event_id") or "")
     message_id = str(message.get("message_id") or "")
+    _audit_identity_resolution(db, identity, open_id=open_id)
     if not identity.active:
         result = _permission_denied_result(
-            decision=None, identity_status=identity.status, message_id=message_id,
+            decision=None, identity_status=identity.status,
         )
-        return identity, None, _denial_idempotency(
+        return identity, None, _persist_message_denial(
             db, payload=payload, result=result,
             message_id=message_id, event_id=event_id,
         )
@@ -157,9 +183,8 @@ def _authorize_message(db: Session, payload: dict):
     if not decision.allowed:
         result = _permission_denied_result(
             decision=decision, identity_status=identity.status,
-            message_id=message_id,
         )
-        return identity, decision, _denial_idempotency(
+        return identity, decision, _persist_message_denial(
             db, payload=payload, result=result,
             message_id=message_id, event_id=event_id,
         )
@@ -181,12 +206,13 @@ def _card_case_and_capability(db: Session, payload: dict):
 
 
 def _authorize_card_action(db: Session, payload: dict):
-    header = payload.get("header") if isinstance(payload.get("header"), dict) else {}
+    open_id = _operator_open_id(payload)
     identity = resolve_feishu_identity(
-        db, tenant_key=_tenant_key(payload), open_id=_operator_open_id(payload),
+        db, tenant_key=_tenant_key(payload), open_id=open_id,
         discover_unmapped=settings.feishu_identity_discover_unmapped,
     )
     action, case_id, capability = _card_case_and_capability(db, payload)
+    _audit_identity_resolution(db, identity, open_id=open_id, case_id=case_id)
     if not identity.active:
         return identity, _permission_denied_result(
             decision=None, identity_status=identity.status, card_action=True,
@@ -207,7 +233,7 @@ def _authorize_card_action(db: Session, payload: dict):
 def dispatch_authorized_event(
     db: Session, *, payload: dict, actor: str = "feishu:callback",
 ) -> dict:
-    """Feishu entry gateway: Identity/RBAC first, legacy business handler second."""
+    """Feishu entry gateway: Identity/RBAC first, G1 business handler second."""
     if not settings.feishu_identity_rbac_enabled:
         return dispatch_event(db, payload=payload, actor=actor)
 
