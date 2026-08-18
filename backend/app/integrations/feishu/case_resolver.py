@@ -67,10 +67,7 @@ def _tenant_filter(tenant_key: str):
 
 
 def _raw_active_binding(db: Session, *, tenant_key: str, chat_id: str) -> ActiveChatBinding | None:
-    # G1's one-group-one-active-case invariant is tenant-bound. Empty-tenant rows
-    # are legacy/default-delivery history and must not be promoted into the new
-    # Active Case routing context; they continue through thread/fingerprint rules.
-    if not tenant_key or not lifecycle_columns_available(db) or not chat_id:
+    if not lifecycle_columns_available(db) or not chat_id:
         return None
     row = db.execute(
         text(
@@ -156,9 +153,14 @@ def activate_binding_lifecycle(
 
 
 def active_case_for_chat(db: Session, *, tenant_key: str | None, chat_id: str) -> tuple[Case | None, str | None]:
-    """Resolve the one ACTIVE Case for a Feishu chat and auto-close stale terminal bindings."""
+    """Resolve the one ACTIVE Case for a tenant-bound Feishu chat.
+
+    G1's business key is ``tenant_key + chat_id``. Empty-tenant bindings are
+    legacy/default-delivery records and deliberately do not opt into Active-Case
+    routing; they retain the older thread/fingerprint behavior.
+    """
     tenant = normalize_tenant_key(tenant_key)
-    if not chat_id:
+    if not tenant or not chat_id:
         return None, None
 
     active = _raw_active_binding(db, tenant_key=tenant, chat_id=chat_id)
@@ -172,7 +174,8 @@ def active_case_for_chat(db: Session, *, tenant_key: str | None, chat_id: str) -
             return None, None
         return case, active.binding_id
 
-    # Legacy fallback for developer/test databases that have not applied 0021.
+    # Legacy developer/test databases may not have migration 0021 yet, but a real
+    # tenant-bound source binding can still be resolved conservatively by ORM.
     if not lifecycle_columns_available(db):
         row = db.scalar(
             select(FeishuCaseBinding)
@@ -180,7 +183,7 @@ def active_case_for_chat(db: Session, *, tenant_key: str | None, chat_id: str) -
             .where(
                 FeishuCaseBinding.receive_id == chat_id,
                 FeishuCaseBinding.receive_id_type == "chat_id",
-                _tenant_filter(tenant),
+                FeishuCaseBinding.source_tenant_key == tenant,
                 Case.status.not_in(sorted(TERMINAL_CASE_STATES)),
             )
             .order_by(Case.created_at.desc())
@@ -295,10 +298,13 @@ def resolve_case(
     if thread_case:
         return CaseResolution(thread_case, reason="THREAD", binding_id=binding_id)
 
-    # P3: current chat Active Case is the normal collaboration context.
-    active_case, binding_id = active_case_for_chat(db, tenant_key=tenant, chat_id=chat_id)
-    if active_case:
-        return CaseResolution(active_case, reason="CHAT_ACTIVE_CASE", binding_id=binding_id)
+    # P3 is intentionally tenant-bound. Empty-tenant legacy events keep the old
+    # conservative fingerprint path instead of being reinterpreted as governed
+    # Active-Case conversations.
+    if tenant:
+        active_case, binding_id = active_case_for_chat(db, tenant_key=tenant, chat_id=chat_id)
+        if active_case:
+            return CaseResolution(active_case, reason="CHAT_ACTIVE_CASE", binding_id=binding_id)
 
     # P4/P5: conservative cross-thread fingerprint; ambiguity is surfaced.
     return _fingerprint_case(
