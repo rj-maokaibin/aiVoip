@@ -4,6 +4,7 @@ from celery.utils.log import get_task_logger
 from sqlalchemy import or_, select
 
 from app.contracts.enums import ReproductionCallStatus, ReproductionState
+from app.core.config import settings
 from app.db.models import AnalyzerRun, Case, ReproductionCall, ReproductionSession
 from app.db.session import SessionLocal
 from app.services.evidence_report import generate_evidence_report
@@ -16,6 +17,8 @@ _TERMINAL_SESSION={ReproductionState.COMPLETED.value,ReproductionState.PARTIAL_S
 
 
 def notify_evidence_report_changed(case_id:str,reason:str="analyzer_changed") -> None:
+    if not settings.preliminary_evidence_report_enabled:
+        return
     try: refresh_case_evidence_reports.apply_async(args=[case_id,reason],queue="diagnosis",countdown=3)
     except Exception: log.exception("failed to enqueue evidence report refresh case=%s",case_id)
 
@@ -26,6 +29,8 @@ def _active_analyzer_exists(db,case_id:str) -> bool:
 
 @celery_app.task(name="evidence_report.refresh_case",bind=True,max_retries=3,default_retry_delay=2)
 def refresh_case_evidence_reports(self,case_id:str,reason:str="case_changed"):
+    if not settings.preliminary_evidence_report_enabled:
+        return {"status":"SKIPPED","reason":"PRELIMINARY_EVIDENCE_REPORT_DISABLED","case_id":case_id}
     db=SessionLocal(); generated=[]; errors=[]
     try:
         if not db.get(Case,case_id): return {"status":"CASE_NOT_FOUND","case_id":case_id}
