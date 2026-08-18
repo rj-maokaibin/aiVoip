@@ -20,10 +20,6 @@ def _dt(value):
     return value.isoformat() if value is not None else None
 
 
-def _safe_attr(row, name: str, default=None):
-    return getattr(row, name, default)
-
-
 class CaseIntelligenceSnapshotBuilder:
     """Build one current-Case-only, role-aware source of truth for AI3.
 
@@ -181,7 +177,7 @@ class CaseIntelligenceSnapshotBuilder:
                 "cycle": diagnosis.cycle,
                 "summary": diagnosis.summary_json or {},
                 "decision": diagnosis.decision_json or {},
-                "updated_at": _dt(_safe_attr(diagnosis, "updated_at")),
+                "updated_at": _dt(diagnosis.updated_at),
             },
             "reproductions": [
                 {
@@ -200,23 +196,35 @@ class CaseIntelligenceSnapshotBuilder:
             "experiments": [
                 {
                     "id": row.id,
-                    "profile_id": _safe_attr(row, "profile_id"),
-                    "status": _safe_attr(row, "status"),
-                    "causal_state": _safe_attr(row, "causal_state"),
-                    "target_finding": _safe_attr(row, "target_finding"),
-                    "created_at": _dt(_safe_attr(row, "created_at")),
-                    "updated_at": _dt(_safe_attr(row, "updated_at")),
+                    "profile_key": row.profile_key,
+                    "profile_version": row.profile_version,
+                    "state": row.state,
+                    "confirmation_policy": row.confirmation_policy,
+                    "independent_variable": row.independent_variable,
+                    "causal_state": row.causal_state,
+                    "target_finding": row.target_finding,
+                    "current_round": row.current_round,
+                    "terminal_reason": row.terminal_reason,
+                    "created_at": _dt(row.created_at),
+                    "updated_at": _dt(row.updated_at),
                 }
                 for row in experiments
             ],
             "fix_verifications": [
                 {
                     "id": row.id,
-                    "status": _safe_attr(row, "status"),
-                    "target_finding": _safe_attr(row, "target_finding"),
-                    "result": _safe_attr(row, "result_json", {}) or {},
-                    "created_at": _dt(_safe_attr(row, "created_at")),
-                    "updated_at": _dt(_safe_attr(row, "updated_at")),
+                    "fix_action_id": row.fix_action_id,
+                    "status": row.status,
+                    "target_finding": row.target_finding,
+                    "verification_call_count": row.verification_call_count,
+                    "successful_call_count": row.successful_call_count,
+                    "environment_status": row.environment_status,
+                    "evaluations": row.evaluations_json or [],
+                    "business_checks": row.business_checks_json or {},
+                    "comparison": row.comparison_json or {},
+                    "evidence_id": row.evidence_id,
+                    "created_at": _dt(row.created_at),
+                    "updated_at": _dt(row.updated_at),
                 }
                 for row in fixes
             ],
