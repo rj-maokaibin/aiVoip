@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.contracts.enums import CaseStatus
+from app.contracts.enums import ActorType, CaseStatus
 from app.core.config import settings
 from app.db.ai_intelligence_models import AIDiagnosticCycle
 from app.diagnosis.ai_proposal import run_ai_shadow
@@ -70,14 +70,23 @@ def _evidence_sufficient(snapshot: dict) -> bool:
     return False
 
 
-def _next_action_from_selection(selection, proposal: dict, planning: dict | None = None) -> dict:
+def _next_action_from_selection(
+    selection,
+    proposal: dict,
+    baseline: dict,
+    planning: dict | None = None,
+) -> dict:
     action = proposal.get("recommended_action") or {}
-    expected = []
-    distinguishes = []
+    expected = ["SUPPORT_TOP_HYPOTHESIS", "WEAKEN_TOP_HYPOTHESIS", "INCONCLUSIVE"]
+    distinguishes = [
+        str(item.get("code"))
+        for item in (baseline.get("hypotheses") or [])[:3]
+        if item.get("code")
+    ]
     if planning:
         question = planning.get("question_recommendation") or {}
-        expected = list(question.get("possible_outcomes") or [])
-        distinguishes = list(question.get("distinguishes") or [])
+        expected = list(question.get("possible_outcomes") or expected)
+        distinguishes = list(question.get("distinguishes") or distinguishes)
     return {
         "type": selection.kind,
         "registered_id": selection.registered_id,
@@ -248,6 +257,7 @@ class AIDiagnosticCycleService:
                         next_action = _next_action_from_selection(
                             selection,
                             proposal_for_action,
+                            baseline,
                             planning=planning,
                         )
                     except Exception as exc:
@@ -290,6 +300,7 @@ class AIDiagnosticCycleService:
             db,
             case_id=case_id,
             actor=actor,
+            actor_type=ActorType.AI,
             event_type="AI_DIAGNOSTIC_CYCLE_EVALUATED",
             target_type="ai_diagnostic_cycle",
             target_id=row.id,
