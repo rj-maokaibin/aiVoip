@@ -65,6 +65,11 @@ class Settings(BaseSettings):
     ai_eval_max_unauthorized_suggestion_rate: float = 0.0
     reasoning_gateway_models: str = ""
     reasoning_gateway_failover_enabled: bool = True
+    # AI1 is released SHADOW-first. Even when enabled, V1 records/evaluates the
+    # semantic proposal while the deterministic router remains execution authority.
+    ai_semantic_router_enabled: bool = False
+    ai_semantic_router_mode: str = "SHADOW"
+    ai_semantic_router_min_confidence: float = 0.80
     auth_allow_anonymous_dev: bool = True
     production_auth_provider: str = "pending"
     auth_gateway_hmac_secret: str = ""
@@ -90,8 +95,6 @@ class Settings(BaseSettings):
     feishu_attachment_max_bytes: int = 100 * 1024 * 1024
     feishu_identity_rbac_enabled: bool = False
     feishu_identity_discover_unmapped: bool = True
-    # G3 document ACL sync. AUTO prefers one group collaborator (`openchat`) and
-    # falls back to member mirroring only when the live Tenant cannot use it.
     feishu_document_acl_enabled: bool = False
     feishu_document_acl_mode: str = "AUTO"
     feishu_document_acl_permission: str = "view"
@@ -120,6 +123,12 @@ class Settings(BaseSettings):
     def model_post_init(self, __context) -> None:
         if str(self.ai_promotion_stage or "OFF").upper() != "OFF":
             self.ai_shadow_enabled = True
+        semantic_mode = str(self.ai_semantic_router_mode or "SHADOW").upper()
+        if semantic_mode not in {"OFF", "SHADOW"}:
+            raise ValueError("AI_SEMANTIC_ROUTER_MODE_INVALID")
+        self.ai_semantic_router_mode = semantic_mode
+        if not 0.0 <= float(self.ai_semantic_router_min_confidence) <= 1.0:
+            raise ValueError("AI_SEMANTIC_ROUTER_MIN_CONFIDENCE_INVALID")
         mode = str(self.feishu_document_acl_mode or "AUTO").upper()
         if mode not in {"AUTO", "CHAT_SCOPE", "MEMBER_MIRROR"}:
             raise ValueError("FEISHU_DOCUMENT_ACL_MODE_INVALID")
