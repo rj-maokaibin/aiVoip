@@ -43,3 +43,33 @@ class AISemanticIntentRecord(Base):
     model_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
     error_code: Mapped[str | None] = mapped_column(String(128), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class AICaseCopilotRecord(Base):
+    __tablename__ = "ai_case_copilot_records"
+    __table_args__ = (
+        UniqueConstraint("request_key", name="uq_ai_case_copilot_request_key"),
+        CheckConstraint(
+            "status IN ('ANSWERED','CONTROL_INTENT_REQUIRED','REJECTED','GATEWAY_FAILED')",
+            name="ck_ai_case_copilot_status",
+        ),
+        Index("ix_ai_case_copilot_case", "case_id"),
+        Index("ix_ai_case_copilot_status", "status"),
+        Index("ix_ai_case_copilot_created", "created_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    case_id: Mapped[str] = mapped_column(ForeignKey("cases.id", ondelete="CASCADE"), nullable=False)
+    request_key: Mapped[str] = mapped_column(String(256), nullable=False)
+    actor_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    actor_role: Mapped[str] = mapped_column(String(32), nullable=False)
+    question_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    snapshot_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    proposal_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    grounding_report_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    routed_control_intent: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    prompt_version: Mapped[str] = mapped_column(String(64), nullable=False, default="ai-case-copilot-v1")
+    model_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    error_code: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
