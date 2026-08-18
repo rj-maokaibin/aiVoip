@@ -39,6 +39,12 @@ def upgrade() -> None:
         sa.Column("formal_result_changed", sa.Boolean(), nullable=False, server_default=sa.false()),
         sa.Column("dispatch_attempted", sa.Boolean(), nullable=False, server_default=sa.false()),
         sa.Column("dispatch_allowed", sa.Boolean(), nullable=False, server_default=sa.false()),
+        sa.Column("suggestion_state", sa.String(24), nullable=False, server_default="NONE"),
+        sa.Column("accepted_by", sa.String(128), nullable=True),
+        sa.Column("accepted_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("execution_ref_type", sa.String(64), nullable=True),
+        sa.Column("execution_ref_id", sa.String(64), nullable=True),
+        sa.Column("suggestion_error_code", sa.String(128), nullable=True),
         sa.Column("error_code", sa.String(128), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
         sa.UniqueConstraint("case_id", "cycle_no", name="uq_ai_diagnostic_cycle_case_no"),
@@ -55,15 +61,21 @@ def upgrade() -> None:
             "continue_recommendation IN ('CONTINUE','STOP','REQUIRE_HUMAN')",
             name="ck_ai_diagnostic_cycle_continue",
         ),
+        sa.CheckConstraint(
+            "suggestion_state IN ('NONE','PROPOSED','ACCEPTED','DISPATCHED','FAILED')",
+            name="ck_ai_diagnostic_cycle_suggestion_state",
+        ),
     )
     op.create_index("ix_ai_diagnostic_cycle_case", "ai_diagnostic_cycles", ["case_id"])
     op.create_index("ix_ai_diagnostic_cycle_stage", "ai_diagnostic_cycles", ["runtime_stage"])
     op.create_index("ix_ai_diagnostic_cycle_status", "ai_diagnostic_cycles", ["status"])
+    op.create_index("ix_ai_diagnostic_cycle_suggestion_state", "ai_diagnostic_cycles", ["suggestion_state"])
     op.create_index("ix_ai_diagnostic_cycle_created", "ai_diagnostic_cycles", ["created_at"])
 
 
 def downgrade() -> None:
     op.drop_index("ix_ai_diagnostic_cycle_created", table_name="ai_diagnostic_cycles")
+    op.drop_index("ix_ai_diagnostic_cycle_suggestion_state", table_name="ai_diagnostic_cycles")
     op.drop_index("ix_ai_diagnostic_cycle_status", table_name="ai_diagnostic_cycles")
     op.drop_index("ix_ai_diagnostic_cycle_stage", table_name="ai_diagnostic_cycles")
     op.drop_index("ix_ai_diagnostic_cycle_case", table_name="ai_diagnostic_cycles")
