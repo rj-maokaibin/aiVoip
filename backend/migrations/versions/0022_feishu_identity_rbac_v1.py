@@ -35,9 +35,12 @@ def upgrade() -> None:
     )
     op.create_index("ix_feishu_identity_tenant", "feishu_user_identities", ["tenant_key"])
     op.create_index("ix_feishu_identity_open_id", "feishu_user_identities", ["open_id"])
+    op.create_index("ix_feishu_identity_union_id", "feishu_user_identities", ["union_id"])
+    op.create_index("ix_feishu_identity_user_id", "feishu_user_identities", ["user_id"])
     op.create_index("ix_feishu_identity_actor", "feishu_user_identities", ["internal_actor_id"])
     op.create_index("ix_feishu_identity_role", "feishu_user_identities", ["role"])
     op.create_index("ix_feishu_identity_status", "feishu_user_identities", ["status"])
+    op.create_index("ix_feishu_identity_last_seen", "feishu_user_identities", ["last_seen_at"])
 
     op.create_table(
         "case_acl_entries",
@@ -56,19 +59,24 @@ def upgrade() -> None:
     op.create_index("ix_case_acl_case", "case_acl_entries", ["case_id"])
     op.create_index("ix_case_acl_actor", "case_acl_entries", ["actor_id"])
     op.create_index("ix_case_acl_capability", "case_acl_entries", ["capability"])
+    op.create_index("ix_case_acl_effect", "case_acl_entries", ["effect"])
     op.create_index("ix_case_acl_expires", "case_acl_entries", ["expires_at"])
 
 
 def downgrade() -> None:
     op.drop_index("ix_case_acl_expires", table_name="case_acl_entries")
+    op.drop_index("ix_case_acl_effect", table_name="case_acl_entries")
     op.drop_index("ix_case_acl_capability", table_name="case_acl_entries")
     op.drop_index("ix_case_acl_actor", table_name="case_acl_entries")
     op.drop_index("ix_case_acl_case", table_name="case_acl_entries")
     op.drop_table("case_acl_entries")
 
+    op.drop_index("ix_feishu_identity_last_seen", table_name="feishu_user_identities")
     op.drop_index("ix_feishu_identity_status", table_name="feishu_user_identities")
     op.drop_index("ix_feishu_identity_role", table_name="feishu_user_identities")
     op.drop_index("ix_feishu_identity_actor", table_name="feishu_user_identities")
+    op.drop_index("ix_feishu_identity_user_id", table_name="feishu_user_identities")
+    op.drop_index("ix_feishu_identity_union_id", table_name="feishu_user_identities")
     op.drop_index("ix_feishu_identity_open_id", table_name="feishu_user_identities")
     op.drop_index("ix_feishu_identity_tenant", table_name="feishu_user_identities")
     op.drop_table("feishu_user_identities")
