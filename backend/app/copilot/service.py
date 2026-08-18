@@ -64,19 +64,16 @@ def _control_intent(question: str) -> str | None:
 
 
 def _claim_evidence_ids(proposal: CaseCopilotProposal) -> set[str]:
-    return {
-        str(ref.evidence_id)
-        for claim in proposal.claims
-        for ref in claim.evidence
-    }
+    return {str(ref.evidence_id) for claim in proposal.claims for ref in claim.evidence}
 
 
 class CaseCopilotService:
     """Read-only AI3 orchestration with current-Case Claim Grounding.
 
-    This service has no dependency on reproduction/experiment/fix workers and has
-    no action dispatcher. Control requests are returned to the caller as an Intent
-    that must re-enter the deterministic G1/G2/Policy path.
+    The service has no reproduction/experiment/fix dispatcher. Control requests
+    route out before the model. Grounded answers are released only when the
+    requester's role has at least one authorized Evidence object and the public
+    citation set exactly covers Evidence used by structured Claims.
     """
 
     def __init__(
@@ -87,6 +84,41 @@ class CaseCopilotService:
     ):
         self.snapshot_builder = snapshot_builder or CaseIntelligenceSnapshotBuilder()
         self.gateway = gateway or CaseCopilotGatewayClient()
+
+    def _persist_rejection(
+        self,
+        db: Session,
+        *,
+        common: dict[str, Any],
+        status: str,
+        code: str,
+    ) -> CopilotResult:
+        row = AICaseCopilotRecord(
+            status=status,
+            proposal_json={},
+            grounding_report_json={"status": "REJECT", "error_code": code},
+            routed_control_intent=None,
+            model_name=None,
+            error_code=code,
+            **common,
+        )
+        db.add(row)
+        db.flush()
+        audit(
+            db,
+            case_id=common["case_id"],
+            actor=common["actor_id"],
+            event_type="AI_CASE_COPILOT_REJECTED",
+            target_type="ai_case_copilot",
+            target_id=row.id,
+            detail={
+                "schema_version": "ai-case-copilot-audit-v1",
+                "status": status,
+                "error_code": code,
+                "read_only": True,
+            },
+        )
+        return _record_to_result(row)
 
     def answer(
         self,
@@ -152,23 +184,34 @@ class CaseCopilotService:
             )
             return _record_to_result(row)
 
+        allowed = self.snapshot_builder.allowed_evidence_ids(snapshot)
+        if not allowed:
+            return self._persist_rejection(
+                db,
+                common=common,
+                status="REJECTED",
+                code="COPILOT_NO_AUTHORIZED_EVIDENCE",
+            )
+
         try:
             raw = self.gateway.answer(question=question, snapshot=snapshot)
             proposal = CaseCopilotProposal.model_validate(raw["proposal"])
-            allowed = self.snapshot_builder.allowed_evidence_ids(snapshot)
             grounding = ClaimGroundingValidator().validate(
                 proposal.claims,
                 allowed_evidence_ids=allowed,
                 ai_generated=True,
             )
             cited = {str(x) for x in proposal.cited_evidence_ids}
-            unknown_citations = sorted(cited - allowed)
             claim_refs = _claim_evidence_ids(proposal)
+            unknown_citations = sorted(cited - allowed)
             unbound_citations = sorted(cited - claim_refs)
+            missing_public_citations = sorted(claim_refs - cited)
             if unknown_citations:
                 raise ValueError(f"COPILOT_EVIDENCE_NOT_IN_CASE:{','.join(unknown_citations[:8])}")
             if unbound_citations:
                 raise ValueError(f"COPILOT_CITATION_NOT_BOUND_TO_CLAIM:{','.join(unbound_citations[:8])}")
+            if missing_public_citations:
+                raise ValueError(f"COPILOT_CLAIM_EVIDENCE_NOT_PUBLICLY_CITED:{','.join(missing_public_citations[:8])}")
             if grounding.status != "PASS":
                 codes = [str(x.get("code")) for x in grounding.errors + grounding.warnings]
                 raise ValueError(f"COPILOT_GROUNDING_NOT_PASS:{','.join(codes[:8])}")
@@ -208,29 +251,4 @@ class CaseCopilotService:
             status = "REJECTED"
             code = str(exc).split("\n", 1)[0][:128]
 
-        row = AICaseCopilotRecord(
-            status=status,
-            proposal_json={},
-            grounding_report_json={"status": "REJECT", "error_code": code},
-            routed_control_intent=None,
-            model_name=None,
-            error_code=code,
-            **common,
-        )
-        db.add(row)
-        db.flush()
-        audit(
-            db,
-            case_id=case_id,
-            actor=actor_id,
-            event_type="AI_CASE_COPILOT_REJECTED",
-            target_type="ai_case_copilot",
-            target_id=row.id,
-            detail={
-                "schema_version": "ai-case-copilot-audit-v1",
-                "status": status,
-                "error_code": code,
-                "read_only": True,
-            },
-        )
-        return _record_to_result(row)
+        return self._persist_rejection(db, common=common, status=status, code=code)
