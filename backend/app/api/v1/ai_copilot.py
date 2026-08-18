@@ -11,6 +11,7 @@ from app.core.config import settings
 from app.core.ids import new_id
 from app.db.models import Case
 from app.copilot.service import CaseCopilotService
+from app.services.audit import audit
 
 router = APIRouter(tags=["ai-case-copilot"])
 _reader = require_permissions(PermissionName.CASE_READ, PermissionName.REPORT_READ)
@@ -36,14 +37,36 @@ def ask_case_copilot(
         raise HTTPException(404, "CASE_NOT_FOUND")
     request_id = req.request_id or new_id()
     request_key = f"api:{case_id}:{request_id}"
-    result = CaseCopilotService().answer(
-        db,
-        case_id=case_id,
-        question=req.question,
-        request_key=request_key,
-        actor_id=identity.actor_id,
-        actor_role=identity.role,
-    )
+    try:
+        with db.begin_nested():
+            result = CaseCopilotService().answer(
+                db,
+                case_id=case_id,
+                question=req.question,
+                request_key=request_key,
+                actor_id=identity.actor_id,
+                actor_role=identity.role,
+            )
+    except Exception as exc:
+        error_code = type(exc).__name__[:128]
+        audit(
+            db,
+            case_id=case_id,
+            actor=identity.actor_id,
+            event_type="AI_CASE_COPILOT_RUNTIME_FAILED",
+            target_type="ai_case_copilot",
+            target_id=None,
+            detail={
+                "schema_version": "ai-case-copilot-runtime-failure-v1",
+                "error_code": error_code,
+                "read_only": True,
+                "parent_transaction_preserved": True,
+                "source": "API",
+            },
+        )
+        db.commit()
+        raise HTTPException(503, "AI_CASE_COPILOT_RUNTIME_FAILED") from exc
+
     db.commit()
     safe_answer = result.answer
     if result.status == "GATEWAY_FAILED":
