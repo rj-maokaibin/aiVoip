@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import json
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
 from app.contracts.enums import UserRole
 from app.copilot.service import CopilotResult
 from app.core.config import settings
+from app.db.ai_intelligence_models import AICaseCopilotRecord
 from app.db.base import Base
 from app.db.feishu_governance_models import FeishuUserIdentity
 from app.db.models import Case, CaseDevice, ReproductionSession
@@ -124,6 +125,29 @@ class _ForbiddenCopilotService:
         raise AssertionError("Copilot must not be reached")
 
 
+class _FailingCopilotService:
+    calls = 0
+
+    def answer(self, db, **kwargs):
+        self.__class__.calls += 1
+        # Prove the SAVEPOINT rolls back partial AI3 persistence while preserving
+        # the outer Feishu identity/Case/idempotency transaction.
+        db.add(AICaseCopilotRecord(
+            case_id=kwargs["case_id"],
+            request_key="transient-runtime-row",
+            actor_id=kwargs["actor_id"],
+            actor_role=kwargs["actor_role"].value,
+            question_hash="a" * 64,
+            snapshot_fingerprint="b" * 64,
+            status="ANSWERED",
+            proposal_json={},
+            grounding_report_json={},
+            prompt_version="ai-case-copilot-v1",
+        ))
+        db.flush()
+        raise RuntimeError("synthetic AI3 runtime failure")
+
+
 def test_authorized_case_general_question_uses_copilot_and_duplicate_replies_once(monkeypatch):
     monkeypatch.setattr(settings, "feishu_identity_rbac_enabled", True)
     monkeypatch.setattr(settings, "ai_case_copilot_enabled", True)
@@ -148,6 +172,38 @@ def test_authorized_case_general_question_uses_copilot_and_duplicate_replies_onc
         assert _FakeCopilotService.calls == 1
         assert len(replies) == 1
         assert "根因尚未确认" in replies[0][1]
+
+
+def test_unexpected_copilot_failure_rolls_back_sidecar_only_and_replays_safe_result(monkeypatch):
+    monkeypatch.setattr(settings, "feishu_identity_rbac_enabled", True)
+    monkeypatch.setattr(settings, "ai_case_copilot_enabled", True)
+    monkeypatch.setattr(settings, "ai_semantic_router_enabled", False)
+    replies = []
+    _FailingCopilotService.calls = 0
+    monkeypatch.setattr("app.copilot.service.CaseCopilotService", _FailingCopilotService)
+    monkeypatch.setattr(authorized_events, "enqueue_reply", lambda message_id, text: replies.append((message_id, text)))
+
+    with Session(_engine()) as db:
+        case = _case(db)
+        identity = _identity(db, open_id="ou-runtime-viewer")
+        payload = _payload("这个 Case 现在怎么看？", open_id="ou-runtime-viewer", message_id="msg-ai3-runtime")
+        first = dispatch_authorized_event(db, payload=payload)
+        db.commit()
+        second = dispatch_authorized_event(db, payload=payload)
+        db.commit()
+
+        assert first["handled"] == "case_copilot"
+        assert first["copilot_status"] == "RUNTIME_FAILED"
+        assert first["error_code"] == "RuntimeError"
+        assert second["duplicate"] is True
+        assert _FailingCopilotService.calls == 1
+        assert len(replies) == 1
+        assert "确定性诊断" in replies[0][1]
+        assert db.get(Case, case.id) is not None
+        assert db.get(FeishuUserIdentity, identity.id) is not None
+        assert db.scalar(select(AICaseCopilotRecord).where(
+            AICaseCopilotRecord.request_key == "transient-runtime-row"
+        )) is None
 
 
 def test_unknown_identity_is_denied_before_copilot(monkeypatch):
