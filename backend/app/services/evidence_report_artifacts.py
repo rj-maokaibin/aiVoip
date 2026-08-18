@@ -111,25 +111,30 @@ _IMAGE_TYPES={"WAVEFORM_PNG","SPECTRUM_PNG","SPECTROGRAM_PNG","RTP_TIMELINE_PNG"
 _REPORT_TYPES={"PRELIMINARY_REPORT_HTML","PRELIMINARY_REPORT_JSON","MANIFEST_JSON"}
 
 
+def _artifact_type(artifact: Artifact) -> str:
+    return str(artifact.type or "").upper()
+
+
 def _artifact_allowed_for_profile(artifact:Artifact,profile:str)->bool:
-    if artifact.type==EvidenceReportArtifactType.EVIDENCE_BUNDLE.value:
+    atype=_artifact_type(artifact)
+    # Bundles are terminal export artifacts and may never be recursively embedded
+    # into another Bundle, regardless of generation order/profile.
+    if atype==EvidenceReportArtifactType.EVIDENCE_BUNDLE.value or str(artifact.filename or "").lower().endswith(".zip"):
         return False
     if profile=="INTERNAL_FULL":
         return True
-    # SHARE_SAFE intentionally excludes full WAV artifacts. Abnormal clips,
-    # deterministic images and structured analysis remain available.
-    return artifact.type not in _FULL_AUDIO_TYPES
+    return atype not in _FULL_AUDIO_TYPES
 
 
 def _artifact_bundle_path(artifact:Artifact)->str:
-    prefix=artifact.id[:8]
-    if artifact.type in _CLIP_TYPES:
+    prefix=artifact.id[:8]; atype=_artifact_type(artifact)
+    if atype in _CLIP_TYPES:
         return f"audio/clips/{prefix}_{artifact.filename}"
-    if artifact.type in _FULL_AUDIO_TYPES:
+    if atype in _FULL_AUDIO_TYPES:
         return f"audio/full/{prefix}_{artifact.filename}"
-    if artifact.type in _IMAGE_TYPES or artifact.content_type=="image/png":
+    if atype in _IMAGE_TYPES or artifact.content_type=="image/png":
         return f"images/{prefix}_{artifact.filename}"
-    if artifact.type in _REPORT_TYPES or "REPORT" in str(artifact.type):
+    if atype in _REPORT_TYPES or "REPORT" in atype:
         return f"report/{prefix}_{artifact.filename}"
     return f"analysis/{prefix}_{artifact.filename}"
 
@@ -144,8 +149,6 @@ def _evidence_bundle_path(evidence:Evidence)->str:
 
 
 def _share_safe_evidence(evidence:Evidence)->bool:
-    # No raw capture/full audio is copied from Evidence into SHARE_SAFE. Abnormal
-    # clips are represented by linked AUDIO_CLIP/PERIODIC_AUDIO_CLIP Artifacts.
     return False
 
 
