@@ -29,11 +29,10 @@ class FeishuCaseAlreadyBound(RuntimeError):
         super().__init__(f"FEISHU_CASE_ALREADY_BOUND:{case_id}:{existing_chat_id}")
 
 
-def _abort_active_case_conflict(db: Session, *, chat_id: str, existing_case_id: str) -> None:
-    # A conflicting source-chat bind invalidates the caller's Case-creation
-    # transaction. Roll it back here because legacy provision code deliberately
-    # catches binding exceptions and otherwise could commit an orphan Case.
-    db.rollback()
+def _raise_active_case_conflict(*, chat_id: str, existing_case_id: str) -> None:
+    # This low-level service must never roll back the caller's whole Session: it
+    # may be running inside an idempotent message transaction. The transaction
+    # owner (provision/attachment workflow) decides rollback scope.
     raise FeishuActiveCaseConflict(chat_id=chat_id, existing_case_id=existing_case_id)
 
 
@@ -79,7 +78,7 @@ def bind_case_to_chat(db: Session, *, case_id: str, chat_id: str, chat_type: str
         if receive_id_type == 'chat_id':
             active_case, _ = active_case_for_chat(db, tenant_key=tenant_key, chat_id=chat_id)
             if active_case is not None and active_case.id != case_id:
-                _abort_active_case_conflict(db, chat_id=chat_id, existing_case_id=active_case.id)
+                _raise_active_case_conflict(chat_id=chat_id, existing_case_id=active_case.id)
             activate_binding_lifecycle(
                 db, binding_id=binding.id, tenant_key=tenant_key, chat_id=chat_id,
                 created_by_open_id=created_by_open_id,
@@ -89,7 +88,7 @@ def bind_case_to_chat(db: Session, *, case_id: str, chat_id: str, chat_type: str
     if receive_id_type == 'chat_id':
         active_case, _ = active_case_for_chat(db, tenant_key=tenant_key, chat_id=chat_id)
         if active_case is not None and active_case.id != case_id:
-            _abort_active_case_conflict(db, chat_id=chat_id, existing_case_id=active_case.id)
+            _raise_active_case_conflict(chat_id=chat_id, existing_case_id=active_case.id)
 
     candidate = FeishuCaseBinding(
         case_id=case_id, receive_id=chat_id, receive_id_type=receive_id_type,
@@ -97,6 +96,9 @@ def bind_case_to_chat(db: Session, *, case_id: str, chat_id: str, chat_type: str
     )
     apply_source_context(candidate)
     try:
+        # The nested transaction limits a true concurrent partial-unique conflict
+        # to the bind itself; the caller can then decide whether to roll back its
+        # larger Case-creation transaction.
         with db.begin_nested():
             db.add(candidate)
             db.flush()
@@ -104,7 +106,7 @@ def bind_case_to_chat(db: Session, *, case_id: str, chat_id: str, chat_type: str
         if receive_id_type == 'chat_id':
             active_case, _ = active_case_for_chat(db, tenant_key=tenant_key, chat_id=chat_id)
             if active_case is not None and active_case.id != case_id:
-                _abort_active_case_conflict(db, chat_id=chat_id, existing_case_id=active_case.id)
+                _raise_active_case_conflict(chat_id=chat_id, existing_case_id=active_case.id)
         existing = db.scalar(select(FeishuCaseBinding).where(FeishuCaseBinding.case_id == case_id).limit(1))
         if existing is not None:
             return existing
