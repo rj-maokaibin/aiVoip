@@ -45,16 +45,16 @@ class CopilotNextStep(BaseModel):
 class CaseCopilotProposal(BaseModel):
     """AI3 read-only grounded answer contract.
 
-    Every factual/diagnostic assertion must be represented as an L5 PROPOSED
-    DiagnosticClaim and structurally grounded against current-Case Evidence by
-    ClaimGroundingValidator before the answer can be returned.
+    Every factual/diagnostic answer must carry at least one explicit L5 PROPOSED
+    Claim and at least one public current-Case Evidence citation. Empty-claim
+    prose is rejected so the model cannot bypass structural grounding.
     """
 
     model_config = ConfigDict(extra="forbid")
     schema_version: Literal["ai-case-copilot-v1"]
     answer: str = Field(min_length=1, max_length=12000)
-    claims: list[DiagnosticClaim] = Field(default_factory=list, max_length=64)
-    cited_evidence_ids: list[str] = Field(default_factory=list, max_length=128)
+    claims: list[DiagnosticClaim] = Field(min_length=1, max_length=64)
+    cited_evidence_ids: list[str] = Field(min_length=1, max_length=128)
     uncertainty: list[str] = Field(default_factory=list, max_length=32)
     next_steps: list[CopilotNextStep] = Field(default_factory=list, max_length=16)
     root_cause_confirmed_by_ai: Literal[False]
