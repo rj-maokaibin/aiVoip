@@ -53,6 +53,10 @@ def ensure_retention_state(db: Session, evidence: Evidence) -> EvidenceRetention
         if row.status == "ACTIVE" and row.locked_at is None:
             row.policy = "LONG_TERM_GOLDEN"
             row.retain_until = None
+            audit(db, case_id=evidence.case_id, actor="retention-policy", event_type="EVIDENCE_RETENTION_GOLDEN_EXEMPTED",
+                  target_type="evidence", target_id=evidence.id,
+                  detail={"policy":"LONG_TERM_GOLDEN","reason":"CASE_PROMOTED_TO_GOLDEN"})
+            db.flush()
     return row
 
 
@@ -120,6 +124,34 @@ def _remove_payload(evidence: Evidence) -> tuple[bool, list[str]]:
     return removed, errors
 
 
+def _refresh_golden_exemptions(db: Session, *, limit: int) -> int:
+    """Refresh tracked raw evidence before deletion.
+
+    Golden eligibility can be reached long after Evidence creation. Retention
+    therefore re-checks active 90-day rows on every sweep before selecting due
+    payloads. This prevents a later-promoted Golden Case from being accidentally
+    expired by a stale policy snapshot.
+    """
+    candidates = list(db.scalars(
+        select(EvidenceRetentionState).where(
+            EvidenceRetentionState.status == "ACTIVE",
+            EvidenceRetentionState.policy == "STANDARD_90D",
+            EvidenceRetentionState.golden_exempt.is_(False),
+        ).order_by(EvidenceRetentionState.retain_until.asc().nullslast()).limit(limit)
+    ))
+    changed = 0
+    for row in candidates:
+        evidence = db.get(Evidence, row.evidence_id)
+        if not evidence:
+            continue
+        before = bool(row.golden_exempt)
+        ensure_retention_state(db, evidence)
+        if not before and row.golden_exempt:
+            changed += 1
+    db.flush()
+    return changed
+
+
 def expire_due_evidence(db: Session, *, now: datetime | None = None, actor: str = "retention-worker",
                         limit: int | None = None, storage_delete: bool = True) -> dict:
     now = now or utcnow()
@@ -133,6 +165,8 @@ def expire_due_evidence(db: Session, *, now: datetime | None = None, actor: str 
     ))
     for evidence in untracked:
         ensure_retention_state(db, evidence)
+
+    golden_refreshed = _refresh_golden_exemptions(db, limit=limit)
 
     due = list(db.scalars(
         select(EvidenceRetentionState).where(
@@ -176,7 +210,7 @@ def expire_due_evidence(db: Session, *, now: datetime | None = None, actor: str 
         expired += 1
         details.append({"evidence_id": evidence.id, "status": "EXPIRED"})
     db.flush()
-    return {"initialized": len(untracked), "due": len(due), "expired": expired, "failed": failed, "details": details}
+    return {"initialized": len(untracked), "golden_refreshed": golden_refreshed, "due": len(due), "expired": expired, "failed": failed, "details": details}
 
 
 def retention_status(db: Session, evidence_id: str) -> dict:
