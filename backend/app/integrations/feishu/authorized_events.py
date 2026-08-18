@@ -12,6 +12,7 @@ from app.api.feishu_permissions import (
 )
 from app.core.config import settings
 from app.core.errors import AppError
+from app.db.ai_intelligence_models import AIDiagnosticCycle
 from app.db.models import DiagnosticExperiment, ReproductionSession
 from app.integrations.feishu.case_resolver import resolve_case
 from app.integrations.feishu.events import CARD_ACTION_EVENT_TYPES, action_value, dispatch_event
@@ -26,6 +27,7 @@ _CARD_CAPABILITIES = {
     "STOP_REPRODUCTION": FeishuCapability.CONTROL_REPRODUCTION,
     "EXTERNAL_ACTION_COMPLETED": FeishuCapability.COMPLETE_EXTERNAL_ACTION,
     "OPEN_CASE": FeishuCapability.VIEW_CASE,
+    "AI2_ACCEPT_SUGGESTION": FeishuCapability.RUN_AI_SUGGESTION,
 }
 _DENIED_MESSAGE = "当前飞书账号未完成权限映射、已被禁用，或没有执行该操作的权限。请联系 VOIP AI 管理员。"
 
@@ -140,12 +142,7 @@ def _authorize_message(db: Session, payload: dict):
 
 
 def _maybe_dispatch_case_copilot(db: Session, *, payload: dict, identity) -> dict | None:
-    """Handle an authorized, Case-bound GENERAL_QUESTION with AI3.
-
-    AI3 is an optional read-only sidecar. Its work runs inside a SAVEPOINT so an
-    unexpected model/grounding/persistence exception cannot poison the parent
-    Feishu/G1/G2 transaction. G2 authorization has already completed.
-    """
+    """Handle an authorized, Case-bound GENERAL_QUESTION with AI3."""
     if not settings.ai_case_copilot_enabled or not identity.active or identity.role is None:
         return None
     header = payload.get("header") if isinstance(payload.get("header"), dict) else {}
@@ -273,6 +270,20 @@ def _maybe_dispatch_case_copilot(db: Session, *, payload: dict, identity) -> dic
     return result
 
 
+def _ai2_underlying_capability(db: Session, value: dict) -> tuple[str | None, FeishuCapability | None]:
+    cycle = db.get(AIDiagnosticCycle, str(value.get("cycle_id") or ""))
+    if not cycle:
+        return str(value.get("case_id") or "") or None, None
+    kind = str((cycle.next_action_json or {}).get("type") or "")
+    capability = {
+        "QUESTION": FeishuCapability.ADD_EVIDENCE,
+        "USER_EVIDENCE_REQUEST": FeishuCapability.ADD_EVIDENCE,
+        "REPRODUCTION_PROFILE": FeishuCapability.CONTROL_REPRODUCTION,
+        "EXPERIMENT_PROFILE": FeishuCapability.RUN_REGISTERED_EXPERIMENT,
+    }.get(kind)
+    return cycle.case_id, capability
+
+
 def _card_case_and_capability(db: Session, payload: dict):
     value = action_value(payload)
     action = str(value.get("action") or "").upper()
@@ -284,6 +295,8 @@ def _card_case_and_capability(db: Session, payload: dict):
     elif action == "EXTERNAL_ACTION_COMPLETED":
         row = db.get(DiagnosticExperiment, str(value.get("experiment_id") or ""))
         case_id = row.case_id if row else case_id
+    elif action == "AI2_ACCEPT_SUGGESTION":
+        case_id, _ = _ai2_underlying_capability(db, value)
     return action, case_id, capability
 
 
@@ -299,6 +312,31 @@ def _authorize_card_action(db: Session, payload: dict):
     decision = authorize_capability(db, identity=identity, capability=capability, case_id=case_id)
     if not decision.allowed:
         return identity, _permission_denied_result(decision=decision, identity_status=identity.status, card_action=True)
+    if action == "AI2_ACCEPT_SUGGESTION":
+        value = action_value(payload)
+        _, underlying = _ai2_underlying_capability(db, value)
+        if underlying is None:
+            return identity, _permission_denied_result(
+                decision=FeishuAuthorizationDecision(
+                    False, FeishuCapability.RUN_AI_SUGGESTION, identity.actor_id,
+                    identity.role.value if identity.role else None, identity.status,
+                    case_id, None, False, "AI2_SUGGESTION_NOT_ACTIONABLE",
+                ),
+                identity_status=identity.status,
+                card_action=True,
+            )
+        underlying_decision = authorize_capability(
+            db,
+            identity=identity,
+            capability=underlying,
+            case_id=case_id,
+        )
+        if not underlying_decision.allowed:
+            return identity, _permission_denied_result(
+                decision=underlying_decision,
+                identity_status=identity.status,
+                card_action=True,
+            )
     return identity, None
 
 
