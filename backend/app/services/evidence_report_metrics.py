@@ -43,12 +43,12 @@ def evidence_report_pipeline_metrics(db: Session, *, window_days: int | None = N
     links = list(db.scalars(select(EvidenceReportArtifactLink).where(EvidenceReportArtifactLink.report_id.in_(report_ids)))) if report_ids else []
     artifact_ids = [x.artifact_id for x in links]
     artifacts = list(db.scalars(select(Artifact).where(Artifact.id.in_(artifact_ids)))) if artifact_ids else []
-    # Feishu binding has immutable created_at plus last_synced_at; there is no
-    # generic updated_at column. Count documents created or synchronized in the
-    # observation window so long-lived Case documents remain observable.
+    # A Case-level Feishu evidence document is long-lived. Count bindings created
+    # or updated inside the observation window so synchronization remains visible
+    # without inventing a second timestamp that is not part of the persistence model.
     feishu = list(db.scalars(select(FeishuEvidenceDocumentBinding).where(or_(
         FeishuEvidenceDocumentBinding.created_at >= since,
-        FeishuEvidenceDocumentBinding.last_synced_at >= since,
+        FeishuEvidenceDocumentBinding.updated_at >= since,
     ))))
 
     report_latency = [
