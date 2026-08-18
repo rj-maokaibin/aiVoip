@@ -68,7 +68,12 @@ class BindCaseRequest(BaseModel):
     chat_type: str = Field(default="group", max_length=32)
 
 
+def _iso(value: datetime | None) -> str | None:
+    return value.isoformat() if value is not None else None
+
+
 def _identity_out(row: FeishuUserIdentity) -> dict:
+    """Return a JSON-native identity snapshot for API, Audit and idempotency storage."""
     return {
         "id": row.id,
         "tenant_key": row.tenant_key,
@@ -80,9 +85,9 @@ def _identity_out(row: FeishuUserIdentity) -> dict:
         "status": row.status,
         "display_name": row.display_name,
         "metadata": row.metadata_json or {},
-        "last_seen_at": row.last_seen_at,
-        "created_at": row.created_at,
-        "updated_at": row.updated_at,
+        "last_seen_at": _iso(row.last_seen_at),
+        "created_at": _iso(row.created_at),
+        "updated_at": _iso(row.updated_at),
     }
 
 
@@ -221,7 +226,7 @@ def get_case_acl(
         "actor_id": row.actor_id,
         "capability": row.capability,
         "effect": row.effect,
-        "expires_at": row.expires_at,
+        "expires_at": _iso(row.expires_at),
         "created_by": row.created_by,
     } for row in rows]
 
@@ -319,7 +324,6 @@ def bind_case(
         db, case_id=req.case_id, chat_id=req.chat_id, chat_type=req.chat_type,
         source_context={
             "tenant_key": req.tenant_key,
-            "sender_open_id": identity.actor_id,
             "normalized_text": "ADMIN_BIND",
         },
     )
