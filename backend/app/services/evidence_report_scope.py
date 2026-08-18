@@ -71,8 +71,16 @@ def scoped_evidences(db: Session, *, scope_type: str, scope: dict) -> list[Evide
 
 
 def evidence_dict(e: Evidence) -> dict:
-    return {"id":e.id,"type":e.type,"source":e.source,"kind":e.kind,"scope":e.source_scope,"level":e.level,"completeness":e.completeness,
+    meta=e.metadata_json or {}
+    payload_available=bool(meta.get("payload_available", True)) and str(e.completeness or "").upper() not in {"UNAVAILABLE","CORRUPTED"}
+    retention_status=meta.get("retention_status")
+    # For completeness calculations an expired payload is deliberately not
+    # represented as PCAP/PCM_RX/PCM_TX. The original type remains available for
+    # provenance and UI explanation.
+    effective_type=e.type if payload_available else "EXPIRED_RAW_EVIDENCE"
+    return {"id":e.id,"type":effective_type,"original_type":e.type,"source":e.source,"kind":e.kind,"scope":e.source_scope,"level":e.level,"completeness":e.completeness,
             "filename":e.filename,"sha256":e.sha256,"size_bytes":e.size_bytes,"session_id":e.session_id,"call_id":e.call_id,
+            "payload_available":payload_available,"retention_status":retention_status,"retention_expired_at":meta.get("retention_expired_at"),
             "time_range_start":e.time_range_start.isoformat() if e.time_range_start else None,"time_range_end":e.time_range_end.isoformat() if e.time_range_end else None}
 
 
