@@ -58,6 +58,27 @@ def test_golden_candidate_raw_evidence_is_long_term_exempt():
         assert state.retain_until is None
 
 
+def test_late_golden_promotion_is_refreshed_before_expiry():
+    eng = _engine()
+    old = datetime(2025, 1, 1, tzinfo=timezone.utc)
+    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    with Session(eng) as db:
+        case = _case(db, 'RET-LATE-GOLDEN')
+        ev = _evidence(db, case.id, created_at=old)
+        state = ensure_retention_state(db, ev)
+        assert state.policy == 'STANDARD_90D'
+        db.add(GoldenCandidateAssessment(case_id=case.id, status='GOLDEN_CANDIDATE'))
+        db.flush()
+        result = expire_due_evidence(db, now=now, storage_delete=False)
+        db.refresh(state)
+        assert result['golden_refreshed'] == 1
+        assert result['expired'] == 0
+        assert state.golden_exempt is True
+        assert state.policy == 'LONG_TERM_GOLDEN'
+        assert state.retain_until is None
+        assert ev.completeness == 'COMPLETE'
+
+
 def test_manual_lock_and_unlock_are_audited():
     eng = _engine()
     now = datetime.now(timezone.utc)
