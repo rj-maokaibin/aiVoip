@@ -23,10 +23,9 @@ def _dt(value):
 class CaseIntelligenceSnapshotBuilder:
     """Build one current-Case-only, role-aware source of truth for AI3.
 
-    Viewer receives report-level Evidence summaries only. Roles allowed to inspect
-    engineering Evidence receive the existing CaseEvidenceSnapshotBuilder output.
-    No cross-Case historical data is included in AI3 V1; this prevents chat Q&A
-    from accidentally turning similarity/RAG context into current-Case fact.
+    Viewer receives report/derived Evidence only; raw Evidence is not included in
+    the Viewer snapshot at all. Engineering roles may inspect the engineering
+    Evidence view internally. No cross-Case history is included in AI3 V1.
     """
 
     schema_version = "case-intelligence-snapshot-v1"
@@ -41,10 +40,14 @@ class CaseIntelligenceSnapshotBuilder:
 
         base = self.evidence_builder.build(db, case_id)
         raw_allowed = role in _RAW_ROLES
-        evidence_ids = {str(item["id"]) for item in base.get("evidences") or []}
+        base_evidences = list(base.get("evidences") or [])
+        visible_source = base_evidences if raw_allowed else [
+            item for item in base_evidences if str(item.get("kind") or "").upper() != "RAW"
+        ]
+        evidence_ids = {str(item["id"]) for item in visible_source if item.get("id")}
 
         if raw_allowed:
-            evidence_view = base.get("evidences") or []
+            evidence_view = visible_source
             analyzer_view = base.get("analyzers") or {}
             devices = base.get("devices") or []
         else:
@@ -57,7 +60,7 @@ class CaseIntelligenceSnapshotBuilder:
                     "level": item.get("level"),
                     "completeness": item.get("completeness"),
                 }
-                for item in (base.get("evidences") or [])
+                for item in visible_source
             ]
             analyzer_view = {
                 name: {
@@ -149,7 +152,7 @@ class CaseIntelligenceSnapshotBuilder:
             .limit(20)
         ))
 
-        out = {
+        return {
             "schema_version": self.schema_version,
             "case": {
                 "id": case.id,
@@ -222,7 +225,7 @@ class CaseIntelligenceSnapshotBuilder:
                     "evaluations": row.evaluations_json or [],
                     "business_checks": row.business_checks_json or {},
                     "comparison": row.comparison_json or {},
-                    "evidence_id": row.evidence_id,
+                    "evidence_id": row.evidence_id if raw_allowed or str(row.evidence_id or "") in evidence_ids else None,
                     "created_at": _dt(row.created_at),
                     "updated_at": _dt(row.updated_at),
                 }
@@ -235,7 +238,6 @@ class CaseIntelligenceSnapshotBuilder:
             },
             "fingerprint": base["fingerprint"],
         }
-        return out
 
     @staticmethod
     def allowed_evidence_ids(snapshot: dict[str, Any]) -> set[str]:
