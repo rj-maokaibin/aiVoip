@@ -75,7 +75,7 @@ Gateway payload contains normalized text, attachment metadata, deterministic can
 - Root Cause confirmation forbidden
 - deterministic router remains execution authority
 
-IP, MAC, phone/number and secret material are redacted before transport; gateway bearer token exists only in the HTTP header.
+IP, MAC, phone/number and secret material are redacted before transport; gateway bearer token exists only in the HTTP header. Payload safety failures are converted to `SemanticGatewayError`; the SHADOW sidecar cannot crash the deterministic Feishu workflow.
 
 ## 7. Fail-closed behavior
 
@@ -88,7 +88,7 @@ The semantic proposal is rejected when:
 - confidence is below configured threshold
 - gateway returns invalid data
 
-Gateway transport failure is recorded as `GATEWAY_FAILED`. None of these conditions changes the deterministic workflow route.
+Gateway transport/safety failure is recorded as `GATEWAY_FAILED`. None of these conditions changes the deterministic workflow route.
 
 ## 8. API
 
@@ -110,18 +110,31 @@ Focused tests cover:
 - duplicate message id idempotency
 - raw-command/extra-field rejection
 - Gateway IP/MAC/number/secret redaction
+- Admin/Service non-executing debug API
 - synthetic contract corpus routing gate
 
+The CI workflow has a dedicated `AI1 Semantic Router software gate` so these invariants fail independently from the large backend regression.
+
 The synthetic corpus is a software-contract gate, **not** a substitute for the frozen production acceptance target.
+
+### Real-corpus executable acceptance
+
+`tools/ai1_semantic_eval.py` accepts reviewed/de-identified JSON or JSONL labels and emits `ai1-semantic-eval-v1` with machine-verifiable PASS/FAIL for:
+
+- Intent Accuracy >= 95%
+- Dangerous Intent false allow = 0
+- Case wrong association = 0
+- invalid/low-confidence/gateway-failure Fail-Closed Rate = 100%
+
+The evaluator itself has positive/negative threshold tests and is included in the dedicated AI1 CI gate. Production acceptance must run this tool on real Feishu traffic labels; synthetic data cannot satisfy that environment gate.
 
 ## 10. Release acceptance still required
 
 Before AI1 can influence real routing beyond SHADOW:
 
-- real Feishu corpus Intent Accuracy >= 95%
-- Dangerous Intent false allow = 0
-- Case wrong association = 0
-- invalid schema / low confidence fail closed = 100%
-- live Gateway observability and audit verified
+- run `tools/ai1_semantic_eval.py` against reviewed real Feishu corpus and obtain PASS
+- live Gateway observability/audit verified
+- Dangerous Intent false allow remains 0 under live traffic
+- Case wrong association remains 0 under live traffic
 
 Promotion beyond SHADOW requires an explicit later change and corresponding Promotion Gate; this PR does not implement that promotion.
