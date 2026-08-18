@@ -11,7 +11,6 @@ from app.experiments.orchestrator import DiagnosticExperimentOrchestrator
 from app.reproduction.orchestrator import ReproductionOrchestrator
 from app.reproduction.question_graph import DiagnosticQuestionGraph, DiagnosticQuestionRegistry
 from app.services.audit import audit
-from app.workers.reproduction_tasks import start_reproduction
 
 
 class AISuggestionBridgeError(RuntimeError):
@@ -26,6 +25,7 @@ class AISuggestionExecution:
     execution_ref_type: str | None
     execution_ref_id: str | None
     user_message: str
+    enqueue_after_commit: bool = False
     idempotent_replay: bool = False
 
 
@@ -40,7 +40,8 @@ class AISuggestionBridge:
     Feishu Identity/RBAC authorization. It re-loads the persisted cycle, rejects a
     stale/non-SUGGEST/non-registered recommendation, revalidates the identifier in
     the deterministic registry/orchestrator, and only then creates the deterministic
-    workflow object.
+    workflow object. Any asynchronous worker dispatch is deliberately deferred until
+    the caller has committed the database transaction.
     """
 
     def _load_current_cycle(self, db: Session, *, case_id: str, cycle_id: str) -> AIDiagnosticCycle:
@@ -97,6 +98,7 @@ class AISuggestionBridge:
                 execution_ref_type=row.execution_ref_type,
                 execution_ref_id=row.execution_ref_id,
                 user_message="该 AI2 建议已采纳并进入确定性工作流，本次为幂等重复回调。",
+                enqueue_after_commit=False,
                 idempotent_replay=True,
             )
         if row.suggestion_state not in {"NONE", "PROPOSED", "ACCEPTED"}:
@@ -111,6 +113,7 @@ class AISuggestionBridge:
         try:
             execution_ref_type: str | None = None
             execution_ref_id: str | None = None
+            enqueue_after_commit = False
             message = "AI2 建议已采纳。"
 
             if kind == "QUESTION":
@@ -126,8 +129,6 @@ class AISuggestionBridge:
                 message = f"已采纳建议：{template.title}。请按该问题补充对应现象/证据。"
 
             elif kind == "REPRODUCTION_PROFILE":
-                # Registry validation is repeated inside create_session(). No raw
-                # command or model-supplied parameter is forwarded.
                 session = ReproductionOrchestrator().create_session(
                     db,
                     case_id=case_id,
@@ -136,8 +137,8 @@ class AISuggestionBridge:
                 )
                 execution_ref_type = "reproduction_session"
                 execution_ref_id = session.id
-                start_reproduction.apply_async(args=[session.id], queue="reproduction-control")
-                message = "已按注册复现 Profile 创建任务并进入确定性 Reproduction Orchestrator。"
+                enqueue_after_commit = True
+                message = "已按注册复现 Profile 创建任务；提交成功后将进入确定性 Reproduction Orchestrator。"
 
             elif kind == "EXPERIMENT_PROFILE":
                 orchestrator = DiagnosticExperimentOrchestrator()
@@ -152,7 +153,7 @@ class AISuggestionBridge:
                 execution_ref_id = experiment.id
                 message = "已按注册 Experiment Profile 创建 A/B 实验；后续步骤继续由确定性 Experiment Orchestrator 管理。"
 
-            else:  # USER_EVIDENCE_REQUEST
+            else:
                 execution_ref_type = "user_evidence_request"
                 execution_ref_id = row.id
                 message = "已采纳建议：请在当前 Case 群继续上传/补充建议所需的现场证据。"
@@ -160,8 +161,6 @@ class AISuggestionBridge:
             row.suggestion_state = "DISPATCHED"
             row.execution_ref_type = execution_ref_type
             row.execution_ref_id = execution_ref_id
-            # These fields describe AI authority, not the explicitly authorized
-            # deterministic workflow that may have been created after the click.
             row.dispatch_attempted = False
             row.dispatch_allowed = False
             row.formal_result_changed = False
@@ -183,6 +182,7 @@ class AISuggestionBridge:
                     "execution_ref_id": execution_ref_id,
                     "explicit_user_confirmation": True,
                     "ai_dispatch_authority": False,
+                    "async_dispatch_deferred_until_commit": enqueue_after_commit,
                     "raw_command_allowed": False,
                     "formal_result_changed": False,
                 },
@@ -194,6 +194,7 @@ class AISuggestionBridge:
                 execution_ref_type=execution_ref_type,
                 execution_ref_id=execution_ref_id,
                 user_message=message,
+                enqueue_after_commit=enqueue_after_commit,
             )
         except Exception as exc:
             row.suggestion_state = "FAILED"
