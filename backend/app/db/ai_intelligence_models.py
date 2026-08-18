@@ -92,9 +92,14 @@ class AIDiagnosticCycle(Base):
             "continue_recommendation IN ('CONTINUE','STOP','REQUIRE_HUMAN')",
             name="ck_ai_diagnostic_cycle_continue",
         ),
+        CheckConstraint(
+            "suggestion_state IN ('NONE','PROPOSED','ACCEPTED','DISPATCHED','FAILED')",
+            name="ck_ai_diagnostic_cycle_suggestion_state",
+        ),
         Index("ix_ai_diagnostic_cycle_case", "case_id"),
         Index("ix_ai_diagnostic_cycle_stage", "runtime_stage"),
         Index("ix_ai_diagnostic_cycle_status", "status"),
+        Index("ix_ai_diagnostic_cycle_suggestion_state", "suggestion_state"),
         Index("ix_ai_diagnostic_cycle_created", "created_at"),
     )
 
@@ -119,5 +124,11 @@ class AIDiagnosticCycle(Base):
     formal_result_changed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     dispatch_attempted: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     dispatch_allowed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    suggestion_state: Mapped[str] = mapped_column(String(24), nullable=False, default="NONE")
+    accepted_by: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    execution_ref_type: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    execution_ref_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    suggestion_error_code: Mapped[str | None] = mapped_column(String(128), nullable=True)
     error_code: Mapped[str | None] = mapped_column(String(128), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
