@@ -125,7 +125,7 @@ def _packet_findings(packet: dict | None, source_run_id: str | None) -> list[dic
                 "packet_count": stream.get("packet_count"),
                 "lost_packets": stream.get("lost_packets", stream.get("lost")),
                 "loss_rate": stream.get("loss_rate"),
-                "p95_jitter_ms": stream.get("p95_rfc3550_jitter_ms"),
+                "p95_jitter_ms": stream.get("p95_rfc3550_jitter_ms", stream.get("p95_jitter_ms")),
                 "max_delta_ms": stream.get("max_delta_ms"),
                 "codec": stream.get("codec"),
                 "ptime_ms": stream.get("ptime_ms"),
@@ -212,6 +212,22 @@ def _pcm_findings(pcm: dict | None, source_run_id: str | None) -> list[dict]:
                     source_run_id=source_run_id, feature_family="click_pop",
                     event_refs=[{"source": "pcm.click_pop_events", "index": index}],
                 ))
+            for index, ev in enumerate(session.get("dtmf_quality_events", []) or []):
+                relative_start = float(ev.get("start_seconds") or 0.0)
+                relative_end = float(ev.get("end_seconds") if ev.get("end_seconds") is not None else relative_start)
+                start = (session.get("start_time") or 0) + relative_start
+                end = (session.get("start_time") or 0) + relative_end
+                feature = str(ev.get("type") or "DTMF_QUALITY")
+                out.append(_base_finding(
+                    finding_type="DTMF_ABNORMAL", severity=ev.get("severity", "MEDIUM"), evidence_level="L3",
+                    title=f"{tap_name} DTMF（双音多频）信号质量异常候选",
+                    observation=(f"{tap_name} 检测到 {feature}；这是可测量的 DTMF 信号/时序质量异常，"
+                                 "没有用户期望号码或独立信令对照时不推断具体丢号。"),
+                    scope=base_scope, metrics=ev,
+                    time_range={"start": start, "end": end, "representative": start},
+                    source_run_id=source_run_id, feature_family=feature,
+                    event_refs=[{"source": "pcm.dtmf_quality_events", "index": index}],
+                ))
     return out
 
 
@@ -266,7 +282,7 @@ def derive_first_observable_layer(layer_observations: list[dict]) -> dict:
     """Return a deterministic Evidence Boundary, never a physical root cause.
 
     Each item must be ordered along the media path and carry
-    ``available`` plus ``abnormal``.  A layer can only be declared first
+    ``available`` plus ``abnormal``. A layer can only be declared first
     observable when every earlier comparable layer is available and normal.
     """
     if not layer_observations:
