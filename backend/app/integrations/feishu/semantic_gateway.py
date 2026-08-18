@@ -39,43 +39,45 @@ class SemanticGatewayClient:
     ) -> dict[str, Any]:
         if not self.enabled():
             raise SemanticGatewayError("SEMANTIC_GATEWAY_NOT_CONFIGURED")
-        payload = {
-            "schema_version": "feishu-semantic-gateway-v1",
-            "prompt_version": self.prompt_version,
-            "model": self.model,
-            "message": {
-                "text": text[:4000],
-                "attachments": [
-                    {
-                        "attachment_id": str(item.get("attachment_id") or item.get("file_key") or f"attachment-{i+1}"),
-                        "filename": str(item.get("filename") or "")[:256],
-                        "message_type": str(item.get("message_type") or "")[:32],
-                    }
-                    for i, item in enumerate(attachments[:32])
-                ],
-            },
-            "deterministic_candidate": deterministic,
-            "context": context,
-            "policy": {
-                "output_schema": "feishu-semantic-intent-v1",
-                "output_is_non_executing_proposal": True,
-                "raw_commands_forbidden": True,
-                "case_override_forbidden": True,
-                "rbac_and_policy_recheck_required": True,
-                "root_cause_confirmation_forbidden": True,
-                "deterministic_router_remains_execution_authority": True,
-            },
-        }
-        payload = redact_gateway_value(payload)
-        assert_gateway_payload_safe(payload)
-        headers = {"Content-Type": "application/json"}
-        if self.token:
-            headers["Authorization"] = f"Bearer {self.token}"
         try:
+            payload = {
+                "schema_version": "feishu-semantic-gateway-v1",
+                "prompt_version": self.prompt_version,
+                "model": self.model,
+                "message": {
+                    "text": text[:4000],
+                    "attachments": [
+                        {
+                            "attachment_id": str(item.get("attachment_id") or item.get("file_key") or f"attachment-{i+1}"),
+                            "filename": str(item.get("filename") or "")[:256],
+                            "message_type": str(item.get("message_type") or "")[:32],
+                        }
+                        for i, item in enumerate(attachments[:32])
+                    ],
+                },
+                "deterministic_candidate": deterministic,
+                "context": context,
+                "policy": {
+                    "output_schema": "feishu-semantic-intent-v1",
+                    "output_is_non_executing_proposal": True,
+                    "raw_commands_forbidden": True,
+                    "case_override_forbidden": True,
+                    "rbac_and_policy_recheck_required": True,
+                    "root_cause_confirmation_forbidden": True,
+                    "deterministic_router_remains_execution_authority": True,
+                },
+            }
+            payload = redact_gateway_value(payload)
+            assert_gateway_payload_safe(payload)
+            headers = {"Content-Type": "application/json"}
+            if self.token:
+                headers["Authorization"] = f"Bearer {self.token}"
             with httpx.Client(timeout=settings.reasoning_gateway_timeout_seconds) as client:
                 response = client.post(self.url, json=payload, headers=headers)
                 response.raise_for_status()
                 data = response.json()
+        except SemanticGatewayError:
+            raise
         except Exception as exc:
             raise SemanticGatewayError(f"SEMANTIC_GATEWAY_FAILED:{type(exc).__name__}") from exc
         if not isinstance(data, dict):
