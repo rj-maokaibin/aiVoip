@@ -1,0 +1,19 @@
+name: AI3 Runner Probe
+
+on:
+  push:
+    branches:
+      - agent/ai3-case-copilot-v1
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Runner acquired
+        run: echo runner-acquired
+      - name: Python available
+        run: python --version
