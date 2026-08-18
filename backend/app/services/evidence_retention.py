@@ -21,6 +21,20 @@ def utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _db_datetime(db: Session, value: datetime) -> datetime:
+    """Normalize UTC comparison values for the active SQL dialect.
+
+    PostgreSQL preserves timezone-aware DateTime values. SQLite stores the same
+    SQLAlchemy DateTime(timezone=True) values as timezone-naive text/datetime.
+    Tests and local tooling therefore need a dialect-neutral comparison value;
+    production PostgreSQL semantics remain timezone-aware.
+    """
+    bind = db.get_bind()
+    if bind.dialect.name == "sqlite" and value.tzinfo is not None:
+        return value.astimezone(timezone.utc).replace(tzinfo=None)
+    return value
+
+
 def _is_raw(evidence: Evidence) -> bool:
     return str(evidence.kind or "RAW").upper() == "RAW"
 
@@ -125,13 +139,6 @@ def _remove_payload(evidence: Evidence) -> tuple[bool, list[str]]:
 
 
 def _refresh_golden_exemptions(db: Session, *, limit: int) -> int:
-    """Refresh tracked raw evidence before deletion.
-
-    Golden eligibility can be reached long after Evidence creation. Retention
-    therefore re-checks active 90-day rows on every sweep before selecting due
-    payloads. This prevents a later-promoted Golden Case from being accidentally
-    expired by a stale policy snapshot.
-    """
     candidates = list(db.scalars(
         select(EvidenceRetentionState).where(
             EvidenceRetentionState.status == "ACTIVE",
@@ -155,10 +162,10 @@ def _refresh_golden_exemptions(db: Session, *, limit: int) -> int:
 def expire_due_evidence(db: Session, *, now: datetime | None = None, actor: str = "retention-worker",
                         limit: int | None = None, storage_delete: bool = True) -> dict:
     now = now or utcnow()
+    compare_now = _db_datetime(db, now)
+    persisted_now = _db_datetime(db, now)
     limit = limit or settings.evidence_retention_batch_size
 
-    # Materialize policy rows for legacy Evidence first. This is bounded so the
-    # scheduled task can safely converge on large databases over multiple runs.
     untracked = list(db.scalars(
         select(Evidence).where(~Evidence.id.in_(select(EvidenceRetentionState.evidence_id)))
         .order_by(Evidence.created_at.asc()).limit(limit)
@@ -173,7 +180,7 @@ def expire_due_evidence(db: Session, *, now: datetime | None = None, actor: str 
             EvidenceRetentionState.status == "ACTIVE",
             EvidenceRetentionState.policy == "STANDARD_90D",
             EvidenceRetentionState.retain_until.is_not(None),
-            EvidenceRetentionState.retain_until <= now,
+            EvidenceRetentionState.retain_until <= compare_now,
             EvidenceRetentionState.locked_at.is_(None),
             EvidenceRetentionState.golden_exempt.is_(False),
         ).order_by(EvidenceRetentionState.retain_until.asc()).limit(limit)
@@ -196,11 +203,11 @@ def expire_due_evidence(db: Session, *, now: datetime | None = None, actor: str 
             details.append({"evidence_id": evidence.id, "status": "ERROR", "errors": errors})
             continue
         row.status = "EXPIRED"
-        row.expired_at = now
-        row.object_deleted_at = now if storage_delete else None
+        row.expired_at = persisted_now
+        row.object_deleted_at = persisted_now if storage_delete else None
         row.last_error = None
         meta = dict(evidence.metadata_json or {})
-        meta.update({"retention_status": "EXPIRED", "retention_expired_at": now.isoformat(), "payload_available": False})
+        meta.update({"retention_status": "EXPIRED", "retention_expired_at": now.astimezone(timezone.utc).isoformat() if now.tzinfo else now.isoformat(), "payload_available": False})
         evidence.metadata_json = meta
         evidence.completeness = "UNAVAILABLE"
         audit(db, case_id=evidence.case_id, actor=actor, event_type="EVIDENCE_RETENTION_EXPIRED",
