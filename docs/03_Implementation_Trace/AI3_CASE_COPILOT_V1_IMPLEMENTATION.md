@@ -53,9 +53,11 @@ No cross-Case similarity/history is used as current fact in AI3 V1.
 
 ### Role projection
 
-- Viewer receives report-level Evidence/analyzer summaries only.
+- Viewer receives only report/derived Evidence; **RAW Evidence rows are removed from the Viewer snapshot entirely**.
+- Viewer analyzer input Evidence references are filtered to the same authorized visible set.
 - Engineer / Expert Reviewer / Admin / Service may receive engineering Evidence view internally.
 - Direct device access identifiers are removed again before Reasoning Gateway transport.
+- Fix Verification Evidence references are hidden from Viewer when the underlying Evidence is not visible to that role.
 
 ## 4. Gateway contract
 
@@ -69,23 +71,25 @@ No cross-Case similarity/history is used as current fact in AI3 V1.
 - raw device commands forbidden
 - control requests must return to deterministic control Intent path
 
+Device metadata uses an explicit allowlist (`product/model/version/software_version/firmware_version/hardware_version/platform`) **before** generic recursive redaction. IP/MAC/SN/credentials/custom secret keys are therefore not allowed to rely on regex detection alone.
+
 Reasoning Gateway payload safety/redaction is reused from the existing diagnosis gateway.
 
 ## 5. Grounded answer contract
 
 Schema: `ai-case-copilot-v1`
 
-A proposal contains:
+A proposal must contain:
 
 - answer text
-- structured `DiagnosticClaim` list
-- cited Evidence IDs
+- **at least one** structured `DiagnosticClaim`
+- **at least one** public Evidence citation
 - uncertainty
 - read-only or control-routing next steps
 - `root_cause_confirmed_by_ai=false`
 - `safety_class=READ_ONLY_GROUNDED_RESPONSE`
 
-The contract rejects executable command material and explicit final Root Cause confirmation wording.
+The contract rejects executable command material and explicit final Root Cause confirmation wording. Empty-claim prose is rejected so a model cannot bypass structural Grounding by returning a fluent answer with no Claims.
 
 ## 6. Claim Grounding authority
 
@@ -99,7 +103,12 @@ For AI-generated claims the existing validator requires:
 - a support Evidence reference exists
 - contradictions are surfaced
 
-AI3 additionally validates that every public citation belongs to current Case Evidence and is bound to a structured Claim.
+AI3 additionally requires:
+
+- every public citation belongs to the role-authorized current-Case Evidence set
+- every public citation is bound to a structured Claim
+- every Evidence reference used by a Claim appears in the public citation set
+- if the requester has **zero authorized Evidence**, AI3 fails closed with `COPILOT_NO_AUTHORIZED_EVIDENCE` **without calling the model**
 
 A non-PASS grounding result causes the response to be rejected and not shown as an AI answer.
 
@@ -116,7 +125,30 @@ The result is `CONTROL_INTENT_REQUIRED`; no model/action worker is called. The c
 
 `CaseCopilotService` deliberately has no reproduction/experiment/fix task dispatcher.
 
-## 8. API
+## 8. Runtime failure isolation
+
+AI3 is optional read-only infrastructure and must not poison the deterministic transaction.
+
+### Feishu
+
+The Case Copilot call executes inside a SQLAlchemy nested transaction/SAVEPOINT. If an unexpected model/grounding/persistence exception escapes the normal AI3 error contract:
+
+- only AI3 side effects inside the SAVEPOINT are rolled back
+- G1/G2 parent transaction remains usable
+- `AI_CASE_COPILOT_RUNTIME_FAILED` is audited using only the error class/code, never raw question text
+- user receives a safe fallback reply once
+- Feishu event idempotency is completed, so redelivery does not repeatedly call the failing sidecar
+
+### API
+
+The read-only Copilot API uses the same SAVEPOINT boundary. An unexpected AI3 runtime failure:
+
+- rolls back only AI3 side effects
+- records safe audit metadata
+- commits the audit while preserving the Case transaction
+- returns HTTP 503 `AI_CASE_COPILOT_RUNTIME_FAILED`
+
+## 9. API
 
 `POST /api/v1/cases/{case_id}/ai/copilot`
 
@@ -134,7 +166,7 @@ The API always reports:
 
 Rejected or Gateway-failed proposals are replaced by safe explanatory text rather than exposing an ungrounded answer.
 
-## 9. Feishu integration
+## 10. Feishu integration
 
 AI3 is integrated only in the G2 `Authorized Event Gateway`.
 
@@ -143,34 +175,39 @@ For an authorized, Case-bound `GENERAL_QUESTION` without attachments:
 1. G2 Identity/RBAC authorization has already passed.
 2. G1 resolves the current Case.
 3. AI3 builds role-aware current Case Snapshot.
-4. Grounded read-only answer is generated.
+4. Grounded read-only answer is generated inside the AI3 SAVEPOINT.
 5. Reply is written once with an idempotency record.
 
 Unknown/disabled users never reach Copilot. A recognized control message continues through the existing deterministic business handler rather than AI3.
 
 When AI3 is disabled or no Case is resolved, existing verified-knowledge behavior remains unchanged.
 
-## 10. Tests and software gate
+## 11. Tests and software gate
 
 Focused tests cover:
 
-- Viewer vs Engineer Snapshot visibility
+- Viewer cannot see RAW Evidence; Engineer can
 - current-Case grounded answer PASS
 - cross-Case Evidence rejection
 - AI Evidence Level/status promotion rejection
 - Root Cause confirmation rejection
+- no authorized Evidence -> reject without model
+- empty Claim prose -> reject
+- Claim Evidence missing from public citations -> reject
 - control request bypasses model/action worker
 - request-key idempotency
-- Gateway IP/MAC/SN/password/question-secret redaction
+- Gateway IP/MAC/SN/password/question-secret redaction + device metadata allowlist
 - API feature gate + read-only authority response
+- API SAVEPOINT runtime failure isolation
 - authorized Feishu Case question -> Copilot
 - unknown identity denied before Copilot
 - duplicate Feishu event replies once
+- Feishu SAVEPOINT runtime failure isolation and safe replay
 - control Feishu message stays on deterministic control path
 
 Repository CI has a dedicated `AI3 Case Copilot software gate` in addition to the full backend regression.
 
-## 11. Remaining production acceptance
+## 12. Remaining production acceptance
 
 AI3 software completion does not itself satisfy production acceptance. Required live gates include:
 
