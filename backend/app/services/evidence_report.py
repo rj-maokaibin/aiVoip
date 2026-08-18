@@ -67,15 +67,26 @@ def _persist_findings(db: Session, *, report: PreliminaryEvidenceReport, payload
 def generate_evidence_report(db: Session, *, scope_type, scope_id: str, actor: str|None=None, storage=None, force: bool=False) -> tuple[PreliminaryEvidenceReport,dict,bool]:
     storage=storage or ObjectStorage(); scope_type=scope_value(scope_type); scope=resolve_scope(db,scope_type=scope_type,scope_id=scope_id)
     case=scope["case"]; session=scope.get("session"); call=scope.get("call")
-    evidences=scoped_evidences(db,scope_type=scope_type,scope=scope); evidence_ids={e.id for e in evidences}
+    evidences=scoped_evidences(db,scope_type=scope_type,scope=scope); evidence_items=[evidence_dict(e) for e in evidences]; evidence_ids={e.id for e in evidences}
     runs=latest_analyzer_runs(db,case_id=case.id,evidence_ids=evidence_ids,case_scope=scope_type=="CASE")
     results,states=load_analyzer_results(storage,runs); previous=latest_report(db,scope_type,scope_id); version=(previous.version+1) if previous else 1
     environment=environment_snapshot(db,case,session)
     payload=build_report_payload(case=case_dict(case),scope_type=scope_type,scope_id=scope_id,session=session_dict(session),call=call_dict(call),
-                                 environment=environment,evidences=[evidence_dict(e) for e in evidences],analyzer_states=states,results=results,report_version=version)
+                                 environment=environment,evidences=evidence_items,analyzer_states=states,results=results,report_version=version)
+    expired=[{
+        "evidence_id":x.get("id"),"original_type":x.get("original_type"),"filename":x.get("filename"),"sha256":x.get("sha256"),
+        "retention_status":x.get("retention_status"),"expired_at":x.get("retention_expired_at"),"payload_available":False,
+    } for x in evidence_items if not x.get("payload_available",True)]
+    payload["evidence_retention"]={"expired_raw_evidence":expired,"expired_count":len(expired)}
+    if expired:
+        completeness=payload.setdefault("completeness",{})
+        completeness["expired_evidence"]=expired
+        prior=str(completeness.get("boundary") or "")
+        completeness["boundary"]=(f"{len(expired)} 个原始 Evidence Payload 已按 Retention 策略过期；报告、SHA256、来源元数据和关键派生证据仍保留，但过期原始数据不可重新下载或重新分析。 "+prior).strip()
     apply_first_observable_boundaries(payload); enrich_aggregate_payload(db,payload=payload,scope_type=scope_type,case_id=case.id,session_id=session.id if session else None)
     payload["input_snapshot_hash"]=canonical_hash({"base":payload["input_snapshot_hash"],"findings":payload.get("findings"),"multi_call_summary":payload.get("multi_call_summary"),
-                                                     "environment_groups":payload.get("environment_groups"),"ab_comparison":payload.get("ab_comparison")})
+                                                     "environment_groups":payload.get("environment_groups"),"ab_comparison":payload.get("ab_comparison"),
+                                                     "evidence_retention":payload.get("evidence_retention")})
     idem=report_idempotency_key(scope_type,scope_id,payload["input_snapshot_hash"],states,forced_version=version if force else None)
     if not force:
         same=db.scalar(select(PreliminaryEvidenceReport).where(PreliminaryEvidenceReport.idempotency_key==idem).limit(1))
@@ -108,7 +119,7 @@ def generate_evidence_report(db: Session, *, scope_type, scope_id: str, actor: s
     report.status=EvidenceReportStatus.COMPLETE.value if payload.get("completeness",{}).get("state")=="COMPLETE" else EvidenceReportStatus.PARTIAL_COMPLETE.value
     report.snapshot_json=payload; report.completed_at=utcnow(); db.flush()
     audit(db,case_id=case.id,actor=actor,event_type="PRELIMINARY_EVIDENCE_REPORT_GENERATED",target_type="preliminary_evidence_report",target_id=report.id,
-          detail={"scope_type":scope_type,"scope_id":scope_id,"version":version,"status":report.status,"finding_count":len(finding_rows),"artifact_count":len(report_artifacts)+3,"forced":force})
+          detail={"scope_type":scope_type,"scope_id":scope_id,"version":version,"status":report.status,"finding_count":len(finding_rows),"artifact_count":len(report_artifacts)+3,"forced":force,"expired_raw_evidence_count":len(expired)})
     return report,payload,False
 
 
