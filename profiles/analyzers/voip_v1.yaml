@@ -1,10 +1,11 @@
 schema_version: 1
 id: voip_analyzer_v1
-version: 1.0.0
+version: 1.1.0
 status: GOLDEN_CALIBRATED
 description: >-
-  Deterministic analyzer thresholds frozen for VOIP AI V1.0 Phase B. Values mirror the
-  previously validated M6.1 behavior unless a contract correction explicitly changed semantics.
+  Deterministic analyzer thresholds frozen for VOIP AI V1.0. Version 1.1 adds
+  explicit DTMF quality thresholds used only for evidence findings; it does not
+  change root-cause authority.
 rtp:
   ptime_min_ms: 1.0
   ptime_max_ms: 200.0
@@ -119,6 +120,8 @@ dtmf:
   dominance_confidence_full_scale: 20.0
   energy_confidence_full_scale: 0.15
   max_interdigit_gap_ms: 1500.0
+  min_interdigit_gap_ms: 40.0
+  quality_min_confidence: 0.55
 basic_metrics:
   clipping_abs_threshold: 32760.0
 hum:
