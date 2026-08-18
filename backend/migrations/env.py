@@ -6,6 +6,7 @@ from app.db.base import Base
 from app.db import models  # noqa: F401
 from app.db import evidence_report_models  # noqa: F401
 from app.db import evidence_retention_models  # noqa: F401
+from app.db import feishu_governance_models  # noqa: F401
 
 config = context.config
 config.set_main_option("sqlalchemy.url", settings.database_url)
