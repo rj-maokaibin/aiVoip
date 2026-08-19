@@ -9,7 +9,11 @@ from app.db.ai_intelligence_models import AISemanticIntentRecord
 from app.db.base import Base
 from app.db.models import Case
 from app.integrations.feishu.intake import route_intake
-from app.integrations.feishu.semantic_router import needs_semantic_fallback, shadow_semantic_route
+from app.integrations.feishu.semantic_router import (
+    _semantic_delivery_key,
+    needs_semantic_fallback,
+    shadow_semantic_route,
+)
 
 
 class FakeGateway:
@@ -33,8 +37,8 @@ def _db():
     return Session(engine)
 
 
-def _case(db: Session):
-    row = Case(case_no="CASE-AI1-001", summary="周期性电流音", status="ANALYZING")
+def _case(db: Session, case_no: str = "CASE-AI1-001"):
+    row = Case(case_no=case_no, summary="周期性电流音", status="ANALYZING")
     db.add(row)
     db.commit()
     return row
@@ -90,9 +94,12 @@ def test_complex_environment_change_triggers_shadow_but_cannot_change_final_inte
         assert result.proposal["intent"] == "STOP_REPRODUCTION"
         assert result.final_intent == intake.intent
         assert result.final_intent != result.proposal["intent"]
-        row = db.scalar(select(AISemanticIntentRecord).where(AISemanticIntentRecord.message_id == "m-complex"))
+        delivery_key = _semantic_delivery_key(message_id="m-complex", tenant_key="tenant-a", case_id=case.id)
+        row = db.scalar(select(AISemanticIntentRecord).where(AISemanticIntentRecord.message_id == delivery_key))
         assert row is not None and row.status == "SHADOW_VALID"
         assert row.input_hash and len(row.input_hash) == 64
+        assert row.message_id.startswith("sem:") and len(row.message_id) == 68
+        assert "tenant-a" not in row.message_id
         assert gateway.calls == 1
 
 
@@ -134,15 +141,62 @@ def test_duplicate_message_id_replays_one_semantic_record_and_one_gateway_call()
         gateway = FakeGateway(_proposal())
         one = shadow_semantic_route(
             db, message_id="m-dup", text=text, attachments=[], deterministic=intake,
-            case_id=case.id, case_no=case.case_no, gateway=gateway, force=True,
+            case_id=case.id, case_no=case.case_no, tenant_key="tenant-a", gateway=gateway, force=True,
         )
         two = shadow_semantic_route(
             db, message_id="m-dup", text=text, attachments=[], deterministic=intake,
-            case_id=case.id, case_no=case.case_no, gateway=gateway, force=True,
+            case_id=case.id, case_no=case.case_no, tenant_key="tenant-a", gateway=gateway, force=True,
         )
         assert one.record_id == two.record_id
         assert gateway.calls == 1
         assert len(list(db.scalars(select(AISemanticIntentRecord)))) == 1
+
+
+def test_same_message_id_in_two_tenants_never_cross_replays():
+    with _db() as db:
+        case_a = _case(db, "CASE-AI1-TENANT-A")
+        case_b = _case(db, "CASE-AI1-TENANT-B")
+        text = "又复现了，换回原装就正常"
+        intake = route_intake(text=text, attachments=[], has_thread_case=True)
+        gateway_a = FakeGateway(_proposal(environment_changes={"site": "tenant-a"}))
+        gateway_b = FakeGateway(_proposal(environment_changes={"site": "tenant-b"}))
+
+        result_a = shadow_semantic_route(
+            db, message_id="same-message-id", text=text, attachments=[], deterministic=intake,
+            case_id=case_a.id, case_no=case_a.case_no, tenant_key="tenant-a",
+            gateway=gateway_a, force=True,
+        )
+        result_b = shadow_semantic_route(
+            db, message_id="same-message-id", text=text, attachments=[], deterministic=intake,
+            case_id=case_b.id, case_no=case_b.case_no, tenant_key="tenant-b",
+            gateway=gateway_b, force=True,
+        )
+        replay_a = shadow_semantic_route(
+            db, message_id="same-message-id", text=text, attachments=[], deterministic=intake,
+            case_id=case_a.id, case_no=case_a.case_no, tenant_key="tenant-a",
+            gateway=ForbiddenGateway(), force=True,
+        )
+
+        assert result_a.record_id != result_b.record_id
+        assert replay_a.record_id == result_a.record_id
+        assert gateway_a.calls == 1
+        assert gateway_b.calls == 1
+        rows = list(db.scalars(select(AISemanticIntentRecord).order_by(AISemanticIntentRecord.tenant_key)))
+        assert len(rows) == 2
+        assert rows[0].tenant_key == "tenant-a"
+        assert rows[1].tenant_key == "tenant-b"
+        assert rows[0].message_id != rows[1].message_id
+        assert all(row.message_id.startswith("sem:") and len(row.message_id) == 68 for row in rows)
+
+
+def test_same_manual_message_id_is_scoped_by_case_when_tenant_missing():
+    with _db() as db:
+        case_a = _case(db, "CASE-AI1-MANUAL-A")
+        case_b = _case(db, "CASE-AI1-MANUAL-B")
+        key_a = _semantic_delivery_key(message_id="manual-id", tenant_key=None, case_id=case_a.id)
+        key_b = _semantic_delivery_key(message_id="manual-id", tenant_key=None, case_id=case_b.id)
+        assert key_a != key_b
+        assert len(key_a) == 68 and len(key_b) == 68
 
 
 def test_schema_rejects_raw_command_or_extra_execution_field():
