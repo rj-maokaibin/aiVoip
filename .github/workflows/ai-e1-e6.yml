@@ -1,144 +1,18 @@
 name: AI E1-E6 + M7 + Evidence Report Gate
 
+# GitHub-hosted CI is intentionally opt-in. Software release acceptance is
+# performed with tools/voip_ai_release_gate.sh on a controlled Linux host.
 on:
-  pull_request:
-    paths:
-      - "backend/**"
-      - "frontend/**"
-      - "tools/**"
-      - "golden_cases/**"
-      - "docs/02_Core_Documents/VOIP_AI_M7_*.md"
-      - "docs/02_Core_Documents/Preliminary_Evidence_Report_V1.0/**"
-      - "docs/03_Implementation_Trace/**"
-      - "knowledge/seed/**"
-      - "Makefile"
-      - ".github/workflows/ai-e1-e6.yml"
-  push:
-    branches:
-      - "master"
-    paths:
-      - "backend/**"
-      - "frontend/**"
-      - "tools/**"
-      - "golden_cases/**"
-      - "docs/02_Core_Documents/VOIP_AI_M7_*.md"
-      - "docs/02_Core_Documents/Preliminary_Evidence_Report_V1.0/**"
-      - "docs/03_Implementation_Trace/**"
-      - "knowledge/seed/**"
-      - "Makefile"
-      - ".github/workflows/ai-e1-e6.yml"
+  workflow_dispatch:
 
 permissions:
   contents: read
 
-concurrency:
-  group: ai-gate-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
-
 jobs:
   ai-contracts:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_DB: voip
-          POSTGRES_USER: voip
-          POSTGRES_PASSWORD: voip
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U voip -d voip"
-          --health-interval 5s
-          --health-timeout 3s
-          --health-retries 20
-      redis:
-        image: redis:7-alpine
-        ports:
-          - 6379:6379
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 5s
-          --health-timeout 3s
-          --health-retries 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-          cache: pip
-          cache-dependency-path: backend/requirements.txt
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
-      - name: Install backend and attachment-analysis dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends ffmpeg tesseract-ocr
-          python -m pip install --upgrade pip
-          pip install -r backend/requirements.txt
-      - name: Compile backend and release tools
-        run: python -m compileall -q backend/app backend/tests tools
-      - name: AI contract coverage gate
-        run: make ai-eval-gate
-      - name: AI E1-E6 regression gate
-        run: make ai-e1-e6-gate
-      - name: AI1 Semantic Router software gate
-        run: >-
-          PYTHONPATH=backend:. pytest -q
-          backend/tests/test_ai1_semantic_router_v1.py
-          backend/tests/test_ai1_semantic_gateway_v1.py
-          backend/tests/test_ai1_semantic_eval_gate_v1.py
-          backend/tests/test_ai1_semantic_api_v1.py
-          backend/tests/test_ai1_semantic_real_corpus_eval_v1.py
-      - name: AI3 Case Copilot software gate
-        run: >-
-          PYTHONPATH=backend:. pytest -q
-          backend/tests/test_ai3_case_copilot_v1.py
-          backend/tests/test_ai3_copilot_gateway_v1.py
-          backend/tests/test_ai3_copilot_api_v1.py
-          backend/tests/test_ai3_copilot_idempotency_isolation_v1.py
-          backend/tests/test_ai3_feishu_copilot_v1.py
-          backend/tests/test_ai3_feishu_tenant_idempotency_v1.py
-          backend/tests/test_ai3_copilot_fail_closed_v1.py
-      - name: M7 acceptance contract gate
-        run: PYTHONPATH=backend:. pytest -q backend/tests/test_m7_acceptance_gate.py
-      - name: Prepare regression database through latest migration
-        env:
-          DATABASE_URL: postgresql+psycopg://voip:voip@localhost:5432/voip
-        run: cd backend && alembic upgrade head
-      - name: Full backend regression
-        shell: bash
-        env:
-          DATABASE_URL: postgresql+psycopg://voip:voip@localhost:5432/voip
-          REDIS_URL: redis://localhost:6379/0
-          REPRODUCTION_PLATFORM_MODE: real
-        run: |
-          set +e
-          PYTHONPATH=backend:. pytest -q backend/tests --tb=line 2>&1 | tee /tmp/backend-pytest.log
-          status=${PIPESTATUS[0]}
-          if [ "$status" -ne 0 ]; then
-            python - <<'PY'
-          from pathlib import Path
-          text = Path('/tmp/backend-pytest.log').read_text(encoding='utf-8', errors='replace')[-12000:]
-          text = text.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
-          print(f'::error title=Full backend regression failed::{text}')
-          PY
-          fi
-          exit "$status"
-      - name: Preliminary Evidence Report software release gate
-        env:
-          DATABASE_URL: postgresql+psycopg://voip:voip@localhost:5432/voip
-          REDIS_URL: redis://localhost:6379/0
-        run: PYTHONPATH=backend:. python tools/evidence_report_release_gate.py --skip-tests
-      - name: Frontend dependency security and production build gate
-        run: |
-          cd frontend
-          npm ci
-          npm audit --audit-level=low
-          npm run build
-          test -s dist/index.html
-          test -s dist/evidence-report.html
+      - name: Run VOIP AI software release gate
+        run: bash tools/voip_ai_release_gate.sh
