@@ -112,7 +112,7 @@ class FeishuDocumentAclService:
     @staticmethod
     def ensure_binding(db: Session, *, case_id: str, document_id: str) -> FeishuDocumentAclBinding:
         source = FeishuDocumentAclService._source_binding(db, case_id)
-        if source is None or not source.receive_id or not source.source_tenant_key:
+        if source is None or not source.receive_id:
             raise ValueError("FEISHU_SOURCE_CHAT_BINDING_REQUIRED")
         row = db.scalar(select(FeishuDocumentAclBinding).where(
             FeishuDocumentAclBinding.case_id == case_id,
@@ -123,18 +123,18 @@ class FeishuDocumentAclService:
         if row is None:
             row = FeishuDocumentAclBinding(
                 case_id=case_id, document_id=document_id,
-                tenant_key=str(source.source_tenant_key), chat_id=source.receive_id,
+                tenant_key=str(source.source_tenant_key or ""), chat_id=source.receive_id,
                 sync_mode=desired_mode, desired_permission=desired_permission,
                 desired_revision=1, applied_revision=0, status="PENDING",
             )
             db.add(row); db.flush(); return row
         changed = (
-            row.tenant_key != str(source.source_tenant_key)
+            row.tenant_key != str(source.source_tenant_key or "")
             or row.chat_id != source.receive_id
             or row.sync_mode != desired_mode
             or row.desired_permission != desired_permission
         )
-        row.tenant_key = str(source.source_tenant_key)
+        row.tenant_key = str(source.source_tenant_key or "")
         row.chat_id = source.receive_id
         row.sync_mode = desired_mode
         row.desired_permission = desired_permission

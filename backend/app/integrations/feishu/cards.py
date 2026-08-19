@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.db.ai_intelligence_models import AIDiagnosticCycle
 from app.db.models import (
     Case, DiagnosisRun, Hypothesis, ReproductionSession, ReproductionAttempt, ReproductionCall,
-    CaptureChannelHealth, DiagnosticExperiment, CausalAssessment, FixVerificationRun,
+    CaptureChannelHealth, DiagnosticExperiment, CausalAssessment, FixVerificationRun, AnalyzerRun,
 )
 from app.db.evidence_report_models import FeishuEvidenceDocumentBinding, PreliminaryEvidenceReport
 
@@ -62,6 +62,35 @@ def _ai2_retryable(cycle: AIDiagnosticCycle) -> bool:
         and cycle.execution_ref_type == "reproduction_session"
         and cycle.execution_ref_id
     )
+
+
+_CASE_STATUS_CN = {
+    "NEW": "新建", "TRIAGING": "分诊中", "COLLECTING": "采集中", "ANALYZING": "分析中",
+    "NEED_MORE_EVIDENCE": "需补充证据", "WAITING_USER": "等待用户", "DIAGNOSED": "已诊断",
+    "ROOT_CAUSE_CONFIRMED": "根因已确认", "RESOLVING": "处理中", "RESOLVED": "已解决",
+    "CLOSED": "已关闭", "FAILED": "失败",
+}
+
+
+def _needs_user_action(case: Case, repro, operation_status: str) -> str:
+    if case.status in {"WAITING_USER", "NEED_MORE_EVIDENCE"}:
+        return "是，请补充信息/回答问题"
+    if repro is not None and operation_status == "可以开始现场复现：FXS 监听已就绪":
+        return "是，需现场复现操作"
+    return "否（系统自动推进）"
+
+
+def _auto_verifying(db: Session, case: Case, repro, diagnosis) -> str:
+    if db.scalar(select(AnalyzerRun.id).where(
+        AnalyzerRun.case_id == case.id, AnalyzerRun.status.in_(["PENDING", "RUNNING"])).limit(1)):
+        return "是（分析中）"
+    if diagnosis is not None and diagnosis.status in {"PENDING", "ANALYZING"}:
+        return "是（诊断中）"
+    if repro is not None and repro.state in {"AUTO_ARMING", "ARMED", "WATCHING", "CAPTURING", "POST_CAPTURE"}:
+        return "是（自动复现/监听中）"
+    if case.status in {"COLLECTING", "ANALYZING"}:
+        return "是"
+    return "否"
 
 
 @dataclass(frozen=True)
@@ -141,8 +170,13 @@ class FeishuCaseCardBuilder:
         if evidence_report:
             report_lines.append("_以上仅为 Evidence Finding（初步证据问题点），不等于最终 Root Cause（根因）。_")
 
+        case_state_cn = _CASE_STATUS_CN.get(case.status, case.status)
+        needs_user = _needs_user_action(case, repro, operation_status)
+        auto_verifying = _auto_verifying(db, case, repro, diagnosis)
+
         elements: list[dict[str, Any]] = [
-            {"tag":"div","text":_md("\n".join([_kv_line("Case",case.case_no),_kv_line("状态",case.status),_kv_line("问题",case.summary)]))},
+            {"tag":"div","text":_md("\n".join([_kv_line("Case",case.case_no),_kv_line("当前阶段",case_state_cn),_kv_line("问题",case.summary)]))},
+            {"tag":"div","text":_md("\n".join([_kv_line("是否需要操作",needs_user),_kv_line("正在自动验证",auto_verifying)]))},
             {"tag":"hr"},
             {"tag":"div","text":_md("\n".join(report_lines))},
             {"tag":"hr"},

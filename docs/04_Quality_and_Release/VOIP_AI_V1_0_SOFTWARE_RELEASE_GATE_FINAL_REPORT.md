@@ -118,6 +118,24 @@ Executed 2026-08-19 after rebuilding the compose stack to the current HEAD:
   `document_url` is now populated by constructing `https://feishu.cn/docx/{id}`
   when the create response omits it (unit tests 4/4).
 
+### Card SPEC alignment and document ACL (2026-08-20)
+
+- Card vs SPEC (`SPEC_V1.2` §20 FEISHU-AI-006): three gaps fixed in `cards.py`:
+  - `状态` now shows a user-readable Chinese stage (`当前阶段`) instead of the
+    raw state-machine enum;
+  - explicit `是否需要操作` field (WAITING_USER / NEED_MORE_EVIDENCE /
+    on-site-repro-ready);
+  - explicit `正在自动验证` field (active analyzer / diagnosing /
+    reproduction watching/capturing).
+- Document ACL now enabled: `FEISHU_DOCUMENT_ACL_ENABLED=true` (local `.env`).
+  `FeishuDocumentAclService.reconcile` was relaxed to allow an empty
+  `source_tenant_key` (offline/API-created cases), so `CHAT_SCOPE` grants the
+  source chat `view` on the Case Docx. Verified live on Case `e142eb7b`
+  (document `Ps9dduEOHoMMrGxF4FTcuWdbn3f`): reconcile `SYNCED` /
+  `CHAT_SCOPE` / `view`. Earlier documents were also granted the chat `view`
+  collaborator directly.
+- Unit tests: 21 passed (document ACL + card + governance).
+
 ### REAL_SEMANTIC_AND_GOLDEN_DATASET — synthetic PASS; real data missing
 
 User decision (2026-08-19): **option C — do not run real semantic/Golden
