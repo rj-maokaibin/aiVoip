@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
@@ -23,6 +25,11 @@ class CaseCopilotRequest(BaseModel):
     request_id: str | None = Field(default=None, min_length=1, max_length=192)
 
 
+def _api_request_key(*, case_id: str, request_id: str, identity: AuthIdentity) -> str:
+    material = "\x1f".join((case_id, identity.actor_id, identity.role.value, request_id))
+    return f"api:{hashlib.sha256(material.encode('utf-8')).hexdigest()}"
+
+
 @router.post("/cases/{case_id}/ai/copilot")
 def ask_case_copilot(
     case_id: str,
@@ -36,10 +43,10 @@ def ask_case_copilot(
     if case is None:
         raise HTTPException(404, "CASE_NOT_FOUND")
     request_id = req.request_id or new_id()
-    # Idempotency is scoped to the effective reader identity. Reusing a request_id
-    # across users or after a role change must never replay an answer projected for
-    # a different authorization context.
-    request_key = f"api:{case_id}:{identity.actor_id}:{identity.role.value}:{request_id}"
+    # Keep the persisted key bounded while binding idempotency to the effective
+    # reader identity and role. Service-side replay validation remains the final
+    # defense against cross-authorization-context reuse.
+    request_key = _api_request_key(case_id=case_id, request_id=request_id, identity=identity)
     try:
         with db.begin_nested():
             result = CaseCopilotService().answer(
