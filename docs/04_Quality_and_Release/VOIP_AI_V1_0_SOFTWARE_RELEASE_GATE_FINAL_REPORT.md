@@ -60,11 +60,11 @@ integration points.
 - `validation/evidence_report_{golden,performance,release}_gate.json` evidence,
 - `.gitignore` entry for `.venv-release-gate/`.
 
-## External production gates (Pending ！ not converted into software PASS)
+## External production gates (status)
 
-- `LIVE_FEISHU_TENANT`
-- `REAL_DUT_END_TO_END`
-- `REAL_SEMANTIC_AND_GOLDEN_DATASET`
+- `LIVE_FEISHU_TENANT` ！ **VERIFIED** (send acceptance PASS, 2026-08-19)
+- `REAL_DUT_END_TO_END` ！ Pending (not performed)
+- `REAL_SEMANTIC_AND_GOLDEN_DATASET` ！ Pending (user decision C: not accepted; synthetic golden PASS)
 
 `CONTROLLED_PLANNER` remains disabled per the acceptance contract.
 
@@ -73,7 +73,7 @@ integration points.
 Exploration for the two external directions was executed on this host; results
 are recorded so the remaining asks are unambiguous.
 
-### LIVE_FEISHU_TENANT ！ credentials/connectivity verified
+### LIVE_FEISHU_TENANT ！ VERIFIED (send acceptance PASS)
 
 - App credentials valid: `tenant_access_token` exchange returned `code=0`
   (self-built app `cli_aad5970e...`).
@@ -82,12 +82,18 @@ are recorded so the remaining asks are unambiguous.
 - Long-connection listener connected to the real tenant gateway
   (`wss://msg-frontier.feishu.cn/ws/v2...`), so event-subscription connectivity
   is live.
-- Pending (needs explicit user confirmation ！ has real side effects):
-  - sending real messages / interactive cards to the chat;
-  - `FEISHU_ENCRYPT_KEY` is unset; confirm the app does not require event
-    encryption before full callback/event acceptance.
+- Real send acceptance PASS (user-authorized): a test interactive card was
+  delivered to the test chat through the product path
+  (`FeishuLiveTransport.send_card` ★ `POST /im/v1/messages`); Feishu returned
+  `code=0` and `message_id om_x100b6768f9c048a0...`.
+- Event encryption: user confirmed the app does NOT enable event encryption, so
+  `FEISHU_ENCRYPT_KEY` is intentionally unset. ?
 
 ### REAL_SEMANTIC_AND_GOLDEN_DATASET ！ synthetic PASS; real data missing
+
+User decision (2026-08-19): **option C ！ do not run real semantic/Golden
+acceptance**; this item remains an external Pending and is not converted into
+software PASS.
 
 - Synthetic Golden: PASS (`validation/evidence_report_golden_gate.json`,
   recall=1.0 / precision=1.0, 0 FP).
@@ -102,10 +108,11 @@ are recorded so the remaining asks are unambiguous.
 
 ### Required external inputs (not software-fixable)
 
+Feishu acceptance is now fully PASS. Remaining external inputs apply only to the
+real semantic/Golden dataset direction (user decision C ！ external Pending):
+
 1. Real Field Golden pcap: `8b72929e-...pcap` (or an equivalent real evidence set).
 2. Real semantic/Golden eval dataset, or DB cases that qualify as `GOLDEN_READY`.
-3. Explicit go-ahead (with real-side-effect awareness) for Feishu message/card
-   send acceptance, and confirmation on `FEISHU_ENCRYPT_KEY`.
 
 ## Handover notes
 
