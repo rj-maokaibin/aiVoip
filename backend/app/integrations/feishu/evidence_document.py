@@ -3,7 +3,11 @@ from __future__ import annotations
 import time
 from urllib.parse import quote
 
+import httpx
+
 from sqlalchemy import select
+
+from app.core.config import settings
 from sqlalchemy.orm import Session
 
 from app.db.evidence_report_models import FeishuEvidenceDocumentBinding, PreliminaryEvidenceReport
@@ -26,36 +30,38 @@ class FeishuEvidenceDocumentService:
         key={2:"text",3:"heading1",4:"heading2",5:"heading3",12:"bullet"}.get(block_type,"text")
         return {"block_type":block_type,key:{"elements":[{"text_run":{"content":str(content),"text_element_style":{}}}],"style":{}}}
 
-    def _create_document(self,title:str)->tuple[str,str|None]:
-        data=self.transport._request("POST","/docx/v1/documents",json_body={"title":title})
+    async def _create_document(self,title:str)->tuple[str,str|None]:
+        data=await self.transport._request("POST","/docx/v1/documents",json_body={"title":title})
         doc=(data.get("data") or {}).get("document") or {}; document_id=doc.get("document_id") or doc.get("token")
         if not document_id:raise RuntimeError("FEISHU_DOCX_CREATE_MISSING_DOCUMENT_ID")
         return document_id,doc.get("url")
 
-    def _insert_blocks(self,document_id:str,blocks:list[dict],index:int=0)->list[dict]:
+    async def _insert_blocks(self,document_id:str,blocks:list[dict],index:int=0)->list[dict]:
         created=[]; current=index
         for pos in range(0,len(blocks),40):
             chunk=blocks[pos:pos+40]
-            response=self.transport._request("POST",f"/docx/v1/documents/{quote(document_id,safe='')}/blocks/{quote(document_id,safe='')}/children",
-                                             json_body={"index":current,"children":chunk})
+            response=await self.transport._request("POST",f"/docx/v1/documents/{quote(document_id,safe='')}/blocks/{quote(document_id,safe='')}/children",
+                                                   json_body={"index":current,"children":chunk})
             rows=(response.get("data") or {}).get("children") or []; created.extend(rows); current+=len(chunk)
             time.sleep(self.DOC_EDIT_INTERVAL_SECONDS)
         return created
 
-    def _upload_media(self,*,block_id:str,filename:str,data:bytes,parent_type:str)->str:
-        token=self.transport._tenant_token()
-        response=self.transport._client.post(self.transport._base+"/drive/v1/medias/upload_all",
-            headers={"Authorization":f"Bearer {token}"},data={"file_name":filename,"parent_type":parent_type,"parent_node":block_id,"size":str(len(data))},
-            files={"file":(filename,data,"application/octet-stream")})
+    async def _upload_media(self,*,block_id:str,filename:str,data:bytes,parent_type:str)->str:
+        token=await self.transport._tenant_token()
+        url=settings.feishu_base_url.rstrip("/")+"/drive/v1/medias/upload_all"
+        async with httpx.AsyncClient(timeout=settings.feishu_timeout_seconds) as client:
+            response=await client.post(url,headers={"Authorization":f"Bearer {token}"},
+                data={"file_name":filename,"parent_type":parent_type,"parent_node":block_id,"size":str(len(data))},
+                files={"file":(filename,data,"application/octet-stream")})
         response.raise_for_status(); payload=response.json()
         if payload.get("code") not in (0,None):raise RuntimeError(f"FEISHU_MEDIA_UPLOAD_FAILED:{payload.get('code')}:{payload.get('msg')}")
         media_token=(payload.get("data") or {}).get("file_token")
         if not media_token:raise RuntimeError("FEISHU_MEDIA_UPLOAD_MISSING_TOKEN")
         return media_token
 
-    def _replace_media(self,document_id:str,block_id:str,token:str,*,image:bool)->None:
+    async def _replace_media(self,document_id:str,block_id:str,token:str,*,image:bool)->None:
         body={"replace_image":{"token":token}} if image else {"replace_file":{"token":token}}
-        self.transport._request("PATCH",f"/docx/v1/documents/{quote(document_id,safe='')}/blocks/{quote(block_id,safe='')}",json_body=body)
+        await self.transport._request("PATCH",f"/docx/v1/documents/{quote(document_id,safe='')}/blocks/{quote(block_id,safe='')}",json_body=body)
         time.sleep(self.DOC_EDIT_INTERVAL_SECONDS)
 
     def _core_blocks(self,report:PreliminaryEvidenceReport,payload:dict)->tuple[list[dict],int]:
@@ -95,16 +101,16 @@ class FeishuEvidenceDocumentService:
         blocks.extend([self._text("11. 报告版本与审计记录",4),self._text(f"Schema：{payload.get('schema_version')}｜Composer：{payload.get('composer_version')}｜Report ID：{report.id}")])
         return blocks,attachment_index
 
-    def project(self,db:Session,*,case_id:str,report_id:str)->FeishuEvidenceDocumentBinding:
+    async def project(self,db:Session,*,case_id:str,report_id:str)->FeishuEvidenceDocumentBinding:
         case=db.get(Case,case_id); report=db.get(PreliminaryEvidenceReport,report_id)
         if not case or not report or report.case_id!=case_id:raise ValueError("FEISHU_EVIDENCE_REPORT_NOT_FOUND")
         payload=report.snapshot_json or {}; binding=db.scalar(select(FeishuEvidenceDocumentBinding).where(FeishuEvidenceDocumentBinding.case_id==case_id).limit(1))
         if binding is None:
-            document_id,url=self._create_document(f"{case.case_no} VOIP 初步证据分析报告")
+            document_id,url=await self._create_document(f"{case.case_no} VOIP 初步证据分析报告")
             binding=FeishuEvidenceDocumentBinding(case_id=case_id,document_id=document_id,document_url=url,title=f"{case.case_no} VOIP 初步证据分析报告",status="CREATED")
             db.add(binding);db.flush()
         if not binding.document_id:raise RuntimeError("FEISHU_DOCUMENT_ID_MISSING")
-        core,attachment_index=self._core_blocks(report,payload);self._insert_blocks(binding.document_id,core,index=0)
+        core,attachment_index=self._core_blocks(report,payload);await self._insert_blocks(binding.document_id,core,index=0)
         candidates=[]
         for artifact in report_artifacts(db,report.id):
             is_image=artifact.content_type=="image/png" and artifact.type in {"WAVEFORM_PNG","SPECTRUM_PNG","SPECTROGRAM_PNG","RTP_TIMELINE_PNG","SIP_CALL_FLOW_PNG"}
@@ -116,12 +122,12 @@ class FeishuEvidenceDocumentService:
         candidates=candidates[:12]
         if candidates:
             placeholders=[({"block_type":27,"image":{}} if is_image else {"block_type":23,"file":{"token":""}}) for _,is_image in candidates]
-            created=self._insert_blocks(binding.document_id,placeholders,index=attachment_index)
+            created=await self._insert_blocks(binding.document_id,placeholders,index=attachment_index)
             for (artifact,is_image),block in zip(candidates,created):
                 block_id=block.get("block_id")
                 if not block_id:continue
-                data=self.storage.get_bytes(artifact.object_key);token=self._upload_media(block_id=block_id,filename=artifact.filename,data=data,parent_type="docx_image" if is_image else "docx_file")
-                self._replace_media(binding.document_id,block_id,token,image=is_image)
+                data=self.storage.get_bytes(artifact.object_key);token=await self._upload_media(block_id=block_id,filename=artifact.filename,data=data,parent_type="docx_image" if is_image else "docx_file")
+                await self._replace_media(binding.document_id,block_id,token,image=is_image)
         binding.projected_report_id=report.id;binding.projection_version+=1;binding.status="SYNCED";binding.last_error=None
         binding.metadata_json={"report_version":report.version,"report_status":report.status,"finding_count":payload.get("finding_count"),"ordering_contract":"D112","attachment_count":len(candidates)}
         audit(db,case_id=case_id,actor="feishu-evidence-document",event_type="FEISHU_EVIDENCE_DOCUMENT_SYNCED",target_type="feishu_evidence_document",target_id=binding.id,

@@ -25,7 +25,7 @@ def project_case_evidence_document(self,case_id:str,report_id:str):
         report=db.get(PreliminaryEvidenceReport,report_id)
         if not report or report.case_id!=case_id:
             return {"status":"NOT_FOUND","case_id":case_id,"report_id":report_id}
-        binding=FeishuEvidenceDocumentService().project(db,case_id=case_id,report_id=report_id)
+        binding=asyncio.run(FeishuEvidenceDocumentService().project(db,case_id=case_id,report_id=report_id))
         card_status="NOT_BOUND"
         try:
             asyncio.run(FeishuCaseCardService().sync_case_card(db,case_id=case_id))
