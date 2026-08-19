@@ -79,11 +79,12 @@ def test_copilot_api_returns_only_grounded_answer_and_authority_boundary(monkeyp
     monkeypatch.setattr(api, "CaseCopilotService", _Service)
     with _db() as db:
         case = _case(db)
+        identity = _identity(UserRole.VIEWER)
         result = api.ask_case_copilot(
             case.id,
             api.CaseCopilotRequest(question="现在证据说明什么？", request_id="req-answer"),
             db=db,
-            identity=_identity(UserRole.VIEWER),
+            identity=identity,
         )
         assert result["status"] == "ANSWERED"
         assert result["read_only"] is True
@@ -91,7 +92,13 @@ def test_copilot_api_returns_only_grounded_answer_and_authority_boundary(monkeyp
         assert result["execution_authority"] == "DETERMINISTIC_ROUTER_RBAC_POLICY_ORCHESTRATOR"
         assert result["proposal"]["root_cause_confirmed_by_ai"] is False
         assert seen["actor_role"] == UserRole.VIEWER
-        assert seen["request_key"].endswith(":req-answer")
+        assert seen["request_key"] == api._api_request_key(
+            case_id=case.id,
+            request_id="req-answer",
+            identity=identity,
+        )
+        assert seen["request_key"].startswith("api:")
+        assert "req-answer" not in seen["request_key"]
 
 
 def test_copilot_api_control_result_is_non_executing(monkeypatch):
