@@ -40,6 +40,30 @@ def _ai2_kind_label(kind: str) -> str:
     }.get(kind, kind or "-")
 
 
+def _ai2_state_label(cycle: AIDiagnosticCycle) -> str:
+    state = cycle.suggestion_state or "NONE"
+    if state == "DISPATCHED":
+        return "已采纳并进入确定性工作流"
+    if (
+        state == "ACCEPTED"
+        and cycle.execution_ref_type == "reproduction_session"
+        and cycle.execution_ref_id
+    ):
+        return "复现 Session 已创建，等待/重试任务投递"
+    return state
+
+
+def _ai2_retryable(cycle: AIDiagnosticCycle) -> bool:
+    state = cycle.suggestion_state or "NONE"
+    if state == "PROPOSED":
+        return True
+    return bool(
+        state == "ACCEPTED"
+        and cycle.execution_ref_type == "reproduction_session"
+        and cycle.execution_ref_id
+    )
+
+
 @dataclass(frozen=True)
 class FeishuCaseCard:
     case_id: str
@@ -126,13 +150,12 @@ class FeishuCaseCardBuilder:
         ]
 
         if ai2_cycle and ai2_action:
-            suggestion_state = ai2_cycle.suggestion_state or "NONE"
             ai2_lines = [
                 "**AI2 下一步建议（SUGGEST）**",
                 _kv_line("类型", _ai2_kind_label(str(ai2_action.get("type") or ""))),
                 _kv_line("注册 ID", ai2_action.get("registered_id")),
                 _kv_line("理由", ai2_action.get("reason")),
-                _kv_line("状态", "已采纳并进入确定性工作流" if suggestion_state == "DISPATCHED" else suggestion_state),
+                _kv_line("状态", _ai2_state_label(ai2_cycle)),
                 "_这是 AI 建议，不是 Root Cause，也不会由 AI 自动执行；点击采纳后仍会重新经过用户 RBAC、Case ACL、Registry 与确定性 Orchestrator。_",
             ]
             elements.extend([
@@ -148,10 +171,11 @@ class FeishuCaseCardBuilder:
         actions = [{"tag":"button","text":_plain("查看详情"),"type":"default","value":{"action":"OPEN_CASE","case_id":case_id}}]
         if evidence_doc and evidence_doc.document_url:
             actions.insert(0,{"tag":"button","text":_plain("查看完整证据报告"),"type":"primary","url":evidence_doc.document_url})
-        if ai2_cycle and ai2_action and (ai2_cycle.suggestion_state or "NONE") in {"NONE", "PROPOSED"}:
+        if ai2_cycle and ai2_action and _ai2_retryable(ai2_cycle):
+            retrying = (ai2_cycle.suggestion_state or "NONE") == "ACCEPTED"
             actions.append({
                 "tag":"button",
-                "text":_plain("采纳 AI2 建议"),
+                "text":_plain("重试 AI2 任务投递" if retrying else "采纳 AI2 建议"),
                 "type":"primary",
                 "value":{"action":"AI2_ACCEPT_SUGGESTION","case_id":case_id,"cycle_id":ai2_cycle.id},
             })
