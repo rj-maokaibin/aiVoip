@@ -56,6 +56,22 @@ def _input_hash(text: str, attachments: list[dict[str, Any]], case_id: str | Non
     return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
 
 
+def _semantic_delivery_key(*, message_id: str, tenant_key: str | None, case_id: str | None) -> str:
+    """Build the persisted unique delivery key without storing raw tenant identity.
+
+    Feishu message IDs are only required to be unique within the tenant boundary.
+    For live tenant traffic, scope replay to ``tenant_key + message_id``. Admin/debug
+    calls may intentionally have no tenant; scope those to ``case_id + message_id``.
+    The existing UNIQUE(message_id) database contract can therefore remain stable
+    while the stored value becomes a bounded, privacy-preserving delivery key.
+    """
+    if tenant_key:
+        material = "\x1f".join(("tenant", str(tenant_key), str(message_id)))
+    else:
+        material = "\x1f".join(("case", str(case_id or ""), str(message_id)))
+    return f"sem:{hashlib.sha256(material.encode('utf-8')).hexdigest()}"
+
+
 def semantic_router_enabled() -> bool:
     return bool(getattr(settings, "ai_semantic_router_enabled", False))
 
@@ -81,9 +97,9 @@ def needs_semantic_fallback(*, text: str, deterministic: IntakeResult) -> bool:
     return deterministic.confidence < 0.90
 
 
-def _record_existing(db: Session, message_id: str) -> AISemanticIntentRecord | None:
+def _record_existing(db: Session, delivery_key: str) -> AISemanticIntentRecord | None:
     return db.scalar(
-        select(AISemanticIntentRecord).where(AISemanticIntentRecord.message_id == message_id).limit(1)
+        select(AISemanticIntentRecord).where(AISemanticIntentRecord.message_id == delivery_key).limit(1)
     )
 
 
@@ -135,7 +151,8 @@ def shadow_semantic_route(
     A model proposal is observation/evaluation data only and cannot execute a
     workflow, change Case authority, or bypass G2 authorization.
     """
-    existing = _record_existing(db, message_id)
+    delivery_key = _semantic_delivery_key(message_id=message_id, tenant_key=tenant_key, case_id=case_id)
+    existing = _record_existing(db, delivery_key)
     if existing is not None:
         return _result_from_record(existing)
     if not force and (not semantic_router_enabled() or semantic_router_mode() != "SHADOW"):
@@ -146,7 +163,7 @@ def shadow_semantic_route(
         case_id=case_id,
         tenant_key=tenant_key,
         chat_id=chat_id,
-        message_id=message_id,
+        message_id=delivery_key,
         input_hash=_input_hash(text, attachments, case_id),
         deterministic_intent=deterministic.intent,
         deterministic_confidence=float(deterministic.confidence),
