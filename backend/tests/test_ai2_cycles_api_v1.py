@@ -86,6 +86,17 @@ def test_list_cycles_returns_non_executing_authority_contract():
         assert item["root_cause_authority"] == "DETERMINISTIC_OR_HUMAN_CONFIRMED_ONLY"
 
 
+def test_cycle_serializer_never_masks_persisted_invariant_violation():
+    row = _cycle("case-observability")
+    row.formal_result_changed = True
+    row.dispatch_attempted = True
+    row.dispatch_allowed = True
+    item = api._serialize(row)
+    assert item["formal_result_changed"] is True
+    assert item["dispatch_attempted"] is True
+    assert item["dispatch_allowed"] is True
+
+
 def test_next_cycle_api_returns_suggest_only_result_and_commits(monkeypatch):
     seen = {}
 
@@ -146,6 +157,22 @@ def test_metrics_make_safety_invariants_observable():
         assert metrics["by_stop_reason"]["NO_PROGRESS_LIMIT"] == 1
         assert metrics["ai_formal_result_changes"] == 0
         assert metrics["ai_dispatch_attempts"] == 0
+        assert metrics["ai_dispatch_allowed_rows"] == 0
+
+
+def test_metrics_count_any_persisted_safety_violation():
+    with _db() as db:
+        case = _case(db)
+        row = _cycle(case.id)
+        row.formal_result_changed = True
+        row.dispatch_attempted = True
+        row.dispatch_allowed = True
+        db.add(row)
+        db.commit()
+        metrics = api.ai_diagnostic_loop_metrics(db=db, identity=_identity())
+        assert metrics["ai_formal_result_changes"] == 1
+        assert metrics["ai_dispatch_attempts"] == 1
+        assert metrics["ai_dispatch_allowed_rows"] == 1
 
 
 def test_next_cycle_api_fails_closed_when_controlled_stage_is_not_allowed(monkeypatch):
