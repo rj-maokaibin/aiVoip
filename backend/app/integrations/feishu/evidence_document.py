@@ -34,7 +34,9 @@ class FeishuEvidenceDocumentService:
         data=await self.transport._request("POST","/docx/v1/documents",json_body={"title":title})
         doc=(data.get("data") or {}).get("document") or {}; document_id=doc.get("document_id") or doc.get("token")
         if not document_id:raise RuntimeError("FEISHU_DOCX_CREATE_MISSING_DOCUMENT_ID")
-        return document_id,doc.get("url")
+        # The create endpoint returns document_id but not a url; build a stable docx link.
+        url=doc.get("url") or f"https://feishu.cn/docx/{document_id}"
+        return document_id,url
 
     async def _insert_blocks(self,document_id:str,blocks:list[dict],index:int=0)->list[dict]:
         created=[]; current=index

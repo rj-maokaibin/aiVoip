@@ -73,7 +73,7 @@ integration points.
 Exploration for the two external directions was executed on this host; results
 are recorded so the remaining asks are unambiguous.
 
-### LIVE_FEISHU_TENANT ！ VERIFIED (send acceptance PASS)
+### LIVE_FEISHU_TENANT ！ VERIFIED (send + Docx projection PASS)
 
 - App credentials valid: `tenant_access_token` exchange returned `code=0`
   (self-built app `cli_aad5970e...`).
@@ -106,10 +106,17 @@ Executed 2026-08-19 after rebuilding the compose stack to the current HEAD:
   transport) and the worker wraps the call with `asyncio.run`. `_upload_media`
   no longer depends on the nonexistent `transport._client/_base`. Local unit
   tests pass (4/4).
-- **External blocker remains**: Feishu returned `HTTP 400 / 99991672` on
-  `POST /docx/v1/documents` ！ the app lacks "create document" permission. Grant
-  the `docx`/`drive` write scopes in the Feishu developer console, publish a new
-  app version, then the Docx projection can be re-verified end-to-end.
+- **External blocker resolved ！ Docx projection now end-to-end PASS (2026-08-20)**
+  after the user granted `docx`/`drive` write scopes in the Feishu developer
+  console. A full automatic chain run (Case `e142eb7b-a578-4d18-8afb-ad8c08ec20d1`,
+  real pcap) created Feishu document
+  `Ps9dduEOHoMMrGxF4FTcuWdbn3f` (`POST /docx/v1/documents` ★ 11 section blocks
+  via `children` + media replacement via `PATCH` all `200 OK`), then
+  `feishu.project_evidence_report` returned `status=SYNCED`,
+  `projection_version=3`, `case_card=SYNCED`; binding persisted in
+  `feishu_evidence_document_bindings` (document_id, `SYNCED`, v3).
+  `document_url` is now populated by constructing `https://feishu.cn/docx/{id}`
+  when the create response omits it (unit tests 4/4).
 
 ### REAL_SEMANTIC_AND_GOLDEN_DATASET ！ synthetic PASS; real data missing
 
