@@ -93,10 +93,24 @@ def test_service_rejects_cross_actor_request_key_replay():
         case = _case(db)
         gateway = _Gateway()
         service = CaseCopilotService(snapshot_builder=_SnapshotBuilder(), gateway=gateway)
-        first = service.answer(db, case_id=case.id, question="当前证据说明什么？", request_key="shared-key", actor_id="engineer-a", actor_role=UserRole.ENGINEER)
+        first = service.answer(
+            db,
+            case_id=case.id,
+            question="当前证据说明什么？",
+            request_key="shared-key",
+            actor_id="engineer-a",
+            actor_role=UserRole.ENGINEER,
+        )
         assert first.status == "ANSWERED"
         with pytest.raises(ValueError, match="COPILOT_REQUEST_KEY_ACTOR_CONFLICT"):
-            service.answer(db, case_id=case.id, question="当前证据说明什么？", request_key="shared-key", actor_id="viewer-b", actor_role=UserRole.VIEWER)
+            service.answer(
+                db,
+                case_id=case.id,
+                question="当前证据说明什么？",
+                request_key="shared-key",
+                actor_id="viewer-b",
+                actor_role=UserRole.VIEWER,
+            )
         assert gateway.calls == 1
 
 
@@ -105,10 +119,24 @@ def test_service_rejects_cross_role_request_key_replay():
         case = _case(db)
         gateway = _Gateway()
         service = CaseCopilotService(snapshot_builder=_SnapshotBuilder(), gateway=gateway)
-        first = service.answer(db, case_id=case.id, question="当前证据说明什么？", request_key="same-actor-role-change", actor_id="user-a", actor_role=UserRole.ENGINEER)
+        first = service.answer(
+            db,
+            case_id=case.id,
+            question="当前证据说明什么？",
+            request_key="same-actor-role-change",
+            actor_id="user-a",
+            actor_role=UserRole.ENGINEER,
+        )
         assert first.status == "ANSWERED"
         with pytest.raises(ValueError, match="COPILOT_REQUEST_KEY_ROLE_CONFLICT"):
-            service.answer(db, case_id=case.id, question="当前证据说明什么？", request_key="same-actor-role-change", actor_id="user-a", actor_role=UserRole.VIEWER)
+            service.answer(
+                db,
+                case_id=case.id,
+                question="当前证据说明什么？",
+                request_key="same-actor-role-change",
+                actor_id="user-a",
+                actor_role=UserRole.VIEWER,
+            )
         assert gateway.calls == 1
 
 
@@ -117,10 +145,24 @@ def test_service_rejects_same_request_key_with_different_question():
         case = _case(db)
         gateway = _Gateway()
         service = CaseCopilotService(snapshot_builder=_SnapshotBuilder(), gateway=gateway)
-        first = service.answer(db, case_id=case.id, question="问题 A", request_key="same-key-different-question", actor_id="user-a", actor_role=UserRole.ENGINEER)
+        first = service.answer(
+            db,
+            case_id=case.id,
+            question="问题 A",
+            request_key="same-key-different-question",
+            actor_id="user-a",
+            actor_role=UserRole.ENGINEER,
+        )
         assert first.status == "ANSWERED"
         with pytest.raises(ValueError, match="COPILOT_REQUEST_KEY_QUESTION_CONFLICT"):
-            service.answer(db, case_id=case.id, question="问题 B", request_key="same-key-different-question", actor_id="user-a", actor_role=UserRole.ENGINEER)
+            service.answer(
+                db,
+                case_id=case.id,
+                question="问题 B",
+                request_key="same-key-different-question",
+                actor_id="user-a",
+                actor_role=UserRole.ENGINEER,
+            )
         assert gateway.calls == 1
 
 
@@ -152,8 +194,18 @@ def test_api_scopes_idempotency_key_to_actor_and_role_with_bounded_hash(monkeypa
     with _db() as db:
         case = _case(db)
         req = api.CaseCopilotRequest(question="同一个 request id", request_id="x" * 192)
-        api.ask_case_copilot(case.id, req, db=db, identity=AuthIdentity("actor-a", UserRole.ENGINEER, True, "test"))
-        api.ask_case_copilot(case.id, req, db=db, identity=AuthIdentity("actor-b", UserRole.VIEWER, True, "test"))
+        api.ask_case_copilot(
+            case.id,
+            req,
+            db=db,
+            identity=AuthIdentity("actor-a", UserRole.ENGINEER, True, "test"),
+        )
+        api.ask_case_copilot(
+            case.id,
+            req,
+            db=db,
+            identity=AuthIdentity("actor-b", UserRole.VIEWER, True, "test"),
+        )
 
     assert len(keys) == 2
     assert keys[0] != keys[1]
