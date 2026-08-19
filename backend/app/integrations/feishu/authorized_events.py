@@ -51,6 +51,12 @@ def _tenant_key(payload: dict) -> str:
     return str(header.get("tenant_key") or sender.get("tenant_key") or "")
 
 
+def _case_copilot_idempotency_key(*, tenant_key: str, case_id: str, actor_id: str, actor_role: str, delivery_id: str) -> str:
+    """Scope AI3 replay protection to the effective authorization context."""
+    material = "\x1f".join((tenant_key, case_id, actor_id, actor_role, delivery_id))
+    return hashlib.sha256(material.encode("utf-8")).hexdigest()
+
+
 def _audit_identity_resolution(db: Session, identity, *, open_id: str, case_id: str | None = None) -> None:
     digest = hashlib.sha256(str(open_id or "").encode("utf-8")).hexdigest()[:20] if open_id else None
     audit(db, case_id=case_id, actor=identity.actor_id or "feishu-identity-resolver", event_type="FEISHU_IDENTITY_RESOLVED", target_type="feishu_user_identity", target_id=identity.identity_id, detail={
@@ -164,8 +170,7 @@ def _maybe_dispatch_case_copilot(db: Session, *, payload: dict, identity) -> dic
         message_id=message_id,
         root_message_id=str(message.get("root_id") or message.get("root_message_id") or ""),
         parent_message_id=str(message.get("parent_id") or message.get("parent_message_id") or ""),
-        device_refs=preliminary.device_refs,
-        symptoms=preliminary.symptoms,
+        device_refs=preliminary.device_refs, symptoms=preliminary.symptoms,
     )
     case = resolution.case
     if case is None:
@@ -174,13 +179,28 @@ def _maybe_dispatch_case_copilot(db: Session, *, payload: dict, identity) -> dic
     if intake.intent != "GENERAL_QUESTION":
         return None
 
-    key = message_id or event_id
+    delivery_id = message_id or event_id or hashlib.sha256(text.encode()).hexdigest()
+    scoped_key = _case_copilot_idempotency_key(
+        tenant_key=tenant,
+        case_id=case.id,
+        actor_id=identity.actor_id,
+        actor_role=identity.role.value,
+        delivery_id=delivery_id,
+    )
     try:
         handle = begin_idempotent(
             db,
             scope="FEISHU_CASE_COPILOT_EVENT",
-            key=key or None,
-            payload={"case_id": case.id, "message_id": message_id, "event_id": event_id, "text_hash": hashlib.sha256(text.encode()).hexdigest()},
+            key=scoped_key,
+            payload={
+                "case_id": case.id,
+                "message_id": message_id,
+                "event_id": event_id,
+                "tenant_key": tenant,
+                "actor_id": identity.actor_id,
+                "actor_role": identity.role.value,
+                "text_hash": hashlib.sha256(text.encode()).hexdigest(),
+            },
         )
     except AppError as exc:
         if exc.code == "IDEMPOTENCY_IN_PROGRESS":
@@ -197,7 +217,7 @@ def _maybe_dispatch_case_copilot(db: Session, *, payload: dict, identity) -> dic
                 db,
                 case_id=case.id,
                 question=text,
-                request_key=f"feishu:{key or hashlib.sha256(text.encode()).hexdigest()}",
+                request_key=f"feishu:{scoped_key}",
                 actor_id=identity.actor_id,
                 actor_role=identity.role,
             )
