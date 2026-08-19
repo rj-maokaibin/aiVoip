@@ -85,7 +85,7 @@ def _cycle(case_id: str) -> AIDiagnosticCycle:
     )
 
 
-def test_persist_decision_automatically_runs_ai2_sidecar(monkeypatch):
+def test_persist_decision_runs_ai2_sidecar_without_mutating_formal_decision(monkeypatch):
     monkeypatch.setattr(settings, "ai_diagnostic_loop_enabled", True)
     monkeypatch.setattr(settings, "ai_promotion_stage", "SHADOW")
     seen = {}
@@ -107,15 +107,18 @@ def test_persist_decision_automatically_runs_ai2_sidecar(monkeypatch):
     with _db() as db:
         case, run = _case_and_run(db)
         decision = FakeDecision()
+        formal_before = decision.to_dict()
         diagnosis_service.persist_decision(db, run, decision)
         assert seen["case_id"] == case.id
         assert seen["actor"] == "diagnosis-worker"
         assert seen["baseline"]["diagnosis_run_id"] == run.id
-        assert decision.summary["ai2_cycle_stage"] == "SHADOW"
-        assert decision.summary["ai2_cycle_status"] == "COMPLETED"
-        assert decision.summary["ai2_dispatch_attempted"] is False
-        assert decision.summary["ai2_formal_result_changed"] is False
-        assert db.scalar(select(AIDiagnosticCycle).where(AIDiagnosticCycle.case_id == case.id)) is not None
+        assert decision.to_dict() == formal_before
+        assert not any(str(key).startswith("ai2_") for key in decision.summary)
+        cycle = db.scalar(select(AIDiagnosticCycle).where(AIDiagnosticCycle.case_id == case.id))
+        assert cycle is not None
+        assert cycle.formal_result_changed is False
+        assert cycle.dispatch_attempted is False
+        assert cycle.dispatch_allowed is False
 
 
 def test_ai2_sidecar_failure_rolls_back_only_sidecar_and_keeps_deterministic_flow(monkeypatch):
@@ -135,10 +138,10 @@ def test_ai2_sidecar_failure_rolls_back_only_sidecar_and_keeps_deterministic_flo
     with _db() as db:
         case, run = _case_and_run(db)
         decision = FakeDecision()
+        formal_before = decision.to_dict()
         rows = diagnosis_service.persist_decision(db, run, decision)
         assert rows == []
-        assert decision.summary["headline"] == "deterministic result"
-        assert "ai2_cycle_id" not in decision.summary
+        assert decision.to_dict() == formal_before
         assert db.scalar(select(AIDiagnosticCycle).where(AIDiagnosticCycle.case_id == case.id)) is None
         failure = db.scalar(select(AuditLog).where(
             AuditLog.case_id == case.id,
@@ -147,3 +150,4 @@ def test_ai2_sidecar_failure_rolls_back_only_sidecar_and_keeps_deterministic_flo
         assert failure is not None
         assert failure.detail["deterministic_transaction_preserved"] is True
         assert failure.detail["dispatch_attempted"] is False
+        assert failure.detail["formal_result_changed"] is False
