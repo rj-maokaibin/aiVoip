@@ -107,6 +107,7 @@ class Settings(BaseSettings):
     feishu_document_acl_mode: str = "AUTO"
     feishu_document_acl_permission: str = "view"
     feishu_document_acl_fallback_enabled: bool = True
+    feishu_document_acl_admin_open_ids: str = ""
     auth_default_actor: str = "dev-admin"
     auth_default_role: str = "ADMIN"
     idempotency_ttl_hours: int = 24

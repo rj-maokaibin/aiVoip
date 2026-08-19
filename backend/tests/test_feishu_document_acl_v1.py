@@ -77,6 +77,21 @@ def _set(monkeypatch, mode="AUTO", permission="view", fallback=True):
     monkeypatch.setattr(settings, "feishu_document_acl_mode", mode)
     monkeypatch.setattr(settings, "feishu_document_acl_permission", permission)
     monkeypatch.setattr(settings, "feishu_document_acl_fallback_enabled", fallback)
+    monkeypatch.setattr(settings, "feishu_document_acl_admin_open_ids", "")
+
+
+def test_admin_open_id_gets_full_access_while_chat_keeps_view(monkeypatch):
+    _set(monkeypatch, mode="CHAT_SCOPE", permission="view")
+    monkeypatch.setattr(settings, "feishu_document_acl_admin_open_ids", "ou-admin-1")
+    adapter = FakeAdapter(chat_members=["ou-member-a"])
+    db = _db()
+    case = _source(db)
+    service = FeishuDocumentAclService(adapter=adapter)
+    asyncio.run(service.reconcile(db, case_id=case.id, document_id="doc-1"))
+    perms = {c.member_id: c.perm for c in adapter.collaborators}
+    assert perms.get("oc-case") == "view"            # chat members keep view
+    assert perms.get("ou-admin-1") == "full_access"  # admin holds manage
+    assert ("add", "openid", "ou-admin-1", "full_access") in adapter.calls
 
 
 def test_chat_scope_adds_group_once_and_second_reconcile_is_idempotent(monkeypatch):

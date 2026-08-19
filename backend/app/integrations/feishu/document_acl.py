@@ -188,6 +188,32 @@ class FeishuDocumentAclService:
             ); changed.append(f"REMOVE:{open_id}")
         return {"mode": "MEMBER_MIRROR", "changed": changed, "member_count": len(desired)}
 
+    def _admin_open_ids(self) -> list[str]:
+        raw = str(getattr(settings, "feishu_document_acl_admin_open_ids", "") or "")
+        return [x.strip() for x in raw.split(",") if x.strip()]
+
+    async def _grant_admin_manage(self, row: FeishuDocumentAclBinding) -> list[str]:
+        """Ensure configured admin open_ids hold full_access; chat members keep view."""
+        changed: list[str] = []
+        admins = self._admin_open_ids()
+        if not admins:
+            return changed
+        collaborators = await self.adapter.list_collaborators(row.document_id)
+        current = {c.member_id: c for c in collaborators if c.member_type == "openid"}
+        for open_id in admins:
+            existing = current.get(open_id)
+            if existing is None:
+                await self.adapter.add_collaborator(
+                    row.document_id, member_type="openid", member_id=open_id,
+                    perm="full_access",
+                ); changed.append(f"ADD_ADMIN:{open_id[:12]}")
+            elif existing.perm != "full_access":
+                await self.adapter.update_collaborator(
+                    row.document_id, member_type="openid", member_id=open_id,
+                    perm="full_access",
+                ); changed.append(f"UPDATE_ADMIN:{open_id[:12]}")
+        return changed
+
     async def reconcile(self, db: Session, *, case_id: str, document_id: str,
                         actor: str = "feishu-document-acl") -> FeishuDocumentAclBinding:
         row = self.ensure_binding(db, case_id=case_id, document_id=document_id)
@@ -206,6 +232,7 @@ class FeishuDocumentAclService:
                         raise
                     result = await self._member_mirror(row)
                     result["fallback_from"] = "CHAT_SCOPE"
+            admin_changes = await self._grant_admin_manage(row)
             row.effective_mode = result["mode"]
             row.applied_revision = row.desired_revision
             row.status = "SYNCED"
@@ -215,6 +242,8 @@ class FeishuDocumentAclService:
                 "member_count": result.get("member_count", 0),
                 "change_count": len(result.get("changed") or []),
                 "fallback_from": result.get("fallback_from"),
+                "admin_count": len(self._admin_open_ids()),
+                "admin_change_count": len(admin_changes),
             }
             audit(db, case_id=case_id, actor=actor,
                   event_type="FEISHU_DOCUMENT_ACL_SYNCED",
@@ -223,7 +252,8 @@ class FeishuDocumentAclService:
                           "effective_mode": row.effective_mode,
                           "permission": row.desired_permission,
                           "desired_revision": row.desired_revision,
-                          "change_count": len(result.get("changed") or [])})
+                          "change_count": len(result.get("changed") or []),
+                          "admin_change_count": len(admin_changes)})
         except Exception as exc:
             row.retry_count += 1
             row.status = "FAILED"

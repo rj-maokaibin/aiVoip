@@ -136,6 +136,19 @@ Executed 2026-08-19 after rebuilding the compose stack to the current HEAD:
   collaborator directly.
 - Unit tests: 21 passed (document ACL + card + governance).
 
+### Document ACL admin-only manage (2026-08-20)
+
+- Requirement: only a configured admin (Ã«¿­±ó, open_id
+  `ou_67bee3c2e462a7f8939093bd8e697a96`) gets document manage permission;
+  other chat members keep `view`.
+- Implemented `FEISHU_DOCUMENT_ACL_ADMIN_OPEN_IDS` (comma-separated open_ids).
+  `FeishuDocumentAclService.reconcile` now, after the chat/member scope, grants
+  each admin open_id `full_access` (`_grant_admin_manage`); the source chat
+  stays at the configured permission (default `view`). Verified live on Case
+  `e142eb7b` document `Ps9dduEOHoMMrGxF4FTcuWdbn3f`: collaborators =
+  admin openid `full_access` + chat `view`; new unit test covers the full path.
+- Existing documents were updated: admin full_access, chat reverted to view.
+
 ### REAL_SEMANTIC_AND_GOLDEN_DATASET ¡ª synthetic PASS; real data missing
 
 User decision (2026-08-19): **option C ¡ª do not run real semantic/Golden
