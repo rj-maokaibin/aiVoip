@@ -114,6 +114,32 @@ real semantic/Golden dataset direction (user decision C — external Pending):
 1. Real Field Golden pcap: `8b72929e-...pcap` (or an equivalent real evidence set).
 2. Real semantic/Golden eval dataset, or DB cases that qualify as `GOLDEN_READY`.
 
+## Real-pcap offline partial-flow verification (2026-08-19)
+
+The user was away from the physical phone/DUT, so a partial end-to-end
+verification using a real field capture was executed instead (no device
+required), covering the capture→analyze→diagnose chain on the current HEAD.
+
+- Input: real field pcap `/home/dev/workspace/tcpdump-2026-08-14.pcap`
+  (4.5 MB, ~67 s, 1 SIP call, 3 RTP streams, G.711U).
+- Flow: create Case → upload evidence (auto-inferred `PCAP`) → analyze
+  `packet` / `pcm` / `media` → run diagnosis.
+- Results (Case `2dfc2edd-a7e9-43f3-b983-886d98097278`):
+  - packet analysis: **SUCCESS**
+  - pcm analysis: **SUCCESS**
+  - media analysis: **SUCCESS**
+  - diagnosis: **DIAGNOSED** (workflow `m4-v1`, `DeterministicDiagnosisReasoner` v0.4.0)
+  - headline: 本地音频采集链路存在稳定周期性干扰并进入上行RTP
+  - top hypotheses: `LOCAL_CAPTURE_PERIODIC_INTERFERENCE` SUPPORTED 0.96;
+    `RTP_ARRIVAL_JITTER` SUPPORTED 0.8; `PCM_UNEXPECTED_SILENCE` OPEN 0.9
+  - rule engine v2.0.0: 11 evaluated / 1 matched (`DTMF_PCM_SIP_MATCH`)
+- The diagnosis matches the historical real-site analysis of the same pcap,
+  confirming the capture→analyze→diagnose chain is functional on the current
+  HEAD without a physical phone.
+- Note: `GET /cases/{id}/reports/evidence` returns 404 at the case level
+  (evidence reports are exposed per call/session); this is a reporting-endpoint
+  detail, not a capture/diagnose failure.
+
 ## Handover notes
 
 - `.env.example` restored to template (no real token); real reasoning-gateway
