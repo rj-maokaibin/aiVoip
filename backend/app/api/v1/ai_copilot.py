@@ -36,7 +36,10 @@ def ask_case_copilot(
     if case is None:
         raise HTTPException(404, "CASE_NOT_FOUND")
     request_id = req.request_id or new_id()
-    request_key = f"api:{case_id}:{request_id}"
+    # Idempotency is scoped to the effective reader identity. Reusing a request_id
+    # across users or after a role change must never replay an answer projected for
+    # a different authorization context.
+    request_key = f"api:{case_id}:{identity.actor_id}:{identity.role.value}:{request_id}"
     try:
         with db.begin_nested():
             result = CaseCopilotService().answer(
