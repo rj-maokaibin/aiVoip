@@ -109,6 +109,7 @@ jobs:
           backend/tests/test_ai2_diagnostic_loop_v1.py
           backend/tests/test_ai2_cycles_api_v1.py
           backend/tests/test_ai2_diagnosis_sidecar_v1.py
+          backend/tests/test_ai2_cycle_concurrency_contract_v1.py
           backend/tests/test_ai2_suggest_bridge_v1.py
           backend/tests/test_ai2_suggest_concurrency_contract_v1.py
           backend/tests/test_ai2_reproduction_publish_recovery_v1.py
