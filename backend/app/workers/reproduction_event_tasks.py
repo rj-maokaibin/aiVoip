@@ -102,6 +102,37 @@ def _should_restart_ring_after_end(state: str, active_call_id: str | None) -> bo
     }
 
 
+def _binding_precedes_end(*, binding_event: str | None, bind_ms: int,
+                          pending_onhook_ms: int | None,
+                          segment_start_ms: int | None = None,
+                          attempt_start_ms: int | None = None) -> bool:
+    """Whether a deterministic call-binding signal may create a Call now.
+
+    A progressing-RTP fallback is only trusted when it precedes the End Anchor:
+    RTP observed strictly after ONHOOK can be a tail packet from a previous call,
+    not proof that a new call started before hangup.
+
+    A SIP INVITE, however, is unambiguous call-setup evidence — it only ever
+    appears while a call is being established — so it is trusted even when the
+    segment observation (download + analysis) completes AFTER the FXS ONHOOK.
+    Real DUTs show this on short calls (a few seconds): APF1250 eb9d7edb and
+    APF3260 052884a5 both captured the INVITE in a segment whose observation lag
+    the ONHOOK by 10+s; requiring bind_ms <= ONHOOK there wrongly dropped the
+    call and marked the attempt INVALID. The INVITE itself was emitted *during*
+    the call, so late observation must not discard it.
+
+    To keep the late-SIP binding safe against a stale INVITE from the previous
+    call being attributed to a fresh no-call attempt, the observed segment must
+    belong to the current attempt: its start must be no earlier than the
+    attempt's own OFFHOOK anchor (when the segment/attempt anchors are known).
+    """
+    if binding_event == 'SIP_INVITE':
+        if segment_start_ms is not None and attempt_start_ms is not None:
+            return segment_start_ms >= attempt_start_ms
+        return True
+    return pending_onhook_ms is None or bind_ms <= pending_onhook_ms
+
+
 def _persist_fxs_monitor_ready(db, session, orch) -> None:
     debug_health = db.scalar(select(CaptureChannelHealth).where(
         CaptureChannelHealth.session_id == session.id,
@@ -710,7 +741,30 @@ async def _watch_real_v11(db, session, device, max_seconds: int | None) -> dict:
                     # RTP captured only after the pending ONHOOK is a tail packet,
                     # not proof that a call started before hangup.  Never create a
                     # call whose binding anchor is later than its end anchor.
-                    binding_precedes_end = pending_onhook_ms is None or bind_ms <= pending_onhook_ms
+                    #
+                    # Short calls (a few seconds) expose a race: the deterministic
+                    # SIP-INVITE signal is observed by segment download/analysis
+                    # that can lag the FXS ONHOOK by 10+s on real DUTs (APF1250
+                    # eb9d7edb / APF3260 052884a5: INVITE in the segment AFTER the
+                    # ONHOOK). The INVITE itself was emitted *during* the call, so
+                    # binding to it is correct even though the observation is late.
+                    # A SIP INVITE is unambiguous call evidence (it only ever
+                    # appears while a call is being set up), so it is trusted over
+                    # the observed-vs-anchor ordering. RTP-only fallback keeps the
+                    # strict check: progressing RTP observed only after ONHOOK can
+                    # be a tail packet from a previous call, not new-call proof.
+                    # For the late-SIP-INVITE binding to be safe we also require the
+                    # observed segment to belong to the CURRENT attempt (its start
+                    # is not before the attempt's own anchor) — this prevents a
+                    # stale INVITE segment from the previous call being attributed
+                    # to a fresh no-call attempt.
+                    binding_precedes_end = _binding_precedes_end(
+                        binding_event=observation.call_binding_event,
+                        bind_ms=bind_ms,
+                        pending_onhook_ms=pending_onhook_ms,
+                        segment_start_ms=segment_start_ms,
+                        attempt_start_ms=(attempt.start_anchor_ms if attempt else None),
+                    )
                     if (attempt is not None and active_call_id is None
                             and observation.call_binding_event and binding_precedes_end):
                         try:

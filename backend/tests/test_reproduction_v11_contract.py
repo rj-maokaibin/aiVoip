@@ -16,7 +16,7 @@ from app.reproduction.pcap_codec import PcapRecord, build_pcap, build_rtp, udp_e
 from app.reproduction.profile import ReproductionProfileRegistry
 from app.reproduction.quick import EvidenceBackedCallQuickAnalyzer, QuickAnalysisInput
 from app.reproduction.signal_observer import binding_relative_ms, observe_pcap_signals
-from app.workers.reproduction_event_tasks import _ring_segment_retainable
+from app.workers.reproduction_event_tasks import _binding_precedes_end, _ring_segment_retainable
 
 
 def _write_pcap(path: Path, records: list[PcapRecord]) -> Path:
@@ -284,3 +284,54 @@ def test_activity_data_plane_gap_names_missing_direction_and_requests_recovery()
         assert row.failed_reasons_json == ['PCM_TX_NOT_VERIFIED']
     finally:
         db.close()
+
+
+def test_late_sip_invite_still_binds_a_short_call():
+    """A SIP INVITE observed AFTER the FXS ONHOOK must still bind the Call.
+
+    Short calls (a few seconds) expose a segment-download/analysis lag on real
+    DUTs: the deterministic INVITE is captured in a segment whose observation
+    completes 10+s after hangup (APF1250 eb9d7edb, APF3260 052884a5 - the call
+    was made, media/INVITE exist, yet the attempt was wrongly INVALID). The
+    INVITE is unambiguous call-setup evidence and is emitted *during* the call,
+    so late observation must not discard it. Regression test for the real-device
+    short-call binding fix.
+    """
+    # Late SIP INVITE (bind after ONHOOK) in the current attempt's segment.
+    assert _binding_precedes_end(
+        binding_event='SIP_INVITE',
+        bind_ms=50_175,          # observed segment anchor, after ONHOOK
+        pending_onhook_ms=38_593,
+        segment_start_ms=32_651,
+        attempt_start_ms=31_422,
+    ) is True
+
+    # RTP-only fallback keeps the strict ordering (tail-packet guard).
+    assert _binding_precedes_end(
+        binding_event='RTP_STREAM_START_FALLBACK',
+        bind_ms=50_175,
+        pending_onhook_ms=38_593,
+        segment_start_ms=32_651,
+        attempt_start_ms=31_422,
+    ) is False
+
+    # A stale INVITE segment from the PREVIOUS call (start before the current
+    # attempt's OFFHOOK) must not bind to the fresh attempt.
+    assert _binding_precedes_end(
+        binding_event='SIP_INVITE',
+        bind_ms=50_175,
+        pending_onhook_ms=38_593,
+        segment_start_ms=20_000,   # older than the attempt's OFFHOOK
+        attempt_start_ms=31_422,
+    ) is False
+
+    # When segment/attempt anchors are unknown, a SIP INVITE is still trusted.
+    assert _binding_precedes_end(
+        binding_event='SIP_INVITE', bind_ms=50_175, pending_onhook_ms=38_593,
+    ) is True
+
+    # With no pending ONHOOK, RTP fallback is allowed regardless of order.
+    assert _binding_precedes_end(
+        binding_event='RTP_STREAM_START_FALLBACK',
+        bind_ms=50_175, pending_onhook_ms=None,
+    ) is True
