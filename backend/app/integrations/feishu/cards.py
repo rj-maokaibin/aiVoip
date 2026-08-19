@@ -156,7 +156,7 @@ class FeishuCaseCardBuilder:
                 _kv_line("注册 ID", ai2_action.get("registered_id")),
                 _kv_line("理由", ai2_action.get("reason")),
                 _kv_line("状态", _ai2_state_label(ai2_cycle)),
-                "_这是 AI 建议，不是 Root Cause，也不会由 AI 自动执行；点击采纳后仍会重新经过用户 RBAC、Case ACL、Registry 与确定性 Orchestrator。_",
+                "_这是 AI 建议，不是 Root Cause；AI 不自动执行。点击采纳后仍会重新经过用户 RBAC、Case ACL、Registry 与确定性 Orchestrator。_",
             ]
             elements.extend([
                 {"tag":"hr"},
