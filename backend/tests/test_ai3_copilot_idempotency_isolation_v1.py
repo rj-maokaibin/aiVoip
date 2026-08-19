@@ -140,7 +140,33 @@ def test_service_rejects_cross_role_request_key_replay():
         assert gateway.calls == 1
 
 
-def test_api_scopes_idempotency_key_to_actor_and_role(monkeypatch):
+def test_service_rejects_same_request_key_with_different_question():
+    with _db() as db:
+        case = _case(db)
+        gateway = _Gateway()
+        service = CaseCopilotService(snapshot_builder=_SnapshotBuilder(), gateway=gateway)
+        first = service.answer(
+            db,
+            case_id=case.id,
+            question="问题 A",
+            request_key="same-key-different-question",
+            actor_id="user-a",
+            actor_role=UserRole.ENGINEER,
+        )
+        assert first.status == "ANSWERED"
+        with pytest.raises(ValueError, match="COPILOT_REQUEST_KEY_QUESTION_CONFLICT"):
+            service.answer(
+                db,
+                case_id=case.id,
+                question="问题 B",
+                request_key="same-key-different-question",
+                actor_id="user-a",
+                actor_role=UserRole.ENGINEER,
+            )
+        assert gateway.calls == 1
+
+
+def test_api_scopes_idempotency_key_to_actor_and_role_with_bounded_hash(monkeypatch):
     monkeypatch.setattr(settings, "ai_case_copilot_enabled", True)
     keys = []
 
@@ -167,7 +193,7 @@ def test_api_scopes_idempotency_key_to_actor_and_role(monkeypatch):
     monkeypatch.setattr(api, "CaseCopilotService", _Service)
     with _db() as db:
         case = _case(db)
-        req = api.CaseCopilotRequest(question="同一个 request id", request_id="same-request")
+        req = api.CaseCopilotRequest(question="同一个 request id", request_id="x" * 192)
         api.ask_case_copilot(
             case.id,
             req,
@@ -183,5 +209,6 @@ def test_api_scopes_idempotency_key_to_actor_and_role(monkeypatch):
 
     assert len(keys) == 2
     assert keys[0] != keys[1]
-    assert ":actor-a:ENGINEER:" in keys[0]
-    assert ":actor-b:VIEWER:" in keys[1]
+    assert all(key.startswith("api:") for key in keys)
+    assert all(len(key) == 68 for key in keys)
+    assert all("actor-" not in key for key in keys)
