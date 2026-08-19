@@ -111,6 +111,7 @@ jobs:
           backend/tests/test_ai2_diagnosis_sidecar_v1.py
           backend/tests/test_ai2_suggest_bridge_v1.py
           backend/tests/test_ai2_suggest_concurrency_contract_v1.py
+          backend/tests/test_ai2_reproduction_publish_recovery_v1.py
           backend/tests/test_ai2_feishu_suggest_v1.py
           backend/tests/test_ai2_feishu_dispatch_order_v1.py
       - name: M7 acceptance contract gate
