@@ -15,4 +15,4 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Run VOIP AI software release gate
-        run: ./tools/voip_ai_release_gate.sh
+        run: bash tools/voip_ai_release_gate.sh
