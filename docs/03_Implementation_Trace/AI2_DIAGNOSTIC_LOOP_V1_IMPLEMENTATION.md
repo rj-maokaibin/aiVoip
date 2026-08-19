@@ -22,6 +22,8 @@ AI2 reuses the existing Case Intelligence Snapshot, deterministic diagnosis base
 
 AI2 sidecar failure rolls back only the sidecar savepoint. The deterministic diagnosis transaction remains authoritative and continues.
 
+**The sidecar never mutates the formal `DiagnosisDecision` object.** AI2 cycle IDs, recommendations and continuation state live only in `AIDiagnosticCycle`, Audit, the dedicated AI2 API and Feishu projection. They are not copied into `DiagnosisRun.decision_json` or `summary_json`.
+
 ## Stage behavior
 
 ### SHADOW
@@ -70,7 +72,31 @@ Suggestion lifecycle is persisted as:
 
 `NONE | PROPOSED | ACCEPTED | DISPATCHED | FAILED`
 
-with `accepted_by`, `accepted_at`, `execution_ref_type`, `execution_ref_id`, and error metadata. Duplicate callback after `DISPATCHED` is idempotent and does not create a second workflow object.
+with `accepted_by`, `accepted_at`, `execution_ref_type`, `execution_ref_id`, and error metadata.
+
+### Reproduction two-phase dispatch recovery
+
+Reproduction recommendations use a recoverable handoff instead of declaring success before the broker accepts the task:
+
+`PROPOSED`
+→ explicit user confirmation
+→ create deterministic `ReproductionSession`
+→ persist `ACCEPTED`
+→ commit
+→ publish `reproduction.start(session_id)`
+→ Celery `after_task_publish`
+→ persist `DISPATCHED`.
+
+If broker publication fails, the Cycle remains `ACCEPTED` and the same persisted Session can be retried; a second Session is not created.
+
+Additional race protection:
+
+- Cycle acceptance uses `SELECT ... FOR UPDATE`;
+- a persisted 60-second publish lease suppresses simultaneous duplicate card callbacks during commit→broker confirmation;
+- if the Session has already left `CREATED`, a later click reconciles the Cycle to `DISPATCHED` instead of publishing again;
+- `after_task_publish` confirms broker acceptance and clears the publish-pending marker;
+- Feishu Card keeps a **重试 AI2 任务投递** button only for recoverable `ACCEPTED` reproduction state;
+- `DISPATCHED` hides both accept/retry buttons.
 
 ### CONTROLLED_PLANNER
 
@@ -93,7 +119,12 @@ Important invariants:
 - stage limited to `SHADOW | SUGGEST`;
 - status limited to `COMPLETED | DEGRADED | STOPPED | REQUIRE_HUMAN`;
 - persisted snapshot/evidence fingerprints, proposal link, critic, recommendation, stop reason and no-progress count;
-- explicit AI authority fields remain false even after a user-confirmed deterministic workflow is created.
+- Case row is locked while allocating Cycle/idempotency state, so manual `/cycles/next` and automatic sidecar cannot race `cycle_no`/fingerprint uniqueness;
+- DB check constraints enforce `formal_result_changed = false`;
+- DB check constraints enforce `dispatch_attempted = false`;
+- DB check constraints enforce `dispatch_allowed = false`.
+
+The hard-zero authority rules therefore exist at both service and database level.
 
 ## Stop conditions
 
@@ -105,18 +136,43 @@ Important invariants:
 - hard deterministic contradiction;
 - no useful registered discriminator.
 
+## Reasoning Gateway privacy boundary
+
+AI2 may build an internal SERVICE-level engineering Snapshot, but the Reasoning Gateway receives only `compact_context()` plus a recursively redacted deterministic baseline.
+
+- raw PCAP/PCM/WAV bytes are never uploaded;
+- `device_info` and credential fields are not included in gateway device projection;
+- device identifiers are excluded by default (`REASONING_GATEWAY_INCLUDE_DEVICE_IDENTIFIERS=false`);
+- Evidence metadata is allow-listed;
+- nested password/token/secret/cookie/authorization fields are recursively redacted;
+- IP/MAC/phone identifiers are redacted;
+- SIP caller/callee fields are structurally redacted even for 3–6 digit short numbers/extensions;
+- prompt-injection-like evidence text is treated as untrusted data and redacted before transport.
+
 ## API and observability
 
 - `GET /api/v1/cases/{case_id}/ai/cycles`
   - `CASE_READ + DIAGNOSIS_READ`;
-  - includes suggestion lifecycle and deterministic execution references.
+  - includes suggestion lifecycle and deterministic execution references;
+  - returns the actual persisted authority booleans instead of masking them.
 - `POST /api/v1/cases/{case_id}/ai/cycles/next`
   - `CASE_READ + DIAGNOSIS_RUN`;
   - one bounded cycle; no direct device action.
 - `GET /api/v1/ai/diagnostic-loop/metrics`
   - cycle count by stage/status/continue decision/stop reason/suggestion state;
   - accepted suggestion count;
-  - exposes hard-zero counters for AI formal-result changes and AI dispatch attempts.
+  - hard-zero counters for AI formal-result changes, AI dispatch attempts and AI dispatch-authority rows.
+
+## Feishu / AI3 inherited isolation
+
+PR #10 is stacked on AI3 and includes the AI3 acceptance hardening:
+
+- API Copilot idempotency key is scoped to Case + actor + role + request ID using a bounded SHA-256 key;
+- Service replay validates Case, actor, role and question hash;
+- Feishu Copilot idempotency is scoped to `tenant + case + actor + role + delivery_id` before the idempotency layer can replay a response;
+- identical Feishu message IDs in different tenants cannot cross-replay a Copilot result.
+
+AI2 card actions continue through the same G2 Authorized Event Gateway and additionally re-check the underlying Question/Reproduction/Experiment capability.
 
 ## Feature flags
 
@@ -134,33 +190,68 @@ PYTHONPATH=backend:. pytest -q \
   backend/tests/test_ai2_diagnostic_loop_v1.py \
   backend/tests/test_ai2_cycles_api_v1.py \
   backend/tests/test_ai2_diagnosis_sidecar_v1.py \
+  backend/tests/test_ai2_cycle_concurrency_contract_v1.py \
+  backend/tests/test_ai2_reasoning_gateway_redaction_v1.py \
   backend/tests/test_ai2_suggest_bridge_v1.py \
-  backend/tests/test_ai2_feishu_suggest_v1.py
+  backend/tests/test_ai2_suggest_concurrency_contract_v1.py \
+  backend/tests/test_ai2_reproduction_publish_recovery_v1.py \
+  backend/tests/test_ai2_feishu_suggest_v1.py \
+  backend/tests/test_ai2_feishu_retry_card_v1.py \
+  backend/tests/test_ai2_feishu_dispatch_order_v1.py
+```
+
+The inherited AI3 Gate also includes:
+
+```bash
+backend/tests/test_ai3_copilot_idempotency_isolation_v1.py
+backend/tests/test_ai3_feishu_tenant_idempotency_v1.py
 ```
 
 Focused coverage includes:
 
 - SHADOW no planning/dispatch/formal result mutation;
+- exact formal `DiagnosisDecision` immutability on sidecar success and failure;
 - SUGGEST registered recommendation with `PROPOSED` lifecycle;
 - Snapshot+Stage idempotency and proposal reuse;
+- per-Case Cycle serialization;
 - no-progress, Evidence-sufficient, Root Cause terminal and max-cycle stops;
 - CONTROLLED_PLANNER fail-closed;
 - unregistered recommendation and raw-command marker fail-closed;
 - deterministic sidecar automatic invocation and failure isolation;
 - explicit user confirmation required;
 - stale suggestion rejected;
-- duplicate click idempotent;
+- sequential and concurrent duplicate click protection;
+- recoverable two-phase Reproduction dispatch;
+- publish lease, broker confirmation and Session-state reconciliation;
 - Viewer denied;
 - Engineer still constrained by Case ACL on underlying action;
 - G2 RBAC disabled → suggestion acceptance fail-closed;
-- Case card contains no raw command authority;
-- metrics hard-zero observability.
+- HTTP and Feishu WebSocket paths both use the Authorized Event Gateway;
+- Case card contains no raw command authority and exposes retry state without leaking Session IDs;
+- Reasoning Gateway credential/identifier redaction including short VOIP numbers;
+- API does not mask persisted safety invariant values;
+- database rejects any true AI authority flag in V1 SHADOW/SUGGEST rows.
+
+## Static acceptance defects found and fixed
+
+During pre-CI acceptance, the following real software defects were found and fixed rather than being deferred as environment Pending:
+
+1. **AI3 API idempotent replay authorization isolation** — existing request keys could replay an answer produced for another actor/role; fixed with scoped hashed key + Service validation.
+2. **AI3 Feishu cross-Tenant replay isolation** — message/event ID alone could collide before Service validation; fixed with tenant/Case/actor/role scoped hashed idempotency.
+3. **AI2 concurrent suggestion acceptance** — two card callbacks could both create deterministic workflows; fixed with row locking and state contract.
+4. **AI2 Reproduction broker failure** — Cycle could be marked DISPATCHED before broker publish and permanently lose the task; fixed with two-phase ACCEPTED→DISPATCHED handoff.
+5. **AI2 Reproduction duplicate-publish window** — commit→broker confirmation allowed a short concurrent republish race; fixed with a 60-second persisted publish lease and Session-state reconciliation.
+6. **AI2 Feishu retry UX** — recoverable ACCEPTED state originally had no retry button; fixed with explicit retry projection.
+7. **AI2 Cycle allocation race** — concurrent automatic/manual cycles could collide on cycle number/fingerprint; fixed with Case row serialization.
+8. **AI2 formal-result pollution** — successful sidecar metadata was copied into `decision.summary`, which is later persisted as formal `DiagnosisRun`; removed completely.
+9. **AI2 observability masking** — Cycle API hardcoded authority fields false instead of exposing stored values; fixed and DB hard-zero constraints added.
+10. **Reasoning Gateway short VOIP number privacy** — short caller/callee extensions were below the generic phone-regex threshold; fixed with structural party-field redaction.
 
 ## Authority invariants
 
 AI2 must never:
 
-- write/replace a formal `DiagnosisDecision`;
+- write/replace or mutate a formal `DiagnosisDecision`;
 - promote AI hypothesis beyond OPEN/L5/non-confirmable;
 - confirm Root Cause or elevate Evidence Level;
 - generate/execute raw shell, SSH or AIM commands;
@@ -172,10 +263,22 @@ Formal diagnosis remains deterministic. Root Cause authority remains determinist
 
 ## Current validation status
 
-Implementation is committed on `agent/ai2-diagnostic-loop-v1`, Draft PR #10.
+Implementation remains on `agent/ai2-diagnostic-loop-v1`, Draft PR #10.
 
-GitHub Actions run `32168965959` / run #429 failed before any workflow step was created: `ai-contracts` returned `steps=null` and `logs_url=null`. The same pre-step failure also occurred on the AI3 branch and earlier AI2 runs. Therefore no pytest, migration, backend regression, Evidence Report gate, or frontend-build failure has been observed from those runs, but **software PASS is not claimed**.
+GitHub-hosted Actions currently fails before any workflow step is created (`steps=null`, `logs_url=null`) across the AI3/AI2 branches and even minimal runner probes on Ubuntu/Windows/macOS. Therefore the latest static-hardening commits have **not yet received executable CI evidence**, and **software PASS is not claimed**.
 
-PR #10 remains Draft until GitHub Actions can actually execute and the dedicated AI2 gate, migration through `0026_ai_diagnostic_loop_v1`, full backend regression, Evidence Report release gate and frontend production build all PASS.
+PR #10 remains Draft until GitHub Actions can actually execute and all of the following PASS on the latest head:
 
-External production gates remain separate: live Reasoning Gateway/real Case behavior, real Golden/Eval data, real Feishu tenant and real DUT end-to-end validation.
+- Python compile;
+- AI Contract Coverage Gate;
+- AI E1–E6 regression;
+- AI1 Semantic Router gate;
+- AI3 Case Copilot gate including actor/role/question and tenant idempotency isolation;
+- AI2 SHADOW/SUGGEST dedicated gate listed above;
+- M7 acceptance contract;
+- PostgreSQL clean Alembic upgrade through `0026_ai_diagnostic_loop_v1`;
+- full backend regression;
+- Preliminary Evidence Report software release gate;
+- frontend dependency audit and production build.
+
+External production gates remain separate and are not used to excuse software failures: live Feishu tenant, real DUT end-to-end, and real semantic/Golden Dataset validation.
