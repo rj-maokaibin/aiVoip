@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import pytest
 from sqlalchemy import create_engine
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
@@ -86,7 +88,7 @@ def test_list_cycles_returns_non_executing_authority_contract():
         assert item["root_cause_authority"] == "DETERMINISTIC_OR_HUMAN_CONFIRMED_ONLY"
 
 
-def test_cycle_serializer_never_masks_persisted_invariant_violation():
+def test_cycle_serializer_never_masks_in_memory_invariant_violation():
     row = _cycle("case-observability")
     row.formal_result_changed = True
     row.dispatch_attempted = True
@@ -160,19 +162,23 @@ def test_metrics_make_safety_invariants_observable():
         assert metrics["ai_dispatch_allowed_rows"] == 0
 
 
-def test_metrics_count_any_persisted_safety_violation():
+@pytest.mark.parametrize("field", ["formal_result_changed", "dispatch_attempted", "dispatch_allowed"])
+def test_database_rejects_any_ai2_v1_authority_violation(field):
     with _db() as db:
         case = _case(db)
         row = _cycle(case.id)
-        row.formal_result_changed = True
-        row.dispatch_attempted = True
-        row.dispatch_allowed = True
+        setattr(row, field, True)
         db.add(row)
-        db.commit()
-        metrics = api.ai_diagnostic_loop_metrics(db=db, identity=_identity())
-        assert metrics["ai_formal_result_changes"] == 1
-        assert metrics["ai_dispatch_attempts"] == 1
-        assert metrics["ai_dispatch_allowed_rows"] == 1
+        with pytest.raises(IntegrityError):
+            db.commit()
+        db.rollback()
+
+
+def test_model_declares_named_hard_zero_constraints():
+    names = {constraint.name for constraint in AIDiagnosticCycle.__table__.constraints}
+    assert "ck_ai_diagnostic_cycle_no_formal_result_change" in names
+    assert "ck_ai_diagnostic_cycle_no_ai_dispatch_attempt" in names
+    assert "ck_ai_diagnostic_cycle_no_ai_dispatch_authority" in names
 
 
 def test_next_cycle_api_fails_closed_when_controlled_stage_is_not_allowed(monkeypatch):
