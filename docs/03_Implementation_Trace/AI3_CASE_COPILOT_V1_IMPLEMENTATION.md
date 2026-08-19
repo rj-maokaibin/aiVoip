@@ -13,7 +13,7 @@ Execution and authority remain:
 - deterministic Router / Policy / Orchestrator -> execution authority
 - deterministic confirmation / human review / fix verification -> Root Cause authority
 
-## 2. Persistence
+## 2. Persistence and idempotency isolation
 
 Migration: `0025_ai_case_copilot_v1`
 
@@ -30,7 +30,37 @@ Persisted state includes:
 - routed control Intent if applicable
 - prompt/model/error metadata
 
-`request_key` is unique so API/Feishu redelivery cannot produce a second model interaction.
+`request_key` is unique, but uniqueness alone is not treated as an authorization boundary.
+
+### API idempotency
+
+API idempotency is scoped to the effective authorization context using a fixed-length key:
+
+`SHA256(case_id + actor_id + actor_role + request_id)`.
+
+The Service independently validates an existing record before replay:
+
+- same Case;
+- same actor;
+- same role;
+- same question hash.
+
+A conflict fails closed with one of:
+
+- `COPILOT_REQUEST_KEY_CASE_CONFLICT`
+- `COPILOT_REQUEST_KEY_ACTOR_CONFLICT`
+- `COPILOT_REQUEST_KEY_ROLE_CONFLICT`
+- `COPILOT_REQUEST_KEY_QUESTION_CONFLICT`
+
+This prevents an answer projected for an Engineer from being replayed to a Viewer and prevents reusing the same request key for changed question content.
+
+### Feishu idempotency
+
+Feishu event replay protection is scoped **before** the generic idempotency layer can return a cached response:
+
+`SHA256(tenant_key + case_id + actor_id + actor_role + delivery_id)`.
+
+The same Feishu `message_id/event_id` in two different tenants therefore produces independent idempotency records and independent G2/AI3 processing. Raw tenant/actor values are not embedded in the stored key.
 
 ## 3. Current-Case intelligence snapshot
 
@@ -174,9 +204,10 @@ For an authorized, Case-bound `GENERAL_QUESTION` without attachments:
 
 1. G2 Identity/RBAC authorization has already passed.
 2. G1 resolves the current Case.
-3. AI3 builds role-aware current Case Snapshot.
-4. Grounded read-only answer is generated inside the AI3 SAVEPOINT.
-5. Reply is written once with an idempotency record.
+3. Tenant/Case/actor/role-scoped idempotency is established.
+4. AI3 builds role-aware current Case Snapshot.
+5. Grounded read-only answer is generated inside the AI3 SAVEPOINT.
+6. Reply is written once with the same scoped idempotency record.
 
 Unknown/disabled users never reach Copilot. A recognized control message continues through the existing deterministic business handler rather than AI3.
 
@@ -195,19 +226,54 @@ Focused tests cover:
 - empty Claim prose -> reject
 - Claim Evidence missing from public citations -> reject
 - control request bypasses model/action worker
-- request-key idempotency
+- same-actor request-key idempotency
+- cross-actor request-key replay rejected
+- cross-role request-key replay rejected
+- same request key with different question rejected
+- API idempotency key bounded and does not expose raw actor id
 - Gateway IP/MAC/SN/password/question-secret redaction + device metadata allowlist
 - API feature gate + read-only authority response
 - API SAVEPOINT runtime failure isolation
 - authorized Feishu Case question -> Copilot
 - unknown identity denied before Copilot
 - duplicate Feishu event replies once
+- identical Feishu delivery ID in different tenants does not cross-replay
+- Feishu idempotency key is scoped to tenant/Case/actor/role and bounded SHA-256
 - Feishu SAVEPOINT runtime failure isolation and safe replay
 - control Feishu message stays on deterministic control path
 
-Repository CI has a dedicated `AI3 Case Copilot software gate` in addition to the full backend regression.
+Repository CI has a dedicated `AI3 Case Copilot software gate` in addition to the full backend regression. The dedicated gate now includes:
 
-## 12. Remaining production acceptance
+- `test_ai3_copilot_idempotency_isolation_v1.py`
+- `test_ai3_feishu_tenant_idempotency_v1.py`
+
+## 12. Static acceptance defects found and fixed
+
+Pre-CI acceptance found two real security defects and fixed them rather than classifying them as environment Pending:
+
+1. **API cross-authorization replay risk** — `case_id + request_id` could replay an Engineer-projected answer to another actor/role. Fixed with scoped SHA-256 API key plus independent Service validation of Case/actor/role/question hash.
+2. **Feishu cross-Tenant idempotency replay risk** — generic idempotency previously keyed only by `message_id/event_id`, allowing a theoretical collision to replay before Service validation. Fixed by scoping the key to tenant/Case/actor/role/delivery ID.
+
+## 13. Current validation status
+
+PR #9 remains Draft.
+
+GitHub-hosted Actions currently fails before any workflow step is created (`steps=null`, `logs_url=null`), including reruns and minimal runner probes. Therefore the latest idempotency-isolation commits have not yet received executable CI evidence and **AI3 software PASS is not claimed**.
+
+Before PR #9 may become Ready, the latest head must execute and PASS:
+
+- Python compile;
+- AI Contract Coverage Gate;
+- AI E1–E6 regression;
+- AI1 Semantic Router gate;
+- dedicated AI3 gate including both new replay-isolation tests;
+- M7 acceptance contract;
+- PostgreSQL clean migration through `0025_ai_case_copilot_v1`;
+- full backend regression;
+- Preliminary Evidence Report software release gate;
+- frontend dependency audit and production build.
+
+## 14. Remaining production acceptance
 
 AI3 software completion does not itself satisfy production acceptance. Required live gates include:
 
@@ -219,4 +285,4 @@ AI3 software completion does not itself satisfy production acceptance. Required 
 - Root Cause authority violation = 0
 - control action direct-execution from Copilot = 0
 
-These gates must be measured on real, reviewed Case traffic before broad production enablement.
+These live checks belong to the existing external acceptance categories and do not excuse any software Gate failure.
