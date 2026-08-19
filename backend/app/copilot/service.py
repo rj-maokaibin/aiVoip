@@ -130,6 +130,7 @@ class CaseCopilotService:
         actor_id: str,
         actor_role: UserRole,
     ) -> CopilotResult:
+        question_hash = _question_hash(question)
         existing = db.scalar(
             select(AICaseCopilotRecord)
             .where(AICaseCopilotRecord.request_key == request_key)
@@ -138,6 +139,12 @@ class CaseCopilotService:
         if existing is not None:
             if existing.case_id != case_id:
                 raise ValueError("COPILOT_REQUEST_KEY_CASE_CONFLICT")
+            if existing.actor_id != actor_id:
+                raise ValueError("COPILOT_REQUEST_KEY_ACTOR_CONFLICT")
+            if existing.actor_role != actor_role.value:
+                raise ValueError("COPILOT_REQUEST_KEY_ROLE_CONFLICT")
+            if existing.question_hash != question_hash:
+                raise ValueError("COPILOT_REQUEST_KEY_QUESTION_CONFLICT")
             return _record_to_result(existing)
 
         snapshot = self.snapshot_builder.build(db, case_id, role=actor_role)
@@ -147,7 +154,7 @@ class CaseCopilotService:
             request_key=request_key,
             actor_id=actor_id,
             actor_role=actor_role.value,
-            question_hash=_question_hash(question),
+            question_hash=question_hash,
             snapshot_fingerprint=str(snapshot.get("fingerprint") or ""),
             prompt_version="ai-case-copilot-v1",
         )
