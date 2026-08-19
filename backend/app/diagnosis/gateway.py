@@ -142,6 +142,14 @@ def assert_gateway_payload_safe(payload: dict) -> None:
         raise ReasoningGatewayError('REASONING_GATEWAY_SECRET_GUARD_REJECTED')
 
 
+def _redacted_party(value: Any) -> str | None:
+    # SIP extensions are often only 3-6 digits and intentionally fall below the
+    # generic phone regex threshold to avoid over-redacting arbitrary numbers.
+    # Caller/callee fields are semantically known identifiers, so redact them
+    # structurally regardless of length or formatting.
+    return '[REDACTED_NUMBER]' if value not in (None, '') else None
+
+
 def compact_context(snapshot: dict) -> dict:
     devices = []
     for i, device in enumerate(snapshot.get('devices') or [], 1):
@@ -183,8 +191,8 @@ def compact_context(snapshot: dict) -> dict:
             'calls': [
                 {
                     'call_id': call.get('call_id'),
-                    'caller': call.get('caller'),
-                    'callee': call.get('callee'),
+                    'caller': _redacted_party(call.get('caller')),
+                    'callee': _redacted_party(call.get('callee')),
                     'state': call.get('state'),
                     'invite_final_status': call.get('invite_final_status'),
                     'rtp_stream_ids': call.get('rtp_stream_ids'),
