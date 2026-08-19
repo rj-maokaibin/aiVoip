@@ -43,6 +43,9 @@ def ask_case_copilot(
     if case is None:
         raise HTTPException(404, "CASE_NOT_FOUND")
     request_id = req.request_id or new_id()
+    # Keep the persisted key bounded while binding idempotency to the effective
+    # reader identity and role. Service-side replay validation remains the final
+    # defense against cross-authorization-context reuse.
     request_key = _api_request_key(case_id=case_id, request_id=request_id, identity=identity)
     try:
         with db.begin_nested():
