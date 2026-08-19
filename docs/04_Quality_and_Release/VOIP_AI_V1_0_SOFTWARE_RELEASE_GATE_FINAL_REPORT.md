@@ -68,6 +68,45 @@ integration points.
 
 `CONTROLLED_PLANNER` remains disabled per the acceptance contract.
 
+## External acceptance status (2026-08-19)
+
+Exploration for the two external directions was executed on this host; results
+are recorded so the remaining asks are unambiguous.
+
+### LIVE_FEISHU_TENANT ¡ª credentials/connectivity verified
+
+- App credentials valid: `tenant_access_token` exchange returned `code=0`
+  (self-built app `cli_aad5970e...`).
+- Default receive target valid: chat `oc_1d1417a83...` ("»úÆ÷ÈË²âÊÔÈº") resolves
+  (code=0).
+- Long-connection listener connected to the real tenant gateway
+  (`wss://msg-frontier.feishu.cn/ws/v2...`), so event-subscription connectivity
+  is live.
+- Pending (needs explicit user confirmation ¡ª has real side effects):
+  - sending real messages / interactive cards to the chat;
+  - `FEISHU_ENCRYPT_KEY` is unset; confirm the app does not require event
+    encryption before full callback/event acceptance.
+
+### REAL_SEMANTIC_AND_GOLDEN_DATASET ¡ª synthetic PASS; real data missing
+
+- Synthetic Golden: PASS (`validation/evidence_report_golden_gate.json`,
+  recall=1.0 / precision=1.0, 0 FP).
+- Real Field Golden replay is blocked by external data: the source pcap
+  `8b72929e-8a06-4f1e-a922-1d3779ebbd6f.pcap` (sha256 `3af13c...`) referenced by
+  `golden_cases/APF1250_CS20260807_6886043/manifest.yaml` is not present on disk
+  or in MinIO (MinIO only holds `tcpdump-2026-08-14.pcap`).
+- Real semantic eval dataset export is blocked: the local DB has no
+  `GOLDEN_READY` / `ROOT_CAUSE_CONFIRMED` / `FIX_VERIFIED` cases
+  (`golden_candidate_assessments` empty), so `make ai-export-real-eval` cannot
+  produce a qualified dataset.
+
+### Required external inputs (not software-fixable)
+
+1. Real Field Golden pcap: `8b72929e-...pcap` (or an equivalent real evidence set).
+2. Real semantic/Golden eval dataset, or DB cases that qualify as `GOLDEN_READY`.
+3. Explicit go-ahead (with real-side-effect awareness) for Feishu message/card
+   send acceptance, and confirmation on `FEISHU_ENCRYPT_KEY`.
+
 ## Handover notes
 
 - `.env.example` restored to template (no real token); real reasoning-gateway
