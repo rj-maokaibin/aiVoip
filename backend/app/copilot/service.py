@@ -34,6 +34,22 @@ class CopilotResult:
     error_code: str | None = None
 
 
+def _validation_error_code(exc: ValidationError) -> str:
+    """Extract the stable contract error code raised by Pydantic validators."""
+    for item in exc.errors():
+        ctx = item.get("ctx") or {}
+        err = ctx.get("error")
+        if err is not None:
+            message = str(err)
+            if message.startswith("COPILOT_"):
+                return message.split("\n", 1)[0][:128]
+        message = str(item.get("msg") or "")
+        match = re.search(r"(COPILOT_[A-Z0-9_]+)", message)
+        if match:
+            return match.group(1)[:128]
+    return "COPILOT_SCHEMA_VALIDATION_FAILED"
+
+
 def _question_hash(question: str) -> str:
     return hashlib.sha256((question or "").encode("utf-8")).hexdigest()
 
@@ -254,7 +270,10 @@ class CaseCopilotService:
         except CopilotGatewayError as exc:
             status = "GATEWAY_FAILED"
             code = str(exc).split(":", 1)[0][:128]
-        except (ValidationError, ValueError, KeyError, TypeError) as exc:
+        except ValidationError as exc:
+            status = "REJECTED"
+            code = _validation_error_code(exc)
+        except (ValueError, KeyError, TypeError) as exc:
             status = "REJECTED"
             code = str(exc).split("\n", 1)[0][:128]
 
