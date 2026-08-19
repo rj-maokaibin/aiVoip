@@ -109,6 +109,24 @@ class AISuggestionBridge:
                 enqueue_after_commit=False,
                 idempotent_replay=True,
             )
+        # Reproduction uses a recoverable two-phase handoff. ACCEPTED means the
+        # deterministic ReproductionSession is committed but the Celery publish has
+        # not yet been durably acknowledged. A retry must reuse the same Session.
+        if (
+            row.suggestion_state == "ACCEPTED"
+            and row.execution_ref_type == "reproduction_session"
+            and row.execution_ref_id
+        ):
+            return AISuggestionExecution(
+                cycle=row,
+                kind=kind,
+                registered_id=registered_id,
+                execution_ref_type=row.execution_ref_type,
+                execution_ref_id=row.execution_ref_id,
+                user_message="复现 Session 已创建，正在重试投递同一个确定性任务。",
+                enqueue_after_commit=True,
+                idempotent_replay=True,
+            )
         if row.suggestion_state != "PROPOSED":
             raise AISuggestionBridgeError("AI2_SUGGESTION_STATE_NOT_ACTIONABLE")
 
@@ -166,9 +184,12 @@ class AISuggestionBridge:
                 execution_ref_id = row.id
                 message = "已采纳建议：请在当前 Case 群继续上传/补充建议所需的现场证据。"
 
-            row.suggestion_state = "DISPATCHED"
             row.execution_ref_type = execution_ref_type
             row.execution_ref_id = execution_ref_id
+            # Synchronous deterministic workflows are complete at commit. For a
+            # ReproductionSession, ACCEPTED is retained until post-commit queue
+            # publication succeeds and mark_async_dispatched() confirms it.
+            row.suggestion_state = "ACCEPTED" if enqueue_after_commit else "DISPATCHED"
             row.dispatch_attempted = False
             row.dispatch_allowed = False
             row.formal_result_changed = False
@@ -209,3 +230,48 @@ class AISuggestionBridge:
             row.suggestion_error_code = f"{type(exc).__name__}:{exc}"[:128]
             db.flush()
             raise
+
+    def mark_async_dispatched(
+        self,
+        db: Session,
+        *,
+        case_id: str,
+        cycle_id: str,
+        execution_ref_id: str,
+        actor: str,
+    ) -> AIDiagnosticCycle:
+        row = db.scalar(
+            select(AIDiagnosticCycle)
+            .where(AIDiagnosticCycle.id == cycle_id)
+            .with_for_update()
+        )
+        if not row or row.case_id != case_id:
+            raise AISuggestionBridgeError("AI2_SUGGESTION_NOT_FOUND")
+        if row.suggestion_state == "DISPATCHED" and row.execution_ref_id == execution_ref_id:
+            return row
+        if (
+            row.suggestion_state != "ACCEPTED"
+            or row.execution_ref_type != "reproduction_session"
+            or row.execution_ref_id != execution_ref_id
+        ):
+            raise AISuggestionBridgeError("AI2_ASYNC_DISPATCH_STATE_CONFLICT")
+        row.suggestion_state = "DISPATCHED"
+        row.suggestion_error_code = None
+        db.flush()
+        audit(
+            db,
+            case_id=case_id,
+            actor=actor,
+            event_type="AI_DIAGNOSTIC_SUGGESTION_ASYNC_DISPATCHED",
+            action="AI2_REPRODUCTION_TASK_PUBLISHED",
+            target_type="ai_diagnostic_cycle",
+            target_id=row.id,
+            detail={
+                "schema_version": "ai2-suggestion-async-dispatch-v1",
+                "execution_ref_type": row.execution_ref_type,
+                "execution_ref_id": row.execution_ref_id,
+                "ai_dispatch_authority": False,
+                "publisher": "DETERMINISTIC_FEISHU_BRIDGE",
+            },
+        )
+        return row
