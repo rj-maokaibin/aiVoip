@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db.ai_intelligence_models import AIDiagnosticCycle
+from app.db.models import ReproductionSession
 from app.experiments.orchestrator import DiagnosticExperimentOrchestrator
 from app.reproduction.orchestrator import ReproductionOrchestrator
 from app.reproduction.question_graph import DiagnosticQuestionGraph, DiagnosticQuestionRegistry
@@ -31,6 +32,31 @@ class AISuggestionExecution:
 
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
+
+
+_PUBLISH_PENDING_PREFIX = "AI2_REPRODUCTION_PUBLISH_PENDING:"
+_PUBLISH_RETRY_LEASE_SECONDS = 60
+
+
+def _publish_pending_marker(now: datetime | None = None) -> str:
+    current = now or _utcnow()
+    return f"{_PUBLISH_PENDING_PREFIX}{int(current.timestamp())}"
+
+
+def _publish_pending_age_seconds(row: AIDiagnosticCycle, now: datetime | None = None) -> float | None:
+    current = now or _utcnow()
+    raw = str(row.suggestion_error_code or "")
+    if raw.startswith(_PUBLISH_PENDING_PREFIX):
+        try:
+            return max(0.0, current.timestamp() - float(raw[len(_PUBLISH_PENDING_PREFIX):]))
+        except (TypeError, ValueError):
+            pass
+    accepted = row.accepted_at
+    if accepted is None:
+        return None
+    if accepted.tzinfo is None:
+        accepted = accepted.replace(tzinfo=timezone.utc)
+    return max(0.0, (current - accepted).total_seconds())
 
 
 class AISuggestionBridge:
@@ -111,12 +137,64 @@ class AISuggestionBridge:
             )
         # Reproduction uses a recoverable two-phase handoff. ACCEPTED means the
         # deterministic ReproductionSession is committed but the Celery publish has
-        # not yet been durably acknowledged. A retry must reuse the same Session.
+        # not yet been durably acknowledged. A retry reuses the same Session and a
+        # short persisted lease prevents simultaneous card callbacks from publishing
+        # duplicate tasks in the commit -> broker-confirmation window.
         if (
             row.suggestion_state == "ACCEPTED"
             and row.execution_ref_type == "reproduction_session"
             and row.execution_ref_id
         ):
+            session = db.get(ReproductionSession, row.execution_ref_id)
+            if session is None or session.case_id != case_id:
+                row.suggestion_state = "FAILED"
+                row.suggestion_error_code = "AI2_REPRODUCTION_SESSION_NOT_FOUND"
+                db.flush()
+                raise AISuggestionBridgeError("AI2_REPRODUCTION_SESSION_NOT_FOUND")
+            if str(session.state or "") != "CREATED":
+                row.suggestion_state = "DISPATCHED"
+                row.suggestion_error_code = None
+                db.flush()
+                audit(
+                    db,
+                    case_id=case_id,
+                    actor=actor,
+                    event_type="AI_DIAGNOSTIC_SUGGESTION_ASYNC_RECONCILED",
+                    action="AI2_REPRODUCTION_SESSION_ALREADY_STARTED",
+                    target_type="ai_diagnostic_cycle",
+                    target_id=row.id,
+                    detail={
+                        "schema_version": "ai2-suggestion-async-reconcile-v1",
+                        "execution_ref_id": row.execution_ref_id,
+                        "session_state": session.state,
+                        "republished": False,
+                        "ai_dispatch_authority": False,
+                    },
+                )
+                return AISuggestionExecution(
+                    cycle=row,
+                    kind=kind,
+                    registered_id=registered_id,
+                    execution_ref_type=row.execution_ref_type,
+                    execution_ref_id=row.execution_ref_id,
+                    user_message="复现 Session 已开始，已恢复 AI2 建议状态，无需重复投递。",
+                    enqueue_after_commit=False,
+                    idempotent_replay=True,
+                )
+            age = _publish_pending_age_seconds(row)
+            if age is not None and age < _PUBLISH_RETRY_LEASE_SECONDS:
+                return AISuggestionExecution(
+                    cycle=row,
+                    kind=kind,
+                    registered_id=registered_id,
+                    execution_ref_type=row.execution_ref_type,
+                    execution_ref_id=row.execution_ref_id,
+                    user_message="复现 Session 已创建，任务投递处理中；本次重复点击不会再次发布。",
+                    enqueue_after_commit=False,
+                    idempotent_replay=True,
+                )
+            row.suggestion_error_code = _publish_pending_marker()
+            db.flush()
             return AISuggestionExecution(
                 cycle=row,
                 kind=kind,
@@ -164,6 +242,7 @@ class AISuggestionBridge:
                 execution_ref_type = "reproduction_session"
                 execution_ref_id = session.id
                 enqueue_after_commit = True
+                row.suggestion_error_code = _publish_pending_marker()
                 message = "已按注册复现 Profile 创建任务；提交成功后将进入确定性 Reproduction Orchestrator。"
 
             elif kind == "EXPERIMENT_PROFILE":
