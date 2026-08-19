@@ -89,6 +89,28 @@ are recorded so the remaining asks are unambiguous.
 - Event encryption: user confirmed the app does NOT enable event encryption, so
   `FEISHU_ENCRYPT_KEY` is intentionally unset. ?
 
+### Feishu Docx projection chain (preliminary report ¡ú Docx) ¡ª verified to real API call
+
+Executed 2026-08-19 after rebuilding the compose stack to the current HEAD:
+
+- The projection chain now fires on analyzer completion:
+  `notify_evidence_report_changed` ¡ú `refresh_case_evidence_reports` ¡ú CASE
+  Preliminary Evidence Report ¡ú `project_case_evidence_document` ¡ú
+  `FeishuEvidenceDocumentService` ¡ú Feishu Docx. Confirmed live with a real
+  pcap (Case `3b678ba9-8b62-4941-8617-7ab0a08a7f4e`; reports v1/v2 SUPERSEDED ¡ú
+  v3 COMPLETE; projection task dispatched).
+- **Software defect fixed**: `FeishuEvidenceDocumentService` invoked the async
+  `FeishuLiveTransport` from synchronous methods (`AttributeError: 'coroutine'
+  object has no attribute 'get'`); `_create_document`/`_insert_blocks`/
+  `_upload_media`/`_replace_media`/`project` were converted to async (await the
+  transport) and the worker wraps the call with `asyncio.run`. `_upload_media`
+  no longer depends on the nonexistent `transport._client/_base`. Local unit
+  tests pass (4/4).
+- **External blocker remains**: Feishu returned `HTTP 400 / 99991672` on
+  `POST /docx/v1/documents` ¡ª the app lacks "create document" permission. Grant
+  the `docx`/`drive` write scopes in the Feishu developer console, publish a new
+  app version, then the Docx projection can be re-verified end-to-end.
+
 ### REAL_SEMANTIC_AND_GOLDEN_DATASET ¡ª synthetic PASS; real data missing
 
 User decision (2026-08-19): **option C ¡ª do not run real semantic/Golden
