@@ -24,7 +24,7 @@ def test_cycle_creation_acquires_case_row_lock_before_snapshot(monkeypatch):
     monkeypatch.setattr(settings, "ai_diagnostic_loop_enabled", True)
     db = _RecordingSession()
     runtime = AIRuntimePolicy(stage=AIPromotionStage.SHADOW)
-    service = AIDiagnosticCycleService(runtime=runtime)
+    service = AIDiagnosticCycleService(runtime=runtime, snapshot_builder=object())
 
     with pytest.raises(_StopAfterFirstScalar):
         service.run_next(db, case_id="case-concurrency")
