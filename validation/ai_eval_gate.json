@@ -1,8 +1,11 @@
 {
-  "schema_version": "ai-eval-gate-result-v1",
+  "schema_version": "ai-eval-gate-result-v2",
   "status": "PASS",
+  "gate_scope": "CONTRACT_COVERAGE_ONLY",
+  "promotion_eligible": false,
   "case_count": 19,
   "category_count": 19,
   "errors": [],
-  "real_history_required": true
+  "real_history_required": true,
+  "next_gate": "AI_MODEL_QUALITY_V2"
 }

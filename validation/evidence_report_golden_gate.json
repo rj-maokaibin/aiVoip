@@ -1,0 +1,353 @@
+{
+  "schema_version": "evidence-report-golden-gate-v1",
+  "dataset_version": "evidence-report-golden-dataset-v1",
+  "case_count": 9,
+  "evaluated_case_count": 9,
+  "status": "PASS",
+  "gates": {
+    "no_answer_leakage": true,
+    "p0_dataset_coverage": true,
+    "recall": true,
+    "precision": true,
+    "per_p0_finding_type_recall_precision": true,
+    "serious_false_positive_regression": true,
+    "boundary_correctness": true,
+    "wrong_boundary_rate": true,
+    "unknown_safety": true
+  },
+  "p0_required_types": [
+    "BURST_LOSS",
+    "CLICK_POP",
+    "CODEC_NEGOTIATION_MISMATCH",
+    "DTMF_ABNORMAL",
+    "ECHO_PATH_DETECTED",
+    "HIGH_DELTA",
+    "LOCAL_CAPTURE_PERIODIC_INTERFERENCE",
+    "ONE_WAY_RTP_MEDIA",
+    "PACKET_LOSS",
+    "PCM_GAP",
+    "PERIODIC_INTERFERENCE_PATH_COMPARISON",
+    "PERIODIC_LOW_FREQUENCY_INTERFERENCE",
+    "SIP_CALL_FAILED",
+    "SIP_REGISTRATION_FAILED",
+    "UNEXPECTED_SILENCE"
+  ],
+  "p0_labelled_types": [
+    "BURST_LOSS",
+    "CLICK_POP",
+    "CODEC_NEGOTIATION_MISMATCH",
+    "DTMF_ABNORMAL",
+    "ECHO_PATH_DETECTED",
+    "HIGH_DELTA",
+    "LOCAL_CAPTURE_PERIODIC_INTERFERENCE",
+    "ONE_WAY_RTP_MEDIA",
+    "PACKET_LOSS",
+    "PCM_GAP",
+    "PERIODIC_INTERFERENCE_PATH_COMPARISON",
+    "PERIODIC_LOW_FREQUENCY_INTERFERENCE",
+    "SIP_CALL_FAILED",
+    "SIP_REGISTRATION_FAILED",
+    "UNEXPECTED_SILENCE"
+  ],
+  "p0_missing_types": [],
+  "thresholds": {
+    "min_recall": 0.95,
+    "min_precision": 0.95,
+    "min_boundary_correctness": 0.95,
+    "max_wrong_boundary_rate": 0.01,
+    "serious_false_positive_allowed": 0
+  },
+  "metrics": {
+    "tp": 15,
+    "fp": 0,
+    "fn": 0,
+    "recall": 1.0,
+    "precision": 1.0,
+    "p0_required_type_count": 15,
+    "p0_covered_type_count": 15,
+    "boundary_total": 7,
+    "boundary_correctness": 1.0,
+    "wrong_boundary_rate": 0.0,
+    "unknown_expected": 1,
+    "unknown_correct": 1,
+    "serious_false_positive_count": 0
+  },
+  "per_type": {
+    "BURST_LOSS": {
+      "tp": 1,
+      "fp": 0,
+      "fn": 0,
+      "recall": 1.0,
+      "precision": 1.0
+    },
+    "CLICK_POP": {
+      "tp": 1,
+      "fp": 0,
+      "fn": 0,
+      "recall": 1.0,
+      "precision": 1.0
+    },
+    "CODEC_NEGOTIATION_MISMATCH": {
+      "tp": 1,
+      "fp": 0,
+      "fn": 0,
+      "recall": 1.0,
+      "precision": 1.0
+    },
+    "DTMF_ABNORMAL": {
+      "tp": 1,
+      "fp": 0,
+      "fn": 0,
+      "recall": 1.0,
+      "precision": 1.0
+    },
+    "ECHO_PATH_DETECTED": {
+      "tp": 1,
+      "fp": 0,
+      "fn": 0,
+      "recall": 1.0,
+      "precision": 1.0
+    },
+    "HIGH_DELTA": {
+      "tp": 1,
+      "fp": 0,
+      "fn": 0,
+      "recall": 1.0,
+      "precision": 1.0
+    },
+    "LOCAL_CAPTURE_PERIODIC_INTERFERENCE": {
+      "tp": 1,
+      "fp": 0,
+      "fn": 0,
+      "recall": 1.0,
+      "precision": 1.0
+    },
+    "ONE_WAY_RTP_MEDIA": {
+      "tp": 1,
+      "fp": 0,
+      "fn": 0,
+      "recall": 1.0,
+      "precision": 1.0
+    },
+    "PACKET_LOSS": {
+      "tp": 1,
+      "fp": 0,
+      "fn": 0,
+      "recall": 1.0,
+      "precision": 1.0
+    },
+    "PCM_GAP": {
+      "tp": 1,
+      "fp": 0,
+      "fn": 0,
+      "recall": 1.0,
+      "precision": 1.0
+    },
+    "PERIODIC_INTERFERENCE_PATH_COMPARISON": {
+      "tp": 1,
+      "fp": 0,
+      "fn": 0,
+      "recall": 1.0,
+      "precision": 1.0
+    },
+    "PERIODIC_LOW_FREQUENCY_INTERFERENCE": {
+      "tp": 1,
+      "fp": 0,
+      "fn": 0,
+      "recall": 1.0,
+      "precision": 1.0
+    },
+    "SIP_CALL_FAILED": {
+      "tp": 1,
+      "fp": 0,
+      "fn": 0,
+      "recall": 1.0,
+      "precision": 1.0
+    },
+    "SIP_REGISTRATION_FAILED": {
+      "tp": 1,
+      "fp": 0,
+      "fn": 0,
+      "recall": 1.0,
+      "precision": 1.0
+    },
+    "UNEXPECTED_SILENCE": {
+      "tp": 1,
+      "fp": 0,
+      "fn": 0,
+      "recall": 1.0,
+      "precision": 1.0
+    }
+  },
+  "serious_false_positives": [],
+  "answer_leakage_cases": [],
+  "cases": [
+    {
+      "id": "packet-core-p0",
+      "actual_finding_types": [
+        "SIP_REGISTRATION_FAILED",
+        "SIP_CALL_FAILED",
+        "ONE_WAY_RTP_MEDIA",
+        "CODEC_NEGOTIATION_MISMATCH",
+        "PACKET_LOSS",
+        "HIGH_DELTA"
+      ],
+      "expected_finding_types": [
+        "SIP_REGISTRATION_FAILED",
+        "SIP_CALL_FAILED",
+        "CODEC_NEGOTIATION_MISMATCH",
+        "ONE_WAY_RTP_MEDIA",
+        "PACKET_LOSS",
+        "HIGH_DELTA"
+      ],
+      "boundary_actual": {
+        "status": "UNKNOWN",
+        "reason": "NO_LAYER_OBSERVATIONS"
+      },
+      "boundary_expected": null,
+      "boundary_ok": null
+    },
+    {
+      "id": "packet-burst-loss",
+      "actual_finding_types": [
+        "BURST_LOSS"
+      ],
+      "expected_finding_types": [
+        "BURST_LOSS"
+      ],
+      "boundary_actual": {
+        "status": "OBSERVED_BOUNDARY",
+        "first_observable_layer": "RTP_DOWNSTREAM",
+        "statement": "异常首次可观测于 RTP_DOWNSTREAM；这是证据边界，不等于异常物理起源或最终根因。"
+      },
+      "boundary_expected": {
+        "status": "OBSERVED_BOUNDARY",
+        "first_observable_layer": "RTP_DOWNSTREAM"
+      },
+      "boundary_ok": true
+    },
+    {
+      "id": "pcm-rx-hum",
+      "actual_finding_types": [
+        "PERIODIC_LOW_FREQUENCY_INTERFERENCE"
+      ],
+      "expected_finding_types": [
+        "PERIODIC_LOW_FREQUENCY_INTERFERENCE"
+      ],
+      "boundary_actual": {
+        "status": "OBSERVED_BOUNDARY",
+        "first_observable_layer": "PCM_RX",
+        "statement": "异常首次可观测于 PCM_RX；这是证据边界，不等于异常物理起源或最终根因。"
+      },
+      "boundary_expected": {
+        "status": "OBSERVED_BOUNDARY",
+        "first_observable_layer": "PCM_RX"
+      },
+      "boundary_ok": true
+    },
+    {
+      "id": "pcm-gap-silence-click",
+      "actual_finding_types": [
+        "PCM_GAP",
+        "UNEXPECTED_SILENCE",
+        "CLICK_POP"
+      ],
+      "expected_finding_types": [
+        "PCM_GAP",
+        "UNEXPECTED_SILENCE",
+        "CLICK_POP"
+      ],
+      "boundary_actual": {
+        "status": "OBSERVED_BOUNDARY",
+        "first_observable_layer": "PCM_TX",
+        "statement": "异常首次可观测于 PCM_TX；这是证据边界，不等于异常物理起源或最终根因。"
+      },
+      "boundary_expected": {
+        "status": "OBSERVED_BOUNDARY",
+        "first_observable_layer": "PCM_TX"
+      },
+      "boundary_ok": true
+    },
+    {
+      "id": "pcm-dtmf-quality",
+      "actual_finding_types": [
+        "DTMF_ABNORMAL"
+      ],
+      "expected_finding_types": [
+        "DTMF_ABNORMAL"
+      ],
+      "boundary_actual": {
+        "status": "OBSERVED_BOUNDARY",
+        "first_observable_layer": "PCM_RX",
+        "statement": "异常首次可观测于 PCM_RX；这是证据边界，不等于异常物理起源或最终根因。"
+      },
+      "boundary_expected": {
+        "status": "OBSERVED_BOUNDARY",
+        "first_observable_layer": "PCM_RX"
+      },
+      "boundary_ok": true
+    },
+    {
+      "id": "media-echo",
+      "actual_finding_types": [
+        "ECHO_PATH_DETECTED"
+      ],
+      "expected_finding_types": [
+        "ECHO_PATH_DETECTED"
+      ],
+      "boundary_actual": {
+        "status": "NO_COMPARABLE_ANOMALY",
+        "reason": "ALL_AVAILABLE_LAYERS_NORMAL"
+      },
+      "boundary_expected": {
+        "status": "NO_COMPARABLE_ANOMALY"
+      },
+      "boundary_ok": true
+    },
+    {
+      "id": "media-periodic-cross-layer-p0",
+      "actual_finding_types": [
+        "LOCAL_CAPTURE_PERIODIC_INTERFERENCE",
+        "PERIODIC_INTERFERENCE_PATH_COMPARISON"
+      ],
+      "expected_finding_types": [
+        "LOCAL_CAPTURE_PERIODIC_INTERFERENCE",
+        "PERIODIC_INTERFERENCE_PATH_COMPARISON"
+      ],
+      "boundary_actual": {
+        "status": "UNKNOWN",
+        "reason": "NO_LAYER_OBSERVATIONS"
+      },
+      "boundary_expected": null,
+      "boundary_ok": null
+    },
+    {
+      "id": "boundary-unknown-upstream-missing",
+      "actual_finding_types": [],
+      "expected_finding_types": [],
+      "boundary_actual": {
+        "status": "UNKNOWN",
+        "reason": "UPSTREAM_EVIDENCE_MISSING",
+        "missing_layer": "RTP_DOWNSTREAM"
+      },
+      "boundary_expected": {
+        "status": "UNKNOWN"
+      },
+      "boundary_ok": true
+    },
+    {
+      "id": "normal-negative",
+      "actual_finding_types": [],
+      "expected_finding_types": [],
+      "boundary_actual": {
+        "status": "NO_COMPARABLE_ANOMALY",
+        "reason": "ALL_AVAILABLE_LAYERS_NORMAL"
+      },
+      "boundary_expected": {
+        "status": "NO_COMPARABLE_ANOMALY"
+      },
+      "boundary_ok": true
+    }
+  ],
+  "environment_gate_note": "Synthetic/Lab/Field composition is required for production release; real dataset acceptance is intentionally external to this software-only gate."
+}

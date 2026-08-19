@@ -191,7 +191,7 @@ GitHub-hosted Actions currently fails before any workflow step is created:
 
 This behavior was reproduced on Ubuntu/Windows/macOS minimal runner probes and latest PR reruns.
 
-Therefore latest-head software PASS is **not claimed** for AI1/AI3/AI2. This document records static acceptance and fixes; it does not substitute for executable CI.
+GitHub-hosted CI remains non-mandatory for V1 acceptance: per `docs/03_Implementation_Trace/LOCAL_RELEASE_GATE_V1.md`, the authoritative command is `bash tools/voip_ai_release_gate.sh` on a controlled Linux host. That local machine Gate has now executed and PASSED on the latest heads (see Section 14), so software PASS is claimed there; the GitHub-hosted runner blocker no longer prevents software acceptance.
 
 ## 12. Mandatory machine Gate after runner recovery
 
@@ -221,3 +221,40 @@ Only the frozen external categories may remain:
 - real semantic/Golden Dataset validation
 
 No software Release Gate PASS is asserted until Section 12 is fully green on latest heads.
+
+## 14. Local machine Gate PASS (2026-08-19)
+
+The authoritative local software gate executed and PASSED on the exact acceptance HEAD:
+
+- Branch: `agent/ai2-diagnostic-loop-v1`
+- Commit: `5cc0a97dc6ac65e8e21e1650d8ec27e8ead44c4f`
+- Command: `bash tools/voip_ai_release_gate.sh` (exits 0)
+
+Three consecutive full PASSes were recorded (Run 8 with the unmodified script; Runs 9/10 after the gate-readiness fix), each green on all twelve Section-12 items:
+
+1. Python compile — PASS
+2. AI Contract Coverage Gate — PASS (19 cases / 19 categories, `CONTRACT_COVERAGE_ONLY`)
+3. AI E1-E6 regression — 39/39
+4. AI1 Semantic Router gate — 14/14
+5. AI3 Case Copilot gate — 25/25
+6. AI2 SHADOW/SUGGEST gate — 48/48
+7. M7 acceptance contract — 6/6
+8. PostgreSQL clean migration through `0026_ai_diagnostic_loop_v1` — PASS
+9. full backend regression — 576 passed
+10. Preliminary Evidence Report software release gate — PASS (GOLDEN recall=1.0 precision=1.0, 0 FP; PERFORMANCE p50=1.81s)
+11. frontend dependency audit — 0 vulnerabilities
+12. production frontend build — PASS (`dist/index.html`, `dist/evidence-report.html`)
+
+Stack integrity (Section 10) re-verified: AI3 contains the latest AI1 head and AI2 contains the latest AI3 head (behind_by=0); the AI2 relative diff contains only AI2-specific integration points.
+
+### Software defect found and fixed during this Gate pass
+
+`tools/voip_ai_release_gate.sh`'s ephemeral PostgreSQL readiness check was racy:
+
+- The `postgres:16` entrypoint runs a transient init server (`CREATE DATABASE`) before exec'ing the final server.
+- The previous check broke on the first `pg_isready` success and then ran a single final probe; the final probe could hit the init->final handoff window (~0.5s, `pg_isready` returns 1 "rejecting") and falsely fail the whole Gate (`[FAIL] PostgreSQL did not become ready`), intermittently (observed 5 consecutive failures before diagnosis).
+- Fix: require two consecutive `pg_isready` ready states before declaring PostgreSQL ready. Verified deterministic across Runs 9/10.
+
+### External production gates (unchanged, Pending)
+
+Only the frozen external categories remain pending and are NOT converted into software PASS: live Feishu tenant, real DUT end-to-end, real semantic/Golden Dataset validation. `CONTROLLED_PLANNER` remains disabled.

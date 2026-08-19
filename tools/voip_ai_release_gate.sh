@@ -47,8 +47,21 @@ export REDIS_URL="redis://127.0.0.1:${REDIS_PORT}/0"
 export REPRODUCTION_PLATFORM_MODE="real"
 export PYTHONPATH="backend:."
 
-for _ in $(seq 1 60); do docker exec "$PG_CONTAINER" pg_isready -U voip -d voip >/dev/null 2>&1 && break; sleep 1; done
-docker exec "$PG_CONTAINER" pg_isready -U voip -d voip >/dev/null 2>&1 || fail "PostgreSQL did not become ready"
+# postgres's entrypoint runs a transient init server (CREATE DATABASE) before
+# exec'ing the final server. A single ready probe can catch the init server and
+# then fail during the init->final handoff, so require two consecutive ready
+# states before declaring PostgreSQL ready.
+pg_ready=0
+for _ in $(seq 1 60); do
+  if docker exec "$PG_CONTAINER" pg_isready -U voip -d voip >/dev/null 2>&1; then
+    pg_ready=$((pg_ready + 1))
+    [ "$pg_ready" -ge 2 ] && break
+  else
+    pg_ready=0
+  fi
+  sleep 1
+done
+if [ "$pg_ready" -lt 2 ]; then fail "PostgreSQL did not become ready"; fi
 for _ in $(seq 1 30); do docker exec "$REDIS_CONTAINER" redis-cli ping 2>/dev/null | grep -q PONG && break; sleep 1; done
 docker exec "$REDIS_CONTAINER" redis-cli ping 2>/dev/null | grep -q PONG || fail "Redis did not become ready"
 

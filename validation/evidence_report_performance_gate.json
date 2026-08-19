@@ -1,0 +1,49 @@
+{
+  "schema_version": "evidence-report-performance-gate-v1",
+  "status": "PASS",
+  "iterations": 4,
+  "scale": 1,
+  "software_core_budget_seconds": 10.0,
+  "metrics": {
+    "p50_seconds": 1.811,
+    "p95_seconds": 1.8134,
+    "max_seconds": 1.827,
+    "mean_seconds": 1.8136
+  },
+  "rows": [
+    {
+      "compose_seconds": 0.0012,
+      "render_seconds": 1.8258,
+      "total_seconds": 1.827,
+      "finding_count": 9,
+      "rendered_bytes": 45550
+    },
+    {
+      "compose_seconds": 0.0003,
+      "render_seconds": 1.8027,
+      "total_seconds": 1.803,
+      "finding_count": 9,
+      "rendered_bytes": 45550
+    },
+    {
+      "compose_seconds": 0.0002,
+      "render_seconds": 1.8108,
+      "total_seconds": 1.811,
+      "finding_count": 9,
+      "rendered_bytes": 45550
+    },
+    {
+      "compose_seconds": 0.0002,
+      "render_seconds": 1.8131,
+      "total_seconds": 1.8134,
+      "finding_count": 9,
+      "rendered_bytes": 45550
+    }
+  ],
+  "production_sla": {
+    "basic_result_seconds": 10.0,
+    "full_report_p95_seconds": 30.0,
+    "large_call_p95_seconds": 60.0,
+    "real_dut_validation_required": true
+  }
+}

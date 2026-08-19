@@ -13,6 +13,9 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 
+# Release gate isolated Python environment (created by tools/voip_ai_release_gate.sh)
+.venv-release-gate/
+
 # Node / frontend build artifacts
 node_modules/
 frontend/node_modules/
