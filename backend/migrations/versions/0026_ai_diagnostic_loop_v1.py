@@ -65,6 +65,18 @@ def upgrade() -> None:
             "suggestion_state IN ('NONE','PROPOSED','ACCEPTED','DISPATCHED','FAILED')",
             name="ck_ai_diagnostic_cycle_suggestion_state",
         ),
+        sa.CheckConstraint(
+            "formal_result_changed = false",
+            name="ck_ai_diagnostic_cycle_no_formal_result_change",
+        ),
+        sa.CheckConstraint(
+            "dispatch_attempted = false",
+            name="ck_ai_diagnostic_cycle_no_ai_dispatch_attempt",
+        ),
+        sa.CheckConstraint(
+            "dispatch_allowed = false",
+            name="ck_ai_diagnostic_cycle_no_ai_dispatch_authority",
+        ),
     )
     op.create_index("ix_ai_diagnostic_cycle_case", "ai_diagnostic_cycles", ["case_id"])
     op.create_index("ix_ai_diagnostic_cycle_stage", "ai_diagnostic_cycles", ["runtime_stage"])
