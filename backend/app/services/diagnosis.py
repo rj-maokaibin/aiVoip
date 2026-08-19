@@ -27,6 +27,11 @@ def _run_ai2_sidecar(db: Session, run: DiagnosisRun, decision):
     only AI2 writes and cannot invalidate the deterministic diagnosis transaction.
     SHADOW/SUGGEST are the only stages attached here; CONTROLLED_PLANNER remains on
     the separate promotion + Policy/Orchestrator path.
+
+    The formal ``decision`` object is intentionally never mutated here. AI2 state is
+    persisted only in AIDiagnosticCycle/Audit and exposed through dedicated AI2 API
+    and Feishu projection. This preserves byte-for-byte deterministic formal result
+    semantics independent of whether the AI sidecar is enabled or succeeds.
     """
     if not settings.ai_diagnostic_loop_enabled:
         return None
@@ -42,16 +47,6 @@ def _run_ai2_sidecar(db: Session, run: DiagnosisRun, decision):
                 actor='diagnosis-worker',
                 deterministic_baseline=baseline,
             )
-        decision.summary = {
-            **decision.summary,
-            'ai2_cycle_id': execution.row.id,
-            'ai2_cycle_stage': execution.row.runtime_stage,
-            'ai2_cycle_status': execution.row.status,
-            'ai2_continue_recommendation': execution.row.continue_recommendation,
-            'ai2_registered_next_action': (execution.row.next_action_json or {}).get('registered_id'),
-            'ai2_dispatch_attempted': False,
-            'ai2_formal_result_changed': False,
-        }
         return execution
     except Exception as exc:
         audit(
