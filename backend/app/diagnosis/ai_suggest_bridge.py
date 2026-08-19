@@ -45,7 +45,14 @@ class AISuggestionBridge:
     """
 
     def _load_current_cycle(self, db: Session, *, case_id: str, cycle_id: str) -> AIDiagnosticCycle:
-        row = db.get(AIDiagnosticCycle, cycle_id)
+        # Serialize acceptance for the requested suggestion. Without a row lock,
+        # two simultaneous Feishu card clicks could both observe PROPOSED and each
+        # create a deterministic workflow before either transaction commits.
+        row = db.scalar(
+            select(AIDiagnosticCycle)
+            .where(AIDiagnosticCycle.id == cycle_id)
+            .with_for_update()
+        )
         if not row or row.case_id != case_id:
             raise AISuggestionBridgeError("AI2_SUGGESTION_NOT_FOUND")
         if row.runtime_stage != "SUGGEST":
@@ -57,6 +64,7 @@ class AISuggestionBridge:
             .where(AIDiagnosticCycle.case_id == case_id, AIDiagnosticCycle.runtime_stage == "SUGGEST")
             .order_by(AIDiagnosticCycle.cycle_no.desc(), AIDiagnosticCycle.created_at.desc())
             .limit(1)
+            .with_for_update()
         )
         if current is None or current.id != row.id:
             raise AISuggestionBridgeError("AI2_SUGGESTION_STALE")
@@ -101,7 +109,7 @@ class AISuggestionBridge:
                 enqueue_after_commit=False,
                 idempotent_replay=True,
             )
-        if row.suggestion_state not in {"NONE", "PROPOSED", "ACCEPTED"}:
+        if row.suggestion_state != "PROPOSED":
             raise AISuggestionBridgeError("AI2_SUGGESTION_STATE_NOT_ACTIONABLE")
 
         row.suggestion_state = "ACCEPTED"
