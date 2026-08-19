@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.contracts.enums import ActorType, CaseStatus
 from app.core.config import settings
 from app.db.ai_intelligence_models import AIDiagnosticCycle
-from app.db.models import AIProposalRecord
+from app.db.models import AIProposalRecord, Case
 from app.diagnosis.ai_proposal import run_ai_shadow
 from app.diagnosis.ai_runtime import AIPromotionStage, AIRuntimePolicy
 from app.diagnosis.ai_workbench import contradiction_critic, controlled_planning
@@ -173,6 +173,15 @@ class AIDiagnosticCycleService:
             raise AIDiagnosticCycleError("AI_DIAGNOSTIC_LOOP_STAGE_OFF")
         if runtime.stage is AIPromotionStage.CONTROLLED_PLANNER:
             raise AIDiagnosticCycleError("AI2_CONTROLLED_PLANNER_NOT_ENABLED_BY_V1_GATE")
+
+        # Serialize Cycle creation per Case. This makes the fingerprint/stage
+        # idempotency and cycle_no invariants deterministic even when a manual
+        # /cycles/next request races the automatic diagnosis sidecar.
+        locked_case = db.scalar(
+            select(Case).where(Case.id == case_id).with_for_update()
+        )
+        if locked_case is None:
+            raise AIDiagnosticCycleError("CASE_NOT_FOUND")
 
         snapshot = self.snapshot_builder.build_for_reasoning(db, case_id)
         snapshot_fingerprint = str(snapshot.get("snapshot_fingerprint") or snapshot.get("fingerprint") or "")
