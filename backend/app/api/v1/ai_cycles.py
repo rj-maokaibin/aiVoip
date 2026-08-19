@@ -36,9 +36,12 @@ def _serialize(row: AIDiagnosticCycle, *, replay: bool = False) -> dict:
         "continue_recommendation": row.continue_recommendation,
         "stop_reason": row.stop_reason,
         "no_progress_count": row.no_progress_count,
-        "formal_result_changed": False,
-        "dispatch_attempted": False,
-        "dispatch_allowed": False,
+        # Never mask an invariant violation in the observability API. Normal V1
+        # SHADOW/SUGGEST rows are required to persist all three values as false;
+        # metrics/release gates can then detect any non-zero violation directly.
+        "formal_result_changed": bool(row.formal_result_changed),
+        "dispatch_attempted": bool(row.dispatch_attempted),
+        "dispatch_allowed": bool(row.dispatch_allowed),
         "suggestion_state": row.suggestion_state,
         "accepted_by": row.accepted_by,
         "accepted_at": row.accepted_at.isoformat() if row.accepted_at else None,
@@ -81,6 +84,9 @@ def ai_diagnostic_loop_metrics(
         ) or 0),
         "ai_dispatch_attempts": int(db.scalar(
             select(func.count()).select_from(AIDiagnosticCycle).where(AIDiagnosticCycle.dispatch_attempted.is_(True))
+        ) or 0),
+        "ai_dispatch_allowed_rows": int(db.scalar(
+            select(func.count()).select_from(AIDiagnosticCycle).where(AIDiagnosticCycle.dispatch_allowed.is_(True))
         ) or 0),
         "actor_id": identity.actor_id,
     }
