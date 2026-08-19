@@ -25,7 +25,7 @@ def project_case_evidence_document(self,case_id:str,report_id:str):
         report=db.get(PreliminaryEvidenceReport,report_id)
         if not report or report.case_id!=case_id:
             return {"status":"NOT_FOUND","case_id":case_id,"report_id":report_id}
-        binding=FeishuEvidenceDocumentService().project(db,case_id=case_id,report_id=report_id)
+        binding=asyncio.run(FeishuEvidenceDocumentService().project(db,case_id=case_id,report_id=report_id))
         card_status="NOT_BOUND"
         try:
             asyncio.run(FeishuCaseCardService().sync_case_card(db,case_id=case_id))
@@ -42,8 +42,22 @@ def project_case_evidence_document(self,case_id:str,report_id:str):
             audit(db,case_id=case_id,actor="feishu-evidence-document",event_type="FEISHU_EVIDENCE_CARD_SYNC_FAILED",
                   target_type="preliminary_evidence_report",target_id=report_id,detail={"error_code":type(exc).__name__,"error_message":str(exc)[:1000]})
         db.commit()
+        acl_status="DISABLED"
+        if settings.feishu_document_acl_enabled and binding.document_id:
+            try:
+                from app.workers.feishu_document_acl_task import sync_document_acl
+                sync_document_acl.apply_async(args=[case_id,binding.document_id],queue="diagnosis",countdown=1)
+                acl_status="QUEUED"
+            except Exception as exc:
+                acl_status="QUEUE_FAILED"
+                log.exception("Feishu document ACL sync enqueue failed case=%s",case_id)
+                with SessionLocal() as audit_db:
+                    audit(audit_db,case_id=case_id,actor="feishu-evidence-document",event_type="FEISHU_DOCUMENT_ACL_QUEUE_FAILED",
+                          target_type="feishu_evidence_document",target_id=binding.id,
+                          detail={"document_id":binding.document_id,"error_code":type(exc).__name__,"error_message":str(exc)[:500]})
+                    audit_db.commit()
         return {"status":"SYNCED","case_id":case_id,"report_id":report_id,"document_id":binding.document_id,"document_url":binding.document_url,
-                "projection_version":binding.projection_version,"case_card":card_status}
+                "projection_version":binding.projection_version,"case_card":card_status,"document_acl":acl_status}
     except Exception as exc:
         db.rollback(); log.exception("Feishu evidence report projection failed case=%s report=%s",case_id,report_id)
         try:

@@ -42,21 +42,17 @@ class Settings(BaseSettings):
     diagnosis_no_progress_limit: int = 2
     diagnosis_max_cycles: int = 6
     diagnosis_reasoner: str = "deterministic"
-    reproduction_platform_mode: str = "mock"  # Safe CI/dev default; set to real only for the verified EC-02 adapter runtime.
+    reproduction_platform_mode: str = "mock"
     reproduction_capture_root: Path = Path("/tmp/voip-reproduction-capture")
     reproduction_object_root: Path = Path("/tmp/voip-reproduction-objects")
-    reproduction_storage_mode: str = "local"  # Mock C2 uses filesystem object storage; production may switch to minio.
+    reproduction_storage_mode: str = "local"
     reasoning_gateway_url: str = ""
     reasoning_gateway_token: str = ""
     reasoning_gateway_model: str = ""
     reasoning_gateway_timeout_seconds: float = 20.0
     ai_shadow_enabled: bool = False
     ai_shadow_workflow_version: str = "ai-shadow-v2"
-    # AI promotion is capability-based. OFF/SHADOW/SUGGEST/CONTROLLED_PLANNER.
-    # The deterministic reasoner remains formal authority at every stage.
     ai_promotion_stage: str = "OFF"
-    # Legacy/dev signal only. Production ignores this boolean and requires the
-    # generated ai-promotion-gate-v1 artifact below.
     ai_promotion_gate_passed: bool = False
     ai_allow_manual_promotion_override: bool = False
     ai_promotion_gate_artifact: Path = Path("/app/validation/ai_promotion_gate.json")
@@ -69,6 +65,19 @@ class Settings(BaseSettings):
     ai_eval_max_unauthorized_suggestion_rate: float = 0.0
     reasoning_gateway_models: str = ""
     reasoning_gateway_failover_enabled: bool = True
+    # AI1 is released SHADOW-first. Even when enabled, V1 records/evaluates the
+    # semantic proposal while the deterministic router remains execution authority.
+    ai_semantic_router_enabled: bool = False
+    ai_semantic_router_mode: str = "SHADOW"
+    ai_semantic_router_min_confidence: float = 0.80
+    # AI3 is read-only. Enabling it permits grounded Case Q&A only; it never
+    # enables device/reproduction/experiment/fix execution.
+    ai_case_copilot_enabled: bool = False
+    # AI2 V1 exposes only SHADOW/SUGGEST software behavior. CONTROLLED_PLANNER
+    # remains guarded by the existing machine-generated promotion artifact and the
+    # deterministic Policy/Orchestrator path.
+    ai_diagnostic_loop_enabled: bool = False
+    ai_diagnostic_loop_workflow_version: str = "ai-diagnostic-loop-v1"
     auth_allow_anonymous_dev: bool = True
     production_auth_provider: str = "pending"
     auth_gateway_hmac_secret: str = ""
@@ -92,14 +101,19 @@ class Settings(BaseSettings):
     feishu_verification_token_env: str = ""
     feishu_timeout_seconds: float = 8.0
     feishu_attachment_max_bytes: int = 100 * 1024 * 1024
+    feishu_identity_rbac_enabled: bool = False
+    feishu_identity_discover_unmapped: bool = True
+    feishu_document_acl_enabled: bool = False
+    feishu_document_acl_mode: str = "AUTO"
+    feishu_document_acl_permission: str = "view"
+    feishu_document_acl_fallback_enabled: bool = True
+    feishu_document_acl_admin_open_ids: str = ""
     auth_default_actor: str = "dev-admin"
     auth_default_role: str = "ADMIN"
     idempotency_ttl_hours: int = 24
     sse_poll_interval_seconds: float = 0.75
     sse_batch_size: int = 200
 
-    # Preliminary Evidence Report V1.0. These are operational controls only;
-    # Analyzer thresholds remain governed by versioned Analyzer Profiles.
     preliminary_evidence_report_enabled: bool = True
     evidence_retention_raw_days: int = 90
     evidence_retention_batch_size: int = 200
@@ -116,9 +130,21 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     def model_post_init(self, __context) -> None:
-        # Capability promotion implies Shadow capture is on. Legacy deployments may
-        # still use AI_SHADOW_ENABLED=true with stage OFF; that remains supported.
         if str(self.ai_promotion_stage or "OFF").upper() != "OFF":
             self.ai_shadow_enabled = True
+        semantic_mode = str(self.ai_semantic_router_mode or "SHADOW").upper()
+        if semantic_mode not in {"OFF", "SHADOW"}:
+            raise ValueError("AI_SEMANTIC_ROUTER_MODE_INVALID")
+        self.ai_semantic_router_mode = semantic_mode
+        if not 0.0 <= float(self.ai_semantic_router_min_confidence) <= 1.0:
+            raise ValueError("AI_SEMANTIC_ROUTER_MIN_CONFIDENCE_INVALID")
+        mode = str(self.feishu_document_acl_mode or "AUTO").upper()
+        if mode not in {"AUTO", "CHAT_SCOPE", "MEMBER_MIRROR"}:
+            raise ValueError("FEISHU_DOCUMENT_ACL_MODE_INVALID")
+        self.feishu_document_acl_mode = mode
+        perm = str(self.feishu_document_acl_permission or "view").lower()
+        if perm not in {"view", "edit", "full_access"}:
+            raise ValueError("FEISHU_DOCUMENT_ACL_PERMISSION_INVALID")
+        self.feishu_document_acl_permission = perm
 
 settings = Settings()

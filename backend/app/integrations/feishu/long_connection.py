@@ -7,10 +7,8 @@ WebSocket to Feishu's long-connection endpoint and receives events over it.
 The bootstrap handshake (POST /callback/ws/endpoint) and the WebSocket frame
 protocol (protobuf-encoded, heartbeat/ping handled internally) are implemented
 by the official lark-oapi SDK (lark.ws.Client). This module only wires the SDK's
-event dispatcher to our shared dispatch_event
-(app.integrations.feishu.events), so a message handled over the long connection
-provisions the DUT and binds the Case to the source chat exactly like the
-webhook path.
+event dispatcher to our shared authorized event gateway so a message/card action
+has identical Identity/RBAC behavior over WebSocket and HTTP callback transports.
 
 NOTE: lark.ws.Client.start() is BLOCKING and runs its own auto-reconnect loop,
 so run_long_connection() starts the client on a daemon thread and returns
@@ -20,10 +18,10 @@ from __future__ import annotations
 
 import logging
 import threading
-from typing import Optional
 
 from app.core.config import settings
-from app.integrations.feishu.events import callback_actor, dispatch_event
+from app.integrations.feishu.authorized_events import dispatch_authorized_event
+from app.integrations.feishu.events import callback_actor
 
 log = logging.getLogger(__name__)
 
@@ -44,19 +42,11 @@ def _sender_operator(sender_id) -> dict:
 
 
 def _message_payload(data) -> dict:
-    """Normalize a SDK P2ImMessageReceiveV1 into dispatch_event's payload shape.
-
-    Accessor path mirrors the official samples:
-        data.event.message.chat_id
-        data.event.message.content   (JSON text, e.g. {"text": "..."})
-        data.event.sender.sender_id  (open_id / user_id / union_id)
-    """
+    """Normalize a SDK P2ImMessageReceiveV1 into the shared event payload."""
     event = getattr(data, "event", None)
     header = getattr(data, "header", None)
     message = getattr(event, "message", None) if event is not None else None
     chat_id = str(getattr(message, "chat_id", "") or "")
-    # Both group and p2p events carry the conversation chat_id (oc_*). A p2p
-    # chat_id is not the sender open_id and still uses receive_id_type=chat_id.
     chat_type = str(getattr(message, "chat_type", "") or "")
     content = str(getattr(message, "content", "") or "")
     message_type = str(getattr(message, "message_type", "") or "text")
@@ -90,7 +80,7 @@ def _dispatch(payload: dict) -> None:
     actor = callback_actor(payload)
     with SessionLocal() as db:
         try:
-            dispatch_event(db, payload=payload, actor=actor)
+            dispatch_authorized_event(db, payload=payload, actor=actor)
             db.commit()
         except Exception:
             log.exception("feishu long-connection event dispatch failed")
@@ -107,10 +97,13 @@ def _on_message_receive(data) -> None:
     _dispatch(payload)
 
 
-
-
 def _card_action_payload(data) -> dict:
-    """Normalize a SDK P2CardActionTrigger into dispatch_event's payload shape."""
+    """Normalize a SDK P2CardActionTrigger into the shared event payload.
+
+    G2 requires tenant_key for `tenant_key + open_id` identity isolation. The
+    previous adapter dropped it on the WebSocket card path, which would make card
+    authorization weaker than message/webhook authorization.
+    """
     event = getattr(data, "event", None)
     header = getattr(data, "header", None)
     action = getattr(event, "action", None) if event is not None else None
@@ -118,8 +111,12 @@ def _card_action_payload(data) -> dict:
     context = getattr(event, "context", None) if event is not None else None
     value = getattr(action, "value", None) if action is not None else None
     payload = {
-        "header": {"event_type": "card.action.trigger",
-                   "event_id": str(getattr(header, "event_id", "") or "")},
+        "header": {
+            "event_type": "card.action.trigger",
+            "event_id": str(getattr(header, "event_id", "") or ""),
+            "tenant_key": str(getattr(header, "tenant_key", "") or ""),
+            "create_time": str(getattr(header, "create_time", "") or ""),
+        },
         "event": {
             "action": {"value": value if isinstance(value, dict) else {}},
             "operator": {},
@@ -128,10 +125,10 @@ def _card_action_payload(data) -> dict:
     }
     if operator is not None:
         for key in ("open_id", "user_id", "union_id"):
-            v = getattr(operator, key, None)
-            if v:
-                payload["event"]["operator"][key] = v
-                payload["operator"][key] = v
+            value_id = getattr(operator, key, None)
+            if value_id:
+                payload["event"]["operator"][key] = value_id
+                payload["operator"][key] = value_id
                 break
     if context is not None:
         chat_id = getattr(context, "open_chat_id", None)
@@ -141,12 +138,7 @@ def _card_action_payload(data) -> dict:
 
 
 def _on_card_action(data):
-    """SDK handler for card.action.trigger: dispatch + return a toast response.
-
-    The SDK needs a P2CardActionTriggerResponse; we build it from dispatch_event's
-    result (which already carries a human-readable toast for card actions).
-    """
-    import lark_oapi as lark
+    """SDK handler for card.action.trigger: RBAC dispatch + toast response."""
     from lark_oapi.event.callback.model.p2_card_action_trigger import (
         CallBackToast,
         P2CardActionTriggerResponse,
@@ -161,7 +153,7 @@ def _on_card_action(data):
     result = {}
     with SessionLocal() as db:
         try:
-            result = dispatch_event(db, payload=payload, actor=actor)
+            result = dispatch_authorized_event(db, payload=payload, actor=actor)
             db.commit()
         except Exception:
             log.exception("feishu long-connection card action dispatch failed")
@@ -177,7 +169,7 @@ def _on_card_action(data):
 
 
 def build_event_handler():
-    """Build the SDK EventDispatcherHandler wired to our dispatch_event."""
+    """Build the SDK EventDispatcherHandler wired to authorized dispatch."""
     import lark_oapi as lark
     return (
         lark.EventDispatcherHandler.builder("", "")
@@ -185,7 +177,6 @@ def build_event_handler():
         .register_p2_card_action_trigger(_on_card_action)
         .build()
     )
-
 
 
 class LongConnectionHandle:
@@ -200,12 +191,7 @@ class LongConnectionHandle:
 
 
 def run_long_connection(*, log_level=None) -> LongConnectionHandle:
-    """Start the official SDK long-connection listener on a daemon thread.
-
-    Raises FeishuLongConnectionError when the listener cannot start (live
-    disabled or missing app id/secret). Returns immediately; the SDK keeps the
-    connection alive (auto-reconnect) until the process exits.
-    """
+    """Start the official SDK long-connection listener on a daemon thread."""
     if not settings.feishu_live_enabled:
         raise FeishuLongConnectionError("FEISHU_LIVE_DISABLED")
     if not settings.feishu_app_id:

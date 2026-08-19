@@ -46,6 +46,17 @@ def install() -> None:
             sys.modules["celery.utils"] = utils
             sys.modules["celery.utils.log"] = log
 
+            signals = types.ModuleType("celery.signals")
+
+            class _Signal:
+                def connect(self, *_args, **_kwargs):
+                    def deco(fn):
+                        return fn
+                    return deco
+
+            signals.after_task_publish = _Signal()
+            sys.modules["celery.signals"] = signals
+
     if "redis" not in sys.modules:
         try:
             __import__("redis")

@@ -22,6 +22,11 @@ from app.api.v1.reproduction import router as reproduction_router
 from app.api.v1.experiments import router as experiments_router
 from app.api.v1.feishu import router as feishu_router
 from app.api.v1.feishu_callback import router as feishu_callback_router
+from app.api.v1.feishu_governance import router as feishu_governance_router
+from app.api.v1.feishu_document_acl import router as feishu_document_acl_router
+from app.api.v1.ai_semantic import router as ai_semantic_router
+from app.api.v1.ai_copilot import router as ai_copilot_router
+from app.api.v1.ai_cycles import router as ai_cycles_router
 from app.api.v1.system import router as system_router
 from app.api.v1.golden_candidates import router as golden_candidates_router
 from app.api.deps import get_identity
@@ -40,6 +45,8 @@ if settings.app_env.lower() == 'production':
         raise RuntimeError('PRODUCTION_CORS_WILDCARD_FORBIDDEN')
     if str(settings.production_auth_provider).lower() in {'', 'pending', 'dev_headers', 'trusted_headers_only'}:
         raise RuntimeError('PRODUCTION_AUTH_PROVIDER_REQUIRED')
+    if settings.feishu_live_enabled and not settings.feishu_identity_rbac_enabled:
+        raise RuntimeError('PRODUCTION_FEISHU_RBAC_REQUIRED')
 app.add_middleware(CORSMiddleware, allow_origins=_cors_origins or [], allow_methods=['*'], allow_headers=['*'])
 app.middleware('http')(trace_id_middleware)
 app.add_exception_handler(AppError, app_error_handler)
@@ -69,6 +76,11 @@ app.include_router(reproduction_router, prefix='/api/v1', dependencies=[Depends(
 app.include_router(experiments_router, prefix='/api/v1', dependencies=[Depends(get_identity)])
 app.include_router(golden_candidates_router, prefix='/api/v1', dependencies=[Depends(get_identity)])
 app.include_router(feishu_router, prefix='/api/v1', dependencies=[Depends(get_identity)])
+app.include_router(feishu_governance_router, prefix='/api/v1', dependencies=[Depends(get_identity)])
+app.include_router(feishu_document_acl_router, prefix='/api/v1', dependencies=[Depends(get_identity)])
+app.include_router(ai_semantic_router, prefix='/api/v1', dependencies=[Depends(get_identity)])
+app.include_router(ai_copilot_router, prefix='/api/v1', dependencies=[Depends(get_identity)])
+app.include_router(ai_cycles_router, prefix='/api/v1', dependencies=[Depends(get_identity)])
 # Feishu callbacks are authenticated by Feishu signature/token, not by user auth headers.
 app.include_router(feishu_callback_router, prefix='/api/v1')
 app.include_router(system_router, prefix='/api/v1', dependencies=[Depends(get_identity)])
