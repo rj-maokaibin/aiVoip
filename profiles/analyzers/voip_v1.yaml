@@ -1,11 +1,11 @@
 schema_version: 1
 id: voip_analyzer_v1
-version: 1.1.0
+version: 1.2.0
 status: GOLDEN_CALIBRATED
 description: >-
-  Deterministic analyzer thresholds frozen for VOIP AI V1.0. Version 1.1 adds
-  explicit DTMF quality thresholds used only for evidence findings; it does not
-  change root-cause authority.
+  Deterministic analyzer thresholds frozen for VOIP AI V1.0. Version 1.2 adds
+  CandidateDecision negative-control gates for Click/Pop and unexpected silence;
+  raw detector candidates cannot directly become report Findings.
 rtp:
   ptime_min_ms: 1.0
   ptime_max_ms: 200.0
@@ -44,6 +44,17 @@ click_pop:
     highband_weight: 0.15
     rise_full_scale_db: 18.0
     highband_full_scale_ratio: 0.35
+candidate_decision:
+  click_pop:
+    dtmf_guard_ms: 80.0
+    media_boundary_guard_ms: 120.0
+    min_promote_confidence: 0.65
+  silence:
+    min_counterpart_correlation: 0.80
+    counterpart_quiet_dbfs: -52.0
+    counterpart_active_dbfs: -42.0
+    context_seconds: 0.12
+    source_drop_db: 6.0
 echo:
   min_delay_ms: 20
   max_delay_ms: 500

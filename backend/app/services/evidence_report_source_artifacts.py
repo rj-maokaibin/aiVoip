@@ -11,6 +11,26 @@ REPORT_SOURCE_ARTIFACT_TYPES={
     "WAVEFORM_JSON","SPECTROGRAM_JSON",
 }
 
+_RAW_AUDIO_CANDIDATE_EVENT_TYPES={"CLICK_POP","SILENCE","UNEXPECTED_SILENCE"}
+
+
+def report_source_artifact_allowed(*, artifact_type:str, metadata:dict|None) -> bool:
+    """Fail closed for detector-only audio candidates.
+
+    Media Analyzer may keep raw candidate clips for engineering drill-down, but the
+    Preliminary Evidence Report, Feishu projection and Evidence Bundle must not
+    present those files as anomaly evidence unless CandidateDecision explicitly
+    promoted the candidate. Non-candidate RTP/periodic clips are unaffected.
+    """
+    if artifact_type != "AUDIO_CLIP":
+        return True
+    meta=metadata or {}
+    event_type=str(meta.get("event_type") or "").upper()
+    if event_type not in _RAW_AUDIO_CANDIDATE_EVENT_TYPES:
+        return True
+    status=str(meta.get("candidate_decision_status") or "").upper()
+    return status == "PROMOTED"
+
 
 def link_source_artifacts(db:Session,*,report:PreliminaryEvidenceReport,runs:dict[str,AnalyzerRun]) -> list[Artifact]:
     run_ids=[r.id for r in runs.values() if r]
@@ -19,7 +39,10 @@ def link_source_artifacts(db:Session,*,report:PreliminaryEvidenceReport,runs:dic
     findings=list(db.scalars(select(EvidenceFinding).where(EvidenceFinding.scope_type==report.scope_type,EvidenceFinding.scope_id==report.scope_id)))
     out=[]
     for artifact in rows:
-        meta=artifact.metadata_json or {}; related=[]
+        meta=artifact.metadata_json or {}
+        if not report_source_artifact_allowed(artifact_type=artifact.type,metadata=meta):
+            continue
+        related=[]
         for finding in findings:
             scope=finding.scope_json or {}
             if meta.get("stream_id") and (scope.get("rtp_stream_id")==meta.get("stream_id") or scope.get("upstream_rtp_stream_id")==meta.get("stream_id") or scope.get("downstream_rtp_stream_id")==meta.get("stream_id")):

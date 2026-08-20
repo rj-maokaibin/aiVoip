@@ -11,6 +11,7 @@ from .dtmf_quality import dtmf_quality_events
 from .pcap_udp import UdpDatagram, iter_udp_datagrams
 from .profile import PcmProfile
 from .signal import basic_stats, detect_dtmf, dtmf_sequence, hum_analysis
+from app.analyzers.audio.candidate_decision import decide_raw_click_pop, decide_raw_silence
 from app.analyzers.audio.features import spectral_tone_analysis
 from app.analyzers.audio.quality import detect_unexpected_silence, detect_click_pop_robust
 from app.analyzers.profile import get_default_analyzer_profile
@@ -18,7 +19,7 @@ from app.analyzers.profile import get_default_analyzer_profile
 
 class PcmIntelligenceEngine:
     analyzer_name = "pcm_intelligence"
-    analyzer_version = "0.5.0"
+    analyzer_version = "0.6.0"
 
     def __init__(self, profile: PcmProfile):
         self.profile = profile
@@ -42,7 +43,7 @@ class PcmIntelligenceEngine:
             packets = grouped.get(tap.name, [])
             sessions = self._split_sessions(packets)
             if self.profile.can_decode:
-                session_results = [self._analyze_session(i, s) for i, s in enumerate(sessions)]
+                session_results = [self._analyze_session(i, s, tap_name=tap.name, tap_direction=tap.direction) for i, s in enumerate(sessions)]
             else:
                 session_results = [self._raw_session(i, s) for i, s in enumerate(sessions)]
             streams.append({"tap": asdict(tap), "packet_count": len(packets), "sessions": session_results})
@@ -71,6 +72,11 @@ class PcmIntelligenceEngine:
                 "total_packets": sum(s["packet_count"] for s in streams),
                 "session_count": sum(len(s["sessions"]) for s in streams),
                 "ignored_size_mismatch_packets": ignored_size,
+                "raw_candidate_count": sum(
+                    len(sess.get("silence_events", []) or []) + len(sess.get("click_pop_events", []) or [])
+                    for stream in streams for sess in stream.get("sessions", [])
+                ),
+                "raw_candidate_promoted_count": 0,
             },
             "streams": streams,
         }
@@ -105,7 +111,7 @@ class PcmIntelligenceEngine:
             "max_packet_interval_ms": round(max(intervals), 6) if intervals else None,
         }
 
-    def _analyze_session(self, index: int, packets: list[UdpDatagram]) -> dict:
+    def _analyze_session(self, index: int, packets: list[UdpDatagram], *, tap_name: str, tap_direction: str) -> dict:
         raw = b"".join(self._payload_bytes(p) for p in packets)
         itemsize = np.dtype(self.profile.dtype).itemsize
         if len(raw) % itemsize:
@@ -123,6 +129,22 @@ class PcmIntelligenceEngine:
         assert self.profile.sample_rate is not None and self.profile.channels is not None
         dtmf_events = detect_dtmf(samples, self.profile.sample_rate)
         quality_events = dtmf_quality_events(dtmf_events)
+        base_scope = {
+            "pcm_tap": tap_name,
+            "pcm_direction": str(tap_direction).upper(),
+            "pcm_session_index": index,
+        }
+        silence_events = []
+        for event in detect_unexpected_silence(samples, self.profile.sample_rate):
+            item = dict(event)
+            item["classification"] = "UNEXPECTED_SILENCE_CANDIDATE"
+            item["candidate_decision"] = decide_raw_silence(item, scope=base_scope)
+            silence_events.append(item)
+        click_events = []
+        for event in detect_click_pop_robust(samples, self.profile.sample_rate):
+            item = dict(event)
+            item["candidate_decision"] = decide_raw_click_pop(item, dtmf_events, scope=base_scope)
+            click_events.append(item)
         return {
             "session_index": index,
             "start_time": packets[0].timestamp,
@@ -139,8 +161,22 @@ class PcmIntelligenceEngine:
             "signal": basic_stats(samples),
             "hum": hum_analysis(samples, self.profile.sample_rate),
             "spectral": spectral_tone_analysis(samples, self.profile.sample_rate),
-            "silence_events": detect_unexpected_silence(samples, self.profile.sample_rate),
-            "click_pop_events": detect_click_pop_robust(samples, self.profile.sample_rate),
+            "silence_events": silence_events,
+            "click_pop_events": click_events,
+            "candidate_decision_summary": {
+                "silence": {
+                    "total": len(silence_events),
+                    "suppressed": sum(1 for x in silence_events if (x.get("candidate_decision") or {}).get("status") == "SUPPRESSED"),
+                    "inconclusive": sum(1 for x in silence_events if (x.get("candidate_decision") or {}).get("status") == "INCONCLUSIVE"),
+                    "promoted": 0,
+                },
+                "click_pop": {
+                    "total": len(click_events),
+                    "suppressed": sum(1 for x in click_events if (x.get("candidate_decision") or {}).get("status") == "SUPPRESSED"),
+                    "inconclusive": sum(1 for x in click_events if (x.get("candidate_decision") or {}).get("status") == "INCONCLUSIVE"),
+                    "promoted": 0,
+                },
+            },
             "dtmf_events": dtmf_events,
             "dtmf_sequences": dtmf_sequence(dtmf_events),
             "dtmf_quality_events": quality_events,

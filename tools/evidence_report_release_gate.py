@@ -36,11 +36,23 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", type=Path, default=ROOT / "validation" / "evidence_report_release_gate.json")
     ap.add_argument("--skip-tests", action="store_true")
+    ap.add_argument(
+        "--field-pcap",
+        type=Path,
+        help="Optional external field PCAP for PR2 CandidateDecision Golden E2E. The file must match the frozen contract SHA256.",
+    )
     args = ap.parse_args()
 
     gates: list[Gate] = []
     gates.append(run("GOLDEN_SYNTHETIC", [sys.executable, "tools/evidence_report_golden_gate.py"], category="ACCURACY"))
     gates.append(run("PERFORMANCE_SOFTWARE_CORE", [sys.executable, "tools/evidence_report_performance_gate.py", "--iterations", "4"], category="PERFORMANCE", timeout=180))
+    if args.field_pcap is not None:
+        gates.append(run(
+            "PR2_FIELD_CANDIDATE_GOLDEN",
+            [sys.executable, "tools/pr2_field_candidate_gate.py", "--pcap", str(args.field_pcap)],
+            category="FIELD_GOLDEN",
+            timeout=300,
+        ))
     if not args.skip_tests:
         gates.append(run(
             "EVIDENCE_REPORT_REGRESSION",
@@ -48,6 +60,11 @@ def main() -> int:
              "backend/tests/test_preliminary_evidence_report_v1.py",
              "backend/tests/test_evidence_report_offline_context_v1.py",
              "backend/tests/test_evidence_report_context_provenance_v1.py",
+             "backend/tests/test_candidate_decision_negative_control_v1.py",
+             "backend/tests/test_candidate_decision_artifact_gate_v1.py",
+             "backend/tests/test_media_candidate_decision_engine_v1.py",
+             "backend/tests/test_pcm_candidate_decision_audit_v1.py",
+             "backend/tests/test_pr2_field_candidate_gate_contract_v1.py",
              "backend/tests/test_evidence_report_authority_v1.py",
              "backend/tests/test_evidence_bundle_contract_v1.py",
              "backend/tests/test_evidence_bundle_profile_v1.py",
@@ -68,20 +85,22 @@ def main() -> int:
         {"key": "REAL_DUT_END_TO_END", "status": "UNVERIFIED", "blocking_for_production": True,
          "detail": "需要真实 DUT 完成 PCAP+PCM RX/TX→Call→Analyzer→Report→Bundle→Cleanup。"},
         {"key": "REAL_GOLDEN_DATASET", "status": "UNVERIFIED", "blocking_for_production": True,
-         "detail": "需要 Synthetic + Lab Real + Field Confirmed 的真实标注集验证最终 Recall/Precision/Boundary 指标。"},
+         "detail": "需要 Synthetic + Lab Real + Field Confirmed 的真实标注集验证最终 Recall/Precision/Boundary 指标；PR2 单现场样本 Gate 通过也不等同于完整真实 Golden Dataset 已验收。"},
     ]
     payload = {
         "schema_version": "preliminary-evidence-report-release-gate-v1",
         "software_status": "PASS" if software_pass else "FAIL",
         "production_status": "ENVIRONMENT_GATES_PENDING" if software_pass else "SOFTWARE_BLOCKED",
         "gates": [asdict(x) for x in gates],
+        "field_pcap_requested": args.field_pcap is not None,
+        "field_pcap_path": str(args.field_pcap) if args.field_pcap is not None else None,
         "environment_gates": environment_gates,
         "allowed_pending_environment_gates": [x["key"] for x in environment_gates],
         "claim": "When software_status=PASS, all machine-verifiable V1.0 software requirements are closed. Production acceptance still requires exactly the three listed environment gates.",
     }
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    print(json.dumps({"software_status": payload["software_status"], "production_status": payload["production_status"], "out": str(args.out)}, ensure_ascii=False, indent=2))
+    print(json.dumps({"software_status": payload["software_status"], "production_status": payload["production_status"], "field_pcap_requested": payload["field_pcap_requested"], "out": str(args.out)}, ensure_ascii=False, indent=2))
     return 0 if software_pass else 2
 
 

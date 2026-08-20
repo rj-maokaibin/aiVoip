@@ -13,6 +13,7 @@ from app.contracts.evidence_report import (
     SEVERITY_ORDER,
     EvidenceFindingStatus,
 )
+from app.reports.candidate_decision import decision_summary, pcm_candidate_decision_summary, resolve_candidate_decisions
 
 
 def _canonical(value: Any) -> str:
@@ -191,23 +192,29 @@ def _pcm_findings(pcm: dict | None, source_run_id: str | None) -> list[dict]:
                     evidence_refs=[{"type": "ANALYZER_RUN", "id": source_run_id}] if source_run_id else [],
                 ))
             for index, ev in enumerate(session.get("silence_events", []) or []):
+                decision = ev.get("candidate_decision") or {}
+                if decision.get("status") != "PROMOTED":
+                    continue
                 start = (session.get("start_time") or 0) + float(ev.get("start_seconds", 0))
                 end = (session.get("start_time") or 0) + float(ev.get("end_seconds", ev.get("start_seconds", 0)))
                 out.append(_base_finding(
                     finding_type="UNEXPECTED_SILENCE", severity="MEDIUM", evidence_level="L3",
-                    title=f"{tap_name} 异常静音候选", observation=f"{tap_name} 检测到活跃音频中的持续静音候选。",
-                    scope=base_scope, metrics=ev,
+                    title=f"{tap_name} 异常静音候选", observation=f"{tap_name} 静音候选已通过 CandidateDecision 升级门。",
+                    scope=base_scope, metrics={**ev, "candidate_decision": decision},
                     time_range={"start": start, "end": end, "representative": start},
                     source_run_id=source_run_id, feature_family="silence",
                     event_refs=[{"source": "pcm.silence_events", "index": index}],
                 ))
             for index, ev in enumerate(session.get("click_pop_events", []) or []):
+                decision = ev.get("candidate_decision") or {}
+                if decision.get("status") != "PROMOTED":
+                    continue
                 when = (session.get("start_time") or 0) + float(ev.get("time_seconds", 0))
                 out.append(_base_finding(
                     finding_type="CLICK_POP", severity="MEDIUM", evidence_level="L3",
                     title=f"{tap_name} Click/Pop（点击声/爆音）候选",
-                    observation=f"{tap_name} 检测到符合多特征门限的瞬态 Click/Pop 候选。",
-                    scope=base_scope, metrics=ev,
+                    observation=f"{tap_name} Click/Pop 候选已通过 CandidateDecision 升级门。",
+                    scope=base_scope, metrics={**ev, "candidate_decision": decision},
                     time_range={"start": when, "end": when, "representative": when},
                     source_run_id=source_run_id, feature_family="click_pop",
                     event_refs=[{"source": "pcm.click_pop_events", "index": index}],
@@ -235,8 +242,12 @@ def _media_findings(media: dict | None, source_run_id: str | None) -> list[dict]
     if not media:
         return []
     out: list[dict] = []
-    events = []
-    events.extend(media.get("cross_layer_events", []) or [])
+    resolution = resolve_candidate_decisions(media)
+    events = [
+        e for e in (media.get("cross_layer_events", []) or [])
+        if str(e.get("type") or "") not in {"CLICK_POP", "UNEXPECTED_SILENCE"}
+    ]
+    events.extend(resolution.get("promoted_events", []) or [])
     events.extend(media.get("periodic_interference_paths", []) or [])
     seen: set[str] = set()
     for index, event in enumerate(events):
@@ -250,6 +261,8 @@ def _media_findings(media: dict | None, source_run_id: str | None) -> list[dict]
         scope = dict(event.get("scope") or {})
         scope.setdefault("layer", scope.get("pcm_tap") or "CROSS_LAYER")
         details = event.get("details") or {}
+        if ftype in {"CLICK_POP", "UNEXPECTED_SILENCE"} and (details.get("candidate_decision") or {}).get("status") != "PROMOTED":
+            continue
         boundary = details.get("evidence_boundary") or DEFAULT_ROOT_CAUSE_BOUNDARY
         title_map = {
             "LOCAL_CAPTURE_PERIODIC_INTERFERENCE": "本地采集链路周期性干扰",
@@ -273,7 +286,7 @@ def _media_findings(media: dict | None, source_run_id: str | None) -> list[dict]
             feature_family=("periodic" if "PERIODIC" in ftype else ftype),
             correlation=details.get("correlation") or {},
             evidence_refs=[{"type": "ANALYZER_RUN", "id": source_run_id}] if source_run_id else [],
-            event_refs=[{"source": "media.cross_layer", "index": index}],
+            event_refs=[{"source": "media.candidate_decision" if ftype in {"CLICK_POP", "UNEXPECTED_SILENCE"} else "media.cross_layer", "index": index}],
         ))
     return out
 
@@ -364,6 +377,33 @@ def build_normal_evidence(packet: dict | None, pcm: dict | None, media: dict | N
     if pcm:
         if int((pcm.get("summary") or {}).get("total_packets") or 0) > 0:
             normal.append({"type": "PCM_PRESENT", "text": "PCM 诊断数据已采集并可用于分析。"})
-    if media and not (media.get("degraded_reason")):
-        normal.append({"type": "MEDIA_ANALYSIS_FULL", "text": "Media Analyzer 未发生解析降级。"})
+        raw_summary = pcm_candidate_decision_summary(pcm)
+        if raw_summary.get("suppressed"):
+            normal.append({
+                "type": "PCM_RAW_CANDIDATES_SUPPRESSED_BY_NEGATIVE_CONTROL",
+                "text": f"Raw PCM CandidateDecision 已通过 DTMF 等 Negative Control 排除 {raw_summary.get('suppressed')} 个候选；Raw detector 本身不拥有异常 Finding 权限。",
+                "details": {"by_reason": raw_summary.get("by_reason"), "by_type": raw_summary.get("by_type")},
+            })
+        if raw_summary.get("inconclusive"):
+            normal.append({
+                "type": "PCM_RAW_CANDIDATES_INCONCLUSIVE",
+                "text": f"Raw PCM 另有 {raw_summary.get('inconclusive')} 个候选保持 INCONCLUSIVE；需由 Call/Media 跨层证据决定是否升级，不直接计入异常 Finding。",
+                "details": {"by_reason": raw_summary.get("by_reason"), "by_type": raw_summary.get("by_type")},
+            })
+    if media:
+        summary = decision_summary(media)
+        if summary.get("suppressed"):
+            normal.append({
+                "type": "AUDIO_CANDIDATES_SUPPRESSED_BY_NEGATIVE_CONTROL",
+                "text": f"Media CandidateDecision 已通过 Negative Control 排除 {summary.get('suppressed')} 个活跃媒体音频候选；这些候选不会计入异常 Finding。",
+                "details": {"by_reason": summary.get("by_reason"), "by_type": summary.get("by_type")},
+            })
+        if summary.get("inconclusive"):
+            normal.append({
+                "type": "AUDIO_CANDIDATES_INCONCLUSIVE",
+                "text": f"另有 {summary.get('inconclusive')} 个活跃媒体音频候选因缺少跨层正证据保持 INCONCLUSIVE，不升级为异常 Finding。",
+                "details": {"by_reason": summary.get("by_reason"), "by_type": summary.get("by_type")},
+            })
+        if not media.get("degraded_reason"):
+            normal.append({"type": "MEDIA_ANALYSIS_FULL", "text": "Media Analyzer 未发生解析降级。"})
     return normal
