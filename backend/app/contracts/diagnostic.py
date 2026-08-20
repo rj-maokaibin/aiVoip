@@ -90,19 +90,34 @@ def _time_range(value: dict | None) -> dict:
 
 def _scope(value: dict | None) -> dict:
     raw = value or {}
+    direction_raw = raw.get("direction") or raw.get("rtp_direction") or raw.get("pcm_direction")
+    direction_text = str(direction_raw) if direction_raw not in (None, "") else None
+    tap_point = raw.get("tap_point") or raw.get("pcm_tap")
+
+    # `direction` is an identity/comparison field. Endpoint directions and PCM
+    # RX/TX use the same vocabulary as existing Findings and can be compared.
+    # Role labels such as DUT_TO_PBX/UPSTREAM describe meaning but are not the
+    # same identifier as `src:port->dst:port`; retain them in extensions instead
+    # of creating false Finding mismatches.
+    comparable_direction = None
+    if direction_text and ("->" in direction_text or (tap_point and direction_text.upper() in {"RX", "TX"})):
+        comparable_direction = direction_text
+
     canonical = {
         "case_id": raw.get("case_id"),
         "session_id": raw.get("session_id"),
         "call_id": raw.get("call_id"),
         "stream_id": raw.get("stream_id") or raw.get("rtp_stream_id"),
         "layer": raw.get("layer"),
-        "tap_point": raw.get("tap_point") or raw.get("pcm_tap"),
-        "direction": raw.get("direction") or raw.get("rtp_direction") or raw.get("pcm_direction"),
+        "tap_point": tap_point,
+        "direction": comparable_direction,
         "ssrc": raw.get("ssrc"),
         "path_role": raw.get("path_role") or raw.get("stream_role"),
     }
     # Preserve domain-specific fields without making them identity requirements.
     extras = {k: v for k, v in raw.items() if k not in canonical and v is not None}
+    if direction_text and comparable_direction is None:
+        extras["direction_role"] = direction_text
     canonical["extensions"] = extras
     return canonical
 
