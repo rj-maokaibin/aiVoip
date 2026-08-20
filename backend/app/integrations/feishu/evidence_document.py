@@ -68,8 +68,9 @@ class FeishuEvidenceDocumentService:
 
     def _core_blocks(self,report:PreliminaryEvidenceReport,payload:dict)->tuple[list[dict],int]:
         findings=payload.get("findings") or []; comp=payload.get("completeness") or {}; case=payload.get("case") or {}; blocks=[]
+        context=payload.get("analysis_context") or {}; offline=context.get("analysis_mode")=="OFFLINE_IMPORTED"
         blocks.extend([self._text(f"V{report.version}｜{payload.get('generated_at')}｜{report.status}",3),self._text("0. 当前状态 / 快速导航",4),
-                       self._text(f"Case：{case.get('case_no')}｜范围：{report.scope_type}｜证据完整度：{comp.get('state')}｜问题点：{len(findings)}｜最高等级：{payload.get('highest_severity')}")])
+                       self._text(f"Case：{case.get('case_no')}｜范围：{report.scope_type}｜证据完整度：{comp.get('state')}｜可复核性：{comp.get('reviewability')}｜问题点：{len(findings)}｜最高等级：{payload.get('highest_severity')}")])
         blocks.extend([self._text("1. 当前初步结论",4),self._text(payload.get("headline") or ""),self._text((payload.get("evidence_boundary") or {}).get("statement") or "")])
         blocks.append(self._text("2. 当前重点问题",4))
         for f in findings[:20]:
@@ -80,12 +81,22 @@ class FeishuEvidenceDocumentService:
                            self._text(f"根因边界：{f.get('root_cause_boundary')}")])
         blocks.append(self._text("3. 证据完整度",4))
         for name,present in (comp.get("capture") or {}).items():blocks.append(self._text(f"{'✅' if present else '⚠️'} {name}：{'可用' if present else '缺失/不可用'}",12))
-        call=payload.get("call") or {}; blocks.extend([self._text("4. 最新一次复现结果",4),self._text(f"Call：{call.get('call_no')}｜状态：{call.get('status')}｜开始：{call.get('started_at')}｜结束：{call.get('ended_at')}")])
+        call=payload.get("display_call") or payload.get("call") or {}
+        if offline:
+            blocks.append(self._text("4. 当前离线 Call 重建结果",4))
+            blocks.append(self._text(f"分析方式：离线证据导入｜复现 Session：不适用｜重建 Call：{context.get('reconstructed_call_count')}"))
+            if call:
+                blocks.append(self._text(f"Call：{call.get('id') or call.get('call_no')}｜SIP Call-ID：{call.get('sip_call_id') or call.get('external_call_ref')}｜状态：{call.get('status')}｜开始：{call.get('started_at')}｜结束：{call.get('ended_at')}｜号码：{call.get('caller') or '?'} → {call.get('dialed_number') or '?'}"))
+            else:
+                blocks.append(self._text(f"Call：未绑定｜Call Scope：{context.get('call_scope')}｜Call Origin：{context.get('call_origin')}"))
+        else:
+            blocks.extend([self._text("4. 最新一次复现结果",4),self._text(f"Call：{call.get('call_no')}｜状态：{call.get('status')}｜开始：{call.get('started_at')}｜结束：{call.get('ended_at')}")])
         blocks.append(self._text("5. 多次复现汇总",4)); multi=payload.get("multi_call_summary") or {}
+        if offline:blocks.append(self._text("当前离线重建 Call 仅用于证据展示，不计入 Reproduction Call 复现次数。"))
         if multi:
-            blocks.append(self._text(f"有效 Call 报告数：{multi.get('call_count')}"))
+            blocks.append(self._text(f"有效 Reproduction Call 报告数：{multi.get('call_count')}"))
             for g in (multi.get("finding_groups") or [])[:20]:blocks.append(self._text(f"{g.get('severity')}｜{g.get('title')}｜{g.get('occurrence_calls')}/{g.get('total_calls')}｜复现率 {round((g.get('reproduction_rate') or 0)*100,2)}%｜{g.get('stability')}",12))
-        else:blocks.append(self._text("当前为 Call 级报告，无跨 Call 聚合。"))
+        else:blocks.append(self._text("当前没有可聚合的 Reproduction Call 报告。" if offline else "当前为 Call 级报告，无跨 Call 聚合。"))
         blocks.append(self._text("6. A/B 对比",4)); comparisons=payload.get("ab_comparison") or []
         if comparisons:
             for comp_item in comparisons[:6]:
@@ -94,7 +105,9 @@ class FeishuEvidenceDocumentService:
                     if diff.get("significant_by_v1_rule"):
                         blocks.append(self._text(f"{diff.get('title')}：A {round((diff.get('environment_a_rate') or 0)*100,2)}% → B {round((diff.get('environment_b_rate') or 0)*100,2)}%，差异 {round((diff.get('absolute_rate_delta') or 0)*100,2)}%；仅表示环境关联，不独立确认因果。",12))
         else:blocks.append(self._text("当前没有满足分组条件的 A/B 环境对比。"))
-        blocks.extend([self._text("7. 历次 Reproduction Session（复现会话）",4),self._text("历史报告版本保留在本文档下方；版本之间按最新优先，同一 Call 内事件按时间正序。")])
+        blocks.append(self._text("7. 历次 Reproduction Session（复现会话）",4))
+        blocks.append(self._text("当前为离线证据导入；系统不会为了填充报告创建 ReproductionSession/ReproductionCall。历史真实 Reproduction 报告仍按 Case 维度保留。" if offline else
+                                 "历史报告版本保留在本文档下方；版本之间按最新优先，同一 Call 内事件按时间正序。"))
         blocks.append(self._text("8. 正常项 / 排除性证据",4))
         for item in payload.get("normal_and_exclusion_evidence") or []:blocks.append(self._text(f"✅ {item.get('text')}",12))
         blocks.extend([self._text("9. 完整技术证据",4),self._text("RTP（Real-time Transport Protocol，实时传输协议）、PCM（Pulse Code Modulation，脉冲编码调制）、dBFS（Decibels relative to Full Scale，相对于数字满量程的分贝）等指标可从 Web/Artifact 下钻复核。")])
@@ -131,7 +144,9 @@ class FeishuEvidenceDocumentService:
                 data=self.storage.get_bytes(artifact.object_key);token=await self._upload_media(block_id=block_id,filename=artifact.filename,data=data,parent_type="docx_image" if is_image else "docx_file")
                 await self._replace_media(binding.document_id,block_id,token,image=is_image)
         binding.projected_report_id=report.id;binding.projection_version+=1;binding.status="SYNCED";binding.last_error=None
-        binding.metadata_json={"report_version":report.version,"report_status":report.status,"finding_count":payload.get("finding_count"),"ordering_contract":"D112","attachment_count":len(candidates)}
+        binding.metadata_json={"report_version":report.version,"report_status":report.status,"finding_count":payload.get("finding_count"),"ordering_contract":"D112","attachment_count":len(candidates),
+                               "analysis_mode":(payload.get("analysis_context") or {}).get("analysis_mode"),"call_origin":(payload.get("analysis_context") or {}).get("call_origin")}
         audit(db,case_id=case_id,actor="feishu-evidence-document",event_type="FEISHU_EVIDENCE_DOCUMENT_SYNCED",target_type="feishu_evidence_document",target_id=binding.id,
-              detail={"document_id":binding.document_id,"report_id":report.id,"report_version":report.version,"attachment_count":len(candidates)})
+              detail={"document_id":binding.document_id,"report_id":report.id,"report_version":report.version,"attachment_count":len(candidates),
+                      "analysis_mode":(payload.get("analysis_context") or {}).get("analysis_mode")})
         db.flush();return binding
