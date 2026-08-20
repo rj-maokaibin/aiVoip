@@ -15,6 +15,23 @@ class EvidenceReportScope(StrEnum):
     CASE = "CASE"
 
 
+class AnalysisMode(StrEnum):
+    REPRODUCTION = "REPRODUCTION"
+    OFFLINE_IMPORTED = "OFFLINE_IMPORTED"
+
+
+class CallOrigin(StrEnum):
+    REPRODUCTION_RUNTIME = "REPRODUCTION_RUNTIME"
+    RECONSTRUCTED_FROM_PCAP = "RECONSTRUCTED_FROM_PCAP"
+    MEDIA_SESSION_UNBOUND = "MEDIA_SESSION_UNBOUND"
+
+
+class CallScope(StrEnum):
+    BOUND = "BOUND"
+    UNBOUND = "UNBOUND"
+    NOT_APPLICABLE = "NOT_APPLICABLE"
+
+
 class EvidenceReportStatus(StrEnum):
     PENDING = "PENDING"
     ANALYZING = "ANALYZING"
