@@ -31,6 +31,7 @@ def _event(stream_id: str, *, when: float, delta: float, prev_frame: int, frame:
             "rtp_timestamp_continuous": True,
             "catch_up": {
                 "status": "PARTIAL",
+                "observed": True,
                 "recovered_delay_ms": 30.0,
                 "recovery_ratio": 0.25,
             },
@@ -90,6 +91,11 @@ def test_high_delta_findings_are_aggregated_per_stream_not_across_mirrored_strea
     assert dut["metrics"]["max_delta_ms"] == 175.043
     assert dut["metrics"]["all_sequence_continuous"] is True
     assert len(dut["metrics"]["events"]) == 2
+    assert dut["semantic_summary"]["event_family"] == "HIGH_DELTA"
+    assert dut["semantic_summary"]["event_count"] == 2
+    assert dut["semantic_summary"]["loss_interpretation"] == "DELAY_NOT_PACKET_LOSS"
+    assert dut["semantic_summary"]["all_sequence_continuous"] is True
+    assert dut["semantic_summary"]["catch_up_observed_count"] == 2
     assert "未观察到对应 RTP 丢包" in dut["observation"]
     assert "不应写成 Packet Loss" in dut["interpretation"]
     assert dut["scope"]["call_id"] == "dut-call"
@@ -98,6 +104,7 @@ def test_high_delta_findings_are_aggregated_per_stream_not_across_mirrored_strea
 
     assert mirror["occurrence_count"] == 1
     assert mirror["metrics"]["event_count"] == 1
+    assert mirror["semantic_summary"]["loss_interpretation"] == "DELAY_NOT_PACKET_LOSS"
     assert mirror["scope"]["call_id"] == "pbx-leg"
 
 
@@ -132,6 +139,7 @@ def test_single_high_delta_finding_exposes_frame_seq_ptime_and_catch_up_semantic
     event = finding["metrics"]["events"][0]
 
     assert finding["title"] == "RTP 包间隔异常增大（HIGH_DELTA）"
+    assert finding["semantic_summary"]["loss_interpretation"] == "DELAY_NOT_PACKET_LOSS"
     assert event["delta_ms"] == 146.0
     assert event["expected_ptime_ms"] == 20.0
     assert event["previous_frame_number"] == 10
