@@ -90,6 +90,8 @@ expected:
       sequence_must_remain_continuous_across_high_delta: true
   dtmf:
     required_event_type: DTMF_SIP_DIAL_MATCH
+    expected_match_count: 1
+    call_id: 00ad1c804c33b255@192.168.3.200
     pcm_digits: "601"
     sip_target: "601"
     pcm_tap: pcm_rx
@@ -136,6 +138,7 @@ expected:
 notes:
   - 原始 SIP 协议层存在 2 个 Call-ID：DUT→PBX 主腿和 PBX→被叫的 B2BUA 内部腿。Golden 不删除第二条腿；raw_sip_leg_count 必须为 2。
   - 当前诊断对象只有 1 个 DUT-facing Call。PCM 40000/50000 的 UDP source IP 为 192.168.150.4，系统应使用这一原始 provenance 选择包含该设备 SDP/RTP endpoint 的主腿，而不是按“结束时间最新”选择 PBX 内部腿。
+  - PCM DTMF 601 只能与选中的 DUT-facing SIP leg 形成 1 条 DTMF_SIP_DIAL_MATCH；同一 DTMF 不得复制到 PBX B2BUA 内部腿。
   - PCM 原始 UDP 人工复核为 40000/50000 各 6525 包，每包 payload 160 bytes；按已知 Profile 为 8kHz/16-bit little-endian，每包对应 10ms 音频。
   - 两个主上行 HIGH_DELTA 的边界 Frame/Seq 已人工复核：20272/46511→20285/46512，以及 20329/46519→20344/46520；Sequence 连续，因此不能写成 Packet Loss。high_delta_ms 是算法容差范围，high_delta_events 保存人工复核的精确 Frame/Seq Ground Truth。
   - HIGH_DELTA 表示到包/发送节奏间隔异常，不等同于 RTP Sequence Loss。
