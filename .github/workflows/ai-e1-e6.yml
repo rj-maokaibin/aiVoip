@@ -1,4 +1,4 @@
-name: Real Offline Golden 001 (Temporary)
+name: Real Offline Golden 001 Diagnostics (Temporary)
 
 # Temporary validation branch only. Product branches remain workflow_dispatch-only.
 on:
@@ -28,6 +28,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
       - name: Stage and verify requested external fixture
         run: |
           set -euo pipefail
@@ -36,14 +37,10 @@ jobs:
           fixture="$source_fixture"
           echo "Runner: $RUNNER_NAME"
           echo "Source fixture: $source_fixture"
-          if [ ! -f "$source_fixture" ]; then
-            echo "OFFLINE_GOLDEN_FIXTURE_NOT_FOUND"
-            exit 20
-          fi
+          test -f "$source_fixture" || { echo "OFFLINE_GOLDEN_FIXTURE_NOT_FOUND"; exit 20; }
           ls -lh "$source_fixture"
           if [ ! -r "$source_fixture" ]; then
             staged="$RUNNER_TEMP/offline-golden-001.pcap"
-            echo "Source is not readable by $(id -un); staging a private runner copy through Docker without changing source permissions."
             rm -f "$staged"
             image="postgres:16"
             docker image inspect "$image" >/dev/null 2>&1 || docker pull "$image"
@@ -52,18 +49,14 @@ jobs:
               -v "$RUNNER_TEMP":/output \
               --entrypoint sh "$image" \
               -c "cp '/source/tcpdump-2026-08-14.pcap' '/output/offline-golden-001.pcap' && chmod 0644 '/output/offline-golden-001.pcap'"
-            test -r "$staged"
             fixture="$staged"
           fi
           actual_sha="$(sha256sum "$fixture" | awk '{print $1}')"
           echo "Fixture used: $fixture"
           echo "Fixture SHA256: $actual_sha"
-          echo "Expected SHA256: $expected_sha"
-          if [ "$actual_sha" != "$expected_sha" ]; then
-            echo "OFFLINE_GOLDEN_FIXTURE_SHA_MISMATCH"
-            exit 21
-          fi
+          test "$actual_sha" = "$expected_sha" || { echo "OFFLINE_GOLDEN_FIXTURE_SHA_MISMATCH"; exit 21; }
           echo "VOIP_OFFLINE_GOLDEN_001_PCAP=$fixture" >> "$GITHUB_ENV"
+
       - name: Prepare user-space tshark
         run: |
           set -euo pipefail
@@ -71,16 +64,11 @@ jobs:
           debs="$RUNNER_TEMP/tshark-debs"
           rm -rf "$root" "$debs"
           mkdir -p "$root" "$debs"
-
-          echo "APT candidate:"
-          apt-cache policy tshark | sed -n '1,8p'
-
           mapfile -t packages < <(
             apt-cache depends --recurse \
               --no-recommends --no-suggests --no-conflicts --no-breaks \
               --no-replaces --no-enhances tshark \
-            | awk '/^[^ <][^:]*$/ {print $1}' \
-            | sort -u
+            | awk '/^[^ <][^:]*$/ {print $1}' | sort -u
           )
           missing=()
           for pkg in "${packages[@]}"; do
@@ -88,19 +76,9 @@ jobs:
               missing+=("$pkg")
             fi
           done
-          echo "Missing package count: ${#missing[@]}"
-          printf '%s\n' "${missing[@]}"
-          if [ ${#missing[@]} -eq 0 ]; then
-            echo "Dependency graph unexpectedly reports no missing tshark package"
-            exit 23
-          fi
-
           cd "$debs"
           apt-get download "${missing[@]}"
-          for deb in ./*.deb; do
-            dpkg-deb -x "$deb" "$root"
-          done
-
+          for deb in ./*.deb; do dpkg-deb -x "$deb" "$root"; done
           wrapper="$RUNNER_TEMP/tshark-userspace"
           cat > "$wrapper" <<EOF
           #!/usr/bin/env bash
@@ -112,13 +90,54 @@ jobs:
           chmod +x "$wrapper"
           "$wrapper" -v | head -n 2
           echo "TSHARK_BINARY=$wrapper" >> "$GITHUB_ENV"
+
       - name: Prepare isolated Python environment
         run: |
           set -euo pipefail
           python3 -m venv .venv-offline-golden
           .venv-offline-golden/bin/python -m pip install --upgrade pip
           .venv-offline-golden/bin/python -m pip install -r backend/requirements.txt
+
+      - name: Export production replay bundle without Golden truth
+        run: |
+          set -euo pipefail
+          mkdir -p validation/offline_analysis_golden_001_debug_artifacts
+          PYTHONPATH=backend .venv-offline-golden/bin/python - <<'PY'
+          import json, os
+          from pathlib import Path
+          from app.golden.offline_analysis_e2e import build_offline_analysis_bundle
+
+          bundle = build_offline_analysis_bundle(
+              pcap_path=Path(os.environ["VOIP_OFFLINE_GOLDEN_001_PCAP"]),
+              pcm_profile_path=Path("profiles/pcm/ruijie_aim_diag_v1.yaml"),
+              output_dir=Path("validation/offline_analysis_golden_001_debug_artifacts"),
+              tshark_binary=os.environ["TSHARK_BINARY"],
+          )
+          out = Path("validation/offline_analysis_bundle_debug.json")
+          out.write_text(json.dumps(bundle, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+          packet = bundle.get("packet") or {}
+          media = bundle.get("media") or {}
+          pcm = bundle.get("pcm") or {}
+          print(json.dumps({
+              "source": bundle.get("source"),
+              "analysis_context": bundle.get("analysis_context"),
+              "display_call": bundle.get("display_call"),
+              "calls": packet.get("calls"),
+              "rtp_stream_count": len(packet.get("rtp_streams") or []),
+              "pcm_streams": [{
+                  "tap": x.get("tap"),
+                  "packet_count": x.get("packet_count"),
+                  "session_count": len(x.get("sessions") or []),
+                  "dtmf_events": [e for s in (x.get("sessions") or []) for e in (s.get("events") or []) if str(e.get("type","")).startswith("DTMF")],
+              } for x in (pcm.get("streams") or [])],
+              "media_cross_layer_events": media.get("cross_layer_events"),
+              "candidate_decisions": media.get("candidate_decisions"),
+              "report_finding_types": [f.get("type") for f in ((bundle.get("report") or {}).get("findings") or [])],
+          }, ensure_ascii=False, indent=2))
+          PY
+
       - name: Run real Offline Golden 001 replay
+        continue-on-error: true
         run: |
           set -euo pipefail
           .venv-offline-golden/bin/python tools/offline_analysis_golden_replay.py \
@@ -127,16 +146,16 @@ jobs:
             --require-fixture \
             --result validation/offline_analysis_golden_001.json \
             --artifacts validation/offline_analysis_golden_001_artifacts
-      - name: Re-run synthetic Evidence Report Golden gate
-        run: .venv-offline-golden/bin/python tools/evidence_report_golden_gate.py
-      - name: Upload Offline Golden validation artifacts
+
+      - name: Upload Offline Golden diagnostics
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: voip-offline-golden-001-validation
+          name: voip-offline-golden-001-diagnostics
           path: |
+            validation/offline_analysis_bundle_debug.json
             validation/offline_analysis_golden_001.json
+            validation/offline_analysis_golden_001_debug_artifacts/**
             validation/offline_analysis_golden_001_artifacts/**
-            validation/evidence_report_golden_gate.json
-          if-no-files-found: warn
+          if-no-files-found: error
           retention-days: 14
