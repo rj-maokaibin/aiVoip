@@ -7,14 +7,17 @@ from pathlib import Path
 from typing import Any
 
 from app.analyzers.media import MediaIntelligenceEngine
-from app.analyzers.media.candidate_artifacts import gate_candidate_audio_artifacts
-from app.analyzers.media.candidate_decision import apply_candidate_decisions
+from app.analyzers.media.candidate_artifacts import gate_candidate_audio_artifacts, sanitize_gated_media_pcm
+from app.analyzers.media.candidate_decision import CANDIDATE_DECISION_VERSION, apply_candidate_decisions
 from app.analyzers.packet import TSharkAdapter
 from app.analyzers.pcm import load_pcm_profile
 from app.diagnosis.reasoner import DeterministicDiagnosisReasoner
 from app.reports.evidence_brief import build_report_payload
 from app.services.evidence_boundary import apply_first_observable_boundaries
 from app.services.evidence_report_context import resolve_report_analysis_context
+
+
+GATED_MEDIA_CONTRACT_VERSION = "0.5.0"
 
 
 @dataclass(frozen=True, slots=True)
@@ -62,7 +65,7 @@ def build_offline_analysis_bundle(
     output_dir: str | Path,
     tshark_binary: str = "tshark",
 ) -> dict:
-    """Replay production analyzers without exposing Golden expected values to them."""
+    """Replay production analysis without exposing Golden truth to production code."""
     pcap_path = Path(pcap_path)
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -71,16 +74,22 @@ def build_offline_analysis_bundle(
     engine = MediaIntelligenceEngine(profile, TSharkAdapter(binary=tshark_binary))
     raw_media = engine.analyze_pcap(pcap_path, output_dir)
 
-    # Production has distinct Packet/PCM/Media AnalyzerRun payloads. Use a deep copy
-    # for the standalone PCM view so CandidateDecision cannot alias the embedded PCM.
+    # Mirror media_tasks.py persistence semantics: CandidateDecision is part of the
+    # persisted 0.5.0 Media contract, raw PCM click/silence events are moved behind
+    # *_candidates, and only promoted candidate clips remain main AUDIO_CLIPs.
+    raw_media["base_engine_version"] = raw_media.get("version") or engine.analyzer_version
+    raw_media["version"] = GATED_MEDIA_CONTRACT_VERSION
+    raw_media["candidate_decision_version"] = CANDIDATE_DECISION_VERSION
+
     standalone_pcm = copy.deepcopy(raw_media.get("pcm") or {})
-    results = {
+    results: dict[str, dict | None] = {
         "packet_intelligence": raw_media.get("packet") or {},
         "pcm_intelligence": standalone_pcm,
         "media_intelligence": raw_media,
     }
     apply_candidate_decisions(results)
-    media = gate_candidate_audio_artifacts(results["media_intelligence"] or {})
+    media = sanitize_gated_media_pcm(results["media_intelligence"] or {})
+    media = gate_candidate_audio_artifacts(media)
     results["media_intelligence"] = media
     packet = results["packet_intelligence"] or {}
     pcm = results["pcm_intelligence"] or {}
@@ -106,9 +115,24 @@ def build_offline_analysis_bundle(
     context = resolved["analysis_context"]
     display_call = resolved["display_call"]
     analyzer_states = {
-        "packet_intelligence": {"run_id": "golden-packet-run", "status": packet.get("status"), "analyzer_version": packet.get("version"), "config_version": "golden"},
-        "pcm_intelligence": {"run_id": "golden-pcm-run", "status": pcm.get("status", media.get("status")), "analyzer_version": pcm.get("version"), "config_version": "golden"},
-        "media_intelligence": {"run_id": "golden-media-run", "status": media.get("status"), "analyzer_version": media.get("version"), "config_version": "golden"},
+        "packet_intelligence": {
+            "run_id": "golden-packet-run",
+            "status": packet.get("status"),
+            "analyzer_version": packet.get("version"),
+            "config_version": "golden",
+        },
+        "pcm_intelligence": {
+            "run_id": "golden-pcm-run",
+            "status": pcm.get("status", media.get("status")),
+            "analyzer_version": pcm.get("version"),
+            "config_version": "golden",
+        },
+        "media_intelligence": {
+            "run_id": "golden-media-run",
+            "status": media.get("status"),
+            "analyzer_version": media.get("version"),
+            "config_version": "golden",
+        },
     }
     report = build_report_payload(
         case={"id": "offline-golden-001", "case_no": "OFFLINE-GOLDEN-001", "summary": "持续电流音/周期底噪"},
@@ -162,7 +186,13 @@ def validate_offline_analysis_bundle(bundle: dict, manifest: dict) -> list[Golde
         checks.append(GoldenCheck(name, bool(passed), actual, wanted, category))
 
     source_expected = manifest.get("source") or {}
-    add("source.sha256", bundle.get("source", {}).get("sha256") == source_expected.get("sha256"), bundle.get("source", {}).get("sha256"), source_expected.get("sha256"), "SOURCE")
+    add(
+        "source.sha256",
+        bundle.get("source", {}).get("sha256") == source_expected.get("sha256"),
+        bundle.get("source", {}).get("sha256"),
+        source_expected.get("sha256"),
+        "SOURCE",
+    )
 
     context = bundle.get("analysis_context") or {}
     for key, wanted in (expected.get("analysis_context") or {}).items():
@@ -171,10 +201,17 @@ def validate_offline_analysis_bundle(bundle: dict, manifest: dict) -> list[Golde
     packet = bundle.get("packet") or {}
     calls = packet.get("calls", []) or []
     call_exp = expected.get("call") or {}
-    add("call.reconstructed_count", len(calls) == int(call_exp.get("reconstructed_count", 0)), len(calls), call_exp.get("reconstructed_count"), "CALL_BINDING")
-    sip_call_id = call_exp.get("sip_call_id")
-    call = next((x for x in calls if x.get("call_id") == sip_call_id), None)
-    add("call.sip_call_id", call is not None, call.get("call_id") if call else None, sip_call_id, "CALL_BINDING")
+    raw_count = int(call_exp.get("raw_sip_leg_count") or 0)
+    add("call.raw_sip_leg_count", len(calls) == raw_count, len(calls), raw_count, "CALL_BINDING")
+    diagnostic_count = 1 if bundle.get("display_call") else 0
+    add("call.diagnostic_call_count", diagnostic_count == int(call_exp.get("diagnostic_call_count") or 0), diagnostic_count, call_exp.get("diagnostic_call_count"), "CALL_BINDING")
+
+    selected_sip_call_id = call_exp.get("selected_sip_call_id")
+    call = next((x for x in calls if x.get("call_id") == selected_sip_call_id), None)
+    add("call.selected_sip_call_id", call is not None, call.get("call_id") if call else None, selected_sip_call_id, "CALL_BINDING")
+    other_leg = (call_exp.get("other_sip_leg") or {}).get("call_id")
+    if other_leg:
+        add("call.other_sip_leg_present", any(x.get("call_id") == other_leg for x in calls), [x.get("call_id") for x in calls], other_leg, "CALL_BINDING")
     if call:
         target = str(call.get("callee") or "")
         wanted_number = str(call_exp.get("dialed_number") or "")
@@ -188,6 +225,7 @@ def validate_offline_analysis_bundle(bundle: dict, manifest: dict) -> list[Golde
     report_exp = expected.get("report") or {}
     add("report.display_call_required", bool(display_call) == bool(report_exp.get("display_call_required")), bool(display_call), bool(report_exp.get("display_call_required")), "REPORT")
     if display_call:
+        add("call.selected_display_call_id", display_call.get("id") == call_exp.get("selected_display_call_id"), display_call.get("id"), call_exp.get("selected_display_call_id"), "CALL_BINDING")
         add("report.display_call_id", display_call.get("id") == report_exp.get("display_call_id"), display_call.get("id"), report_exp.get("display_call_id"), "REPORT")
         add("report.sip_call_id", display_call.get("sip_call_id") == report_exp.get("sip_call_id"), display_call.get("sip_call_id"), report_exp.get("sip_call_id"), "REPORT")
         add("report.dialed_number", str(display_call.get("dialed_number")) == str(report_exp.get("dialed_number")), display_call.get("dialed_number"), report_exp.get("dialed_number"), "REPORT")
@@ -202,8 +240,14 @@ def validate_offline_analysis_bundle(bundle: dict, manifest: dict) -> list[Golde
         high_delta = [e for e in primary.get("events", []) or [] if e.get("type") == "HIGH_DELTA"]
         add("rtp.primary_uplink.high_delta_count", len(high_delta) == int(rtp_exp.get("high_delta_count") or 0), len(high_delta), rtp_exp.get("high_delta_count"), "RTP")
         actual_deltas = sorted(float((e.get("details") or {}).get("delta_ms") or 0.0) for e in high_delta)
-        ranges = list(rtp_exp.get("high_delta_ms") or [])
-        add("rtp.primary_uplink.high_delta_values", len(actual_deltas) == len(ranges) and all(float(r["min"]) <= value <= float(r["max"]) for value, r in zip(actual_deltas, sorted(ranges, key=lambda x: float(x["min"])))), actual_deltas, ranges, "RTP")
+        ranges = sorted(list(rtp_exp.get("high_delta_ms") or []), key=lambda x: float(x["min"]))
+        add(
+            "rtp.primary_uplink.high_delta_values",
+            len(actual_deltas) == len(ranges) and all(float(r["min"]) <= value <= float(r["max"]) for value, r in zip(actual_deltas, ranges)),
+            actual_deltas,
+            ranges,
+            "RTP",
+        )
 
     packet_anomaly_types = [str(x.get("type")) for x in packet.get("anomalies", []) or []]
     for forbidden in (expected.get("rtp") or {}).get("forbidden_anomaly_types", []) or []:
