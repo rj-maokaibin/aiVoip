@@ -199,11 +199,10 @@ def resolve_candidate_decisions(media: dict | None) -> dict:
     }
 
 
-def decision_summary(media: dict | None) -> dict:
-    resolved = resolve_candidate_decisions(media)
+def _summarize(decisions: list[dict]) -> dict:
     by_reason: dict[str, int] = {}
     by_type: dict[str, dict[str, int]] = {}
-    for decision in resolved["decisions"]:
+    for decision in decisions:
         reason = str(decision.get("reason_code") or "UNKNOWN")
         by_reason[reason] = by_reason.get(reason, 0) + 1
         kind = str(decision.get("candidate_type") or "UNKNOWN")
@@ -212,11 +211,42 @@ def decision_summary(media: dict | None) -> dict:
         group[status] = group.get(status, 0) + 1
     return {
         "policy_version": "candidate-decision-v1",
-        "candidate_count": len(resolved["decisions"]),
-        "promoted": resolved["promoted"],
-        "suppressed": resolved["suppressed"],
-        "inconclusive": resolved["inconclusive"],
+        "candidate_count": len(decisions),
+        "promoted": sum(1 for x in decisions if x.get("status") == PROMOTED),
+        "suppressed": sum(1 for x in decisions if x.get("status") == SUPPRESSED),
+        "inconclusive": sum(1 for x in decisions if x.get("status") == INCONCLUSIVE),
         "by_type": by_type,
         "by_reason": by_reason,
-        "decisions": resolved["decisions"],
+        "decisions": decisions,
     }
+
+
+def decision_summary(media: dict | None) -> dict:
+    resolved = resolve_candidate_decisions(media)
+    return _summarize(resolved["decisions"])
+
+
+def pcm_candidate_decision_summary(pcm: dict | None) -> dict:
+    """Summarize raw PCM CandidateDecision for report audit/exclusion evidence.
+
+    This does not reclassify candidates. It exposes why detector-only candidates did
+    not become Findings, including pre-Call DTMF transients that never enter the
+    active-media Media Analyzer path.
+    """
+    decisions: list[dict] = []
+    for stream in (pcm or {}).get("streams", []) or []:
+        tap = stream.get("tap") or {}
+        for session in stream.get("sessions", []) or []:
+            for field, candidate_type in (("click_pop_events", "CLICK_POP"), ("silence_events", "UNEXPECTED_SILENCE")):
+                for event in session.get(field, []) or []:
+                    decision = event.get("candidate_decision") or {}
+                    if decision.get("status") not in {PROMOTED, SUPPRESSED, INCONCLUSIVE}:
+                        continue
+                    item = deepcopy(decision)
+                    item.setdefault("candidate_type", candidate_type)
+                    scope = item.setdefault("scope", {})
+                    scope.setdefault("pcm_tap", tap.get("name"))
+                    scope.setdefault("pcm_direction", tap.get("direction"))
+                    scope.setdefault("pcm_session_index", session.get("session_index"))
+                    decisions.append(item)
+    return _summarize(decisions)
