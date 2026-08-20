@@ -11,6 +11,10 @@ REPORT_SEMANTIC_CONTRADICTION = "REPORT_SEMANTIC_CONTRADICTION"
 CALL_BINDING_INCOMPLETE = "CALL_BINDING_INCOMPLETE"
 FULLY_REVIEWABLE = "FULLY_REVIEWABLE"
 NOT_FULLY_REVIEWABLE = "NOT_FULLY_REVIEWABLE"
+PACKET_BINDING_BOUND = "BOUND"
+PACKET_BINDING_UNBOUND = "UNBOUND"
+PACKET_BINDING_MIXED = "MIXED"
+PACKET_BINDING_NONE = "NONE"
 
 
 def _as_float(value: Any) -> float | None:
@@ -66,21 +70,25 @@ def _is_packet_capture(evidence: dict) -> bool:
     return current in {"PCAP", "PCAPNG"} or original in {"PCAP", "PCAPNG"}
 
 
-def _case_has_unbound_packet_capture(scope_type: str, evidences: list[dict]) -> bool:
-    """Return True when CASE evidence contains a PCAP not bound to runtime Session/Call.
+def case_packet_binding_state(scope_type: str, evidences: list[dict]) -> str:
+    """Classify CASE packet evidence by explicit runtime binding metadata.
 
-    CASE scope may also expose the latest historical ReproductionSession/Call. An
-    unbound packet capture must not inherit that historical Call merely because it
-    happens to be the latest DB row for the Case.
+    This deliberately uses the Evidence consumed by the Call-source AnalyzerRun,
+    not arbitrary historical Case evidence. Mixed bound/unbound packet inputs are
+    ambiguous and must not silently inherit a runtime Call.
     """
     if str(scope_type).upper() != "CASE":
-        return False
-    return any(
-        _is_packet_capture(e)
-        and not e.get("session_id")
-        and not e.get("call_id")
-        for e in evidences
-    )
+        return PACKET_BINDING_NONE
+    packet_rows = [e for e in evidences if _is_packet_capture(e)]
+    if not packet_rows:
+        return PACKET_BINDING_NONE
+    states = {
+        PACKET_BINDING_BOUND if (e.get("session_id") or e.get("call_id")) else PACKET_BINDING_UNBOUND
+        for e in packet_rows
+    }
+    if len(states) > 1:
+        return PACKET_BINDING_MIXED
+    return next(iter(states))
 
 
 def _packet_result_with_calls(results: dict[str, dict | None]) -> tuple[dict | None, str | None]:
@@ -256,18 +264,25 @@ def _runtime_display_call(runtime_call: dict) -> dict:
 def _semantic_issues(
     *,
     mode: AnalysisMode,
-    session: dict | None,
+    packet_binding_state: str,
     runtime_call: dict | None,
+    reconstructed_call: dict | None,
     display_call: dict | None,
     metadata: dict,
 ) -> list[str]:
     issues: list[str] = []
+    if packet_binding_state == PACKET_BINDING_MIXED:
+        issues.extend([REPORT_SEMANTIC_CONTRADICTION, CALL_BINDING_INCOMPLETE])
     if int(metadata.get("packet_call_count") or 0) > 0 and display_call is None:
         issues.append(REPORT_SEMANTIC_CONTRADICTION)
     if bool(metadata.get("bidirectional_call_media")) and display_call is None:
         issues.append(CALL_BINDING_INCOMPLETE)
-    if mode == AnalysisMode.REPRODUCTION and session is not None and runtime_call is None and display_call is not None:
+    if mode == AnalysisMode.REPRODUCTION and reconstructed_call is not None and runtime_call is None:
         issues.append(CALL_BINDING_INCOMPLETE)
+    runtime_ref = str((runtime_call or {}).get("external_call_ref") or "").strip()
+    packet_ref = str((reconstructed_call or {}).get("sip_call_id") or "").strip()
+    if mode == AnalysisMode.REPRODUCTION and runtime_ref and packet_ref and runtime_ref != packet_ref:
+        issues.extend([REPORT_SEMANTIC_CONTRADICTION, CALL_BINDING_INCOMPLETE])
     return list(dict.fromkeys(issues))
 
 
@@ -282,12 +297,18 @@ def resolve_report_analysis_context(
     """Normalize runtime/offline facts into report semantics without fabricating DB rows.
 
     The resolver never re-runs SIP analysis and never creates ReproductionCall.
-    A runtime Call is authoritative for runtime-bound evidence. For CASE-level
-    unbound packet evidence, the Packet Analyzer reconstruction is authoritative
-    for display even when an older runtime Session/Call exists on the same Case.
+    CASE mode follows the explicit packet-Evidence binding state. Runtime Call is
+    authoritative only for runtime-bound evidence; unbound or mixed CASE packet
+    evidence never silently inherits the latest historical runtime Call.
     """
-    unbound_case_capture = _case_has_unbound_packet_capture(scope_type, evidences)
-    mode = AnalysisMode.OFFLINE_IMPORTED if unbound_case_capture or session is None else AnalysisMode.REPRODUCTION
+    binding_state = case_packet_binding_state(scope_type, evidences)
+    if binding_state in {PACKET_BINDING_UNBOUND, PACKET_BINDING_MIXED}:
+        mode = AnalysisMode.OFFLINE_IMPORTED
+    elif binding_state == PACKET_BINDING_BOUND:
+        mode = AnalysisMode.REPRODUCTION
+    else:
+        mode = AnalysisMode.REPRODUCTION if session is not None else AnalysisMode.OFFLINE_IMPORTED
+
     reconstructed, metadata = select_reconstructed_packet_call(results)
 
     if mode == AnalysisMode.OFFLINE_IMPORTED and reconstructed is not None:
@@ -316,18 +337,22 @@ def resolve_report_analysis_context(
 
     issues = _semantic_issues(
         mode=mode,
-        session=session,
+        packet_binding_state=binding_state,
         runtime_call=runtime_call,
+        reconstructed_call=reconstructed,
         display_call=display_call,
         metadata=metadata,
     )
+    offline_suppressed = mode == AnalysisMode.OFFLINE_IMPORTED and bool(session or runtime_call)
     analysis_context = {
         "analysis_mode": mode.value,
         "capture_origin": _capture_origin(evidences),
+        "packet_evidence_binding": binding_state,
         "source_session_id": session.get("id") if mode == AnalysisMode.REPRODUCTION and session else None,
-        "historical_runtime_session_id": session.get("id") if mode == AnalysisMode.OFFLINE_IMPORTED and session else None,
-        "historical_runtime_call_id": runtime_call.get("id") if mode == AnalysisMode.OFFLINE_IMPORTED and runtime_call else None,
-        "runtime_context_suppressed_for_unbound_case_capture": bool(unbound_case_capture and (session or runtime_call)),
+        "source_runtime_call_id": runtime_call.get("id") if mode == AnalysisMode.REPRODUCTION and runtime_call else None,
+        "historical_runtime_session_id": session.get("id") if offline_suppressed and session else None,
+        "historical_runtime_call_id": runtime_call.get("id") if offline_suppressed and runtime_call else None,
+        "runtime_context_suppressed": offline_suppressed,
         "call_reconstruction": "ENABLED",
         "reconstructed_call_count": metadata.get("reconstructed_call_count", 0),
         "packet_call_count": metadata.get("packet_call_count", 0),
@@ -343,8 +368,7 @@ def resolve_report_analysis_context(
     return {"analysis_context": analysis_context, "display_call": display_call}
 
 
-# Temporary compatibility alias for the first PR1 draft. New code should call
-# resolve_report_analysis_context so the contract name stays explicit.
+# Compatibility alias retained for callers outside the report generation service.
 def build_analysis_context(
     *,
     scope_type: str,
