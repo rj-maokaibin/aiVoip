@@ -1,0 +1,103 @@
+schema_version: offline-analysis-golden-v1
+id: OFFLINE_ANALYSIS_20260814_001
+name: 2026-08-14 导入 PCAP｜601 通话｜本地上行周期干扰
+classification:
+  kind: OFFLINE_ANALYSIS_GOLDEN_E2E
+  source_mode: IMPORTED_EVIDENCE
+  live_acquisition_covered: false
+  validates:
+    - packet_analysis
+    - pcm_analysis
+    - media_analysis
+    - candidate_decision
+    - call_reconstruction
+    - cross_layer_correlation
+    - finding_composition
+    - artifact_semantics
+    - canonical_report_semantics
+source:
+  filename: tcpdump-2026-08-14(2).pcap
+  sha256: b038aa7c9a0644581f2815f654fcdee4620860796382265b178823fccba2e3f0
+  pcm_profile: ruijie_aim_diag_v1
+  fixture_env: VOIP_OFFLINE_GOLDEN_001_PCAP
+  capture_note: 人工提供本地 PCAP；不是系统自动 SSH/ARM/Trigger 采集，因此不得用于证明 Acquisition Reliability。
+ground_truth:
+  reviewed_at: 2026-08-20
+  authority: HUMAN_REVIEWED_RAW_EVIDENCE
+  leakage_rule: expected/ground_truth 只能由 Golden Validator 使用，不得进入生产 Analyzer、FindingComposer、Diagnosis 或 AI Prompt。
+expected:
+  analysis_context:
+    analysis_mode: OFFLINE_IMPORTED
+    call_origin: RECONSTRUCTED_FROM_PCAP
+    call_scope: BOUND
+    semantic_status: OK
+    reviewability: FULLY_REVIEWABLE
+  call:
+    reconstructed_count: 1
+    sip_call_id: 00ad1c804c33b255@192.168.3.200
+    dialed_number: "601"
+    allowed_states: [ESTABLISHED, TERMINATED]
+    media_direction_status: BIDIRECTIONAL
+  rtp:
+    primary_uplink:
+      src_ip: 192.168.150.4
+      src_port: 10000
+      dst_ip: 192.168.3.200
+      dst_port: 11446
+      codec: PCMU
+      lost_packets: 0
+      high_delta_count: 2
+      high_delta_ms:
+        - min: 140.0
+          max: 152.0
+        - min: 168.0
+          max: 182.0
+    forbidden_anomaly_types: [PACKET_LOSS, BURST_LOSS]
+    semantic_rules:
+      high_delta_must_not_be_labeled_packet_loss: true
+  dtmf:
+    required_event_type: DTMF_SIP_DIAL_MATCH
+    pcm_digits: "601"
+    sip_target: "601"
+    pcm_tap: pcm_rx
+  periodic_interference:
+    required_event_type: LOCAL_CAPTURE_PERIODIC_INTERFERENCE
+    require_pcm_rx: true
+    require_upstream_rtp: true
+    downstream_control_required: true
+    odd_50hz_comb_hits_min: 5
+    pcm_rx_ac20_min: 0.70
+    upstream_ac20_min: 0.55
+    root_cause_boundary_must_remain_preliminary: true
+  candidate_decision:
+    required_negative_control_reason: DTMF_OVERLAP
+    forbidden_promoted_click_window:
+      start: 1786690964.300000
+      end: 1786690964.450000
+    silence_promote_reason_required: CROSS_LAYER_SILENCE_MISMATCH
+  report:
+    display_call_required: true
+    display_call_id: CALL-001
+    sip_call_id: 00ad1c804c33b255@192.168.3.200
+    dialed_number: "601"
+    forbidden_finding_types: [PACKET_LOSS, BURST_LOSS]
+    forbidden_click_window:
+      start: 1786690964.300000
+      end: 1786690964.450000
+  artifacts:
+    periodic_audio_sources_required: [pcm_rx, rtp_up]
+    raw_click_silence_clip_must_be_candidate_unless_promoted: true
+  diagnosis:
+    required_hypothesis_code: LOCAL_CAPTURE_PERIODIC_INTERFERENCE
+    required_hypothesis_status: SUPPORTED
+    forbidden_confirmed_hypothesis_codes:
+      - POWER_SUPPLY_NOISE
+      - GROUNDING_NOISE
+      - PHONE_LINE_NOISE
+      - FXS_SLIC_NOISE
+notes:
+  - 该 Case 的核心真值是“601 Call 可重建、RTP 无 Sequence Loss、存在上行 High Delta、DTMF 601 与 SIP 目标一致、周期干扰在 PCM_RX 与上行 RTP 可见”。
+  - HIGH_DELTA 表示到包/发送节奏间隔异常，不等同于 RTP Sequence Loss。
+  - DTMF 起始沿附近的 Click/Pop 候选必须被 Negative Control 拦截，不得作为独立爆音故障升级。
+  - PCM_TX 静音只有在对应 RTP 同窗明确活跃时才允许升级为 CROSS_LAYER_SILENCE_MISMATCH；同窗 RTP 静音/低能量必须 Reject，证据不足必须 Inconclusive。
+  - 周期干扰只能收敛到“本地上行采集路径已可观察”，不能越级确认电源/接地/电话机/FXS-SLIC 等物理根因。
