@@ -55,6 +55,7 @@ def main() -> int:
              "backend/tests/test_candidate_decision_profile_v1.py",
              "backend/tests/test_candidate_decision_diagnosis_boundary_v1.py",
              "backend/tests/test_offline_analysis_golden_e2e_v1.py",
+             "backend/tests/test_offline_analysis_golden_extended_v1.py",
              "backend/tests/test_offline_analysis_golden_manifest_v1.py",
              "backend/tests/test_evidence_report_authority_v1.py",
              "backend/tests/test_evidence_bundle_contract_v1.py",
