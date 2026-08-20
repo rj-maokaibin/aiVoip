@@ -1,6 +1,6 @@
 {
   "schema_version": "evidence-report-golden-dataset-v1",
-  "description": "Software-only deterministic regression set. Expected labels are kept outside input and never passed to analyzers/composers. Every frozen Q92 P0 Finding type has at least one labelled synthetic case; production accuracy still requires Lab Real + Field Confirmed data.",
+  "description": "Software-only deterministic regression set. Expected labels are kept outside input and never passed to analyzers/composers. Every frozen Q92 P0 Finding type has at least one labelled synthetic case. PR2 audio candidates follow CandidateDecision authority: detector-only PCM candidates are fail-closed; Click/Pop and Unexpected Silence Findings require PROMOTED decisions. Production accuracy still requires Lab Real + Field Confirmed data.",
   "cases": [
     {
       "id": "packet-core-p0",
@@ -68,7 +68,7 @@
       }
     },
     {
-      "id": "pcm-gap-silence-click",
+      "id": "pcm-gap-raw-audio-candidates-fail-closed",
       "input": {
         "pcm": {
           "streams": [{
@@ -91,8 +91,100 @@
         ]
       },
       "expected": {
-        "finding_types": ["PCM_GAP", "UNEXPECTED_SILENCE", "CLICK_POP"],
+        "finding_types": ["PCM_GAP"],
         "boundary": {"status": "OBSERVED_BOUNDARY", "first_observable_layer": "PCM_TX"}
+      }
+    },
+    {
+      "id": "media-promoted-audio-candidates",
+      "input": {
+        "media": {
+          "cross_layer_events": [
+            {
+              "type": "UNEXPECTED_SILENCE",
+              "severity": "MEDIUM",
+              "evidence_level": "L2",
+              "time": 30.0,
+              "start_time": 30.0,
+              "end_time": 30.5,
+              "scope": {"call_id": "call-audio", "pcm_tap": "pcm_tx", "pcm_session_index": 0},
+              "details": {
+                "candidate_decision": {
+                  "candidate_id": "cand-silence-promoted",
+                  "candidate_type": "UNEXPECTED_SILENCE",
+                  "status": "PROMOTED",
+                  "reason_code": "CROSS_LAYER_SILENCE_MISMATCH_CONFIRMED",
+                  "policy_version": "candidate-decision-v1"
+                },
+                "interpretation": "相关 RTP 源窗口保持活动而 PCM 静音。"
+              }
+            },
+            {
+              "type": "CLICK_POP",
+              "severity": "MEDIUM",
+              "evidence_level": "L3",
+              "time": 31.0,
+              "scope": {"call_id": "call-audio", "pcm_tap": "pcm_rx", "pcm_session_index": 0},
+              "details": {
+                "candidate_decision": {
+                  "candidate_id": "cand-click-promoted",
+                  "candidate_type": "CLICK_POP",
+                  "status": "PROMOTED",
+                  "reason_code": "CLICK_POP_NEGATIVE_CONTROLS_CLEARED",
+                  "policy_version": "candidate-decision-v1"
+                },
+                "interpretation": "Click/Pop 候选已清除 DTMF 与媒体边界负控。"
+              }
+            }
+          ],
+          "periodic_interference_paths": []
+        }
+      },
+      "expected": {
+        "finding_types": ["UNEXPECTED_SILENCE", "CLICK_POP"]
+      }
+    },
+    {
+      "id": "media-suppressed-audio-candidates-negative",
+      "input": {
+        "media": {
+          "cross_layer_events": [
+            {
+              "type": "UNEXPECTED_SILENCE",
+              "severity": "MEDIUM",
+              "time": 40.0,
+              "scope": {"pcm_tap": "pcm_tx", "pcm_session_index": 0},
+              "details": {
+                "candidate_decision": {
+                  "candidate_id": "cand-silence-suppressed",
+                  "candidate_type": "UNEXPECTED_SILENCE",
+                  "status": "SUPPRESSED",
+                  "reason_code": "NEGCTRL_MATCHED_RTP_SOURCE_SILENCE",
+                  "policy_version": "candidate-decision-v1"
+                }
+              }
+            },
+            {
+              "type": "CLICK_POP",
+              "severity": "MEDIUM",
+              "time": 41.0,
+              "scope": {"pcm_tap": "pcm_rx", "pcm_session_index": 0},
+              "details": {
+                "candidate_decision": {
+                  "candidate_id": "cand-click-inconclusive",
+                  "candidate_type": "CLICK_POP",
+                  "status": "INCONCLUSIVE",
+                  "reason_code": "CLICK_POP_CONFIDENCE_BELOW_PROMOTION_GATE",
+                  "policy_version": "candidate-decision-v1"
+                }
+              }
+            }
+          ],
+          "periodic_interference_paths": []
+        }
+      },
+      "expected": {
+        "finding_types": []
       }
     },
     {
