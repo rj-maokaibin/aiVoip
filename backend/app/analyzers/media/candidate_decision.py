@@ -266,6 +266,7 @@ def decide_event(media: dict, event: dict) -> dict:
 
 
 def _raw_pcm_candidate_decisions(media: dict) -> list[dict]:
+    """Audit raw candidates that are not already owned by Active Media decisions."""
     cfg = _cfg()
     calls = [c for c in (media.get("packet") or {}).get("calls", []) or [] if c.get("media_start_time") is not None and c.get("media_end_time") is not None]
     decisions: list[dict] = []
@@ -277,26 +278,29 @@ def _raw_pcm_candidate_decisions(media: dict) -> list[dict]:
             session_index = session.get("session_index")
             for ev in session.get("click_pop_events", []) or []:
                 when = session_start + float(ev.get("time_seconds") or 0.0)
+                in_media = any(float(c["media_start_time"]) <= when <= float(c["media_end_time"]) for c in calls)
+                if in_media:
+                    # _active_media_audio_events re-detects this window and owns the
+                    # user-visible CandidateDecision. Do not double-count the raw hit.
+                    continue
                 synthetic = {"type": "CLICK_POP", "time": when, "scope": {"pcm_tap": tap, "pcm_session_index": session_index}, "details": ev}
                 dtmf = _dtmf_negative_control(media, synthetic, cfg)
-                in_media = any(float(c["media_start_time"]) <= when <= float(c["media_end_time"]) for c in calls)
+                d = decide_event(media, synthetic)
                 if dtmf:
-                    d = decide_event(media, synthetic)
-                    d.update({"status": REJECTED_NEGATIVE_CONTROL, "reason_code": "DTMF_OVERLAP", "negative_controls": [dtmf], "raw_pcm_candidate": True})
-                    decisions.append(d)
-                elif not in_media:
-                    d = decide_event(media, synthetic)
+                    d.update({"status": REJECTED_NEGATIVE_CONTROL, "reason_code": "DTMF_OVERLAP", "negative_controls": [dtmf], "raw_pcm_candidate": True, "promoted_event": None})
+                else:
                     d.update({"status": REJECTED_NEGATIVE_CONTROL, "reason_code": "OUTSIDE_ACTIVE_MEDIA_WINDOW", "raw_pcm_candidate": True, "promoted_event": None})
-                    decisions.append(d)
+                decisions.append(d)
             for ev in session.get("silence_events", []) or []:
                 start = session_start + float(ev.get("start_seconds") or 0.0)
                 end = session_start + float(ev.get("end_seconds") or ev.get("start_seconds") or 0.0)
                 overlaps = any(_overlap(start, end, float(c["media_start_time"]), float(c["media_end_time"])) > 0 for c in calls)
-                if not overlaps:
-                    synthetic = {"type": "UNEXPECTED_SILENCE", "time": start, "scope": {"pcm_tap": tap, "pcm_session_index": session_index}, "details": ev}
-                    d = decide_event(media, synthetic)
-                    d.update({"status": REJECTED_NEGATIVE_CONTROL, "reason_code": "OUTSIDE_ACTIVE_MEDIA_WINDOW", "raw_pcm_candidate": True, "promoted_event": None})
-                    decisions.append(d)
+                if overlaps:
+                    continue
+                synthetic = {"type": "UNEXPECTED_SILENCE", "time": start, "scope": {"pcm_tap": tap, "pcm_session_index": session_index}, "details": ev}
+                d = decide_event(media, synthetic)
+                d.update({"status": REJECTED_NEGATIVE_CONTROL, "reason_code": "OUTSIDE_ACTIVE_MEDIA_WINDOW", "raw_pcm_candidate": True, "promoted_event": None})
+                decisions.append(d)
     return decisions
 
 
