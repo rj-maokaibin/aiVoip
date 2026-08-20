@@ -1,6 +1,6 @@
 {
   "schema_version": "evidence-report-golden-dataset-v1.1",
-  "description": "Deterministic evidence-report regression set. CLICK_POP and UNEXPECTED_SILENCE are detector candidates and may become Findings only after Candidate Gate ACCEPT. Raw PCM candidates, DTMF overlap, counterpart RTP silence, and missing cross-layer evidence are explicit negative controls.",
+  "description": "Deterministic evidence-report regression set. CLICK_POP and UNEXPECTED_SILENCE are detector candidates and may become Findings only after Candidate Gate ACCEPT. Raw PCM candidates, DTMF overlap, counterpart RTP low-energy, and missing cross-layer evidence are explicit negative controls.",
   "cases": [
     {
       "id": "packet-core-p0",
@@ -55,7 +55,8 @@
           "cross_layer_events":[],
           "periodic_interference_paths":[],
           "correlations":[{"type":"PCM_RTP_CORRELATION","details":{"pcm_tap":"pcm_tx","pcm_session_index":1,"rtp_stream_id":"rtp-down","correlation":{"absolute_correlation":0.8,"quality":"HIGH"}}}],
-          "rtp_audio_tracks":[{"stream_id":"rtp-down","start_time":10.0,"end_time":13.0,"silence_events":[]}]
+          "rtp_audio_tracks":[{"stream_id":"rtp-down","start_time":10.0,"end_time":13.0,"silence_events":[]}],
+          "rtp_activity_profiles":[{"stream_id":"rtp-down","start_time":10.0,"end_time":13.0,"source_artifact":"rtp-down-waveform.json","waveform":{"sample_rate":4,"bin_size_samples":1,"duration_seconds":3.0,"bins":[{"t":0.0,"rms_dbfs":-20},{"t":0.25,"rms_dbfs":-20},{"t":0.5,"rms_dbfs":-20},{"t":0.75,"rms_dbfs":-20},{"t":1.0,"rms_dbfs":-20},{"t":1.25,"rms_dbfs":-20},{"t":1.5,"rms_dbfs":-20},{"t":1.75,"rms_dbfs":-20},{"t":2.0,"rms_dbfs":-20},{"t":2.25,"rms_dbfs":-20},{"t":2.5,"rms_dbfs":-20},{"t":2.75,"rms_dbfs":-20}]}}]
         }
       },
       "expected":{"finding_types":["UNEXPECTED_SILENCE","CLICK_POP"]}
@@ -69,10 +70,10 @@
       "expected":{"finding_types":[]}
     },
     {
-      "id":"negative-silence-counterpart-rtp-silent",
+      "id":"negative-silence-counterpart-rtp-low-energy",
       "input": {
         "pcm":{"streams":[{"tap":{"name":"pcm_tx","direction":"TX"},"sessions":[{"session_index":1,"start_time":10.0,"end_time":13.0,"hum":{"level":"LOW"},"gap_events":[],"silence_events":[],"click_pop_events":[],"dtmf_events":[],"dtmf_quality_events":[]}]}]},
-        "media":{"active_media_audio_events":[{"type":"UNEXPECTED_SILENCE","time":10.5,"severity":"MEDIUM","evidence_level":"L3","scope":{"call_id":"call-1","pcm_tap":"pcm_tx","pcm_session_index":1},"details":{"duration_ms":500}}],"cross_layer_events":[],"periodic_interference_paths":[],"correlations":[{"type":"PCM_RTP_CORRELATION","details":{"pcm_tap":"pcm_tx","pcm_session_index":1,"rtp_stream_id":"rtp-down","correlation":{"absolute_correlation":0.82,"quality":"HIGH"}}}],"rtp_audio_tracks":[{"stream_id":"rtp-down","start_time":10.0,"end_time":13.0,"silence_events":[{"start_seconds":0.45,"end_seconds":1.1,"duration_ms":650}]}]}
+        "media":{"active_media_audio_events":[{"type":"UNEXPECTED_SILENCE","time":10.5,"severity":"MEDIUM","evidence_level":"L3","scope":{"call_id":"call-1","pcm_tap":"pcm_tx","pcm_session_index":1},"details":{"duration_ms":500}}],"cross_layer_events":[],"periodic_interference_paths":[],"correlations":[{"type":"PCM_RTP_CORRELATION","details":{"pcm_tap":"pcm_tx","pcm_session_index":1,"rtp_stream_id":"rtp-down","correlation":{"absolute_correlation":0.82,"quality":"HIGH"}}}],"rtp_audio_tracks":[{"stream_id":"rtp-down","start_time":10.0,"end_time":13.0,"silence_events":[]}],"rtp_activity_profiles":[{"stream_id":"rtp-down","start_time":10.0,"end_time":13.0,"source_artifact":"rtp-down-waveform.json","waveform":{"sample_rate":4,"bin_size_samples":1,"duration_seconds":3.0,"bins":[{"t":0.0,"rms_dbfs":-82},{"t":0.25,"rms_dbfs":-82},{"t":0.5,"rms_dbfs":-82},{"t":0.75,"rms_dbfs":-82},{"t":1.0,"rms_dbfs":-82},{"t":1.25,"rms_dbfs":-82},{"t":1.5,"rms_dbfs":-82},{"t":1.75,"rms_dbfs":-82},{"t":2.0,"rms_dbfs":-82},{"t":2.25,"rms_dbfs":-82},{"t":2.5,"rms_dbfs":-82},{"t":2.75,"rms_dbfs":-82}]}}]}
       },
       "expected":{"finding_types":[]}
     },
@@ -80,7 +81,7 @@
       "id":"negative-silence-no-rtp-mapping",
       "input": {
         "pcm":{"streams":[{"tap":{"name":"pcm_tx","direction":"TX"},"sessions":[{"session_index":1,"start_time":10.0,"end_time":13.0,"hum":{"level":"LOW"},"gap_events":[],"silence_events":[],"click_pop_events":[],"dtmf_events":[],"dtmf_quality_events":[]}]}]},
-        "media":{"active_media_audio_events":[{"type":"UNEXPECTED_SILENCE","time":10.5,"severity":"MEDIUM","evidence_level":"L3","scope":{"call_id":"call-1","pcm_tap":"pcm_tx","pcm_session_index":1},"details":{"duration_ms":500}}],"cross_layer_events":[],"periodic_interference_paths":[],"correlations":[],"rtp_audio_tracks":[]}
+        "media":{"active_media_audio_events":[{"type":"UNEXPECTED_SILENCE","time":10.5,"severity":"MEDIUM","evidence_level":"L3","scope":{"call_id":"call-1","pcm_tap":"pcm_tx","pcm_session_index":1},"details":{"duration_ms":500}}],"cross_layer_events":[],"periodic_interference_paths":[],"correlations":[],"rtp_audio_tracks":[],"rtp_activity_profiles":[]}
       },
       "expected":{"finding_types":[]}
     },
