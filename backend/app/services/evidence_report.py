@@ -15,7 +15,7 @@ from app.services.evidence_boundary import apply_first_observable_boundaries
 from app.services.evidence_report_aggregation import enrich_aggregate_payload
 from app.services.evidence_report_analysis_artifacts import materialize_analyzer_json_artifacts
 from app.services.evidence_report_artifacts import build_manifest, generate_visual_artifacts, persist_artifact
-from app.services.evidence_report_context import build_analysis_context
+from app.services.evidence_report_context import resolve_report_analysis_context
 from app.services.evidence_report_source_artifacts import finding_artifact_refs, link_source_artifacts
 from app.services.evidence_report_scope import (
     call_dict, case_dict, environment_snapshot, evidence_dict, latest_analyzer_runs,
@@ -72,16 +72,18 @@ def generate_evidence_report(db: Session, *, scope_type, scope_id: str, actor: s
     runs=latest_analyzer_runs(db,case_id=case.id,evidence_ids=evidence_ids,case_scope=scope_type=="CASE")
     results,states=load_analyzer_results(storage,runs); previous=latest_report(db,scope_type,scope_id); version=(previous.version+1) if previous else 1
     environment=environment_snapshot(db,case,session)
-    analysis_context=build_analysis_context(
+    runtime_session=session_dict(session); runtime_call=call_dict(call)
+    resolved_context=resolve_report_analysis_context(
         scope_type=scope_type,
-        session=session_dict(session),
-        reproduction_call=call_dict(call),
+        session=runtime_session,
+        runtime_call=runtime_call,
+        evidences=evidence_items,
         results=results,
     )
+    analysis_context=resolved_context["analysis_context"]; display_call=resolved_context["display_call"]
     payload=build_report_payload(case=case_dict(case),scope_type=scope_type,scope_id=scope_id,
-                                 session=analysis_context.get("session"),call=analysis_context.get("call"),
+                                 session=runtime_session,call=runtime_call,analysis_context=analysis_context,display_call=display_call,
                                  environment=environment,evidences=evidence_items,analyzer_states=states,results=results,report_version=version)
-    payload["analysis_context"]=analysis_context
     expired=[{
         "evidence_id":x.get("id"),"original_type":x.get("original_type"),"filename":x.get("filename"),"sha256":x.get("sha256"),
         "retention_status":x.get("retention_status"),"expired_at":x.get("retention_expired_at"),"payload_available":False,
@@ -95,7 +97,8 @@ def generate_evidence_report(db: Session, *, scope_type, scope_id: str, actor: s
     apply_first_observable_boundaries(payload); enrich_aggregate_payload(db,payload=payload,scope_type=scope_type,case_id=case.id,session_id=session.id if session else None)
     payload["input_snapshot_hash"]=canonical_hash({"base":payload["input_snapshot_hash"],"findings":payload.get("findings"),"multi_call_summary":payload.get("multi_call_summary"),
                                                      "environment_groups":payload.get("environment_groups"),"ab_comparison":payload.get("ab_comparison"),
-                                                     "analysis_context":payload.get("analysis_context"),"evidence_retention":payload.get("evidence_retention")})
+                                                     "analysis_context":payload.get("analysis_context"),"display_call":payload.get("display_call"),
+                                                     "evidence_retention":payload.get("evidence_retention")})
     idem=report_idempotency_key(scope_type,scope_id,payload["input_snapshot_hash"],states,forced_version=version if force else None)
     if not force:
         same=db.scalar(select(PreliminaryEvidenceReport).where(PreliminaryEvidenceReport.idempotency_key==idem).limit(1))
@@ -129,8 +132,9 @@ def generate_evidence_report(db: Session, *, scope_type, scope_id: str, actor: s
     report.snapshot_json=payload; report.completed_at=utcnow(); db.flush()
     audit(db,case_id=case.id,actor=actor,event_type="PRELIMINARY_EVIDENCE_REPORT_GENERATED",target_type="preliminary_evidence_report",target_id=report.id,
           detail={"scope_type":scope_type,"scope_id":scope_id,"version":version,"status":report.status,"finding_count":len(finding_rows),"artifact_count":len(report_artifacts)+3,
-                  "forced":force,"expired_raw_evidence_count":len(expired),"analysis_mode":analysis_context.get("mode"),
-                  "call_source":analysis_context.get("call_source"),"reconstructed_call_count":analysis_context.get("reconstructed_call_count",0)})
+                  "forced":force,"expired_raw_evidence_count":len(expired),"analysis_mode":analysis_context.get("analysis_mode"),
+                  "call_origin":analysis_context.get("call_origin"),"call_scope":analysis_context.get("call_scope"),
+                  "reconstructed_call_count":analysis_context.get("reconstructed_call_count",0),"semantic_issues":analysis_context.get("semantic_issues",[])})
     return report,payload,False
 
 
