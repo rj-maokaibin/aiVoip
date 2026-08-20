@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.contracts.evidence_report import AnalysisMode, REPORT_COMPOSER_VERSION, REPORT_SCHEMA_VERSION, EvidenceFindingStatus, EvidenceReportArtifactType, EvidenceReportStatus
 from app.db.evidence_report_models import EvidenceFinding, PreliminaryEvidenceReport
+from app.db.models import ReproductionCall, ReproductionSession
 from app.integrations.storage import ObjectStorage
 from app.reports.evidence_brief import build_report_payload, canonical_hash, render_report_html
 from app.services.audit import audit
@@ -72,6 +73,61 @@ def _analysis_context_evidences(evidence_items: list[dict], runs: dict, results:
     return selected, sorted(input_ids), analyzer_name
 
 
+def _is_packet_evidence(item: dict) -> bool:
+    return str(item.get("type") or "").upper() in {"PCAP","PCAPNG"} or str(item.get("original_type") or "").upper() in {"PCAP","PCAPNG"}
+
+
+def _case_runtime_scope_from_evidence(
+    db: Session,
+    *,
+    case_id: str,
+    scope_type: str,
+    context_evidences: list[dict],
+    fallback_session,
+    fallback_call,
+) -> tuple[object | None, object | None, dict]:
+    """Resolve CASE runtime Session/Call from the current packet Evidence binding.
+
+    `resolve_scope(CASE)` exposes the latest historical runtime rows for convenience,
+    but those rows are not authoritative for a specific AnalyzerRun. If the current
+    packet Evidence is explicitly bound, follow those IDs. If it is unbound, keep
+    the historical rows only as suppressed metadata for the Offline resolver.
+    Ambiguous/missing bound IDs fail closed instead of silently selecting "latest".
+    """
+    if str(scope_type).upper() != "CASE":
+        return fallback_session,fallback_call,{"source":"EXPLICIT_SCOPE","status":"RESOLVED"}
+    packet_rows=[x for x in context_evidences if _is_packet_evidence(x)]
+    if not packet_rows:
+        return fallback_session,fallback_call,{"source":"CASE_FALLBACK_NO_PACKET","status":"FALLBACK"}
+    if any(not x.get("session_id") and not x.get("call_id") for x in packet_rows):
+        return fallback_session,fallback_call,{"source":"UNBOUND_PACKET_EVIDENCE","status":"SUPPRESSED_BY_OFFLINE_CONTEXT"}
+
+    call_ids={str(x.get("call_id")) for x in packet_rows if x.get("call_id")}
+    session_ids={str(x.get("session_id")) for x in packet_rows if x.get("session_id")}
+    if len(call_ids)>1:
+        return None,None,{"source":"PACKET_EVIDENCE","status":"AMBIGUOUS","call_ids":sorted(call_ids),"session_ids":sorted(session_ids)}
+    if len(call_ids)==1:
+        call_id=next(iter(call_ids)); bound_call=db.get(ReproductionCall,call_id)
+        if bound_call is None or bound_call.case_id!=case_id:
+            return None,None,{"source":"PACKET_EVIDENCE_CALL","status":"UNRESOLVED","call_ids":[call_id],"session_ids":sorted(session_ids)}
+        bound_session=db.get(ReproductionSession,bound_call.session_id)
+        if bound_session is None or bound_session.case_id!=case_id:
+            return None,None,{"source":"PACKET_EVIDENCE_CALL","status":"SESSION_UNRESOLVED","call_ids":[call_id],"session_ids":sorted(session_ids)}
+        if session_ids and session_ids!={str(bound_session.id)}:
+            return None,None,{"source":"PACKET_EVIDENCE_CALL","status":"BINDING_MISMATCH","call_ids":[call_id],"session_ids":sorted(session_ids),"call_session_id":bound_session.id}
+        return bound_session,bound_call,{"source":"PACKET_EVIDENCE_CALL","status":"RESOLVED","call_ids":[call_id],"session_ids":[bound_session.id]}
+
+    if len(session_ids)>1:
+        return None,None,{"source":"PACKET_EVIDENCE_SESSION","status":"AMBIGUOUS","call_ids":[],"session_ids":sorted(session_ids)}
+    if len(session_ids)==1:
+        session_id=next(iter(session_ids)); bound_session=db.get(ReproductionSession,session_id)
+        if bound_session is None or bound_session.case_id!=case_id:
+            return None,None,{"source":"PACKET_EVIDENCE_SESSION","status":"UNRESOLVED","call_ids":[],"session_ids":[session_id]}
+        return bound_session,None,{"source":"PACKET_EVIDENCE_SESSION","status":"SESSION_ONLY","call_ids":[],"session_ids":[session_id]}
+
+    return fallback_session,fallback_call,{"source":"CASE_FALLBACK_NO_BINDING_IDS","status":"FALLBACK"}
+
+
 def _runtime_binding_ids(analysis_context: dict, session, call) -> tuple[str | None, str | None]:
     """Return persisted runtime FK bindings only for genuine reproduction context."""
     if analysis_context.get("analysis_mode") != AnalysisMode.REPRODUCTION.value:
@@ -106,12 +162,14 @@ def _persist_findings(db: Session, *, report: PreliminaryEvidenceReport, payload
 
 def generate_evidence_report(db: Session, *, scope_type, scope_id: str, actor: str|None=None, storage=None, force: bool=False) -> tuple[PreliminaryEvidenceReport,dict,bool]:
     storage=storage or ObjectStorage(); scope_type=scope_value(scope_type); scope=resolve_scope(db,scope_type=scope_type,scope_id=scope_id)
-    case=scope["case"]; session=scope.get("session"); call=scope.get("call")
+    case=scope["case"]; scope_session=scope.get("session"); scope_call=scope.get("call")
     evidences=scoped_evidences(db,scope_type=scope_type,scope=scope); evidence_items=[evidence_dict(e) for e in evidences]; evidence_ids={e.id for e in evidences}
     runs=latest_analyzer_runs(db,case_id=case.id,evidence_ids=evidence_ids,case_scope=scope_type=="CASE")
     results,states=load_analyzer_results(storage,runs); previous=latest_report(db,scope_type,scope_id); version=(previous.version+1) if previous else 1
-    runtime_session=session_dict(session); runtime_call=call_dict(call)
     context_evidences,context_input_ids,context_analyzer=_analysis_context_evidences(evidence_items,runs,results)
+    session,call,runtime_resolution=_case_runtime_scope_from_evidence(db,case_id=case.id,scope_type=scope_type,context_evidences=context_evidences,
+                                                                     fallback_session=scope_session,fallback_call=scope_call)
+    runtime_session=session_dict(session); runtime_call=call_dict(call)
     resolved_context=resolve_report_analysis_context(
         scope_type=scope_type,
         session=runtime_session,
@@ -123,6 +181,14 @@ def generate_evidence_report(db: Session, *, scope_type, scope_id: str, actor: s
     analysis_context["analyzer_input_evidence_ids"]=context_input_ids
     analysis_context["context_analyzer"]=context_analyzer
     analysis_context["context_analyzer_run_id"]=(runs.get(context_analyzer).id if context_analyzer and runs.get(context_analyzer) else None)
+    analysis_context["runtime_binding_resolution"]=runtime_resolution
+    if runtime_resolution.get("status") in {"AMBIGUOUS","UNRESOLVED","SESSION_UNRESOLVED","BINDING_MISMATCH"}:
+        issues=list(analysis_context.get("semantic_issues") or [])
+        for code in ("REPORT_SEMANTIC_CONTRADICTION","CALL_BINDING_INCOMPLETE"):
+            if code not in issues: issues.append(code)
+        analysis_context["semantic_issues"]=issues
+        analysis_context["semantic_status"]="INCOMPLETE"
+        analysis_context["reviewability"]="NOT_FULLY_REVIEWABLE"
     display_call=resolved_context["display_call"]
     runtime_bound=analysis_context.get("analysis_mode")==AnalysisMode.REPRODUCTION.value
     report_session_id,report_call_id=_runtime_binding_ids(analysis_context,session,call)
@@ -183,7 +249,7 @@ def generate_evidence_report(db: Session, *, scope_type, scope_id: str, actor: s
                   "forced":force,"expired_raw_evidence_count":len(expired),"analysis_mode":analysis_context.get("analysis_mode"),
                   "call_origin":analysis_context.get("call_origin"),"call_scope":analysis_context.get("call_scope"),
                   "reconstructed_call_count":analysis_context.get("reconstructed_call_count",0),"semantic_issues":analysis_context.get("semantic_issues",[]),
-                  "context_analyzer":context_analyzer,"analyzer_input_evidence_ids":context_input_ids,
+                  "context_analyzer":context_analyzer,"analyzer_input_evidence_ids":context_input_ids,"runtime_binding_resolution":runtime_resolution,
                   "persisted_session_id":report_session_id,"persisted_call_id":report_call_id})
     return report,payload,False
 
