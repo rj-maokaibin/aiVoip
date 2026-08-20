@@ -108,6 +108,23 @@ def validate_analyzer_profile(raw: dict[str, Any]) -> None:
     if not 0 <= float(click["min_highband_ratio"]) <= 1:
         raise AnalyzerProfileError("ANALYZER_PROFILE_CLICK_HIGHBAND_INVALID")
 
+    candidate_gate = raw.get("candidate_gate")
+    if candidate_gate is not None:
+        if not isinstance(candidate_gate, dict):
+            raise AnalyzerProfileError("ANALYZER_PROFILE_CANDIDATE_GATE_INVALID")
+        _positive(candidate_gate, "click_dtmf_guard_ms", allow_zero=True)
+        mapping = float(candidate_gate["silence_mapping_min_correlation"])
+        active_fraction = float(candidate_gate["silence_counterpart_active_fraction_min"])
+        quiet_fraction = float(candidate_gate["silence_counterpart_quiet_fraction_max"])
+        if not 0.0 <= mapping <= 1.0:
+            raise AnalyzerProfileError("ANALYZER_PROFILE_CANDIDATE_MAPPING_CORRELATION_INVALID")
+        if not 0.0 <= active_fraction <= 1.0 or not 0.0 <= quiet_fraction <= 1.0:
+            raise AnalyzerProfileError("ANALYZER_PROFILE_CANDIDATE_ACTIVITY_FRACTION_INVALID")
+        if quiet_fraction > active_fraction:
+            raise AnalyzerProfileError("ANALYZER_PROFILE_CANDIDATE_ACTIVITY_ORDER_INVALID")
+        _positive(candidate_gate, "silence_counterpart_active_margin_db", allow_zero=True)
+        _positive(candidate_gate, "silence_counterpart_min_bins")
+
     echo = raw["echo"]
     if float(echo["min_delay_ms"]) >= float(echo["max_delay_ms"]):
         raise AnalyzerProfileError("ANALYZER_PROFILE_ECHO_DELAY_RANGE_INVALID")
