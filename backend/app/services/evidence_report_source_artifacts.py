@@ -52,20 +52,37 @@ def _scope_matches(finding: EvidenceFinding, meta: dict) -> bool:
     pcm_tap = meta.get("pcm_tap")
     if pcm_tap:
         tap_match = scope.get("pcm_tap") == pcm_tap
-        if meta.get("session_index") is not None and scope.get("pcm_session_index") is not None:
-            tap_match = tap_match and int(scope.get("pcm_session_index")) == int(meta.get("session_index"))
+        if meta.get("session_index") is not None:
+            if scope.get("pcm_session_index") is None:
+                tap_match = False
+            else:
+                try:
+                    tap_match = tap_match and int(scope.get("pcm_session_index")) == int(meta.get("session_index"))
+                except (TypeError, ValueError):
+                    tap_match = False
         matched = matched or tap_match
     nested = meta.get("scope") or {}
     if nested:
+        compared = 0
         nested_match = True
         for key in ("pcm_tap", "pcm_session_index", "upstream_rtp_stream_id", "downstream_rtp_stream_id", "call_id"):
-            if nested.get(key) is None or scope.get(key) is None:
+            if nested.get(key) is None:
                 continue
-            if str(nested.get(key)) != str(scope.get(key)):
+            compared += 1
+            if scope.get(key) is None or str(nested.get(key)) != str(scope.get(key)):
                 nested_match = False
                 break
-        matched = matched or nested_match
+        matched = matched or (compared > 0 and nested_match)
     return matched
+
+
+def _has_scope_locator(meta: dict) -> bool:
+    if meta.get("stream_id") or meta.get("pcm_tap"):
+        return True
+    nested = meta.get("scope") or {}
+    return any(nested.get(k) is not None for k in (
+        "pcm_tap", "pcm_session_index", "upstream_rtp_stream_id", "downstream_rtp_stream_id", "call_id"
+    ))
 
 
 def _artifact_matches_finding(artifact: Artifact, finding: EvidenceFinding) -> bool:
@@ -76,19 +93,17 @@ def _artifact_matches_finding(artifact: Artifact, finding: EvidenceFinding) -> b
     scope_match = _scope_matches(finding, meta)
 
     if atype in _EVENT_SPECIFIC_TYPES:
-        # Event clips/metrics must match the Finding semantic type. This prevents
-        # a Click clip from being attached to an unrelated periodic/silence
-        # Finding merely because both share the same pcm_tap.
-        if event_type and event_type != finding_type:
-            return False
-        if not event_type:
+        # Event clips/metrics require semantic type + time, and if the Artifact
+        # carries a Stream/Tap/Session locator that locator must also match.
+        if not event_type or event_type != finding_type:
             return False
         if not _time_matches(finding, meta):
             return False
-        return scope_match or event_type == finding_type
+        if _has_scope_locator(meta) and not scope_match:
+            return False
+        return True
 
-    # Full audio / waveform source material is allowed to follow the exact
-    # stream or PCM session scope, but never event type alone.
+    # Full audio / waveform source material follows exact stream/PCM scope only.
     return scope_match
 
 
