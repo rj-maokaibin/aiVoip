@@ -4,7 +4,7 @@ from app.contracts.evidence_report import AnalysisMode
 from app.services.evidence_report import _analysis_context_evidences, _runtime_binding_ids
 
 
-def test_context_binding_uses_only_current_analyzer_input_evidence_ids():
+def test_context_binding_uses_only_packet_call_source_analyzer_input_evidence_ids():
     evidences = [
         {
             "id": "old-offline-pcap",
@@ -21,33 +21,62 @@ def test_context_binding_uses_only_current_analyzer_input_evidence_ids():
             "call_id": "call-current",
         },
         {
-            "id": "current-pcm-rx",
+            "id": "unrelated-pcm-input",
             "type": "PCM_RX",
-            "source": "REPRODUCTION",
-            "session_id": "session-current",
-            "call_id": "call-current",
+            "source": "USER_UPLOAD",
+            "session_id": None,
+            "call_id": None,
         },
     ]
     runs = {
         "packet_intelligence": SimpleNamespace(input_evidence_ids=["current-runtime-pcap"]),
-        "pcm_intelligence": SimpleNamespace(input_evidence_ids=["current-pcm-rx"]),
+        "pcm_intelligence": SimpleNamespace(input_evidence_ids=["unrelated-pcm-input"]),
+    }
+    results = {
+        "packet_intelligence": {"calls": [{"call_id": "sip-current"}]},
+        "pcm_intelligence": {"streams": []},
+        "media_intelligence": None,
     }
 
-    selected, input_ids = _analysis_context_evidences(evidences, runs)
+    selected, input_ids, analyzer_name = _analysis_context_evidences(evidences, runs, results)
 
-    assert input_ids == ["current-pcm-rx", "current-runtime-pcap"]
-    assert {x["id"] for x in selected} == {"current-runtime-pcap", "current-pcm-rx"}
-    assert "old-offline-pcap" not in {x["id"] for x in selected}
+    assert analyzer_name == "packet_intelligence"
+    assert input_ids == ["current-runtime-pcap"]
+    assert [x["id"] for x in selected] == ["current-runtime-pcap"]
 
 
-def test_context_binding_falls_back_to_scoped_evidence_when_runs_have_no_input_ids():
+def test_context_binding_uses_media_run_inputs_when_call_falls_back_to_media_packet_result():
+    evidences = [
+        {"id": "old-packet-input", "type": "PCAP", "session_id": "old-session", "call_id": "old-call"},
+        {"id": "current-offline-pcap", "type": "PCAP", "session_id": None, "call_id": None},
+    ]
+    runs = {
+        "packet_intelligence": SimpleNamespace(input_evidence_ids=["old-packet-input"]),
+        "media_intelligence": SimpleNamespace(input_evidence_ids=["current-offline-pcap"]),
+    }
+    results = {
+        "packet_intelligence": {"calls": []},
+        "pcm_intelligence": None,
+        "media_intelligence": {"packet": {"calls": [{"call_id": "sip-media-fallback"}]}},
+    }
+
+    selected, input_ids, analyzer_name = _analysis_context_evidences(evidences, runs, results)
+
+    assert analyzer_name == "media_intelligence"
+    assert input_ids == ["current-offline-pcap"]
+    assert [x["id"] for x in selected] == ["current-offline-pcap"]
+
+
+def test_context_binding_falls_back_to_scoped_evidence_when_source_run_has_no_input_ids():
     evidences = [{"id": "case-pcap", "type": "PCAP"}]
     runs = {"packet_intelligence": SimpleNamespace(input_evidence_ids=[])}
+    results = {"packet_intelligence": {"calls": [{"call_id": "sip-1"}]}}
 
-    selected, input_ids = _analysis_context_evidences(evidences, runs)
+    selected, input_ids, analyzer_name = _analysis_context_evidences(evidences, runs, results)
 
     assert selected == evidences
     assert input_ids == []
+    assert analyzer_name == "packet_intelligence"
 
 
 def test_offline_report_never_persists_historical_runtime_session_or_call_foreign_keys():
