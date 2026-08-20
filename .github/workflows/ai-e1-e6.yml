@@ -4,6 +4,9 @@ name: AI E1-E6 + M7 + Evidence Report Gate
 # performed with tools/voip_ai_release_gate.sh on a controlled Linux host.
 on:
   workflow_dispatch:
+  pull_request:
+    branches:
+      - feat/pr6-report-grounding-validator
 
 permissions:
   contents: read
