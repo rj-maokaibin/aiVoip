@@ -38,6 +38,20 @@ expected:
     dialed_number: "601"
     allowed_states: [ESTABLISHED, TERMINATED]
     media_direction_status: BIDIRECTIONAL
+  pcm:
+    format:
+      sample_rate: 8000
+      bit_depth: 16
+      endian: little
+      udp_payload_bytes: 160
+    total_packets: 13050
+    taps:
+      pcm_rx:
+        direction: RX
+        packet_count: 6525
+      pcm_tx:
+        direction: TX
+        packet_count: 6525
   rtp:
     primary_uplink:
       src_ip: 192.168.150.4
@@ -94,6 +108,7 @@ expected:
     display_call_id: CALL-001
     sip_call_id: 00ad1c804c33b255@192.168.3.200
     dialed_number: "601"
+    required_finding_types: [HIGH_DELTA, LOCAL_CAPTURE_PERIODIC_INTERFERENCE, DTMF_SIP_DIAL_MATCH]
     forbidden_finding_types: [PACKET_LOSS, BURST_LOSS]
     forbidden_click_window:
       start: 1786690964.300000
@@ -110,7 +125,8 @@ expected:
       - PHONE_LINE_NOISE
       - FXS_SLIC_NOISE
 notes:
-  - 该 Case 的核心真值是“601 Call 可重建、RTP 无 Sequence Loss、存在上行 High Delta、DTMF 601 与 SIP 目标一致、周期干扰在 PCM_RX 与上行 RTP 可见”。
+  - 该 Case 的核心真值是“601 Call 可重建、PCM 40000/50000 两路都可解析、RTP 无 Sequence Loss、存在上行 High Delta、DTMF 601 与 SIP 目标一致、周期干扰在 PCM_RX 与上行 RTP 可见”。
+  - PCM 原始 UDP 人工复核为 40000/50000 各 6525 包，每包 payload 160 bytes；按已知 Profile 为 8kHz/16-bit little-endian，每包对应 10ms 音频。
   - 两个主上行 HIGH_DELTA 的边界 Frame/Seq 已人工复核：20272/46511→20285/46512，以及 20329/46519→20344/46520；Sequence 连续，因此不能写成 Packet Loss。high_delta_ms 是算法容差范围，high_delta_events 保存人工复核的精确 Frame/Seq Ground Truth。
   - HIGH_DELTA 表示到包/发送节奏间隔异常，不等同于 RTP Sequence Loss。
   - DTMF 起始沿附近的 Click/Pop 候选必须被 Negative Control 拦截，不得作为独立爆音故障升级。
