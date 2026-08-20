@@ -19,7 +19,15 @@ def _periodic_abnormal(node: dict | None) -> tuple[bool,bool]:
 
 
 def _take_diagnostic_snapshot(payload: dict) -> dict:
-    """Consume the temporary Analyzer→Composer transport without leaking it in UI summaries."""
+    """Consume the private Analyzer→Composer transport before publication."""
+    analyzers=payload.get("analyzers") or {}
+    packet_state=analyzers.get("packet_intelligence") if isinstance(analyzers,dict) else None
+    if isinstance(packet_state,dict):
+        snapshot=packet_state.pop(_DIAGNOSTIC_SNAPSHOT_KEY,None)
+        if isinstance(snapshot,dict):
+            return snapshot
+
+    # Compatibility with early PR7 stacked commits / direct fixtures.
     media_summary=payload.get("media_summary")
     if isinstance(media_summary,dict):
         snapshot=media_summary.pop(_DIAGNOSTIC_SNAPSHOT_KEY,None)
@@ -31,10 +39,10 @@ def _take_diagnostic_snapshot(payload: dict) -> dict:
         snapshot=embedded.pop(_DIAGNOSTIC_SNAPSHOT_KEY,None)
         if isinstance(snapshot,dict):
             return snapshot
+
     # Direct unit callers of build_report_payload do not pass through
-    # load_analyzer_results. Start from an empty valid snapshot; the Finding
-    # adapter below will create explicit compatibility events rather than hiding
-    # the missing source projection.
+    # load_analyzer_results. Start from an empty valid snapshot; the explicit
+    # Finding adapter below records every compatibility fallback.
     return build_diagnostic_contract_snapshot(results={},analyzer_states={})
 
 
