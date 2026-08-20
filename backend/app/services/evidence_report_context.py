@@ -92,20 +92,20 @@ def case_packet_binding_state(scope_type: str, evidences: list[dict]) -> str:
 
 
 def _packet_result_with_calls(results: dict[str, dict | None]) -> tuple[dict | None, str | None]:
-    packet = results.get("packet_intelligence") or {}
-    if packet.get("calls"):
+    # A dedicated Packet Intelligence result is authoritative whenever it exists,
+    # including an explicit "0 Call" result. Falling back merely because calls[]
+    # is empty could splice a different/older Media run into the report.
+    packet = results.get("packet_intelligence")
+    if packet is not None:
         return packet, "packet_intelligence"
 
-    # Media Intelligence embeds the Packet Intelligence result used for its own
-    # cross-layer analysis. This is a provenance-preserving fallback only; SIP is
-    # not re-analysed here.
+    # Media Intelligence embeds the Packet result used for its own cross-layer
+    # analysis. Use it only when the dedicated Packet result is genuinely absent.
     media = results.get("media_intelligence") or {}
-    nested = media.get("packet") or {}
-    if nested.get("calls"):
+    nested = media.get("packet")
+    if nested is not None:
         return nested, "media_intelligence.packet"
-    return (packet if packet else nested if nested else None), (
-        "packet_intelligence" if packet else "media_intelligence.packet" if nested else None
-    )
+    return None, None
 
 
 def _packet_call_sort_key(item: tuple[int, dict]) -> tuple[float, float, int]:
