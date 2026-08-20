@@ -64,39 +64,50 @@ jobs:
             exit 21
           fi
           echo "VOIP_OFFLINE_GOLDEN_001_PCAP=$fixture" >> "$GITHUB_ENV"
-      - name: Prepare containerized tshark wrapper
+      - name: Prepare user-space tshark
         run: |
           set -euo pipefail
-          image="parrotsec/tshark:latest"
-          docker pull "$image"
-          wrapper="$RUNNER_TEMP/tshark-docker"
-          cat > "$wrapper" <<'EOF'
+          root="$RUNNER_TEMP/tshark-root"
+          debs="$RUNNER_TEMP/tshark-debs"
+          rm -rf "$root" "$debs"
+          mkdir -p "$root" "$debs"
+
+          echo "APT candidate:"
+          apt-cache policy tshark | sed -n '1,8p'
+
+          mapfile -t packages < <(
+            apt-cache depends --recurse \
+              --no-recommends --no-suggests --no-conflicts --no-breaks \
+              --no-replaces --no-enhances tshark \
+            | awk '/^[^ <][^:]*$/ {print $1}' \
+            | sort -u
+          )
+          missing=()
+          for pkg in "${packages[@]}"; do
+            if ! dpkg-query -W -f='${Status}' "$pkg" 2>/dev/null | grep -q 'install ok installed'; then
+              missing+=("$pkg")
+            fi
+          done
+          echo "Missing package count: ${#missing[@]}"
+          printf '%s\n' "${missing[@]}"
+          if [ ${#missing[@]} -eq 0 ]; then
+            echo "Dependency graph unexpectedly reports no missing tshark package"
+            exit 23
+          fi
+
+          cd "$debs"
+          apt-get download "${missing[@]}"
+          for deb in ./*.deb; do
+            dpkg-deb -x "$deb" "$root"
+          done
+
+          wrapper="$RUNNER_TEMP/tshark-userspace"
+          cat > "$wrapper" <<EOF
           #!/usr/bin/env bash
           set -euo pipefail
-          image="parrotsec/tshark:latest"
-          if [ "${1:-}" = "-v" ] || [ "${1:-}" = "--version" ]; then
-            exec docker run --rm --entrypoint tshark "$image" "$@"
-          fi
-          args=("$@")
-          pcap=""
-          for ((i=0; i<${#args[@]}; i++)); do
-            if [ "${args[$i]}" = "-r" ] && [ $((i+1)) -lt ${#args[@]} ]; then
-              pcap="${args[$((i+1))]}"
-              break
-            fi
-          done
-          if [ -z "$pcap" ]; then
-            exec docker run --rm --entrypoint tshark "$image" "${args[@]}"
-          fi
-          pcap_dir="$(dirname "$pcap")"
-          pcap_base="$(basename "$pcap")"
-          for ((i=0; i<${#args[@]}; i++)); do
-            if [ "${args[$i]}" = "-r" ]; then
-              args[$((i+1))]="/pcap/$pcap_base"
-              break
-            fi
-          done
-          exec docker run --rm -v "$pcap_dir:/pcap:ro" --entrypoint tshark "$image" "${args[@]}"
+          export LD_LIBRARY_PATH="$root/usr/lib/x86_64-linux-gnu:$root/lib/x86_64-linux-gnu:\${LD_LIBRARY_PATH:-}"
+          export WIRESHARK_DATA_DIR="$root/usr/share/wireshark"
+          exec "$root/usr/bin/tshark" "\$@"
           EOF
           chmod +x "$wrapper"
           "$wrapper" -v | head -n 2
