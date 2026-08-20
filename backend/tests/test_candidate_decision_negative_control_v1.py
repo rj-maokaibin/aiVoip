@@ -9,6 +9,7 @@ from app.analyzers.audio.candidate_decision import (
     decide_silence,
 )
 from app.reports.candidate_decision import decision_summary, resolve_candidate_decisions
+from app.reports.evidence_brief import build_report_payload
 from app.reports.finding_composer import build_normal_evidence, compose_findings
 
 
@@ -239,3 +240,59 @@ def test_candidate_decision_summary_is_auditable_by_reason_and_type():
     assert summary["suppressed"] == 1
     assert summary["by_type"]["UNEXPECTED_SILENCE"][SUPPRESSED] == 1
     assert summary["by_reason"]["NEGCTRL_MATCHED_RTP_SOURCE_SILENCE"] == 1
+
+
+def test_canonical_report_counts_only_promoted_audio_candidates_as_findings():
+    media = _legacy_media_with_matched_silence()
+    pcm = {
+        "summary": {"total_packets": 100},
+        "format": {},
+        "streams": [{
+            "tap": {"name": "pcm_rx", "direction": "RX"},
+            "packet_count": 100,
+            "sessions": [{
+                "session_index": 0,
+                "start_time": 100.0,
+                "end_time": 110.0,
+                "packet_count": 100,
+                "gap_events": [],
+                "signal": {},
+                "hum": {"level": "LOW"},
+                "silence_events": [{
+                    "start_seconds": 1.0,
+                    "end_seconds": 2.0,
+                    "duration_ms": 1000,
+                    "candidate_decision": {"status": "INCONCLUSIVE"},
+                }],
+                "click_pop_events": [{
+                    "time_seconds": 3.0,
+                    "confidence": 0.95,
+                    "candidate_decision": {"status": "SUPPRESSED", "reason_code": "NEGCTRL_DTMF_TRANSIENT"},
+                }],
+                "dtmf_quality_events": [],
+                "dtmf_sequences": [],
+            }],
+        }],
+    }
+    payload = build_report_payload(
+        case={"id": "case-1", "case_no": "CASE-1", "summary": "candidate gate", "status": "OPEN"},
+        scope_type="CASE",
+        scope_id="case-1",
+        session=None,
+        call=None,
+        environment={},
+        evidences=[{"type": "PCAP"}, {"type": "PCM_RX"}, {"type": "PCM_TX"}],
+        analyzer_states={
+            "packet_intelligence": {"status": "SUCCESS", "run_id": "packet"},
+            "pcm_intelligence": {"status": "SUCCESS", "run_id": "pcm"},
+            "media_intelligence": {"status": "SUCCESS", "run_id": "media"},
+        },
+        results={"packet_intelligence": None, "pcm_intelligence": pcm, "media_intelligence": media},
+        report_version=1,
+        generated_at="2026-08-20T00:00:00+00:00",
+    )
+
+    assert payload["finding_count"] == 0
+    assert payload["highest_severity"] == "INFO"
+    assert all(f["type"] not in {"UNEXPECTED_SILENCE", "CLICK_POP"} for f in payload["findings"])
+    assert any(x["type"] == "AUDIO_CANDIDATES_SUPPRESSED_BY_NEGATIVE_CONTROL" for x in payload["normal_and_exclusion_evidence"])
