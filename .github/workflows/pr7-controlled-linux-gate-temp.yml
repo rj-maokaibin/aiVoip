@@ -1,0 +1,40 @@
+name: PR3-PR7 Controlled Linux Gate (Temporary)
+
+on:
+  push:
+    branches:
+      - feat/pr7-diagnostic-contracts
+
+permissions:
+  contents: read
+
+env:
+  PYTHONUNBUFFERED: "1"
+
+jobs:
+  cumulative-software-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show controlled Linux environment
+        run: |
+          uname -a
+          python3 --version
+          docker --version
+          npm --version
+          git rev-parse HEAD
+
+      - name: Run cumulative PR3-PR7 software gate
+        run: bash tools/voip_ai_release_gate.sh
+
+      - name: Upload validation artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr3-pr7-controlled-linux-validation
+          path: |
+            validation/**
+          if-no-files-found: warn
+          retention-days: 14
