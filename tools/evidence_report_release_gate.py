@@ -50,6 +50,7 @@ def main() -> int:
              "backend/tests/test_evidence_report_context_provenance_v1.py",
              "backend/tests/test_offline_subject_call_selection_v1.py",
              "backend/tests/test_pcm_source_provenance_v1.py",
+             "backend/tests/test_dtmf_subject_call_correlation_v1.py",
              "backend/tests/test_candidate_decision_negative_control_v1.py",
              "backend/tests/test_candidate_decision_rtp_activity_v1.py",
              "backend/tests/test_candidate_decision_field_regression_v1.py",
