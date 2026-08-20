@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Any
-
 
 FINDING_EVIDENCE_PACKAGE_VERSION = "finding-evidence-package-v1"
 
@@ -25,7 +23,17 @@ def _metadata(ref: dict) -> dict:
     return ref.get("metadata") or {}
 
 
-def _graph_priority(finding_type: str, ref: dict) -> tuple[int, str]:
+def _graph_priority(finding_type: str, ref: dict) -> tuple[int, int, str]:
+    """Prefer Finding-bound semantic graphs over generic report summaries."""
+    role = str(ref.get("role") or "").upper()
+    role_order = {
+        "PRIMARY_GRAPH": 0,
+        "SUMMARY_GRAPH": 1,
+        "FINDING": 2,
+        "SUPPORTING_GRAPH": 3,
+        "DETAIL": 4,
+        "SUMMARY": 5,
+    }
     atype = _atype(ref)
     if finding_type in _RTP_TYPES:
         order = {"RTP_TIMELINE_PNG": 0, "WAVEFORM_PNG": 1, "SPECTROGRAM_PNG": 2, "SPECTRUM_PNG": 3}
@@ -37,7 +45,7 @@ def _graph_priority(finding_type: str, ref: dict) -> tuple[int, str]:
         order = {"WAVEFORM_PNG": 0, "SPECTROGRAM_PNG": 1, "SPECTRUM_PNG": 2}
     else:
         order = {"WAVEFORM_PNG": 0, "SPECTROGRAM_PNG": 1, "SPECTRUM_PNG": 2, "RTP_TIMELINE_PNG": 3, "SIP_CALL_FLOW_PNG": 4}
-    return order.get(atype, 99), str(ref.get("artifact_id") or "")
+    return role_order.get(role, 50), order.get(atype, 99), str(ref.get("artifact_id") or "")
 
 
 def _audio_role(finding_type: str, ref: dict) -> str:
@@ -56,6 +64,21 @@ def _audio_role(finding_type: str, ref: dict) -> str:
     if _atype(ref) in _FULL_AUDIO_TYPES:
         return "SOURCE_AUDIO"
     return "OTHER"
+
+
+def _audio_priority(finding_type: str, ref: dict) -> tuple[int, str]:
+    """Prefer candidate-bound clips over legacy raw detector clips."""
+    meta = _metadata(ref)
+    atype = _atype(ref)
+    if atype == "AUDIO_CLIP" and str(meta.get("clip_role") or "").upper() == "CANDIDATE_PRIMARY":
+        return 0, str(ref.get("artifact_id") or "")
+    if atype == "AUDIO_CLIP" and meta.get("candidate_id"):
+        return 1, str(ref.get("artifact_id") or "")
+    if atype == "PERIODIC_AUDIO_CLIP" and str(meta.get("source") or "").lower() == "pcm_rx":
+        return 0, str(ref.get("artifact_id") or "")
+    if atype in _AUDIO_CLIP_TYPES:
+        return 5, str(ref.get("artifact_id") or "")
+    return 20, str(ref.get("artifact_id") or "")
 
 
 def _packet_refs(finding: dict) -> list[dict]:
@@ -160,7 +183,7 @@ def _next_validation(finding_type: str) -> str:
 def build_finding_evidence_package(finding: dict, artifact_refs: list[dict]) -> dict:
     ftype = str(finding.get("type") or "")
     graphs = sorted([dict(x) for x in artifact_refs if _atype(x) in _GRAPH_TYPES], key=lambda x: _graph_priority(ftype, x))
-    audio = [dict(x) for x in artifact_refs if _atype(x) in _AUDIO_CLIP_TYPES | _FULL_AUDIO_TYPES]
+    audio = sorted([dict(x) for x in artifact_refs if _atype(x) in _AUDIO_CLIP_TYPES | _FULL_AUDIO_TYPES], key=lambda x: _audio_priority(ftype, x))
     primary_audio = next((x for x in audio if _audio_role(ftype, x) == "PRIMARY_AUDIO"), None)
     comparison_audio = [x for x in audio if _audio_role(ftype, x) == "COMPARISON_AUDIO"]
     control_audio = [x for x in audio if _audio_role(ftype, x) == "CONTROL_AUDIO"]
