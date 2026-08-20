@@ -46,7 +46,9 @@ def main() -> int:
             "DIAGNOSTIC_CONTRACT",
             [sys.executable, "-m", "pytest", "-q",
              "backend/tests/test_diagnostic_contract_v1.py",
-             "backend/tests/test_diagnostic_contract_transport_v1.py"],
+             "backend/tests/test_diagnostic_contract_transport_v1.py",
+             "backend/tests/test_diagnostic_event_identity_v1.py",
+             "backend/tests/test_diagnostic_unresolved_pcm_v1.py"],
             category="CONTRACT", timeout=120,
         ))
         gates.append(run(
@@ -143,7 +145,7 @@ def main() -> int:
         "gates": [asdict(x) for x in gates],
         "environment_gates": environment_gates,
         "allowed_pending_environment_gates": [x["key"] for x in environment_gates if x.get("status") == "UNVERIFIED"],
-        "claim": "software_status covers machine-verifiable software gates, including PR5 Evidence Card traceability/renderer/permission boundaries; PR6 Structural/Semantic/Evidence/Explainability Grounding, runtime FAILED/audit/idempotency persistence and deterministic Claim Manifest; and PR7 canonical DiagnosticEvent v1 / CandidateDecision v2 / Finding Diagnostic Link v1 contracts with deterministic IDs, lossless legacy-status projection, explicit MERGE, packet-only transport, and the invariant that SUPPRESS/INCONCLUSIVE decisions cannot justify user-visible Findings. production_status also evaluates configured real/offline Golden fixtures; missing external fixtures remain explicit UNVERIFIED gates rather than being silently treated as PASS.",
+        "claim": "software_status covers machine-verifiable software gates, including PR5 Evidence Card traceability/renderer/permission boundaries; PR6 Structural/Semantic/Evidence/Explainability Grounding, runtime FAILED/audit/idempotency persistence and deterministic Claim Manifest; and PR7 canonical DiagnosticEvent v1 / CandidateDecision v2 / Finding Diagnostic Link v1 contracts with deterministic/reorder-stable IDs, lossless legacy-status projection, explicit MERGE, packet-only snapshot transport, unresolved-PCM INCONCLUSIVE degradation, and the invariant that SUPPRESS/INCONCLUSIVE decisions cannot justify user-visible Findings. production_status also evaluates configured real/offline Golden fixtures; missing external fixtures remain explicit UNVERIFIED gates rather than being silently treated as PASS.",
     }
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
