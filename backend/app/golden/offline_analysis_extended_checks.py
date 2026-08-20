@@ -62,6 +62,14 @@ def validate_extended_offline_truth(bundle: dict, manifest: dict) -> list[Golden
             if prev_seq is not None and curr_seq is not None:
                 add(f"rtp.high_delta.{index}.sequence_continuity", ((int(curr_seq) - int(prev_seq)) & 0xFFFF) == 1, {"previous": prev_seq, "current": curr_seq}, "current sequence is previous + 1", "RTP_FRAME")
 
+    media = bundle.get("media") or {}
+    dtmf_exp = expected.get("dtmf") or {}
+    dtmf_matches = [e for e in media.get("cross_layer_events", []) or [] if e.get("type") == dtmf_exp.get("required_event_type")]
+    add("dtmf.match_count", len(dtmf_matches) == int(dtmf_exp.get("expected_match_count") or 0), len(dtmf_matches), dtmf_exp.get("expected_match_count"), "CROSS_LAYER")
+    if dtmf_matches:
+        matched_call_ids = [str((e.get("details") or {}).get("call_id") or (e.get("scope") or {}).get("call_id") or "") for e in dtmf_matches]
+        add("dtmf.subject_call_id", matched_call_ids == [str(dtmf_exp.get("call_id"))], matched_call_ids, [str(dtmf_exp.get("call_id"))], "CROSS_LAYER")
+
     report = bundle.get("report") or {}
     report_exp = expected.get("report") or {}
     finding_types = [str(f.get("type")) for f in report.get("findings", []) or []]
