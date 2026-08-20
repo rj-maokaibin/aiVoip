@@ -50,7 +50,10 @@ def _bundle() -> dict:
             "display_call": call,
             "findings": [
                 {"type": "HIGH_DELTA"},
-                {"type": "LOCAL_CAPTURE_PERIODIC_INTERFERENCE"},
+                {
+                    "type": "LOCAL_CAPTURE_PERIODIC_INTERFERENCE",
+                    "root_cause_boundary": "当前仅确认周期/工频族特征，不能确认电源、接地、话柄、线路或 SLIC 为物理根因，需进一步受控验证。",
+                },
                 {"type": "DTMF_SIP_DIAL_MATCH"},
             ],
         },
