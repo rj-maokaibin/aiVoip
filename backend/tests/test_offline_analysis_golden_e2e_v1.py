@@ -18,17 +18,27 @@ def _manifest() -> dict:
 
 def _bundle() -> dict:
     sip_id = "00ad1c804c33b255@192.168.3.200"
+    pbx_leg_id = "60d32450633aea2363e5b73e-1786691379761-0x1067e2b4-2875d8158357@192.168.3.200"
     uplink_id = "192.168.150.4:10000>192.168.3.200:11446/ssrc=1"
     packet = {
         "status": "SUCCESS",
-        "summary": {"call_count": 1, "rtp_stream_count": 2},
-        "calls": [{
-            "call_id": sip_id,
-            "callee": "sip:601@192.168.3.200",
-            "state": "TERMINATED",
-            "media_direction_health": {"status": "BIDIRECTIONAL"},
-            "rtp_stream_ids": [uplink_id, "reverse"],
-        }],
+        "summary": {"call_count": 2, "rtp_stream_count": 3},
+        "calls": [
+            {
+                "call_id": sip_id,
+                "callee": "sip:601@192.168.3.200",
+                "state": "TERMINATED",
+                "media_direction_health": {"status": "BIDIRECTIONAL"},
+                "rtp_stream_ids": [uplink_id, "reverse"],
+            },
+            {
+                "call_id": pbx_leg_id,
+                "callee": "sip:601@192.168.150.8",
+                "state": "TERMINATED",
+                "media_direction_health": {"status": "BIDIRECTIONAL"},
+                "rtp_stream_ids": ["pbx-mirror"],
+            },
+        ],
         "rtp_streams": [{
             "stream_id": uplink_id,
             "src_ip": "192.168.150.4",
@@ -72,6 +82,9 @@ def _bundle() -> dict:
             "analysis_mode": "OFFLINE_IMPORTED",
             "call_origin": "RECONSTRUCTED_FROM_PCAP",
             "call_scope": "BOUND",
+            "call_selection_status": "SELECTED",
+            "selection_rule": "PCM_SOURCE_DEVICE_IDENTITY_MATCH",
+            "subject_device_ip": "192.168.150.4",
             "semantic_status": "OK",
             "reviewability": "FULLY_REVIEWABLE",
         },
@@ -80,6 +93,7 @@ def _bundle() -> dict:
             "findings": [
                 {"type": "HIGH_DELTA", "time_range": {"representative": 1786691020.0}},
                 {"type": "LOCAL_CAPTURE_PERIODIC_INTERFERENCE", "time_range": {"representative": 1786690970.0}},
+                {"type": "DTMF_SIP_DIAL_MATCH", "time_range": {"representative": 1786690965.0}},
             ]
         },
         "artifacts": [
@@ -127,6 +141,7 @@ def test_call_none_regression_is_blocked():
     bundle = _bundle()
     bundle["display_call"] = None
     failed = _failed_names(bundle)
+    assert "call.diagnostic_call_count" in failed
     assert "report.display_call_required" in failed
 
 
