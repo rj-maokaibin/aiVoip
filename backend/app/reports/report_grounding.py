@@ -80,27 +80,20 @@ def _primitive_metrics(finding: dict) -> dict:
 
 
 def build_claim_manifest(payload: dict) -> dict:
-    """Build deterministic report claims from already-composed Findings.
-
-    Claims never create new diagnostic truth. Their statement is the Finding's own
-    observation, while refs point back to the structured Finding/Event/Artifact data
-    that existed before claim construction.
-    """
+    """Project existing Finding truth into deterministic, traceable report claims."""
     claims: list[dict] = []
     for finding in payload.get("findings") or []:
         card = finding.get("evidence_card") or {}
-        claim_id = _stable_claim_id(finding)
         artifact_ids = [str(x.get("artifact_id")) for x in (finding.get("artifact_refs") or []) if x.get("artifact_id")]
-        packet_refs = card.get("packet_refs") or []
         claims.append({
-            "claim_id": claim_id,
+            "claim_id": _stable_claim_id(finding),
             "claim_type": finding.get("type"),
             "statement": finding.get("observation"),
             "finding_ref": finding.get("finding_id") or finding.get("stable_key"),
             "scope": finding.get("scope") or {},
             "metrics": _primitive_metrics(finding),
             "event_refs": finding.get("event_refs") or [],
-            "packet_refs": packet_refs,
+            "packet_refs": card.get("packet_refs") or [],
             "artifact_refs": artifact_ids,
             "rule_id": f"CLAIM-{str(finding.get('type') or 'FINDING')}-V1",
         })
@@ -109,6 +102,17 @@ def build_claim_manifest(payload: dict) -> dict:
 
 def _finding_key(finding: dict) -> tuple[str | None, str | None]:
     return finding.get("finding_id") or finding.get("stable_key"), finding.get("type")
+
+
+def _is_publication_finding(finding: dict) -> bool:
+    """Persisted report Findings have a database finding_id.
+
+    In-memory Offline Golden replay builds Findings before report persistence and
+    therefore cannot yet possess report-level PNG inventory or persisted IDs. It is
+    still subject to structural Call and semantic rules, but final publication-only
+    Artifact/Card completeness is enforced only once the Finding is persisted.
+    """
+    return bool(finding.get("finding_id"))
 
 
 def _issue(issues: list[GroundingIssue], *, rule_id: str, layer: str, severity: str, code: str,
@@ -130,11 +134,15 @@ def _artifact_index(payload: dict) -> dict[str, dict]:
 
 def _text_has_confirmed_physical_root_cause(finding: dict) -> bool:
     text = " ".join(str(finding.get(k) or "") for k in ("title", "observation", "interpretation")).lower()
-    # Intentionally narrow phrases: validator blocks explicit confirmation, not the
-    # mention of these components inside an A/B recommendation or boundary statement.
+    # Only explicit positive confirmation phrases are blocked. Negated boundaries
+    # such as "不能确认电源/接地根因" must never be treated as overclaiming.
     forbidden = (
-        "确认电源", "确认接地", "电源根因已确认", "接地根因已确认", "slic根因已确认", "slic 根因已确认",
-        "话柄根因已确认", "线路根因已确认", "power supply confirmed", "grounding confirmed", "slic confirmed",
+        "电源根因已确认", "已确认电源问题为根因", "根因确定为电源", "电源是根因",
+        "接地根因已确认", "已确认接地问题为根因", "根因确定为接地", "接地是根因",
+        "slic根因已确认", "slic 根因已确认", "根因确定为slic", "根因确定为 slic",
+        "话柄根因已确认", "根因确定为话柄", "线路根因已确认", "根因确定为线路",
+        "power supply confirmed", "power supply is the root cause", "grounding confirmed", "grounding is the root cause",
+        "slic confirmed", "slic is the root cause",
     )
     return any(token in text for token in forbidden)
 
@@ -156,6 +164,8 @@ def _validate_structural(payload: dict, issues: list[GroundingIssue]) -> None:
 
     artifacts = _artifact_index(payload)
     for finding in payload.get("findings") or []:
+        if not _is_publication_finding(finding):
+            continue
         for ref in finding.get("artifact_refs") or []:
             artifact_id = ref.get("artifact_id")
             if artifact_id and str(artifact_id) not in artifacts:
@@ -215,6 +225,11 @@ def _validate_semantic(payload: dict, issues: list[GroundingIssue]) -> None:
 
 def _validate_evidence(payload: dict, issues: list[GroundingIssue]) -> None:
     for finding in payload.get("findings") or []:
+        # Report-level visuals and safe clip inventory exist only after persistence.
+        # In-memory Golden replay is still validated by semantic rules above plus
+        # its own Analyzer Artifact/Card truth checks.
+        if not _is_publication_finding(finding):
+            continue
         ftype = str(finding.get("type") or "")
         severity = str(finding.get("severity") or "INFO").upper()
         card = finding.get("evidence_card") or {}
@@ -266,6 +281,8 @@ def _validate_explainability(payload: dict, issues: list[GroundingIssue]) -> Non
         if severity not in {"MEDIUM", "HIGH", "CRITICAL"}:
             continue
         card = finding.get("evidence_card") or {}
+        if not card and not _is_publication_finding(finding):
+            continue
         for field, code, rule_id in (
             ("what_happened", "WHAT_HAPPENED_MISSING", "RG-018"),
             ("root_cause_boundary", "ROOT_CAUSE_BOUNDARY_MISSING", "RG-019"),
@@ -300,7 +317,7 @@ def _derive_reviewability(payload: dict, issues: list[GroundingIssue]) -> str:
 
 
 def validate_report_grounding(payload: dict) -> dict:
-    """Validate the final Canonical Report after Artifact refs/Cards are attached."""
+    """Validate canonical report truth without changing Analyzer/Finding results."""
     issues: list[GroundingIssue] = []
     _validate_structural(payload, issues)
     _validate_semantic(payload, issues)
@@ -309,10 +326,14 @@ def validate_report_grounding(payload: dict) -> dict:
     counts = Counter(x.severity for x in issues)
     status = FAIL if counts.get(BLOCKER, 0) else PASS_WITH_WARNINGS if counts.get(WARNING, 0) else PASS
     reviewability = _derive_reviewability(payload, issues)
+    findings = payload.get("findings") or []
+    publication_findings = sum(1 for finding in findings if _is_publication_finding(finding))
     return {
         "schema_version": GROUNDING_VALIDATOR_VERSION,
         "status": status,
         "reviewability_status": reviewability,
+        "validation_scope": "PUBLICATION" if publication_findings or not findings else "IN_MEMORY_REPLAY",
+        "publication_finding_count": publication_findings,
         "counts": {"blockers": counts.get(BLOCKER, 0), "warnings": counts.get(WARNING, 0), "issues": len(issues)},
         "issues": [asdict(x) for x in issues],
         "policy": {
@@ -341,7 +362,6 @@ def apply_report_grounding(payload: dict, *, raise_on_blocker: bool = False) -> 
 
 
 def grounding_json(payload: dict) -> str:
-    """Small helper used by CLI/CI without needing report persistence services."""
     clone = json.loads(json.dumps(payload, ensure_ascii=False, default=str))
     apply_report_grounding(clone, raise_on_blocker=False)
     return json.dumps(clone.get("grounding_validation") or {}, ensure_ascii=False, indent=2)
