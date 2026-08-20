@@ -67,26 +67,15 @@ jobs:
       - name: Prepare containerized tshark wrapper
         run: |
           set -euo pipefail
-          image_dir="$RUNNER_TEMP/voip-tshark-image"
-          rm -rf "$image_dir"
-          mkdir -p "$image_dir"
-          cat > "$image_dir/Dockerfile" <<'EOF'
-          FROM postgres:16
-          ENV DEBIAN_FRONTEND=noninteractive
-          RUN apt-get update \
-              && apt-get install -y --no-install-recommends tshark \
-              && rm -rf /var/lib/apt/lists/*
-          ENTRYPOINT ["tshark"]
-          EOF
-          docker build -t voip-tshark:offline-golden "$image_dir"
-
+          image="parrotsec/tshark:latest"
+          docker pull "$image"
           wrapper="$RUNNER_TEMP/tshark-docker"
           cat > "$wrapper" <<'EOF'
           #!/usr/bin/env bash
           set -euo pipefail
-          image="voip-tshark:offline-golden"
+          image="parrotsec/tshark:latest"
           if [ "${1:-}" = "-v" ] || [ "${1:-}" = "--version" ]; then
-            exec docker run --rm "$image" "$@"
+            exec docker run --rm --entrypoint tshark "$image" "$@"
           fi
           args=("$@")
           pcap=""
@@ -97,7 +86,7 @@ jobs:
             fi
           done
           if [ -z "$pcap" ]; then
-            exec docker run --rm "$image" "${args[@]}"
+            exec docker run --rm --entrypoint tshark "$image" "${args[@]}"
           fi
           pcap_dir="$(dirname "$pcap")"
           pcap_base="$(basename "$pcap")"
@@ -107,7 +96,7 @@ jobs:
               break
             fi
           done
-          exec docker run --rm -v "$pcap_dir:/pcap:ro" "$image" "${args[@]}"
+          exec docker run --rm -v "$pcap_dir:/pcap:ro" --entrypoint tshark "$image" "${args[@]}"
           EOF
           chmod +x "$wrapper"
           "$wrapper" -v | head -n 2
