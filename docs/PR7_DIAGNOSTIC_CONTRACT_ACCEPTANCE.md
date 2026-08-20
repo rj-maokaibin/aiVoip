@@ -15,7 +15,7 @@ CandidateDecision v2
   -> only ACCEPT is Finding-eligible
 EvidenceFinding
   -> Finding Diagnostic Link v1
-Canonical Report / Golden / AI
+Canonical Report / Claim Manifest / Golden / AI
 ```
 
 PR7 does **not** add new fault detectors, change acquisition orchestration, increase Evidence Level, or grant Root Cause authority.
@@ -94,6 +94,8 @@ PR7 projects existing deterministic outputs into canonical Events:
 
 A direct Analyzer anomaly is projected as `ACCEPT` only because the current Analyzer already exposes it as a formal anomaly. PR7 does not independently redetect or strengthen the anomaly.
 
+When Media Analyzer is unavailable, raw PCM Click/Silence detector candidates remain in the canonical audit trail as `INCONCLUSIVE` with reason `MEDIA_ANALYZER_UNAVAILABLE`. They are not silently dropped and do not become Findings.
+
 ## 5. Direction identity rule
 
 Direction vocabulary is not assumed to be globally identical.
@@ -108,7 +110,7 @@ Only directly comparable direction forms participate in Event/Finding identity m
 
 Call id, Stream id, Tap and SSRC are stronger matching keys.
 
-## 6. Snapshot transport and persistence
+## 6. Snapshot transport, persistence and Claim bridge
 
 The Analyzer-to-Report in-memory snapshot is transported through a private Analyzer-state extension so it is present even for packet-only reports. The private transport key is removed before publication.
 
@@ -127,9 +129,16 @@ EvidenceFinding.correlation_json
     decision_ids[]
     accepted_event_ids[]
     merged_event_ids[]
+
+EvidenceFinding.event_refs_json
+  existing analyzer provenance refs
+  diagnostic.events -> event_id
+  diagnostic.decisions -> decision_id/status/reason_code
 ```
 
-The complete canonical Event/Decision objects are authoritative in the report snapshot. EvidenceFinding stores compact stable references through the existing JSON column; PR7 intentionally does not introduce a database migration.
+The complete canonical Event/Decision objects are authoritative in the report snapshot. EvidenceFinding stores compact stable references through existing JSON columns; PR7 intentionally does not introduce a database migration.
+
+PR6 Claim Manifest already consumes `finding.event_refs`. PR7 therefore bridges canonical Event/Decision ids into that existing channel instead of inventing a second Claim schema. Legacy provenance refs such as `packet.anomalies/index` are preserved.
 
 ## 7. Compatibility fallback
 
@@ -163,11 +172,13 @@ PR7 software gate must verify all of the following:
 8. Every user-visible Finding has at least one `ACCEPT` decision.
 9. Multiple accepted same-Finding events retain source identities and gain explicit `MERGE` decisions.
 10. Packet-only reports preserve real Packet Analyzer Events without forced Finding fallback.
-11. Private snapshot transport does not leak into published Analyzer summaries.
-12. Full diagnostic snapshot is included in the Canonical Report.
-13. Finding compact diagnostic references resolve to the report snapshot.
-14. Contract projection never upgrades severity, Evidence Level or Root Cause authority.
-15. Existing CandidateDecision V1 negative-control behavior remains compatible.
+11. Media-unavailable raw PCM Click/Silence candidates remain auditable as `INCONCLUSIVE` and never become Findings.
+12. Private snapshot transport does not leak into published Analyzer summaries.
+13. Full diagnostic snapshot is included in the Canonical Report.
+14. Finding compact diagnostic references resolve to the report snapshot.
+15. Existing Finding provenance is preserved while Claim Manifest can see canonical Event and Decision refs through `event_refs`.
+16. Contract projection never upgrades severity, Evidence Level or Root Cause authority.
+17. Existing CandidateDecision V1 negative-control behavior remains compatible.
 
 The dedicated Release Gate key is `DIAGNOSTIC_CONTRACT`.
 
@@ -182,7 +193,8 @@ For the current imported real PCAP case, the later controlled replay should veri
 - Sequence-continuous HIGH_DELTA does not become Packet Loss;
 - DTMF/Click negative-control candidates remain auditable and suppressed candidates do not enter Findings;
 - periodic PCM/cross-layer observations remain traceable without physical-root-cause overclaim;
-- P0 directly supported findings do not silently fall back to `finding_composer_adapter`.
+- P0 directly supported findings do not silently fall back to `finding_composer_adapter`;
+- Claim Manifest Event/Decision refs resolve to the same canonical snapshot objects.
 
 This remains **Offline Analysis Golden E2E**, not Live Acquisition Golden E2E.
 
