@@ -1,16 +1,14 @@
 name: AI E1-E6 + M7 + Evidence Report Gate
 
-# Product branches keep this workflow opt-in. The ci/pr7-controlled-gate branch
-# temporarily enables pull_request execution against the PR7 branch so the
-# cumulative PR3-PR7 software gate can converge on the controlled Linux runner.
+# Temporary controlled validation branch only. Product branches remain opt-in.
 on:
   workflow_dispatch:
-  pull_request:
+  push:
     branches:
-      - feat/pr7-diagnostic-contracts
+      - ci/pr7-controlled-gate
 
 concurrency:
-  group: pr7-controlled-gate-${{ github.event.pull_request.number || github.ref }}
+  group: pr7-controlled-gate
   cancel-in-progress: true
 
 permissions:
@@ -27,7 +25,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ github.sha }}
       - name: Controlled Linux environment
         run: |
           uname -a
