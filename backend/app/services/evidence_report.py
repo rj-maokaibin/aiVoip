@@ -40,6 +40,24 @@ def report_idempotency_key(scope_type: str, scope_id: str, input_hash: str, anal
     return canonical_hash(material)
 
 
+def _analysis_context_evidences(evidence_items: list[dict], runs: dict) -> tuple[list[dict], list[str]]:
+    """Limit context binding to Evidence actually consumed by current AnalyzerRuns.
+
+    CASE scope can contain old captures from earlier reproductions/imports. Using all
+    Case evidence to decide OFFLINE vs REPRODUCTION would let stale unbound PCAPs
+    contaminate a newer report. AnalyzerRun.input_evidence_ids is the provenance
+    boundary for this decision.
+    """
+    input_ids: set[str] = set()
+    for run in runs.values():
+        if run:
+            input_ids.update(str(x) for x in (run.input_evidence_ids or []) if x)
+    if not input_ids:
+        return evidence_items, []
+    selected=[x for x in evidence_items if str(x.get("id") or "") in input_ids]
+    return selected, sorted(input_ids)
+
+
 def _persist_findings(db: Session, *, report: PreliminaryEvidenceReport, payload: dict) -> list[EvidenceFinding]:
     existing={x.stable_key:x for x in db.scalars(select(EvidenceFinding).where(EvidenceFinding.scope_type==report.scope_type,EvidenceFinding.scope_id==report.scope_id))}
     observed=set(); rows=[]
@@ -73,14 +91,17 @@ def generate_evidence_report(db: Session, *, scope_type, scope_id: str, actor: s
     results,states=load_analyzer_results(storage,runs); previous=latest_report(db,scope_type,scope_id); version=(previous.version+1) if previous else 1
     environment=environment_snapshot(db,case,session)
     runtime_session=session_dict(session); runtime_call=call_dict(call)
+    context_evidences,context_input_ids=_analysis_context_evidences(evidence_items,runs)
     resolved_context=resolve_report_analysis_context(
         scope_type=scope_type,
         session=runtime_session,
         runtime_call=runtime_call,
-        evidences=evidence_items,
+        evidences=context_evidences,
         results=results,
     )
-    analysis_context=resolved_context["analysis_context"]; display_call=resolved_context["display_call"]
+    analysis_context=resolved_context["analysis_context"]
+    analysis_context["analyzer_input_evidence_ids"]=context_input_ids
+    display_call=resolved_context["display_call"]
     payload=build_report_payload(case=case_dict(case),scope_type=scope_type,scope_id=scope_id,
                                  session=runtime_session,call=runtime_call,analysis_context=analysis_context,display_call=display_call,
                                  environment=environment,evidences=evidence_items,analyzer_states=states,results=results,report_version=version)
@@ -134,7 +155,8 @@ def generate_evidence_report(db: Session, *, scope_type, scope_id: str, actor: s
           detail={"scope_type":scope_type,"scope_id":scope_id,"version":version,"status":report.status,"finding_count":len(finding_rows),"artifact_count":len(report_artifacts)+3,
                   "forced":force,"expired_raw_evidence_count":len(expired),"analysis_mode":analysis_context.get("analysis_mode"),
                   "call_origin":analysis_context.get("call_origin"),"call_scope":analysis_context.get("call_scope"),
-                  "reconstructed_call_count":analysis_context.get("reconstructed_call_count",0),"semantic_issues":analysis_context.get("semantic_issues",[])})
+                  "reconstructed_call_count":analysis_context.get("reconstructed_call_count",0),"semantic_issues":analysis_context.get("semantic_issues",[]),
+                  "analyzer_input_evidence_ids":context_input_ids})
     return report,payload,False
 
 
