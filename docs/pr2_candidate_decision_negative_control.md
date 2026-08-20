@@ -65,6 +65,37 @@ Promoted Clip 必须携带 `candidate_id`、`candidate_decision_status=PROMOTED`
 
 RTP loss/high-delta clip 与 periodic interference clip 不受 CandidateDecision Gate 影响。
 
+## Golden Dataset 与 Release Gate
+
+Synthetic Golden 已按 PR2 权限模型升级：Raw PCM Silence/Click 是 fail-closed 负例；`UNEXPECTED_SILENCE` / `CLICK_POP` 的 P0 正例必须由 `PROMOTED CandidateDecision` 驱动，并额外包含 SUPPRESSED / INCONCLUSIVE 负例。
+
+真实现场样本采用“契约进仓、PCAP 外置”的方式：
+
+- Contract：`golden_cases/pr2_field_20260814_candidate_decision.json`
+- Field Gate：`tools/pr2_field_candidate_gate.py`
+- Source SHA256：`b038aa7c9a0644581f2815f654fcdee4620860796382265b178823fccba2e3f0`
+- Source size：`4544926` bytes
+
+受控 Linux 主机执行完整 Release Gate 时，将现场 PCAP 放在受控路径并设置：
+
+```bash
+export VOIP_PR2_FIELD_PCAP=/secure/path/tcpdump-2026-08-14\(2\).pcap
+./tools/voip_ai_release_gate.sh
+```
+
+`voip_ai_release_gate.sh` 会将该文件传给 `evidence_report_release_gate.py --field-pcap ...`。Field Gate 首先校验 SHA256 和大小，身份不匹配时直接失败且不运行 Analyzer；身份正确后执行完整 Media Analyzer，并阻塞检查：
+
+- SIP Call-ID 与 DTMF 601 仍可重建；
+- 目标 Raw PCM Click 命中 `NEGCTRL_DTMF_TRANSIENT`；
+- PCM_TX active-media Silence candidate 数仍为 8；
+- 8 个均为 SUPPRESSED、0 个 PROMOTED；
+- PCM_TX↔下行 RTP 保持 HIGH correlation，并验证约 +44 ms lag；
+- RTP loss 仍为 0；
+- Preliminary Finding 中不得出现 `UNEXPECTED_SILENCE`；
+- 已验证的周期干扰主 Finding 必须仍存在。
+
+单个 Field Golden 通过不等同于完整 `REAL_GOLDEN_DATASET` 生产验收；后者仍需要 Synthetic + Lab Real + 多个 Field Confirmed 样本验证最终 Recall / Precision / Boundary 指标。
+
 ## Precision / Recall 边界
 
 本 PR 采用 Precision-first，但不是简单关闭 Silence 检测。存在可信 HIGH 相关 RTP counterpart、无 synthetic-gap 污染且能够测得 lag-aligned 源窗口活动时，真实 PCM/RTP silence mismatch 仍可以 PROMOTE；当正证据不足时保留 `INCONCLUSIVE`，而不是强行判异常或正常。
