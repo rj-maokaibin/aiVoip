@@ -60,6 +60,29 @@ def _capture_origin(evidences: list[dict]) -> str:
     return "UNKNOWN"
 
 
+def _is_packet_capture(evidence: dict) -> bool:
+    current = str(evidence.get("type") or "").upper()
+    original = str(evidence.get("original_type") or "").upper()
+    return current in {"PCAP", "PCAPNG"} or original in {"PCAP", "PCAPNG"}
+
+
+def _case_has_unbound_packet_capture(scope_type: str, evidences: list[dict]) -> bool:
+    """Return True when CASE evidence contains a PCAP not bound to runtime Session/Call.
+
+    CASE scope may also expose the latest historical ReproductionSession/Call. An
+    unbound packet capture must not inherit that historical Call merely because it
+    happens to be the latest DB row for the Case.
+    """
+    if str(scope_type).upper() != "CASE":
+        return False
+    return any(
+        _is_packet_capture(e)
+        and not e.get("session_id")
+        and not e.get("call_id")
+        for e in evidences
+    )
+
+
 def _packet_result_with_calls(results: dict[str, dict | None]) -> tuple[dict | None, str | None]:
     packet = results.get("packet_intelligence") or {}
     if packet.get("calls"):
@@ -259,13 +282,19 @@ def resolve_report_analysis_context(
     """Normalize runtime/offline facts into report semantics without fabricating DB rows.
 
     The resolver never re-runs SIP analysis and never creates ReproductionCall.
-    Runtime Call is authoritative when present. Otherwise it may project the
-    deterministic Packet Analyzer Call into ``display_call`` for reviewability.
+    A runtime Call is authoritative for runtime-bound evidence. For CASE-level
+    unbound packet evidence, the Packet Analyzer reconstruction is authoritative
+    for display even when an older runtime Session/Call exists on the same Case.
     """
-    mode = AnalysisMode.REPRODUCTION if session is not None else AnalysisMode.OFFLINE_IMPORTED
+    unbound_case_capture = _case_has_unbound_packet_capture(scope_type, evidences)
+    mode = AnalysisMode.OFFLINE_IMPORTED if unbound_case_capture or session is None else AnalysisMode.REPRODUCTION
     reconstructed, metadata = select_reconstructed_packet_call(results)
 
-    if runtime_call is not None:
+    if mode == AnalysisMode.OFFLINE_IMPORTED and reconstructed is not None:
+        display_call = reconstructed
+        call_origin = CallOrigin.RECONSTRUCTED_FROM_PCAP
+        selection_rule = metadata.get("selection_rule")
+    elif mode == AnalysisMode.REPRODUCTION and runtime_call is not None:
         display_call = _runtime_display_call(runtime_call)
         call_origin = CallOrigin.REPRODUCTION_RUNTIME
         selection_rule = "REPRODUCTION_RUNTIME_CALL_AUTHORITATIVE"
@@ -295,7 +324,10 @@ def resolve_report_analysis_context(
     analysis_context = {
         "analysis_mode": mode.value,
         "capture_origin": _capture_origin(evidences),
-        "source_session_id": session.get("id") if session else None,
+        "source_session_id": session.get("id") if mode == AnalysisMode.REPRODUCTION and session else None,
+        "historical_runtime_session_id": session.get("id") if mode == AnalysisMode.OFFLINE_IMPORTED and session else None,
+        "historical_runtime_call_id": runtime_call.get("id") if mode == AnalysisMode.OFFLINE_IMPORTED and runtime_call else None,
+        "runtime_context_suppressed_for_unbound_case_capture": bool(unbound_case_capture and (session or runtime_call)),
         "call_reconstruction": "ENABLED",
         "reconstructed_call_count": metadata.get("reconstructed_call_count", 0),
         "packet_call_count": metadata.get("packet_call_count", 0),
