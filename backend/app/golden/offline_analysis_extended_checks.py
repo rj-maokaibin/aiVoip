@@ -62,6 +62,21 @@ def validate_extended_offline_truth(bundle: dict, manifest: dict) -> list[Golden
             if prev_seq is not None and curr_seq is not None:
                 add(f"rtp.high_delta.{index}.sequence_continuity", ((int(curr_seq) - int(prev_seq)) & 0xFFFF) == 1, {"previous": prev_seq, "current": curr_seq}, "current sequence is previous + 1", "RTP_FRAME")
 
+    semantic_exp = rtp_exp.get("high_delta_semantics") or {}
+    allowed_classifications = set(semantic_exp.get("allowed_classifications") or [])
+    for index, actual_event in enumerate(actual_high_delta, start=1):
+        details = actual_event.get("details") or {}
+        if semantic_exp.get("required_sequence_continuous"):
+            add(f"rtp.high_delta.{index}.semantic.sequence_continuous", details.get("sequence_continuous") is True, details.get("sequence_continuous"), True, "RTP_SEMANTIC")
+        required_loss_semantics = semantic_exp.get("required_loss_semantics")
+        if required_loss_semantics:
+            add(f"rtp.high_delta.{index}.semantic.loss", details.get("loss_semantics") == required_loss_semantics, details.get("loss_semantics"), required_loss_semantics, "RTP_SEMANTIC")
+        if allowed_classifications:
+            add(f"rtp.high_delta.{index}.semantic.classification", details.get("classification") in allowed_classifications, details.get("classification"), sorted(allowed_classifications), "RTP_SEMANTIC")
+        if semantic_exp.get("catch_up_required"):
+            catch_up = details.get("catch_up") or {}
+            add(f"rtp.high_delta.{index}.semantic.catch_up", catch_up.get("status") in {"PARTIAL", "FULL"} and catch_up.get("observed") is True, catch_up, "PARTIAL or FULL catch-up observed", "RTP_SEMANTIC")
+
     media = bundle.get("media") or {}
     dtmf_exp = expected.get("dtmf") or {}
     dtmf_matches = [e for e in media.get("cross_layer_events", []) or [] if e.get("type") == dtmf_exp.get("required_event_type")]
@@ -72,9 +87,24 @@ def validate_extended_offline_truth(bundle: dict, manifest: dict) -> list[Golden
 
     report = bundle.get("report") or {}
     report_exp = expected.get("report") or {}
-    finding_types = [str(f.get("type")) for f in report.get("findings", []) or []]
+    findings = report.get("findings", []) or []
+    finding_types = [str(f.get("type")) for f in findings]
     for required in report_exp.get("required_finding_types", []) or []:
         add(f"report.required_finding.{required}", required in finding_types, finding_types, f"must contain {required}", "REPORT")
+
+    high_delta_report_exp = report_exp.get("high_delta_primary_stream_finding") or {}
+    if high_delta_report_exp:
+        primary_stream_id = (primary or {}).get("stream_id")
+        finding = next((f for f in findings if f.get("type") == "HIGH_DELTA" and (f.get("scope") or {}).get("rtp_stream_id") == primary_stream_id), None)
+        add("report.high_delta.primary_stream.exists", finding is not None, (finding or {}).get("scope"), primary_stream_id, "REPORT_SEMANTIC")
+        if finding:
+            metrics = finding.get("metrics") or {}
+            semantic = finding.get("semantic_summary") or {}
+            add("report.high_delta.primary_stream.occurrence_count", int(finding.get("occurrence_count") or 0) == int(high_delta_report_exp.get("occurrence_count") or 0), finding.get("occurrence_count"), high_delta_report_exp.get("occurrence_count"), "REPORT_SEMANTIC")
+            add("report.high_delta.primary_stream.event_count", int(metrics.get("event_count") or 0) == int(high_delta_report_exp.get("occurrence_count") or 0), metrics.get("event_count"), high_delta_report_exp.get("occurrence_count"), "REPORT_SEMANTIC")
+            add("report.high_delta.primary_stream.sequence", metrics.get("all_sequence_continuous") is bool(high_delta_report_exp.get("all_sequence_continuous")), metrics.get("all_sequence_continuous"), high_delta_report_exp.get("all_sequence_continuous"), "REPORT_SEMANTIC")
+            add("report.high_delta.primary_stream.loss_interpretation", semantic.get("loss_interpretation") == high_delta_report_exp.get("loss_interpretation"), semantic.get("loss_interpretation"), high_delta_report_exp.get("loss_interpretation"), "REPORT_SEMANTIC")
+            add("report.high_delta.primary_stream.frame_seq_events", len(metrics.get("events") or []) == int(high_delta_report_exp.get("occurrence_count") or 0) and all(e.get("previous_frame_number") is not None and e.get("current_frame_number") is not None and e.get("previous_sequence") is not None and e.get("current_sequence") is not None for e in metrics.get("events") or []), metrics.get("events"), "all aggregated events retain Frame/Seq evidence", "REPORT_SEMANTIC")
 
     report_context = report.get("analysis_context") or {}
     bundle_context = bundle.get("analysis_context") or {}
