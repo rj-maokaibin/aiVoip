@@ -14,6 +14,41 @@ def _candidate_kind(value: str | None) -> str | None:
     return None
 
 
+def sanitize_gated_media_pcm(media: dict) -> dict:
+    """Move raw PCM detector events behind the candidate boundary.
+
+    CandidateDecision must run before this function. The deterministic Diagnosis
+    reasoner historically reads ``result.pcm.*.click_pop_events/silence_events`` as
+    a fallback. Clearing those fields after preserving them under ``*_candidates``
+    prevents a rejected candidate from bypassing the Media cross-layer gate.
+    """
+    pcm = media.get("pcm") or {}
+    click_count = 0
+    silence_count = 0
+    for stream in pcm.get("streams", []) or []:
+        for session in stream.get("sessions", []) or []:
+            clicks = list(session.get("click_pop_events") or [])
+            silences = list(session.get("silence_events") or [])
+            if clicks:
+                session["click_pop_candidates"] = clicks
+                click_count += len(clicks)
+            else:
+                session.setdefault("click_pop_candidates", [])
+            if silences:
+                session["silence_candidates"] = silences
+                silence_count += len(silences)
+            else:
+                session.setdefault("silence_candidates", [])
+            session["click_pop_events"] = []
+            session["silence_events"] = []
+    media.setdefault("summary", {})["raw_pcm_candidates"] = {
+        "click_pop_candidate_count": click_count,
+        "silence_candidate_count": silence_count,
+        "downstream_visibility": "CANDIDATE_ONLY",
+    }
+    return media
+
+
 def gate_candidate_audio_artifacts(media: dict, *, tolerance_seconds: float = 0.25) -> dict:
     """Keep rejected/raw detector clips out of the main anomaly-audio surface.
 
