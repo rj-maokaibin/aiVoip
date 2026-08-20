@@ -40,7 +40,7 @@ def _absolute_dtmf_intervals(media: dict, scope: dict) -> list[dict]:
     return out
 
 
-def _best_pcm_rtp_correlation(media: dict, scope: dict) -> tuple[str | None, float | None, str | None]:
+def _best_pcm_rtp_correlation(media: dict, scope: dict) -> tuple[str | None, float | None, str | None, float]:
     tap = scope.get("pcm_tap")
     session_index = scope.get("pcm_session_index")
     best = None
@@ -53,10 +53,10 @@ def _best_pcm_rtp_correlation(media: dict, scope: dict) -> tuple[str | None, flo
         corr = details.get("correlation") or {}
         score = abs(float(corr.get("absolute_correlation") or 0.0))
         if best is None or score > best[0]:
-            best = (score, details.get("rtp_stream_id"), corr.get("quality"))
+            best = (score, details.get("rtp_stream_id"), corr.get("quality"), float(corr.get("lag_ms") or 0.0))
     if best is None:
-        return None, None, None
-    return best[1], best[0], best[2]
+        return None, None, None, 0.0
+    return best[1], best[0], best[2], best[3]
 
 
 def _rtp_track(media: dict, stream_id: str | None) -> dict | None:
@@ -125,9 +125,18 @@ def _legacy_silence_decision(media: dict, event: dict) -> dict:
         absolute_end = base + float(details.get("end_seconds") or 0.0)
     else:
         absolute_end = absolute_start + float(details.get("duration_ms") or 0.0) / 1000.0
-    stream_id, correlation, quality = _best_pcm_rtp_correlation(media, scope)
+    stream_id, correlation, quality, lag_ms = _best_pcm_rtp_correlation(media, scope)
     track = _rtp_track(media, stream_id)
-    metrics = _matched_rtp_silence_metrics(track, absolute_start, absolute_end)
+    # correlate_tracks defines positive lag as PCM(a) delayed relative to RTP(b),
+    # therefore the corresponding RTP source window is PCM window - lag.
+    aligned_start = absolute_start - lag_ms / 1000.0
+    aligned_end = absolute_end - lag_ms / 1000.0
+    metrics = _matched_rtp_silence_metrics(track, aligned_start, aligned_end)
+    if metrics is not None:
+        metrics["pcm_absolute_start_time"] = absolute_start
+        metrics["pcm_absolute_end_time"] = absolute_end
+        metrics["correlation_lag_ms"] = lag_ms
+        metrics["alignment_rule"] = "rtp_window = pcm_window - correlation_lag"
     decision = decide_silence(
         details,
         absolute_start=absolute_start,
@@ -137,7 +146,11 @@ def _legacy_silence_decision(media: dict, event: dict) -> dict:
         counterpart_correlation=correlation,
         counterpart_metrics=metrics,
     )
-    decision.setdefault("positive_evidence", {})["correlation_quality"] = quality
+    evidence = decision.setdefault("positive_evidence", {})
+    evidence["correlation_quality"] = quality
+    evidence["correlation_lag_ms"] = lag_ms
+    evidence["counterpart_aligned_start_time"] = aligned_start
+    evidence["counterpart_aligned_end_time"] = aligned_end
     if stream_id and correlation is not None and metrics is None and decision.get("status") == INCONCLUSIVE:
         decision["reason_code"] = "RTP_COUNTERPART_WINDOW_ACTIVITY_NOT_DIRECTLY_MEASURED"
     return decision
@@ -174,7 +187,7 @@ def resolve_candidate_decisions(media: dict | None) -> dict:
             if ftype == "CLICK_POP":
                 promoted_details["interpretation"] = "Click/Pop 候选已通过 DTMF、媒体边界和置信度 Negative Control，可作为活跃媒体异常候选进入报告；仍不等同于物理根因。"
             else:
-                promoted_details["interpretation"] = "PCM 静音候选已通过跨层对照，关联 RTP 方向在同窗仍保持活动证据，支持存在媒体链路静音不一致；仍不等同于物理根因。"
+                promoted_details["interpretation"] = "PCM 静音候选已通过按 correlation lag 对齐的跨层对照，关联 RTP 方向在对应源窗口仍保持活动证据，支持存在媒体链路静音不一致；仍不等同于物理根因。"
             promoted["details"] = promoted_details
             promoted_events.append(promoted)
     return {
