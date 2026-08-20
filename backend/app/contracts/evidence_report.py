@@ -4,9 +4,10 @@ from enum import StrEnum
 
 
 REPORT_SCHEMA_VERSION = "preliminary-evidence-report-v1"
-REPORT_COMPOSER_VERSION = "evidence-brief-composer-v1"
+REPORT_COMPOSER_VERSION = "evidence-brief-composer-v2"
 FINDING_SIGNATURE_VERSION = "sig-v1"
-RENDERER_VERSION = "evidence-renderer-v1"
+RENDERER_VERSION = "evidence-renderer-v2"
+EVIDENCE_CARD_VERSION = "evidence-card-v1"
 
 
 class EvidenceReportScope(StrEnum):
