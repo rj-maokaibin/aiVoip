@@ -108,6 +108,27 @@ def validate_analyzer_profile(raw: dict[str, Any]) -> None:
     if not 0 <= float(click["min_highband_ratio"]) <= 1:
         raise AnalyzerProfileError("ANALYZER_PROFILE_CLICK_HIGHBAND_INVALID")
 
+    candidate = raw.get("candidate_decision")
+    if candidate is not None:
+        if not isinstance(candidate, dict):
+            raise AnalyzerProfileError("ANALYZER_PROFILE_CANDIDATE_DECISION_INVALID")
+        click_gate = candidate.get("click_pop") or {}
+        silence_gate = candidate.get("silence") or {}
+        _positive(click_gate, "dtmf_guard_ms", allow_zero=True)
+        _positive(click_gate, "media_boundary_guard_ms", allow_zero=True)
+        promote_confidence = float(click_gate["min_promote_confidence"])
+        if not 0.0 <= promote_confidence <= 1.0:
+            raise AnalyzerProfileError("ANALYZER_PROFILE_CANDIDATE_CLICK_CONFIDENCE_INVALID")
+        min_corr = float(silence_gate["min_counterpart_correlation"])
+        if not 0.0 <= min_corr <= 1.0:
+            raise AnalyzerProfileError("ANALYZER_PROFILE_CANDIDATE_SILENCE_CORRELATION_INVALID")
+        quiet = float(silence_gate["counterpart_quiet_dbfs"])
+        active = float(silence_gate["counterpart_active_dbfs"])
+        if quiet >= active:
+            raise AnalyzerProfileError("ANALYZER_PROFILE_CANDIDATE_SILENCE_DBFS_RANGE_INVALID")
+        _positive(silence_gate, "context_seconds")
+        _positive(silence_gate, "source_drop_db", allow_zero=True)
+
     echo = raw["echo"]
     if float(echo["min_delay_ms"]) >= float(echo["max_delay_ms"]):
         raise AnalyzerProfileError("ANALYZER_PROFILE_ECHO_DELAY_RANGE_INVALID")
