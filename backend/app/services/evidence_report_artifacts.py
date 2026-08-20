@@ -13,10 +13,17 @@ from app.contracts.evidence_report import EvidenceReportArtifactType, EvidenceRe
 from app.db.evidence_report_models import EvidenceFinding, EvidenceReportArtifactLink, PreliminaryEvidenceReport
 from app.db.models import AnalyzerRun, Artifact, Evidence
 from app.reports.evidence_visuals import (
-    render_rtp_timeline_png, render_sip_call_flow_png, render_spectrum_png,
+    render_rtp_timeline_png, render_spectrum_png,
     render_spectrogram_png, render_waveform_png, visual_metadata,
 )
+from app.reports.sip_flow_visual import render_sip_call_flow_png
 from app.services.audit import audit
+
+
+_PCM_FOCUSED_VISUAL_TYPES={
+    "PCM_GAP","UNEXPECTED_SILENCE","CLICK_POP","PERIODIC_LOW_FREQUENCY_INTERFERENCE",
+    "LOCAL_CAPTURE_PERIODIC_INTERFERENCE","PERIODIC_INTERFERENCE_PATH_COMPARISON","ECHO_PATH_DETECTED","DTMF_ABNORMAL",
+}
 
 
 def utcnow() -> datetime:
@@ -96,11 +103,11 @@ def _overlaps(start:float|None,end:float|None,lo:float|None,hi:float|None)->bool
 
 
 def _anomaly_relative(f:EvidenceFinding,session:dict,duration:float)->tuple[float|None,float|None,dict]:
-    start,end,rep=_finding_window(f); base=session.get("start_time")
+    start,end,rep=_finding_window(f);base=session.get("start_time")
     if base is None:return None,None,{}
-    base=float(base); use_start=rep if start is None else start; use_end=end if end is not None else use_start
+    base=float(base);use_start=rep if start is None else start;use_end=end if end is not None else use_start
     if use_start is None:return None,None,{}
-    a=max(0.0,min(duration,float(use_start)-base)); b=max(a,min(duration,float(use_end)-base if use_end is not None else a))
+    a=max(0.0,min(duration,float(use_start)-base));b=max(a,min(duration,float(use_end)-base if use_end is not None else a))
     if b-a < 0.002:b=min(duration,a+0.02)
     return a,b,{"absolute_start":use_start,"absolute_end":use_end,"relative_start_seconds":round(a,6),"relative_end_seconds":round(b,6)}
 
@@ -116,12 +123,7 @@ def _focused_rtp_stream(stream:dict,f:EvidenceFinding)->dict:
 
 def generate_visual_artifacts(db: Session, storage, *, report: PreliminaryEvidenceReport,
                               results: dict[str,dict|None], runs: dict[str,AnalyzerRun]) -> list[Artifact]:
-    """Generate summary visuals plus Finding-scoped review visuals.
-
-    V2 deliberately links a visual to the exact Finding it explains. Summary plots
-    remain available for deep review, but they are not used as a substitute for a
-    Finding-specific anomaly view.
-    """
+    """Generate deterministic summary visuals and exact Finding-scoped views."""
     created=[];packet=results.get("packet_intelligence") or {};pcm=results.get("pcm_intelligence") or {}
     packet_run=runs.get("packet_intelligence");pcm_run=runs.get("pcm_intelligence");media_run=runs.get("media_intelligence")
     findings=_current_findings(db,report);streams={str(x.get("stream_id")):x for x in packet.get("rtp_streams",[]) or []}
@@ -138,15 +140,13 @@ def generate_visual_artifacts(db: Session, storage, *, report: PreliminaryEviden
             filename="sip_call_flow.png",data=render_sip_call_flow_png(packet.get("calls") or [],title="SIP CALL FLOW",subtitle=f"CALL {report.call_id or report.scope_id}"),content_type="image/png",
             metadata=visual_metadata("SIP_CALL_FLOW",source={"analyzer_run_id":packet_run.id if packet_run else None},title="SIP Call Flow",
                 x_axis="SIP endpoint",y_axis="Message order",units={"frame":"Frame"},finding_ids=sip_findings,call_id=report.call_id,
-                caption="SIP 消息顺序；消息标签优先显示 Frame 与 Method/Status。"),
+                caption="SIP Call ladder：每条消息优先显示 Frame 与 Method/Status。"),
             analyzer_run_id=packet_run.id if packet_run else None,finding_ids=sip_findings,role="FINDING" if sip_findings else "SUMMARY"))
 
-    # RTP findings get their own +/-1s focused timeline, so a 146ms/175ms event is
-    # not visually lost inside a 50-second global call chart.
     rtp_visual_count=0
     for finding in findings:
         scope=finding.scope_json or {};stream_id=scope.get("rtp_stream_id");stream=streams.get(str(stream_id)) if stream_id else None
-        if not stream or rtp_visual_count>=16:continue
+        if not stream or rtp_visual_count>=12:continue
         if finding.finding_type not in {"HIGH_DELTA","PACKET_LOSS","BURST_LOSS","ONE_WAY_RTP_MEDIA","PAYLOAD_CHANGE"}:continue
         focused=_focused_rtp_stream(stream,finding);start,end,rep=_finding_window(finding);direction=_direction(stream)
         created.append(persist_artifact(db,storage,report=report,artifact_type=EvidenceReportArtifactType.RTP_TIMELINE_PNG.value,
@@ -158,13 +158,12 @@ def generate_visual_artifacts(db: Session, storage, *, report: PreliminaryEviden
                 anomaly_window={"start":start,"end":end,"representative":rep},caption=f"{finding.title}：异常点附近 +/-1s RTP Timeline。"),
             analyzer_run_id=packet_run.id if packet_run else None,finding_ids=[finding.id],role="FINDING"));rtp_visual_count+=1
 
-    # Periodic spectrum is source-specific and links only current periodic Findings.
     spectra=0
     for stream in pcm.get("streams",[]) or []:
         tap=(stream.get("tap") or {}).get("name") or "pcm";direction=(stream.get("tap") or {}).get("direction")
         for sess in stream.get("sessions",[]) or []:
             hum=sess.get("hum") or {};spectral=sess.get("spectral") or {}
-            if str(hum.get("level") or "LOW").upper() not in {"MEDIUM","HIGH"} or not spectral or spectra>=6:continue
+            if str(hum.get("level") or "LOW").upper() not in {"MEDIUM","HIGH"} or not spectral or spectra>=4:continue
             related=[f.id for f in findings if f.finding_type in {"PERIODIC_LOW_FREQUENCY_INTERFERENCE","LOCAL_CAPTURE_PERIODIC_INTERFERENCE","PERIODIC_INTERFERENCE_PATH_COMPARISON"} and _scope_matches_pcm(f,str(tap),int(sess.get("session_index") or 0))]
             if not related:continue
             title=f"SPECTRUM {str(tap).upper()} PERIODIC INTERFERENCE";subtitle=f"SESSION {sess.get('session_index',0)} | {direction or 'UNKNOWN'}"
@@ -179,12 +178,13 @@ def generate_visual_artifacts(db: Session, storage, *, report: PreliminaryEviden
     pcm_sessions=_pcm_session_lookup(pcm);visual_count=0
     for source,data_json in _media_json_artifacts(db,storage,media_run)[:16]:
         meta=source.metadata_json or {};tap=str(meta.get("pcm_tap") or "");session_index=int(meta.get("session_index") or 0)
-        session=pcm_sessions.get((tap,session_index));
+        session=pcm_sessions.get((tap,session_index))
         if not session:continue
         duration=float(data_json.get("duration_seconds") or (data_json.get("times") or [0])[-1] or 0.0)
         if duration<=0 and session.get("start_time") is not None and session.get("end_time") is not None:duration=max(0.001,float(session["end_time"])-float(session["start_time"]))
         for finding in findings:
-            if visual_count>=24:break
+            if visual_count>=16:break
+            if finding.finding_type not in _PCM_FOCUSED_VISUAL_TYPES:continue
             if not _scope_matches_pcm(finding,tap,session_index):continue
             fstart,fend,_=_finding_window(finding)
             if not _overlaps(fstart,fend,session.get("start_time"),session.get("end_time")):continue
