@@ -11,16 +11,17 @@ from app.api.evidence_permissions import EvidencePermission, has_evidence_permis
 from app.core.config import settings
 from app.db.evidence_report_models import EvidenceFinding, PreliminaryEvidenceReport
 from app.integrations.storage import ObjectStorage
+from app.reports.report_grounding import ReportGroundingError
 from app.schemas.evidence_reports import EvidenceBundleRequest, EvidenceFindingOut, EvidenceReportOut, EvidenceReportRebuildRequest
 from app.services.audit import audit
-from app.services.evidence_report import generate_evidence_report
+from app.services.evidence_report import generate_evidence_report, mark_report_failed
 from app.services.evidence_report_artifacts import build_evidence_bundle, report_artifacts
-from app.services.idempotency import begin_idempotent, complete_idempotent
+from app.services.idempotency import begin_idempotent, complete_idempotent, fail_idempotent
 
 router=APIRouter(tags=["evidence-reports"])
 
 REPORT_SAFE_ARTIFACT_TYPES = {
-    "AUDIO_CLIP", "WAVEFORM_PNG", "SPECTRUM_PNG", "SPECTROGRAM_PNG",
+    "AUDIO_CLIP", "PERIODIC_AUDIO_CLIP", "WAVEFORM_PNG", "SPECTRUM_PNG", "SPECTROGRAM_PNG",
     "RTP_TIMELINE_PNG", "SIP_CALL_FLOW_PNG", "PRELIMINARY_REPORT_HTML",
     "PRELIMINARY_REPORT_JSON", "MANIFEST_JSON", "WAVEFORM_JSON", "SPECTROGRAM_JSON",
 }
@@ -64,11 +65,46 @@ def _rebuild(scope_type:str,scope_id:str,req:EvidenceReportRebuildRequest,db:Ses
     handle=begin_idempotent(db,scope=f"POST:/api/v1/{scope_type.lower()}/{scope_id}/reports/evidence/rebuild",key=idempotency_key,
                             payload={"scope_type":scope_type,"scope_id":scope_id,"force":req.force})
     if handle.replay is not None: return handle.replay
+    previous=_latest(db,scope_type,scope_id)
+    previous_id=previous.id if previous else None
+    previous_status=previous.status if previous else None
     try:
         row,_payload,_replay=generate_evidence_report(db,scope_type=scope_type,scope_id=scope_id,actor=identity.actor_id,force=req.force)
         response=EvidenceReportOut.model_validate(row).model_dump(mode="json")
         complete_idempotent(db,handle,response=response,status_code=200,resource_type="preliminary_evidence_report",resource_id=row.id)
         db.commit(); db.refresh(row); return row
+    except ReportGroundingError as exc:
+        # Grounding is a deterministic publication rejection, not a transient
+        # infrastructure crash. Preserve this failed report attempt and its audit
+        # trail instead of rolling the whole transaction back and losing the reason.
+        failed=_latest(db,scope_type,scope_id)
+        if failed is not None and failed.id!=previous_id:
+            mark_report_failed(db,failed,exc)
+            completeness=dict(failed.completeness_json or {})
+            completeness.update({"state":"PARTIAL","reviewability":"NOT_REVIEWABLE","grounding_status":"FAIL"})
+            failed.completeness_json=completeness
+            failed.snapshot_json={
+                "schema_version":failed.schema_version,
+                "composer_version":failed.composer_version,
+                "report_version":failed.version,
+                "scope":{"type":failed.scope_type,"id":failed.scope_id},
+                "status":"FAILED",
+                "grounding_validation":exc.validation,
+                "reviewability_status":"NOT_REVIEWABLE",
+            }
+            audit(db,case_id=failed.case_id,actor=identity.actor_id,event_type="PRELIMINARY_EVIDENCE_REPORT_GROUNDING_BLOCKED",
+                  target_type="preliminary_evidence_report",target_id=failed.id,
+                  detail={"scope_type":scope_type,"scope_id":scope_id,"report_version":failed.version,
+                          "grounding_status":exc.validation.get("status"),"counts":exc.validation.get("counts"),
+                          "issues":(exc.validation.get("issues") or [])[:20]})
+        if previous is not None and previous.id==previous_id and previous_status is not None:
+            # generate_evidence_report marks the previous report SUPERSEDED before
+            # final publication. A grounding-blocked replacement must not retire
+            # the last successfully generated report.
+            previous.status=previous_status
+        fail_idempotent(db,handle)
+        db.commit()
+        raise HTTPException(422,f"REPORT_GROUNDING_FAILED:{exc}")
     except ValueError as exc:
         db.rollback(); raise HTTPException(404,str(exc))
     except Exception as exc:
