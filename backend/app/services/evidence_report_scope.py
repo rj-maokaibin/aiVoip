@@ -8,6 +8,7 @@ from app.analyzers.media.candidate_decision import apply_candidate_decisions
 from app.contracts.evidence_report import EvidenceReportScope
 from app.db.models import AnalyzerRun, Case, CaseDevice, Evidence, ReproductionCall, ReproductionSession, VoiceRuntimeContextSnapshot
 from app.reports.diagnostic_contract import build_diagnostic_contract_snapshot
+from app.reports.diagnostic_unresolved_pcm import append_unresolved_pcm_candidates
 
 REPORT_ANALYZERS = {"packet_intelligence", "pcm_intelligence", "media_intelligence"}
 TERMINAL_ANALYZER_STATES = {"SUCCESS", "PARTIAL_SUCCESS", "FAILED", "UNAVAILABLE", "TIMEOUT"}
@@ -151,5 +152,6 @@ def load_analyzer_results(storage, runs: dict[str, AnalyzerRun]) -> tuple[dict[s
     # states are always present, including packet-only reports. evidence_boundary
     # consumes/removes this private transport before publication.
     snapshot=build_diagnostic_contract_snapshot(results=results,analyzer_states=states)
+    snapshot=append_unresolved_pcm_candidates(snapshot,results=results,analyzer_states=states)
     states.setdefault("packet_intelligence",{})[DIAGNOSTIC_SNAPSHOT_KEY]=snapshot
     return results,states
