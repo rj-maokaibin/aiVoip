@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections import Counter
 from typing import Any
 
 from app.analyzers.profile import get_default_analyzer_profile
@@ -18,6 +19,8 @@ _DEFAULTS = {
     "media_boundary_guard_ms": 120.0,
     "silence_counterpart_overlap_ratio": 0.50,
     "silence_min_correlation": 0.55,
+    "silence_counterpart_active_ratio": 0.50,
+    "silence_counterpart_active_margin_db": 6.0,
 }
 
 
@@ -66,15 +69,15 @@ def _dtmf_negative_control(media: dict, event: dict, cfg: dict[str, float]) -> d
     event_time = float(event.get("time") or 0.0)
     guard = cfg["dtmf_guard_ms"] / 1000.0
     for dtmf in session.get("dtmf_events", []) or []:
-        start = session_start + float(dtmf.get("start_seconds") or 0.0) - guard
-        end = session_start + float(dtmf.get("end_seconds") or dtmf.get("start_seconds") or 0.0) + guard
-        if start <= event_time <= end:
+        dtmf_start = session_start + float(dtmf.get("start_seconds") or 0.0)
+        dtmf_end = session_start + float(dtmf.get("end_seconds") or dtmf.get("start_seconds") or 0.0)
+        if dtmf_start - guard <= event_time <= dtmf_end + guard:
             return {
                 "type": "DTMF_OVERLAP",
                 "status": "MATCHED",
                 "digit": dtmf.get("digit"),
-                "dtmf_start_time": round(start + guard, 6),
-                "dtmf_end_time": round(end - guard, 6),
+                "dtmf_start_time": round(dtmf_start, 6),
+                "dtmf_end_time": round(dtmf_end, 6),
                 "guard_ms": cfg["dtmf_guard_ms"],
             }
     return None
@@ -120,22 +123,7 @@ def _track(media: dict, stream_id: str | None) -> dict | None:
     return None
 
 
-def _rtp_silence_negative_control(media: dict, event: dict, cfg: dict[str, float]) -> tuple[dict | None, dict | None]:
-    corr = _best_rtp_correlation(media, event)
-    if not corr:
-        return None, {"reason_code": "NO_DIRECTIONAL_RTP_REFERENCE"}
-    correlation = corr.get("correlation") or {}
-    score = float(correlation.get("absolute_correlation") or 0.0)
-    if score < cfg["silence_min_correlation"]:
-        return None, {
-            "reason_code": "RTP_REFERENCE_CORRELATION_TOO_LOW",
-            "rtp_stream_id": corr.get("rtp_stream_id"),
-            "absolute_correlation": score,
-        }
-    track = _track(media, corr.get("rtp_stream_id"))
-    if not track:
-        return None, {"reason_code": "RTP_AUDIO_TRACK_UNAVAILABLE", "rtp_stream_id": corr.get("rtp_stream_id")}
-
+def _rtp_silence_overlap(track: dict, event: dict, cfg: dict[str, float]) -> dict | None:
     start, end = _event_window(event)
     duration = max(1e-9, end - start)
     best_ratio = 0.0
@@ -147,25 +135,70 @@ def _rtp_silence_negative_control(media: dict, event: dict, cfg: dict[str, float
         ratio = _overlap(start, end, r0, r1) / duration
         if ratio > best_ratio:
             best_ratio = ratio
-            best = (r0, r1, silence)
+            best = (r0, r1)
     if best and best_ratio >= cfg["silence_counterpart_overlap_ratio"]:
         return {
             "type": "RTP_COUNTERPART_SILENCE",
             "status": "MATCHED",
-            "rtp_stream_id": corr.get("rtp_stream_id"),
-            "absolute_correlation": score,
             "overlap_ratio": round(best_ratio, 6),
             "rtp_silence_start_time": round(best[0], 6),
             "rtp_silence_end_time": round(best[1], 6),
-        }, None
+        }
+    return None
 
-    # Absence of an RTP silence candidate is not proof of positive media energy in
-    # exactly the same window. Fail closed until a window-energy timeline is present.
-    return None, {
-        "reason_code": "COUNTERPART_ACTIVITY_NOT_PROVEN",
-        "rtp_stream_id": corr.get("rtp_stream_id"),
-        "absolute_correlation": score,
+
+def _rtp_activity_proof(track: dict, event: dict, cfg: dict[str, float]) -> dict | None:
+    timeline = track.get("energy_timeline") or {}
+    windows = timeline.get("windows") or []
+    if not windows or timeline.get("threshold_dbfs") is None:
+        return None
+    start, end = _event_window(event)
+    duration = end - start
+    if duration <= 0:
+        return None
+    track_start = float(track.get("start_time") or 0.0)
+    threshold = float(timeline["threshold_dbfs"]) + cfg["silence_counterpart_active_margin_db"]
+    covered = 0.0
+    active = 0.0
+    weighted_dbfs = 0.0
+    for item in windows:
+        w0 = track_start + float(item.get("start_seconds") or 0.0)
+        w1 = track_start + float(item.get("end_seconds") or item.get("start_seconds") or 0.0)
+        overlap = _overlap(start, end, w0, w1)
+        if overlap <= 0:
+            continue
+        level = float(item.get("rms_dbfs") if item.get("rms_dbfs") is not None else -120.0)
+        covered += overlap
+        weighted_dbfs += level * overlap
+        if level >= threshold:
+            active += overlap
+    if covered <= 0:
+        return None
+    coverage_ratio = covered / duration
+    active_ratio = active / covered
+    return {
+        "type": "RTP_COUNTERPART_ACTIVITY",
+        "status": "PROVEN" if coverage_ratio >= 0.8 and active_ratio >= cfg["silence_counterpart_active_ratio"] else "NOT_PROVEN",
+        "coverage_ratio": round(coverage_ratio, 6),
+        "active_ratio": round(active_ratio, 6),
+        "active_threshold_dbfs": round(threshold, 3),
+        "mean_window_dbfs": round(weighted_dbfs / covered, 3),
+        "required_active_ratio": cfg["silence_counterpart_active_ratio"],
     }
+
+
+def _promoted_event(event: dict, *, candidate_id: str, reason_code: str, evidence: dict | None = None) -> dict:
+    out = dict(event)
+    details = dict(event.get("details") or {})
+    details["candidate_decision"] = {
+        "schema_version": CANDIDATE_DECISION_VERSION,
+        "candidate_id": candidate_id,
+        "status": PROMOTED,
+        "reason_code": reason_code,
+        "evidence": evidence or {},
+    }
+    out["details"] = details
+    return out
 
 
 def decide_event(media: dict, event: dict) -> dict:
@@ -196,13 +229,38 @@ def decide_event(media: dict, event: dict) -> dict:
         boundary = _media_boundary_negative_control(event, cfg)
         if boundary:
             return {**base, "status": REJECTED_NEGATIVE_CONTROL, "reason_code": "MEDIA_BOUNDARY_TRANSIENT", "negative_controls": [boundary]}
-        return {**base, "status": PROMOTED, "reason_code": "ACTIVE_MEDIA_MULTI_FEATURE_CLICK", "promoted_event": event}
+        reason = "ACTIVE_MEDIA_MULTI_FEATURE_CLICK"
+        return {**base, "status": PROMOTED, "reason_code": reason, "promoted_event": _promoted_event(event, candidate_id=candidate_id, reason_code=reason)}
 
     if ftype == "UNEXPECTED_SILENCE":
-        matched, inconclusive = _rtp_silence_negative_control(media, event, cfg)
+        corr = _best_rtp_correlation(media, event)
+        if not corr:
+            return {**base, "status": INCONCLUSIVE, "reason_code": "NO_DIRECTIONAL_RTP_REFERENCE"}
+        correlation = corr.get("correlation") or {}
+        score = float(correlation.get("absolute_correlation") or 0.0)
+        if score < cfg["silence_min_correlation"]:
+            return {**base, "status": INCONCLUSIVE, "reason_code": "RTP_REFERENCE_CORRELATION_TOO_LOW",
+                    "rtp_stream_id": corr.get("rtp_stream_id"), "absolute_correlation": score}
+        track = _track(media, corr.get("rtp_stream_id"))
+        if not track:
+            return {**base, "status": INCONCLUSIVE, "reason_code": "RTP_AUDIO_TRACK_UNAVAILABLE", "rtp_stream_id": corr.get("rtp_stream_id")}
+
+        matched = _rtp_silence_overlap(track, event, cfg)
         if matched:
+            matched.update({"rtp_stream_id": corr.get("rtp_stream_id"), "absolute_correlation": score})
             return {**base, "status": REJECTED_NEGATIVE_CONTROL, "reason_code": "RTP_COUNTERPART_SILENCE", "negative_controls": [matched]}
-        return {**base, "status": INCONCLUSIVE, **(inconclusive or {"reason_code": "COUNTERPART_ACTIVITY_NOT_PROVEN"})}
+
+        activity = _rtp_activity_proof(track, event, cfg)
+        if activity and activity.get("status") == "PROVEN":
+            evidence = {**activity, "rtp_stream_id": corr.get("rtp_stream_id"), "absolute_correlation": score}
+            reason = "CROSS_LAYER_SILENCE_MISMATCH"
+            return {**base, "status": PROMOTED, "reason_code": reason, "positive_evidence": evidence,
+                    "promoted_event": _promoted_event(event, candidate_id=candidate_id, reason_code=reason, evidence=evidence)}
+        if activity and activity.get("coverage_ratio", 0.0) >= 0.8 and activity.get("active_ratio", 1.0) < cfg["silence_counterpart_active_ratio"]:
+            negative = {**activity, "rtp_stream_id": corr.get("rtp_stream_id"), "absolute_correlation": score}
+            return {**base, "status": REJECTED_NEGATIVE_CONTROL, "reason_code": "RTP_COUNTERPART_LOW_ENERGY", "negative_controls": [negative]}
+        return {**base, "status": INCONCLUSIVE, "reason_code": "COUNTERPART_ACTIVITY_NOT_PROVEN",
+                "rtp_stream_id": corr.get("rtp_stream_id"), "absolute_correlation": score, "activity_evidence": activity}
 
     return {**base, "status": INCONCLUSIVE, "reason_code": "UNSUPPORTED_CANDIDATE_TYPE"}
 
@@ -223,10 +281,12 @@ def _raw_pcm_candidate_decisions(media: dict) -> list[dict]:
                 dtmf = _dtmf_negative_control(media, synthetic, cfg)
                 in_media = any(float(c["media_start_time"]) <= when <= float(c["media_end_time"]) for c in calls)
                 if dtmf:
-                    decisions.append({**decide_event(media, synthetic), "status": REJECTED_NEGATIVE_CONTROL, "reason_code": "DTMF_OVERLAP", "negative_controls": [dtmf], "raw_pcm_candidate": True})
+                    d = decide_event(media, synthetic)
+                    d.update({"status": REJECTED_NEGATIVE_CONTROL, "reason_code": "DTMF_OVERLAP", "negative_controls": [dtmf], "raw_pcm_candidate": True})
+                    decisions.append(d)
                 elif not in_media:
                     d = decide_event(media, synthetic)
-                    d.update({"status": REJECTED_NEGATIVE_CONTROL, "reason_code": "OUTSIDE_ACTIVE_MEDIA_WINDOW", "raw_pcm_candidate": True})
+                    d.update({"status": REJECTED_NEGATIVE_CONTROL, "reason_code": "OUTSIDE_ACTIVE_MEDIA_WINDOW", "raw_pcm_candidate": True, "promoted_event": None})
                     decisions.append(d)
             for ev in session.get("silence_events", []) or []:
                 start = session_start + float(ev.get("start_seconds") or 0.0)
@@ -235,20 +295,53 @@ def _raw_pcm_candidate_decisions(media: dict) -> list[dict]:
                 if not overlaps:
                     synthetic = {"type": "UNEXPECTED_SILENCE", "time": start, "scope": {"pcm_tap": tap, "pcm_session_index": session_index}, "details": ev}
                     d = decide_event(media, synthetic)
-                    d.update({"status": REJECTED_NEGATIVE_CONTROL, "reason_code": "OUTSIDE_ACTIVE_MEDIA_WINDOW", "raw_pcm_candidate": True})
+                    d.update({"status": REJECTED_NEGATIVE_CONTROL, "reason_code": "OUTSIDE_ACTIVE_MEDIA_WINDOW", "raw_pcm_candidate": True, "promoted_event": None})
                     decisions.append(d)
     return decisions
 
 
-def apply_candidate_decisions(results: dict[str, dict | None]) -> dict[str, dict | None]:
-    """Apply report/diagnosis-safe candidate decisions without deleting raw evidence.
+def _sanitize_pcm_candidates(pcm: dict | None) -> None:
+    if not isinstance(pcm, dict):
+        return
+    for stream in pcm.get("streams", []) or []:
+        for session in stream.get("sessions", []) or []:
+            if "silence_events" in session:
+                session["silence_candidates"] = list(session.get("silence_events") or [])
+                session["silence_events"] = []
+            if "click_pop_events" in session:
+                session["click_pop_candidates"] = list(session.get("click_pop_events") or [])
+                session["click_pop_events"] = []
 
-    Raw PCM detector outputs are preserved under ``*_candidates`` for audit. Only
-    promoted Media candidates remain in ``cross_layer_events`` where the Finding
-    composer can turn them into user-visible findings.
+
+def _decision_summary(decisions: list[dict]) -> dict:
+    statuses = Counter(str(d.get("status") or "UNKNOWN") for d in decisions)
+    reasons = Counter(str(d.get("reason_code") or "UNKNOWN") for d in decisions)
+    return {
+        "schema_version": CANDIDATE_DECISION_VERSION,
+        "total": len(decisions),
+        "status_counts": dict(sorted(statuses.items())),
+        "reason_counts": dict(sorted(reasons.items())),
+    }
+
+
+def apply_candidate_decisions(results: dict[str, dict | None]) -> dict[str, dict | None]:
+    """Fail-closed candidate normalization before user-visible Finding composition.
+
+    Raw PCM detector outputs are retained under ``*_candidates``. Click/Pop and
+    Silence reach ``cross_layer_events`` only after deterministic CandidateDecision
+    gates. When Media Analyzer is unavailable, raw PCM candidates remain auditable
+    but cannot become report Findings.
     """
     media = results.get("media_intelligence")
+    standalone_pcm = results.get("pcm_intelligence")
     if not isinstance(media, dict):
+        _sanitize_pcm_candidates(standalone_pcm)
+        if isinstance(standalone_pcm, dict):
+            standalone_pcm.setdefault("summary", {})["candidate_decision"] = {
+                "schema_version": CANDIDATE_DECISION_VERSION,
+                "status": INCONCLUSIVE,
+                "reason_code": "MEDIA_ANALYZER_UNAVAILABLE",
+            }
         return results
 
     active = list(media.get("active_media_audio_events", []) or [])
@@ -262,6 +355,7 @@ def apply_candidate_decisions(results: dict[str, dict | None]) -> dict[str, dict
     media["candidate_decisions"] = decisions
     media["promoted_audio_events"] = promoted
     summary = media.setdefault("summary", {})
+    summary["candidate_decision"] = _decision_summary(decisions)
     summary["raw_audio_candidate_count"] = len(active)
     summary["promoted_audio_candidate_count"] = sum(1 for d in decisions if d.get("status") == PROMOTED)
     summary["rejected_audio_candidate_count"] = sum(1 for d in decisions if d.get("status") == REJECTED_NEGATIVE_CONTROL)
@@ -269,21 +363,11 @@ def apply_candidate_decisions(results: dict[str, dict | None]) -> dict[str, dict
     summary["click_pop_count"] = sum(1 for e in promoted if e.get("type") == "CLICK_POP")
     summary["unexpected_silence_count"] = sum(1 for e in promoted if e.get("type") == "UNEXPECTED_SILENCE")
 
-    # The standalone PCM Analyzer remains detector evidence, not a Finding source
-    # for Click/Pop or Silence. Preserve raw candidates under explicit names.
-    for key in ("pcm_intelligence",):
-        pcm = results.get(key)
-        if not isinstance(pcm, dict):
-            continue
-        for stream in pcm.get("streams", []) or []:
-            for session in stream.get("sessions", []) or []:
-                if "silence_events" in session:
-                    session["silence_candidates"] = list(session.get("silence_events") or [])
-                    session["silence_events"] = []
-                if "click_pop_events" in session:
-                    session["click_pop_candidates"] = list(session.get("click_pop_events") or [])
-                    session["click_pop_events"] = []
+    _sanitize_pcm_candidates(standalone_pcm)
 
+    # Preserve embedded raw candidates for Analyzer audit. Do not clear them here:
+    # CandidateDecision above already consumed this source and the Finding composer
+    # never reads media.pcm.* raw detector events directly.
     embedded_pcm = media.get("pcm")
     if isinstance(embedded_pcm, dict):
         for stream in embedded_pcm.get("streams", []) or []:
