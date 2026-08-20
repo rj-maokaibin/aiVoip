@@ -30,14 +30,22 @@ expected:
     analysis_mode: OFFLINE_IMPORTED
     call_origin: RECONSTRUCTED_FROM_PCAP
     call_scope: BOUND
+    call_selection_status: SELECTED
+    selection_rule: PCM_SOURCE_DEVICE_IDENTITY_MATCH
+    subject_device_ip: 192.168.150.4
     semantic_status: OK
     reviewability: FULLY_REVIEWABLE
   call:
-    reconstructed_count: 1
-    sip_call_id: 00ad1c804c33b255@192.168.3.200
+    raw_sip_leg_count: 2
+    diagnostic_call_count: 1
+    selected_sip_call_id: 00ad1c804c33b255@192.168.3.200
+    selected_display_call_id: CALL-001
     dialed_number: "601"
     allowed_states: [ESTABLISHED, TERMINATED]
     media_direction_status: BIDIRECTIONAL
+    other_sip_leg:
+      call_id: 60d32450633aea2363e5b73e-1786691379761-0x1067e2b4-2875d8158357@192.168.3.200
+      role: PBX_B2BUA_INTERNAL_LEG
   pcm:
     format:
       sample_rate: 8000
@@ -45,6 +53,7 @@ expected:
       endian: little
       udp_payload_bytes: 160
     total_packets: 13050
+    source_device_ip: 192.168.150.4
     taps:
       pcm_rx:
         direction: RX
@@ -125,7 +134,8 @@ expected:
       - PHONE_LINE_NOISE
       - FXS_SLIC_NOISE
 notes:
-  - 该 Case 的核心真值是“601 Call 可重建、PCM 40000/50000 两路都可解析、RTP 无 Sequence Loss、存在上行 High Delta、DTMF 601 与 SIP 目标一致、周期干扰在 PCM_RX 与上行 RTP 可见”。
+  - 原始 SIP 协议层存在 2 个 Call-ID：DUT→PBX 主腿和 PBX→被叫的 B2BUA 内部腿。Golden 不删除第二条腿；raw_sip_leg_count 必须为 2。
+  - 当前诊断对象只有 1 个 DUT-facing Call。PCM 40000/50000 的 UDP source IP 为 192.168.150.4，系统应使用这一原始 provenance 选择包含该设备 SDP/RTP endpoint 的主腿，而不是按“结束时间最新”选择 PBX 内部腿。
   - PCM 原始 UDP 人工复核为 40000/50000 各 6525 包，每包 payload 160 bytes；按已知 Profile 为 8kHz/16-bit little-endian，每包对应 10ms 音频。
   - 两个主上行 HIGH_DELTA 的边界 Frame/Seq 已人工复核：20272/46511→20285/46512，以及 20329/46519→20344/46520；Sequence 连续，因此不能写成 Packet Loss。high_delta_ms 是算法容差范围，high_delta_events 保存人工复核的精确 Frame/Seq Ground Truth。
   - HIGH_DELTA 表示到包/发送节奏间隔异常，不等同于 RTP Sequence Loss。
