@@ -8,9 +8,11 @@ on:
       - 'backend/app/reports/evidence_brief.py'
       - 'backend/app/services/evidence_report.py'
       - 'backend/app/services/evidence_report_context.py'
+      - 'backend/app/integrations/feishu/evidence_document.py'
       - 'backend/tests/test_evidence_report_*.py'
       - 'backend/tests/test_preliminary_evidence_report_v1.py'
       - 'backend/tests/test_evidence_report_authority_v1.py'
+      - 'backend/tests/test_feishu_evidence_document_v1.py'
       - 'tools/evidence_report_*.py'
       - 'golden_cases/evidence_report_v1_synthetic.json'
       - '.github/workflows/evidence-report-pr.yml'
@@ -40,6 +42,7 @@ jobs:
             backend/tests/test_evidence_report_offline_context_v1.py \
             backend/tests/test_evidence_report_context_provenance_v1.py \
             backend/tests/test_preliminary_evidence_report_v1.py \
-            backend/tests/test_evidence_report_authority_v1.py
+            backend/tests/test_evidence_report_authority_v1.py \
+            backend/tests/test_feishu_evidence_document_v1.py
       - name: Synthetic evidence report golden gate
         run: PYTHONPATH=backend:. python tools/evidence_report_golden_gate.py
