@@ -50,7 +50,7 @@ candidate_decision:
     media_boundary_guard_ms: 120.0
     min_promote_confidence: 0.65
   silence:
-    min_counterpart_correlation: 0.55
+    min_counterpart_correlation: 0.80
     counterpart_quiet_dbfs: -52.0
     counterpart_active_dbfs: -42.0
     context_seconds: 0.12
