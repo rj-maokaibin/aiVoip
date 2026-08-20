@@ -4,7 +4,11 @@ from app.services.evidence_report_context import (
     CALL_BINDING_INCOMPLETE,
     FULLY_REVIEWABLE,
     NOT_FULLY_REVIEWABLE,
+    PACKET_BINDING_BOUND,
+    PACKET_BINDING_MIXED,
+    PACKET_BINDING_UNBOUND,
     REPORT_SEMANTIC_CONTRADICTION,
+    case_packet_binding_state,
     resolve_report_analysis_context,
 )
 
@@ -80,6 +84,7 @@ def test_offline_pcap_reconstructs_call_and_dialed_number():
     call = resolved["display_call"]
 
     assert context["analysis_mode"] == AnalysisMode.OFFLINE_IMPORTED.value
+    assert context["packet_evidence_binding"] == PACKET_BINDING_UNBOUND
     assert context["capture_origin"] == "USER_UPLOAD"
     assert context["call_origin"] == CallOrigin.RECONSTRUCTED_FROM_PCAP.value
     assert context["call_scope"] == CallScope.BOUND.value
@@ -117,7 +122,7 @@ def test_offline_context_selects_latest_reconstructed_call_deterministically():
     assert call["id"] == "CALL-002"
 
 
-def test_runtime_call_remains_runtime_context_and_authority():
+def test_runtime_call_remains_runtime_context_and_authority_when_packet_call_matches():
     runtime_session = {"id": "session-1", "status": "COMPLETED"}
     runtime_call = {
         "id": "db-call-1",
@@ -127,7 +132,7 @@ def test_runtime_call_remains_runtime_context_and_authority():
         "started_at": "2026-08-20T01:00:00+00:00",
         "ended_at": "2026-08-20T01:01:00+00:00",
     }
-    packet = _packet_result([_packet_call("packet-call", 100.0, 200.0)])
+    packet = _packet_result([_packet_call("field-call", 100.0, 200.0)])
     results = {"packet_intelligence": packet, "pcm_intelligence": None, "media_intelligence": None}
 
     resolved = resolve_report_analysis_context(
@@ -147,6 +152,50 @@ def test_runtime_call_remains_runtime_context_and_authority():
     assert call["id"] == "db-call-1"
     assert call["origin"] == CallOrigin.REPRODUCTION_RUNTIME.value
     assert call["source"]["type"] == CallOrigin.REPRODUCTION_RUNTIME.value
+
+
+def test_runtime_packet_call_id_mismatch_is_not_fully_reviewable():
+    runtime_session={"id":"session-1"}
+    runtime_call={"id":"db-call-1","external_call_ref":"runtime-sip-call","call_no":1,"status":"ENDED"}
+    results={"packet_intelligence":_packet_result([_packet_call("different-sip-call",10.0,20.0)]),"pcm_intelligence":None,"media_intelligence":None}
+
+    resolved=resolve_report_analysis_context(scope_type="CALL",session=runtime_session,runtime_call=runtime_call,
+                                             evidences=[{"type":"PCAP","source":"REPRODUCTION"}],results=results)
+    context=resolved["analysis_context"]
+
+    assert REPORT_SEMANTIC_CONTRADICTION in context["semantic_issues"]
+    assert CALL_BINDING_INCOMPLETE in context["semantic_issues"]
+    assert context["reviewability"]==NOT_FULLY_REVIEWABLE
+
+
+def test_case_bound_packet_evidence_forces_reproduction_mode_even_without_latest_scope_session():
+    results={"packet_intelligence":_packet_result([_packet_call("sip-bound",10.0,20.0)]),"pcm_intelligence":None,"media_intelligence":None}
+    evidence={"type":"PCAP","source":"REPRODUCTION","session_id":"session-bound","call_id":"call-bound"}
+
+    resolved=resolve_report_analysis_context(scope_type="CASE",session=None,runtime_call=None,evidences=[evidence],results=results)
+    context=resolved["analysis_context"]
+
+    assert case_packet_binding_state("CASE",[evidence])==PACKET_BINDING_BOUND
+    assert context["analysis_mode"]==AnalysisMode.REPRODUCTION.value
+    assert CALL_BINDING_INCOMPLETE in context["semantic_issues"]
+    assert context["reviewability"]==NOT_FULLY_REVIEWABLE
+
+
+def test_case_mixed_bound_and_unbound_packet_evidence_fails_closed():
+    results={"packet_intelligence":_packet_result([_packet_call("sip-mixed",10.0,20.0)]),"pcm_intelligence":None,"media_intelligence":None}
+    evidences=[
+        {"type":"PCAP","session_id":"session-1","call_id":"call-1"},
+        {"type":"PCAP","session_id":None,"call_id":None},
+    ]
+
+    resolved=resolve_report_analysis_context(scope_type="CASE",session=None,runtime_call=None,evidences=evidences,results=results)
+    context=resolved["analysis_context"]
+
+    assert context["packet_evidence_binding"]==PACKET_BINDING_MIXED
+    assert context["analysis_mode"]==AnalysisMode.OFFLINE_IMPORTED.value
+    assert REPORT_SEMANTIC_CONTRADICTION in context["semantic_issues"]
+    assert CALL_BINDING_INCOMPLETE in context["semantic_issues"]
+    assert context["reviewability"]==NOT_FULLY_REVIEWABLE
 
 
 def test_case_unbound_uploaded_pcap_does_not_inherit_historical_runtime_call():
@@ -178,10 +227,11 @@ def test_case_unbound_uploaded_pcap_does_not_inherit_historical_runtime_call():
     call = resolved["display_call"]
 
     assert context["analysis_mode"] == AnalysisMode.OFFLINE_IMPORTED.value
+    assert context["packet_evidence_binding"] == PACKET_BINDING_UNBOUND
     assert context["source_session_id"] is None
     assert context["historical_runtime_session_id"] == "historical-session"
     assert context["historical_runtime_call_id"] == "historical-db-call"
-    assert context["runtime_context_suppressed_for_unbound_case_capture"] is True
+    assert context["runtime_context_suppressed"] is True
     assert context["call_origin"] == CallOrigin.RECONSTRUCTED_FROM_PCAP.value
     assert call["sip_call_id"] == FIELD_CALL_ID
     assert call["id"] != "historical-db-call"

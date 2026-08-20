@@ -42,16 +42,11 @@ def report_idempotency_key(scope_type: str, scope_id: str, input_hash: str, anal
 
 
 def _analysis_context_source_analyzer(results: dict[str,dict|None]) -> str | None:
-    """Mirror the report Call reconstruction source selection without re-analysis."""
-    packet=results.get("packet_intelligence") or {}
-    media_packet=((results.get("media_intelligence") or {}).get("packet") or {})
-    if packet.get("calls"):
+    """Mirror authoritative packet-source selection without re-analysis."""
+    if results.get("packet_intelligence") is not None:
         return "packet_intelligence"
-    if media_packet.get("calls"):
-        return "media_intelligence"
-    if packet:
-        return "packet_intelligence"
-    if media_packet:
+    media_packet=((results.get("media_intelligence") or {}).get("packet"))
+    if media_packet is not None:
         return "media_intelligence"
     return None
 
