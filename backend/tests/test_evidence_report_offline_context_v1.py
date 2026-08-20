@@ -149,6 +149,45 @@ def test_runtime_call_remains_runtime_context_and_authority():
     assert call["source"]["type"] == CallOrigin.REPRODUCTION_RUNTIME.value
 
 
+def test_case_unbound_uploaded_pcap_does_not_inherit_historical_runtime_call():
+    runtime_session = {"id": "historical-session", "status": "COMPLETED"}
+    runtime_call = {
+        "id": "historical-db-call",
+        "call_no": 9,
+        "external_call_ref": "historical-sip-call",
+        "status": "ENDED",
+        "started_at": "2026-08-19T01:00:00+00:00",
+        "ended_at": "2026-08-19T01:01:00+00:00",
+    }
+    packet = _packet_result([_packet_call(FIELD_CALL_ID, 100.0, 120.0)])
+    results = {"packet_intelligence": packet, "pcm_intelligence": None, "media_intelligence": None}
+
+    resolved = resolve_report_analysis_context(
+        scope_type="CASE",
+        session=runtime_session,
+        runtime_call=runtime_call,
+        evidences=[{
+            "type": "PCAP",
+            "source": "USER_UPLOAD",
+            "session_id": None,
+            "call_id": None,
+        }],
+        results=results,
+    )
+    context = resolved["analysis_context"]
+    call = resolved["display_call"]
+
+    assert context["analysis_mode"] == AnalysisMode.OFFLINE_IMPORTED.value
+    assert context["source_session_id"] is None
+    assert context["historical_runtime_session_id"] == "historical-session"
+    assert context["historical_runtime_call_id"] == "historical-db-call"
+    assert context["runtime_context_suppressed_for_unbound_case_capture"] is True
+    assert context["call_origin"] == CallOrigin.RECONSTRUCTED_FROM_PCAP.value
+    assert call["sip_call_id"] == FIELD_CALL_ID
+    assert call["id"] != "historical-db-call"
+    assert context["semantic_issues"] == []
+
+
 def test_offline_rtp_only_packet_is_unbound_and_does_not_fabricate_call():
     packet = _packet_result([], rtp_streams=[
         {"stream_id": "rtp-only", "src_ip": "10.0.0.1", "src_port": 10000, "dst_ip": "10.0.0.2", "dst_port": 20000}
