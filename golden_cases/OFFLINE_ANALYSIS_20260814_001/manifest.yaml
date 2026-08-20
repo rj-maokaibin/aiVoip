@@ -47,19 +47,30 @@ expected:
       codec: PCMU
       lost_packets: 0
       high_delta_count: 2
-      high_delta_ms:
-        - min: 140.0
-          max: 152.0
-        - min: 168.0
-          max: 182.0
+      high_delta_events:
+        - delta_ms: {min: 140.0, max: 152.0}
+          previous_frame_number: 20272
+          current_frame_number: 20285
+          previous_sequence: 46511
+          current_sequence: 46512
+        - delta_ms: {min: 168.0, max: 182.0}
+          previous_frame_number: 20329
+          current_frame_number: 20344
+          previous_sequence: 46519
+          current_sequence: 46520
     forbidden_anomaly_types: [PACKET_LOSS, BURST_LOSS]
     semantic_rules:
       high_delta_must_not_be_labeled_packet_loss: true
+      sequence_must_remain_continuous_across_high_delta: true
   dtmf:
     required_event_type: DTMF_SIP_DIAL_MATCH
     pcm_digits: "601"
     sip_target: "601"
     pcm_tap: pcm_rx
+    reviewed_digits:
+      - {digit: "6", start: 1786690964.323755, end_approx: 1786690964.463755}
+      - {digit: "0", start: 1786690964.703755, end_approx: 1786690964.833755}
+      - {digit: "1", start: 1786690965.033755, end_approx: 1786690965.163755}
   periodic_interference:
     required_event_type: LOCAL_CAPTURE_PERIODIC_INTERFERENCE
     require_pcm_rx: true
@@ -97,6 +108,7 @@ expected:
       - FXS_SLIC_NOISE
 notes:
   - 该 Case 的核心真值是“601 Call 可重建、RTP 无 Sequence Loss、存在上行 High Delta、DTMF 601 与 SIP 目标一致、周期干扰在 PCM_RX 与上行 RTP 可见”。
+  - 两个主上行 HIGH_DELTA 的边界 Frame/Seq 已人工复核：20272/46511→20285/46512，以及 20329/46519→20344/46520；Sequence 连续，因此不能写成 Packet Loss。
   - HIGH_DELTA 表示到包/发送节奏间隔异常，不等同于 RTP Sequence Loss。
   - DTMF 起始沿附近的 Click/Pop 候选必须被 Negative Control 拦截，不得作为独立爆音故障升级。
   - PCM_TX 静音只有在对应 RTP 同窗明确活跃时才允许升级为 CROSS_LAYER_SILENCE_MISMATCH；同窗 RTP 静音/低能量必须 Reject，证据不足必须 Inconclusive。
