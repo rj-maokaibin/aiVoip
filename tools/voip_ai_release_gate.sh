@@ -24,6 +24,10 @@ need "$PYTHON_BIN"
 need docker
 need npm
 need curl
+if [[ -n "${VOIP_PR2_FIELD_PCAP:-}" ]]; then
+  [[ -f "$VOIP_PR2_FIELD_PCAP" ]] || fail "VOIP_PR2_FIELD_PCAP does not exist: $VOIP_PR2_FIELD_PCAP"
+  need tshark
+fi
 
 docker info >/dev/null 2>&1 || fail "Docker daemon is not available"
 
@@ -92,7 +96,12 @@ log "8/11 PostgreSQL clean migration"
 log "9/11 Full backend regression"
 pytest -q backend/tests --tb=line
 log "10/11 Preliminary Evidence Report software gate"
-python tools/evidence_report_release_gate.py --skip-tests
+EVIDENCE_GATE_ARGS=(--skip-tests)
+if [[ -n "${VOIP_PR2_FIELD_PCAP:-}" ]]; then
+  log "PR2 Field Golden enabled: SHA-bound external PCAP"
+  EVIDENCE_GATE_ARGS+=(--field-pcap "$VOIP_PR2_FIELD_PCAP")
+fi
+python tools/evidence_report_release_gate.py "${EVIDENCE_GATE_ARGS[@]}"
 log "11/11 Frontend dependency audit and production build"
 (cd frontend && npm ci && npm audit --audit-level=low && npm run build && test -s dist/index.html && test -s dist/evidence-report.html)
 
