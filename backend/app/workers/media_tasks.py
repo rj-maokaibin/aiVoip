@@ -11,6 +11,7 @@ from celery.utils.log import get_task_logger
 
 from app.contracts.enums import JobStatus, RunStatus
 from app.analyzers.media import MediaIntelligenceEngine
+from app.analyzers.media.candidate_decision import apply_candidate_decisions
 from app.analyzers.packet import TSharkAdapter
 from app.analyzers.pcm import load_pcm_profile
 from app.core.config import settings
@@ -65,7 +66,17 @@ def analyze_media_evidence(self, job_id: str, evidence_id: str, profile_id: str 
         with tempfile.TemporaryDirectory(prefix='voip-media-') as td:
             td=Path(td); local=td/f'input{suffix}'; out=td/'artifacts'; out.mkdir()
             materialize_evidence(evidence, local, permanent_storage=storage)
-            result=engine.analyze_pcap(local, out)
+            raw_result=engine.analyze_pcap(local, out)
+            # CandidateDecision is part of the canonical Media Analyzer output, not
+            # merely a report-time filter. Persist the gated result before notifying
+            # Diagnosis/Report consumers so every downstream reader sees the same
+            # PROMOTED / REJECTED_NEGATIVE_CONTROL / INCONCLUSIVE semantics.
+            gated=apply_candidate_decisions({
+                'packet_intelligence': raw_result.get('packet'),
+                'pcm_intelligence': None,
+                'media_intelligence': raw_result,
+            })
+            result=gated['media_intelligence'] or raw_result
             artifact_rows=[]
             for spec in result.get('artifacts', []):
                 local_path=Path(spec.pop('local_path'))
@@ -85,7 +96,8 @@ def analyze_media_evidence(self, job_id: str, evidence_id: str, profile_id: str 
         run.status=final_status; run.finished_at=utcnow(); run.summary_json=result.get('summary'); run.result_object_key=result_key
         transition_job(db, job, JobStatus(final_status), reason='media_analysis_complete')
         audit(db,case_id=job.case_id,event_type='MEDIA_ANALYSIS_FINISHED',target_type='analyzer_run',target_id=run.id,
-              detail={'evidence_id':evidence.id,'profile_id':profile.id,'summary':result.get('summary'),'artifact_count':len(result.get('artifacts',[]))})
+              detail={'evidence_id':evidence.id,'profile_id':profile.id,'summary':result.get('summary'),'artifact_count':len(result.get('artifacts',[])),
+                      'candidate_decision':(result.get('summary') or {}).get('candidate_decision')})
         db.commit()
         from app.workers.diagnosis_tasks import notify_case_changed
         notify_case_changed(job.case_id); _notify_reports(job.case_id,'media_analysis_complete')
