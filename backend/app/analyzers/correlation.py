@@ -2,18 +2,9 @@ from __future__ import annotations
 
 import re
 
+from app.analyzers.media.subject_identity import SUBJECT_IDENTITY_UNIQUE, infer_pcm_source_device_identity
+
 _URI_DIGITS = re.compile(r"(?:sip:|tel:)?([0-9*#]+)")
-
-
-def _pcm_source_ips(pcm_result: dict) -> set[str]:
-    ips: set[str] = set()
-    for stream in pcm_result.get("streams", []) or []:
-        if int(stream.get("packet_count") or 0) <= 0:
-            continue
-        for endpoint in stream.get("source_endpoints", []) or []:
-            if endpoint.get("ip"):
-                ips.add(str(endpoint["ip"]))
-    return ips
 
 
 def _call_connection_ips(call: dict, packet_result: dict) -> set[str]:
@@ -39,23 +30,27 @@ def _call_connection_ips(call: dict, packet_result: dict) -> set[str]:
 
 def _subject_calls(packet_result: dict, pcm_result: dict) -> tuple[list[dict], dict]:
     calls = [c for c in packet_result.get("calls", []) or [] if c.get("call_id")]
+    identity = infer_pcm_source_device_identity(pcm_result, source="pcm_intelligence")
     if len(calls) <= 1:
-        return calls, {"status": "SINGLE_CALL", "pcm_source_ips": sorted(_pcm_source_ips(pcm_result))}
+        return calls, {"status": "SINGLE_CALL", "subject_identity": identity}
 
-    source_ips = _pcm_source_ips(pcm_result)
-    if len(source_ips) != 1:
+    if identity.get("status") != SUBJECT_IDENTITY_UNIQUE or not identity.get("selected_ip"):
         # Multi-leg Call correlation without one deterministic subject-device IP is
         # unsafe: emitting the same PCM digits against every B2BUA leg creates false
         # duplicate evidence. Fail closed until provenance is sufficient.
-        return [], {"status": "AMBIGUOUS_SUBJECT", "pcm_source_ips": sorted(source_ips)}
+        return [], {"status": "AMBIGUOUS_SUBJECT", "subject_identity": identity}
 
-    subject_ip = next(iter(source_ips))
+    subject_ip = str(identity["selected_ip"])
     matched = [call for call in calls if subject_ip in _call_connection_ips(call, packet_result)]
     if len(matched) == 1:
-        return matched, {"status": "SUBJECT_CALL_SELECTED", "pcm_source_ips": [subject_ip], "selected_call_id": matched[0].get("call_id")}
+        return matched, {
+            "status": "SUBJECT_CALL_SELECTED",
+            "subject_identity": identity,
+            "selected_call_id": matched[0].get("call_id"),
+        }
     return [], {
         "status": "AMBIGUOUS_SUBJECT_CALL",
-        "pcm_source_ips": [subject_ip],
+        "subject_identity": identity,
         "matched_call_ids": [c.get("call_id") for c in matched],
     }
 
