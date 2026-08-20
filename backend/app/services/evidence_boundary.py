@@ -46,6 +46,27 @@ def _take_diagnostic_snapshot(payload: dict) -> dict:
     return build_diagnostic_contract_snapshot(results={},analyzer_states={})
 
 
+def _append_diagnostic_event_refs(finding: dict, link: dict, snapshot: dict) -> None:
+    """Bridge PR7 canonical IDs into the existing Claim/DB event-ref channel."""
+    refs=list(finding.get("event_refs") or [])
+    decision_by_id={str(x.get("decision_id")):x for x in snapshot.get("candidate_decisions",[]) or [] if x.get("decision_id")}
+    canonical=[]
+    for event_id in link.get("event_ids") or []:
+        canonical.append({"source":"diagnostic.events","event_id":str(event_id)})
+    for decision_id in link.get("decision_ids") or []:
+        decision=decision_by_id.get(str(decision_id)) or {}
+        canonical.append({
+            "source":"diagnostic.decisions",
+            "decision_id":str(decision_id),
+            "status":decision.get("status"),
+            "reason_code":decision.get("reason_code"),
+        })
+    for item in canonical:
+        if item not in refs:
+            refs.append(item)
+    finding["event_refs"]=refs
+
+
 def _attach_diagnostic_contract(payload: dict) -> None:
     findings=payload.get("findings",[]) or []
     snapshot=_take_diagnostic_snapshot(payload)
@@ -54,8 +75,8 @@ def _attach_diagnostic_contract(payload: dict) -> None:
     payload["diagnostic_contract"]=snapshot
 
     # EvidenceFinding currently has no dedicated DB JSON column for the PR7
-    # contract. Persist only stable references in correlation_json; the complete
-    # immutable Event/Decision objects remain authoritative in report.snapshot_json.
+    # contract. Persist stable references in existing correlation_json/event_refs;
+    # complete immutable Event/Decision objects remain authoritative in snapshot_json.
     for finding in findings:
         link=finding.get("diagnostic") or {}
         correlation=dict(finding.get("correlation") or {})
@@ -67,6 +88,7 @@ def _attach_diagnostic_contract(payload: dict) -> None:
             "merged_event_ids":link.get("merged_event_ids") or [],
         }
         finding["correlation"]=correlation
+        _append_diagnostic_event_refs(finding,link,snapshot)
 
 
 def apply_first_observable_boundaries(payload:dict) -> dict:
