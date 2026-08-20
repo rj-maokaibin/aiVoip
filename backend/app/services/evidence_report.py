@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.contracts.evidence_report import REPORT_COMPOSER_VERSION, REPORT_SCHEMA_VERSION, EvidenceFindingStatus, EvidenceReportArtifactType, EvidenceReportStatus
+from app.contracts.evidence_report import AnalysisMode, REPORT_COMPOSER_VERSION, REPORT_SCHEMA_VERSION, EvidenceFindingStatus, EvidenceReportArtifactType, EvidenceReportStatus
 from app.db.evidence_report_models import EvidenceFinding, PreliminaryEvidenceReport
 from app.integrations.storage import ObjectStorage
 from app.reports.evidence_brief import build_report_payload, canonical_hash, render_report_html
@@ -58,6 +58,13 @@ def _analysis_context_evidences(evidence_items: list[dict], runs: dict) -> tuple
     return selected, sorted(input_ids)
 
 
+def _runtime_binding_ids(analysis_context: dict, session, call) -> tuple[str | None, str | None]:
+    """Return persisted runtime FK bindings only for genuine reproduction context."""
+    if analysis_context.get("analysis_mode") != AnalysisMode.REPRODUCTION.value:
+        return None, None
+    return (session.id if session else None, call.id if call else None)
+
+
 def _persist_findings(db: Session, *, report: PreliminaryEvidenceReport, payload: dict) -> list[EvidenceFinding]:
     existing={x.stable_key:x for x in db.scalars(select(EvidenceFinding).where(EvidenceFinding.scope_type==report.scope_type,EvidenceFinding.scope_id==report.scope_id))}
     observed=set(); rows=[]
@@ -89,7 +96,6 @@ def generate_evidence_report(db: Session, *, scope_type, scope_id: str, actor: s
     evidences=scoped_evidences(db,scope_type=scope_type,scope=scope); evidence_items=[evidence_dict(e) for e in evidences]; evidence_ids={e.id for e in evidences}
     runs=latest_analyzer_runs(db,case_id=case.id,evidence_ids=evidence_ids,case_scope=scope_type=="CASE")
     results,states=load_analyzer_results(storage,runs); previous=latest_report(db,scope_type,scope_id); version=(previous.version+1) if previous else 1
-    environment=environment_snapshot(db,case,session)
     runtime_session=session_dict(session); runtime_call=call_dict(call)
     context_evidences,context_input_ids=_analysis_context_evidences(evidence_items,runs)
     resolved_context=resolve_report_analysis_context(
@@ -102,8 +108,13 @@ def generate_evidence_report(db: Session, *, scope_type, scope_id: str, actor: s
     analysis_context=resolved_context["analysis_context"]
     analysis_context["analyzer_input_evidence_ids"]=context_input_ids
     display_call=resolved_context["display_call"]
+    runtime_bound=analysis_context.get("analysis_mode")==AnalysisMode.REPRODUCTION.value
+    report_session_id,report_call_id=_runtime_binding_ids(analysis_context,session,call)
+    payload_session=runtime_session if runtime_bound else None
+    payload_runtime_call=runtime_call if runtime_bound else None
+    environment=environment_snapshot(db,case,session if runtime_bound else None)
     payload=build_report_payload(case=case_dict(case),scope_type=scope_type,scope_id=scope_id,
-                                 session=runtime_session,call=runtime_call,analysis_context=analysis_context,display_call=display_call,
+                                 session=payload_session,call=payload_runtime_call,analysis_context=analysis_context,display_call=display_call,
                                  environment=environment,evidences=evidence_items,analyzer_states=states,results=results,report_version=version)
     expired=[{
         "evidence_id":x.get("id"),"original_type":x.get("original_type"),"filename":x.get("filename"),"sha256":x.get("sha256"),
@@ -115,7 +126,7 @@ def generate_evidence_report(db: Session, *, scope_type, scope_id: str, actor: s
         completeness["expired_evidence"]=expired
         prior=str(completeness.get("boundary") or "")
         completeness["boundary"]=(f"{len(expired)} 个原始 Evidence Payload 已按 Retention 策略过期；报告、SHA256、来源元数据和关键派生证据仍保留，但过期原始数据不可重新下载或重新分析。 "+prior).strip()
-    apply_first_observable_boundaries(payload); enrich_aggregate_payload(db,payload=payload,scope_type=scope_type,case_id=case.id,session_id=session.id if session else None)
+    apply_first_observable_boundaries(payload); enrich_aggregate_payload(db,payload=payload,scope_type=scope_type,case_id=case.id,session_id=report_session_id)
     payload["input_snapshot_hash"]=canonical_hash({"base":payload["input_snapshot_hash"],"findings":payload.get("findings"),"multi_call_summary":payload.get("multi_call_summary"),
                                                      "environment_groups":payload.get("environment_groups"),"ab_comparison":payload.get("ab_comparison"),
                                                      "analysis_context":payload.get("analysis_context"),"display_call":payload.get("display_call"),
@@ -124,7 +135,7 @@ def generate_evidence_report(db: Session, *, scope_type, scope_id: str, actor: s
     if not force:
         same=db.scalar(select(PreliminaryEvidenceReport).where(PreliminaryEvidenceReport.idempotency_key==idem).limit(1))
         if same:return same,same.snapshot_json or payload,True
-    report=PreliminaryEvidenceReport(case_id=case.id,session_id=session.id if session else None,call_id=call.id if call else None,scope_type=scope_type,scope_id=scope_id,
+    report=PreliminaryEvidenceReport(case_id=case.id,session_id=report_session_id,call_id=report_call_id,scope_type=scope_type,scope_id=scope_id,
         version=version,status=EvidenceReportStatus.COMPOSING.value,schema_version=REPORT_SCHEMA_VERSION,composer_version=REPORT_COMPOSER_VERSION,
         input_snapshot_hash=payload["input_snapshot_hash"],idempotency_key=idem,
         analyzer_versions_json={k:{"run_id":v.get("run_id"),"version":v.get("analyzer_version"),"config_version":v.get("config_version")} for k,v in states.items()},
@@ -156,7 +167,7 @@ def generate_evidence_report(db: Session, *, scope_type, scope_id: str, actor: s
                   "forced":force,"expired_raw_evidence_count":len(expired),"analysis_mode":analysis_context.get("analysis_mode"),
                   "call_origin":analysis_context.get("call_origin"),"call_scope":analysis_context.get("call_scope"),
                   "reconstructed_call_count":analysis_context.get("reconstructed_call_count",0),"semantic_issues":analysis_context.get("semantic_issues",[]),
-                  "analyzer_input_evidence_ids":context_input_ids})
+                  "analyzer_input_evidence_ids":context_input_ids,"persisted_session_id":report_session_id,"persisted_call_id":report_call_id})
     return report,payload,False
 
 
