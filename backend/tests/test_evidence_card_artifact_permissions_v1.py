@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from app.api.v1.artifacts import REPORT_SAFE_TYPES
+from app.analyzers.media.periodic import _representative_window
 from app.reports.evidence_card import build_evidence_card
 
 
@@ -43,3 +44,12 @@ def test_periodic_clip_string_source_is_safe_and_preserved_for_golden_traceabili
     assert clip["source"]=="rtp_up"
     assert clip["direction"] is None
     assert clip["content_url"]=="/api/v1/artifacts/clip1/content"
+
+
+def test_periodic_representative_window_is_not_a_zero_duration_instant():
+    periodic={"representative":{"absolute_start_time":105.25,"duration_seconds":1.0}}
+    start,end,representative=_representative_window(periodic,100.0,120.0)
+    assert start==105.25
+    assert representative==105.25
+    assert end==106.25
+    assert end>start
