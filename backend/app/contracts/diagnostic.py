@@ -122,6 +122,20 @@ def _scope(value: dict | None) -> dict:
     return canonical
 
 
+def _stable_source_identity(source_ref: dict) -> dict:
+    """Keep traceability metadata out of identity unless it is semantically stable.
+
+    Plain list indexes are intentionally excluded so harmless Analyzer ordering
+    changes do not produce a new Event ID for the same fact.
+    """
+    stable_keys = {
+        "source", "candidate_id", "stable_key", "frame", "frame_number",
+        "previous_frame_number", "current_frame_number", "sequence",
+        "previous_sequence", "current_sequence", "ssrc",
+    }
+    return {k: source_ref[k] for k in sorted(stable_keys) if source_ref.get(k) is not None}
+
+
 def build_diagnostic_event(
     *,
     event_type: str,
@@ -149,7 +163,7 @@ def build_diagnostic_event(
         "analyzer_id": str(analyzer_id),
         "scope": canonical_scope,
         "time_range": canonical_time,
-        "source_ref": source_ref,
+        "source_identity": _stable_source_identity(source_ref),
     }
     item = {
         "schema_version": DIAGNOSTIC_EVENT_SCHEMA_VERSION,
