@@ -26,6 +26,7 @@ def validate_extended_offline_truth(bundle: dict, manifest: dict) -> list[Golden
         add(f"pcm.format.{key}", passed, actual, wanted, "PCM")
 
     by_tap = {str((s.get("tap") or {}).get("name")): s for s in pcm.get("streams", []) or []}
+    source_ips: set[str] = set()
     for tap_name, tap_exp in (pcm_exp.get("taps") or {}).items():
         stream = by_tap.get(tap_name)
         add(f"pcm.tap.{tap_name}.exists", stream is not None, bool(stream), True, "PCM")
@@ -34,6 +35,12 @@ def validate_extended_offline_truth(bundle: dict, manifest: dict) -> list[Golden
         tap = stream.get("tap") or {}
         add(f"pcm.tap.{tap_name}.direction", str(tap.get("direction") or "").upper() == str(tap_exp.get("direction") or "").upper(), tap.get("direction"), tap_exp.get("direction"), "PCM")
         add(f"pcm.tap.{tap_name}.packet_count", int(stream.get("packet_count") or 0) == int(tap_exp.get("packet_count") or 0), stream.get("packet_count"), tap_exp.get("packet_count"), "PCM")
+        for endpoint in stream.get("source_endpoints", []) or []:
+            if endpoint.get("ip"):
+                source_ips.add(str(endpoint["ip"]))
+    expected_source_ip = pcm_exp.get("source_device_ip")
+    if expected_source_ip:
+        add("pcm.source_device_ip", source_ips == {str(expected_source_ip)}, sorted(source_ips), [str(expected_source_ip)], "PCM_PROVENANCE")
 
     rtp_exp = (expected.get("rtp") or {}).get("primary_uplink") or {}
     primary = next((s for s in (bundle.get("packet") or {}).get("rtp_streams", []) or [] if s.get("src_ip") == rtp_exp.get("src_ip") and int(s.get("src_port") or 0) == int(rtp_exp.get("src_port") or 0) and s.get("dst_ip") == rtp_exp.get("dst_ip") and int(s.get("dst_port") or 0) == int(rtp_exp.get("dst_port") or 0)), None)
