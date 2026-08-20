@@ -12,19 +12,35 @@
 
 ## SIP / Call
 
-主 Call：
+原始协议层存在 2 个包含 INVITE 的 SIP Call-ID。它们属于同一次用户业务中的 B2BUA 两条 SIP leg，不能简单按“哪个结束得晚”决定报告主 Call。
+
+### DUT-facing 主腿
 
 - INVITE Frame 2786，时间 `1786690969.100710`
+- `192.168.150.4 -> 192.168.3.200`
 - Request-URI：`sip:601@192.168.3.200;user=phone`
 - SIP Call-ID：`00ad1c804c33b255@192.168.3.200`
+- SDP offer connection：`192.168.150.4`，audio port `10000`
 - 200 OK：`1786690972.052840`
 - ACK：`1786690972.055640`
 - BYE Frame 20412：`1786691020.535864`
 - BYE 200 OK：`1786691020.556065`
 
-因此该导入 PCAP 至少可以确定性重建 1 通完整的 `INVITE -> 200 OK -> ACK -> RTP -> BYE` Call，报告不得显示 `Call=None`。
+### PBX B2BUA 内部腿
 
-## PCM diagnostic UDP
+- INVITE Frame 2808，时间 `1786690969.195511`
+- `192.168.3.200 -> 192.168.150.8`
+- Request-URI：`sip:601@192.168.150.8:5060...`
+- SIP Call-ID：`60d32450633aea2363e5b73e-1786691379761-0x1067e2b4-2875d8158357@192.168.3.200`
+- 该 leg 的 BYE/结束时间略晚于 DUT-facing 主腿。
+
+因此：
+
+- raw SIP leg count = 2；
+- 当前诊断 subject Call = DUT-facing 主腿 1 个；
+- 报告必须显示 DUT-facing `CALL-001 / 601`，不能显示 `Call=None`，也不能因为 PBX 内部腿结束更晚就把它选成主 Call。
+
+## PCM diagnostic UDP / Subject Device Identity
 
 - `pcm_rx`: `192.168.150.4:48741 -> 192.168.3.200:40000`
   - 6525 包
@@ -32,6 +48,8 @@
 - `pcm_tx`: `192.168.150.4:46812 -> 192.168.3.200:50000`
   - 6525 包
   - UDP payload 160 bytes/包
+
+两个 PCM Tap 都由 `192.168.150.4` 发出，这是 PCAP 本身提供的 DUT/subject provenance，不依赖 Golden expected。生产 Call Selector 可使用这个 source identity 去匹配 SIP SDP/RTP endpoint。
 
 已知 `ruijie_aim_diag_v1` Profile 为 8kHz/16-bit little-endian；160 bytes = 80 samples = 10 ms 单声道 PCM。
 
@@ -43,7 +61,7 @@
 - `0`: 约 `1786690964.703755 ~ 1786690964.833755`
 - `1`: 约 `1786690965.033755 ~ 1786690965.163755`
 
-序列为 `601`，与随后 SIP INVITE target `601` 一致。
+序列为 `601`，与 DUT-facing SIP INVITE target `601` 一致。
 
 当前报告中最早的 Click/Pop candidate 在约 `1786690964.332755`，仅比数字 `6` 起始晚约 9 ms，因此该候选必须先经过 DTMF Negative Control，不能直接升级为独立爆音故障。
 
@@ -66,7 +84,7 @@
 - 2425 packets
 - Sequence 连续，`lost_packets=0`
 
-PBX 还把 DUT 上行媒体转发至 `192.168.150.8`；该 mirrored stream 不能让主 Call 的 HIGH_DELTA 语义变成“Packet Loss”。
+PBX 还把 DUT 上行媒体转发至 `192.168.150.8`；该 mirrored stream 属于 PBX 内部腿，不能让主 Call 的 HIGH_DELTA 语义变成“Packet Loss”，也不能因为同一音频内容被转发就抢占 subject Call identity。
 
 ### 主上行 HIGH_DELTA #1
 
