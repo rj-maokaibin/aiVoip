@@ -13,7 +13,7 @@ from app.contracts.evidence_report import (
     SEVERITY_ORDER,
     EvidenceFindingStatus,
 )
-from app.reports.candidate_decision import decision_summary, resolve_candidate_decisions
+from app.reports.candidate_decision import decision_summary, pcm_candidate_decision_summary, resolve_candidate_decisions
 
 
 def _canonical(value: Any) -> str:
@@ -377,18 +377,31 @@ def build_normal_evidence(packet: dict | None, pcm: dict | None, media: dict | N
     if pcm:
         if int((pcm.get("summary") or {}).get("total_packets") or 0) > 0:
             normal.append({"type": "PCM_PRESENT", "text": "PCM 诊断数据已采集并可用于分析。"})
+        raw_summary = pcm_candidate_decision_summary(pcm)
+        if raw_summary.get("suppressed"):
+            normal.append({
+                "type": "PCM_RAW_CANDIDATES_SUPPRESSED_BY_NEGATIVE_CONTROL",
+                "text": f"Raw PCM CandidateDecision 已通过 DTMF 等 Negative Control 排除 {raw_summary.get('suppressed')} 个候选；Raw detector 本身不拥有异常 Finding 权限。",
+                "details": {"by_reason": raw_summary.get("by_reason"), "by_type": raw_summary.get("by_type")},
+            })
+        if raw_summary.get("inconclusive"):
+            normal.append({
+                "type": "PCM_RAW_CANDIDATES_INCONCLUSIVE",
+                "text": f"Raw PCM 另有 {raw_summary.get('inconclusive')} 个候选保持 INCONCLUSIVE；需由 Call/Media 跨层证据决定是否升级，不直接计入异常 Finding。",
+                "details": {"by_reason": raw_summary.get("by_reason"), "by_type": raw_summary.get("by_type")},
+            })
     if media:
         summary = decision_summary(media)
         if summary.get("suppressed"):
             normal.append({
                 "type": "AUDIO_CANDIDATES_SUPPRESSED_BY_NEGATIVE_CONTROL",
-                "text": f"CandidateDecision 已通过 Negative Control 排除 {summary.get('suppressed')} 个音频候选；这些候选不会计入异常 Finding。",
+                "text": f"Media CandidateDecision 已通过 Negative Control 排除 {summary.get('suppressed')} 个活跃媒体音频候选；这些候选不会计入异常 Finding。",
                 "details": {"by_reason": summary.get("by_reason"), "by_type": summary.get("by_type")},
             })
         if summary.get("inconclusive"):
             normal.append({
                 "type": "AUDIO_CANDIDATES_INCONCLUSIVE",
-                "text": f"另有 {summary.get('inconclusive')} 个音频候选因缺少跨层正证据保持 INCONCLUSIVE，不升级为异常 Finding。",
+                "text": f"另有 {summary.get('inconclusive')} 个活跃媒体音频候选因缺少跨层正证据保持 INCONCLUSIVE，不升级为异常 Finding。",
                 "details": {"by_reason": summary.get("by_reason"), "by_type": summary.get("by_type")},
             })
         if not media.get("degraded_reason"):
