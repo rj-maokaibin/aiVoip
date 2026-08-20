@@ -46,6 +46,7 @@ def main() -> int:
             "EVIDENCE_REPORT_REGRESSION",
             [sys.executable, "-m", "pytest", "-q",
              "backend/tests/test_preliminary_evidence_report_v1.py",
+             "backend/tests/test_evidence_report_offline_context_v1.py",
              "backend/tests/test_evidence_report_authority_v1.py",
              "backend/tests/test_evidence_bundle_contract_v1.py",
              "backend/tests/test_evidence_bundle_profile_v1.py",
