@@ -64,6 +64,7 @@ def main() -> int:
              "backend/tests/test_candidate_decision_artifact_gate_v1.py",
              "backend/tests/test_media_candidate_decision_engine_v1.py",
              "backend/tests/test_pcm_candidate_decision_audit_v1.py",
+             "backend/tests/test_pr2_field_candidate_gate_contract_v1.py",
              "backend/tests/test_evidence_report_authority_v1.py",
              "backend/tests/test_evidence_bundle_contract_v1.py",
              "backend/tests/test_evidence_bundle_profile_v1.py",
