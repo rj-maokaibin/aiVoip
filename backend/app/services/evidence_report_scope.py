@@ -4,6 +4,7 @@ import json
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.analyzers.media.candidate_decision import apply_candidate_decisions
 from app.contracts.evidence_report import EvidenceReportScope
 from app.db.models import AnalyzerRun, Case, CaseDevice, Evidence, ReproductionCall, ReproductionSession, VoiceRuntimeContextSnapshot
 
@@ -138,4 +139,8 @@ def load_analyzer_results(storage, runs: dict[str, AnalyzerRun]) -> tuple[dict[s
             if results[name] and results[name].get("degraded_reason"): state["degraded_reason"]=results[name]["degraded_reason"]
         except Exception as exc:
             results[name]=None; state.update({"status":"FAILED","terminal":True,"error_code":type(exc).__name__,"error_message":str(exc)})
+    # CandidateDecision is a deterministic evidence-normalization stage. Raw
+    # detector candidates remain auditable, while only promoted candidates are
+    # exposed to the Finding composer as user-visible anomalies.
+    results=apply_candidate_decisions(results)
     return results,states
