@@ -72,6 +72,8 @@ def main() -> int:
              "backend/tests/test_evidence_card_readability_v1.py",
              "backend/tests/test_evidence_artifact_binding_v1.py",
              "backend/tests/test_visual_annotation_contract_v1.py",
+             "backend/tests/test_sip_flow_visual_v1.py",
+             "backend/tests/test_evidence_card_artifact_permissions_v1.py",
              "backend/tests/test_evidence_retention_v1.py",
              "backend/tests/test_evidence_report_retention_expiry_v1.py",
              "backend/tests/test_evidence_permissions_v1.py",
@@ -131,7 +133,7 @@ def main() -> int:
         "gates": [asdict(x) for x in gates],
         "environment_gates": environment_gates,
         "allowed_pending_environment_gates": [x["key"] for x in environment_gates if x.get("status") == "UNVERIFIED"],
-        "claim": "software_status covers machine-verifiable software gates, including PR5 Evidence Card traceability and renderer annotations. production_status also evaluates configured real/offline Golden fixtures; missing external fixtures remain explicit UNVERIFIED gates rather than being silently treated as PASS.",
+        "claim": "software_status covers machine-verifiable software gates, including PR5 Evidence Card traceability, renderer annotations, SIP ladder projection and artifact permission boundaries. production_status also evaluates configured real/offline Golden fixtures; missing external fixtures remain explicit UNVERIFIED gates rather than being silently treated as PASS.",
     }
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
