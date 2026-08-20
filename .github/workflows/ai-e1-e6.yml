@@ -28,24 +28,38 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
-      - name: Verify requested external fixture
+      - name: Stage and verify requested external fixture
         run: |
           set -euo pipefail
           expected_sha="b038aa7c9a0644581f2815f654fcdee4620860796382265b178823fccba2e3f0"
+          source_fixture="$VOIP_OFFLINE_GOLDEN_001_PCAP"
+          fixture="$source_fixture"
           echo "Runner: $RUNNER_NAME"
-          echo "Fixture: $VOIP_OFFLINE_GOLDEN_001_PCAP"
-          if [ ! -f "$VOIP_OFFLINE_GOLDEN_001_PCAP" ]; then
+          echo "Source fixture: $source_fixture"
+          if [ ! -f "$source_fixture" ]; then
             echo "OFFLINE_GOLDEN_FIXTURE_NOT_FOUND"
             exit 20
           fi
-          ls -lh "$VOIP_OFFLINE_GOLDEN_001_PCAP"
-          actual_sha="$(sha256sum "$VOIP_OFFLINE_GOLDEN_001_PCAP" | awk '{print $1}')"
+          ls -lh "$source_fixture"
+          if [ ! -r "$source_fixture" ]; then
+            staged="$RUNNER_TEMP/offline-golden-001.pcap"
+            echo "Source is not readable by $(id -un); staging a private runner copy via passwordless sudo."
+            if ! sudo -n true; then
+              echo "OFFLINE_GOLDEN_FIXTURE_PERMISSION_BLOCKED"
+              exit 22
+            fi
+            sudo -n install -m 600 -o "$(id -un)" -g "$(id -gn)" "$source_fixture" "$staged"
+            fixture="$staged"
+          fi
+          actual_sha="$(sha256sum "$fixture" | awk '{print $1}')"
+          echo "Fixture used: $fixture"
           echo "Fixture SHA256: $actual_sha"
           echo "Expected SHA256: $expected_sha"
           if [ "$actual_sha" != "$expected_sha" ]; then
             echo "OFFLINE_GOLDEN_FIXTURE_SHA_MISMATCH"
             exit 21
           fi
+          echo "VOIP_OFFLINE_GOLDEN_001_PCAP=$fixture" >> "$GITHUB_ENV"
       - name: Verify tshark
         run: |
           set -euo pipefail
