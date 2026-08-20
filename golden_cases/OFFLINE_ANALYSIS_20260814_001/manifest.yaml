@@ -14,6 +14,7 @@ classification:
     - cross_layer_correlation
     - finding_composition
     - artifact_semantics
+    - evidence_card_traceability
     - canonical_report_semantics
 source:
   filename: tcpdump-2026-08-14(2).pcap
@@ -135,6 +136,19 @@ expected:
       occurrence_count: 2
       all_sequence_continuous: true
       loss_interpretation: DELAY_NOT_PACKET_LOSS
+    evidence_cards:
+      high_delta_primary_stream:
+        finding_type: HIGH_DELTA
+        audio_status: AVAILABLE
+        packet_ref_count: 2
+        next_action_required: true
+        root_cause_boundary_required: true
+      local_periodic_interference:
+        finding_type: LOCAL_CAPTURE_PERIODIC_INTERFERENCE
+        audio_status: AVAILABLE
+        required_audio_sources: [pcm_rx, rtp_up]
+        next_action_required: true
+        root_cause_boundary_required: true
     forbidden_finding_types: [PACKET_LOSS, BURST_LOSS]
     forbidden_click_window:
       start: 1786690964.300000
@@ -158,6 +172,7 @@ notes:
   - 两个主上行 HIGH_DELTA 的边界 Frame/Seq 已人工复核：20272/46511→20285/46512，以及 20329/46519→20344/46520；Sequence 连续，因此不能写成 Packet Loss。high_delta_ms 是算法容差范围，high_delta_events 保存人工复核的精确 Frame/Seq Ground Truth。
   - 两次主上行 HIGH_DELTA 后均可见快速到包/补偿性 burst；Golden 只要求存在 catch-up 证据，不冻结具体 recovery ratio，避免把实现算法数值当成人工 Ground Truth。
   - HIGH_DELTA 表示到包/发送节奏间隔异常，不等同于 RTP Sequence Loss；Report 必须将 DUT 主上行 2 次事件聚合为同一 Stream Finding，并保留逐事件 Frame/Seq 下钻。
+  - PR5 的 Evidence Card Golden 只检查生产 Analyzer 实际生成的 Artifact 是否按生产绑定语义落到正确 Finding，不把 manifest 的 expected 值注入生产分析链；Focused PNG 的 Renderer 语义由独立软件 Gate 校验。
   - DTMF 起始沿附近的 Click/Pop 候选必须被 Negative Control 拦截，不得作为独立爆音故障升级。
   - PCM_TX 静音只有在对应 RTP 同窗明确活跃时才允许升级为 CROSS_LAYER_SILENCE_MISMATCH；同窗 RTP 静音/低能量必须 Reject，证据不足必须 Inconclusive。
   - 周期干扰只能收敛到“本地上行采集路径已可观察”，不能越级确认电源/接地/电话机/FXS-SLIC 等物理根因。
