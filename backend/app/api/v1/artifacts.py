@@ -12,9 +12,11 @@ from app.schemas.artifacts import ArtifactOut
 router = APIRouter(tags=['artifacts'])
 
 # Report-facing derived evidence is viewable with VIEW_REPORT. Full decoded audio,
-# raw captures and bundles require explicit stronger capabilities.
+# raw captures and bundles require explicit stronger capabilities. Candidate audio
+# is intentionally absent: only promoted or deterministic periodic anomaly clips
+# may appear on an Evidence Card.
 REPORT_SAFE_TYPES = {
-    'AUDIO_CLIP', 'WAVEFORM_PNG', 'SPECTRUM_PNG', 'SPECTROGRAM_PNG',
+    'AUDIO_CLIP', 'PERIODIC_AUDIO_CLIP', 'WAVEFORM_PNG', 'SPECTRUM_PNG', 'SPECTROGRAM_PNG',
     'RTP_TIMELINE_PNG', 'SIP_CALL_FLOW_PNG', 'WAVEFORM_JSON', 'SPECTROGRAM_JSON',
     'PRELIMINARY_REPORT_HTML', 'PRELIMINARY_REPORT_JSON', 'MANIFEST_JSON',
 }
@@ -32,8 +34,6 @@ def _check_artifact_access(identity, artifact: Artifact, *, download: bool = Fal
         if not has_evidence_permission(identity, EvidencePermission.VIEW_REPORT):
             raise HTTPException(403, 'EVIDENCE_REPORT_PERMISSION_REQUIRED')
         return
-    # Unknown analyzer artifacts and full WAV are treated as raw/deep evidence by
-    # default. This is deliberately fail-closed.
     if not has_evidence_permission(identity, EvidencePermission.VIEW_RAW_EVIDENCE):
         raise HTTPException(403, 'RAW_EVIDENCE_PERMISSION_REQUIRED')
 
