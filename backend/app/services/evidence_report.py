@@ -40,22 +40,36 @@ def report_idempotency_key(scope_type: str, scope_id: str, input_hash: str, anal
     return canonical_hash(material)
 
 
-def _analysis_context_evidences(evidence_items: list[dict], runs: dict) -> tuple[list[dict], list[str]]:
-    """Limit context binding to Evidence actually consumed by current AnalyzerRuns.
+def _analysis_context_source_analyzer(results: dict[str,dict|None]) -> str | None:
+    """Mirror the report Call reconstruction source selection without re-analysis."""
+    packet=results.get("packet_intelligence") or {}
+    media_packet=((results.get("media_intelligence") or {}).get("packet") or {})
+    if packet.get("calls"):
+        return "packet_intelligence"
+    if media_packet.get("calls"):
+        return "media_intelligence"
+    if packet:
+        return "packet_intelligence"
+    if media_packet:
+        return "media_intelligence"
+    return None
 
-    CASE scope can contain old captures from earlier reproductions/imports. Using all
-    Case evidence to decide OFFLINE vs REPRODUCTION would let stale unbound PCAPs
-    contaminate a newer report. AnalyzerRun.input_evidence_ids is the provenance
-    boundary for this decision.
+
+def _analysis_context_evidences(evidence_items: list[dict], runs: dict, results: dict[str,dict|None]) -> tuple[list[dict], list[str], str | None]:
+    """Limit Call-context binding to the AnalyzerRun that supplied packet facts.
+
+    CASE scope can contain old captures from earlier reproductions/imports, and the
+    latest Packet/PCM/Media runs can be produced at different times. The Call
+    context therefore follows only the AnalyzerRun whose packet result is actually
+    used by the context resolver, rather than a union of unrelated Analyzer inputs.
     """
-    input_ids: set[str] = set()
-    for run in runs.values():
-        if run:
-            input_ids.update(str(x) for x in (run.input_evidence_ids or []) if x)
+    analyzer_name=_analysis_context_source_analyzer(results)
+    run=runs.get(analyzer_name) if analyzer_name else None
+    input_ids={str(x) for x in ((run.input_evidence_ids or []) if run else []) if x}
     if not input_ids:
-        return evidence_items, []
+        return evidence_items, [], analyzer_name
     selected=[x for x in evidence_items if str(x.get("id") or "") in input_ids]
-    return selected, sorted(input_ids)
+    return selected, sorted(input_ids), analyzer_name
 
 
 def _runtime_binding_ids(analysis_context: dict, session, call) -> tuple[str | None, str | None]:
@@ -97,7 +111,7 @@ def generate_evidence_report(db: Session, *, scope_type, scope_id: str, actor: s
     runs=latest_analyzer_runs(db,case_id=case.id,evidence_ids=evidence_ids,case_scope=scope_type=="CASE")
     results,states=load_analyzer_results(storage,runs); previous=latest_report(db,scope_type,scope_id); version=(previous.version+1) if previous else 1
     runtime_session=session_dict(session); runtime_call=call_dict(call)
-    context_evidences,context_input_ids=_analysis_context_evidences(evidence_items,runs)
+    context_evidences,context_input_ids,context_analyzer=_analysis_context_evidences(evidence_items,runs,results)
     resolved_context=resolve_report_analysis_context(
         scope_type=scope_type,
         session=runtime_session,
@@ -107,6 +121,8 @@ def generate_evidence_report(db: Session, *, scope_type, scope_id: str, actor: s
     )
     analysis_context=resolved_context["analysis_context"]
     analysis_context["analyzer_input_evidence_ids"]=context_input_ids
+    analysis_context["context_analyzer"]=context_analyzer
+    analysis_context["context_analyzer_run_id"]=(runs.get(context_analyzer).id if context_analyzer and runs.get(context_analyzer) else None)
     display_call=resolved_context["display_call"]
     runtime_bound=analysis_context.get("analysis_mode")==AnalysisMode.REPRODUCTION.value
     report_session_id,report_call_id=_runtime_binding_ids(analysis_context,session,call)
@@ -167,7 +183,8 @@ def generate_evidence_report(db: Session, *, scope_type, scope_id: str, actor: s
                   "forced":force,"expired_raw_evidence_count":len(expired),"analysis_mode":analysis_context.get("analysis_mode"),
                   "call_origin":analysis_context.get("call_origin"),"call_scope":analysis_context.get("call_scope"),
                   "reconstructed_call_count":analysis_context.get("reconstructed_call_count",0),"semantic_issues":analysis_context.get("semantic_issues",[]),
-                  "analyzer_input_evidence_ids":context_input_ids,"persisted_session_id":report_session_id,"persisted_call_id":report_call_id})
+                  "context_analyzer":context_analyzer,"analyzer_input_evidence_ids":context_input_ids,
+                  "persisted_session_id":report_session_id,"persisted_call_id":report_call_id})
     return report,payload,False
 
 
