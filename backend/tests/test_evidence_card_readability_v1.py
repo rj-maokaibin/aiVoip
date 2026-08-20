@@ -61,6 +61,50 @@ def test_audio_expected_finding_without_matching_clip_is_explicitly_unavailable_
     assert "不得用其他时间窗" in card["audio_evidence"]["reason"]
 
 
+def test_raw_full_wav_mime_never_becomes_report_safe_anomaly_audio():
+    finding=_high_delta_finding(with_audio=False)
+    finding["artifact_refs"].extend([
+        {"artifact_id":"pcm-full","type":"PCM_WAV","filename":"pcm_rx_full.wav","content_type":"audio/wav","role":"FINDING","metadata":{"pcm_tap":"pcm_rx"}},
+        {"artifact_id":"rtp-full","type":"AUDIO_WAV","filename":"rtp_up_full.wav","content_type":"audio/wav","role":"FINDING","metadata":{"stream_id":"rtp-up"}},
+    ])
+
+    card=build_evidence_card(finding,call={"started_at":100.0})
+
+    assert card["audio_evidence"]["status"]=="UNAVAILABLE"
+    assert card["audio_evidence"]["clips"]==[]
+    raw={x["type"]:x for x in card["detail_artifacts"]}
+    assert raw["PCM_WAV"]["content_url"] is None
+    assert raw["AUDIO_WAV"]["content_url"] is None
+
+
+def test_local_periodic_card_exposes_cross_layer_measurements_instead_of_nested_raw_dicts():
+    finding={
+        "finding_id":"periodic-1","type":"LOCAL_CAPTURE_PERIODIC_INTERFERENCE","severity":"HIGH","evidence_level":"L2",
+        "title":"本地采集链路周期性干扰","observation":"pcm_rx 与上行 RTP 存在同类周期结构。","interpretation":"异常在本地采集路径已可观察。",
+        "root_cause_boundary":"不能单独确认电源、接地、话柄或 SLIC。",
+        "time_range":{"start":100.0,"end":120.0,"representative":105.0},
+        "scope":{"layer":"pcm_rx","pcm_tap":"pcm_rx","pcm_session_index":0,"upstream_rtp_stream_id":"rtp-up","downstream_rtp_stream_id":"rtp-down"},
+        "metrics":{
+            "level":"HIGH",
+            "pcm_rx":{"level":"HIGH","representative":{"autocorrelation":{"10ms":-0.81,"20ms":0.91,"40ms":0.86}},"comb":{"hit_count":7}},
+            "upstream_rtp":{"level":"HIGH","representative":{"autocorrelation":{"20ms":0.76}},"comb":{"hit_count":6}},
+            "downstream_rtp":{"level":"LOW","representative":{"autocorrelation":{"20ms":0.12}},"comb":{"hit_count":1}},
+            "strength":{"pcm_rx":0.93,"upstream_rtp":0.79,"downstream_rtp":0.18},
+        },
+        "artifact_refs":[],
+    }
+
+    card=build_evidence_card(finding,call={"started_at":90.0})
+    measurements={x["label"]:x["value"] for x in card["measurements"]}
+
+    assert measurements["PCM_RX 20ms 自相关"]==0.91
+    assert measurements["PCM_RX 频梳命中"]==7
+    assert measurements["PCM_RX 周期强度"]==0.93
+    assert measurements["上行 RTP 周期强度"]==0.79
+    assert measurements["反向 RTP 周期强度"]==0.18
+    assert measurements["上行 RTP 20ms 自相关"]==0.76
+
+
 def test_html_renders_key_visual_audio_tplus_and_packet_drilldown_inside_finding_card():
     finding=_high_delta_finding()
     payload={
