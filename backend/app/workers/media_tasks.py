@@ -11,7 +11,7 @@ from celery.utils.log import get_task_logger
 
 from app.contracts.enums import JobStatus, RunStatus
 from app.analyzers.media import MediaIntelligenceEngine
-from app.analyzers.media.candidate_artifacts import gate_candidate_audio_artifacts
+from app.analyzers.media.candidate_artifacts import gate_candidate_audio_artifacts, sanitize_gated_media_pcm
 from app.analyzers.media.candidate_decision import CANDIDATE_DECISION_VERSION, apply_candidate_decisions
 from app.analyzers.packet import TSharkAdapter
 from app.analyzers.pcm import load_pcm_profile
@@ -82,6 +82,11 @@ def analyze_media_evidence(self, job_id: str, evidence_id: str, profile_id: str 
                 'media_intelligence': raw_result,
             })
             result=gated['media_intelligence'] or raw_result
+            # CandidateDecision has already consumed the raw PCM detector events.
+            # Move them behind the candidate-only boundary before persistence so the
+            # deterministic Diagnosis reasoner cannot recreate fallback hypotheses
+            # from rejected click/silence detector hits.
+            result=sanitize_gated_media_pcm(result)
             # PCM detector clips are also candidates. Rejected/inconclusive clips
             # remain downloadable audit artifacts but are not exposed as main
             # AUDIO_CLIP attachments unless their CandidateDecision was promoted.
