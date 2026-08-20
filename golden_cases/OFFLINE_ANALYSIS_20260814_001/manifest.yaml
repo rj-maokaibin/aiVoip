@@ -47,6 +47,9 @@ expected:
       codec: PCMU
       lost_packets: 0
       high_delta_count: 2
+      high_delta_ms:
+        - {min: 140.0, max: 152.0}
+        - {min: 168.0, max: 182.0}
       high_delta_events:
         - delta_ms: {min: 140.0, max: 152.0}
           previous_frame_number: 20272
@@ -108,7 +111,7 @@ expected:
       - FXS_SLIC_NOISE
 notes:
   - 该 Case 的核心真值是“601 Call 可重建、RTP 无 Sequence Loss、存在上行 High Delta、DTMF 601 与 SIP 目标一致、周期干扰在 PCM_RX 与上行 RTP 可见”。
-  - 两个主上行 HIGH_DELTA 的边界 Frame/Seq 已人工复核：20272/46511→20285/46512，以及 20329/46519→20344/46520；Sequence 连续，因此不能写成 Packet Loss。
+  - 两个主上行 HIGH_DELTA 的边界 Frame/Seq 已人工复核：20272/46511→20285/46512，以及 20329/46519→20344/46520；Sequence 连续，因此不能写成 Packet Loss。high_delta_ms 是算法容差范围，high_delta_events 保存人工复核的精确 Frame/Seq Ground Truth。
   - HIGH_DELTA 表示到包/发送节奏间隔异常，不等同于 RTP Sequence Loss。
   - DTMF 起始沿附近的 Click/Pop 候选必须被 Negative Control 拦截，不得作为独立爆音故障升级。
   - PCM_TX 静音只有在对应 RTP 同窗明确活跃时才允许升级为 CROSS_LAYER_SILENCE_MISMATCH；同窗 RTP 静音/低能量必须 Reject，证据不足必须 Inconclusive。
