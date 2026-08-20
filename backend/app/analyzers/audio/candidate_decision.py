@@ -23,7 +23,7 @@ _DEFAULT_CONFIG = {
         "min_promote_confidence": 0.65,
     },
     "silence": {
-        "min_counterpart_correlation": 0.55,
+        "min_counterpart_correlation": 0.80,
         "counterpart_quiet_dbfs": -52.0,
         "counterpart_active_dbfs": -42.0,
         "context_seconds": 0.12,
@@ -206,7 +206,7 @@ def audio_window_metrics(
     *,
     context_seconds: float | None = None,
 ) -> dict:
-    """Measure source energy in the same absolute window plus short pre/post context."""
+    """Measure source energy in an already alignment-resolved absolute window plus short context."""
     cfg = _config("silence")
     context = float(context_seconds if context_seconds is not None else cfg["context_seconds"])
     start = max(track_start_time, absolute_start)
@@ -244,11 +244,12 @@ def decide_silence(
     counterpart_correlation: float | None,
     counterpart_metrics: dict | None,
 ) -> dict:
-    """Promote silence only when a correlated RTP counterpart remains audibly active.
+    """Promote silence only when a highly correlated RTP counterpart remains active.
 
-    If the corresponding RTP direction is also quiet, the PCM silence is expected
-    source silence and is suppressed. If no trustworthy counterpart exists, the
-    candidate stays inconclusive rather than becoming a MEDIUM finding.
+    If the corresponding lag-aligned RTP source window is also quiet, the PCM
+    silence is expected source/content silence and is suppressed. If no trustworthy
+    counterpart exists, the candidate stays inconclusive rather than becoming a
+    MEDIUM finding.
     """
     cfg = _config("silence")
     min_corr = float(cfg["min_counterpart_correlation"])
