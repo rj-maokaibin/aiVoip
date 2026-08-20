@@ -64,11 +64,54 @@ jobs:
             exit 21
           fi
           echo "VOIP_OFFLINE_GOLDEN_001_PCAP=$fixture" >> "$GITHUB_ENV"
-      - name: Verify tshark
+      - name: Prepare containerized tshark wrapper
         run: |
           set -euo pipefail
-          command -v tshark
-          tshark --version | head -n 2
+          image_dir="$RUNNER_TEMP/voip-tshark-image"
+          rm -rf "$image_dir"
+          mkdir -p "$image_dir"
+          cat > "$image_dir/Dockerfile" <<'EOF'
+          FROM postgres:16
+          ENV DEBIAN_FRONTEND=noninteractive
+          RUN apt-get update \
+              && apt-get install -y --no-install-recommends tshark \
+              && rm -rf /var/lib/apt/lists/*
+          ENTRYPOINT ["tshark"]
+          EOF
+          docker build -t voip-tshark:offline-golden "$image_dir"
+
+          wrapper="$RUNNER_TEMP/tshark-docker"
+          cat > "$wrapper" <<'EOF'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          image="voip-tshark:offline-golden"
+          if [ "${1:-}" = "-v" ] || [ "${1:-}" = "--version" ]; then
+            exec docker run --rm "$image" "$@"
+          fi
+          args=("$@")
+          pcap=""
+          for ((i=0; i<${#args[@]}; i++)); do
+            if [ "${args[$i]}" = "-r" ] && [ $((i+1)) -lt ${#args[@]} ]; then
+              pcap="${args[$((i+1))]}"
+              break
+            fi
+          done
+          if [ -z "$pcap" ]; then
+            exec docker run --rm "$image" "${args[@]}"
+          fi
+          pcap_dir="$(dirname "$pcap")"
+          pcap_base="$(basename "$pcap")"
+          for ((i=0; i<${#args[@]}; i++)); do
+            if [ "${args[$i]}" = "-r" ]; then
+              args[$((i+1))]="/pcap/$pcap_base"
+              break
+            fi
+          done
+          exec docker run --rm -v "$pcap_dir:/pcap:ro" "$image" "${args[@]}"
+          EOF
+          chmod +x "$wrapper"
+          "$wrapper" -v | head -n 2
+          echo "TSHARK_BINARY=$wrapper" >> "$GITHUB_ENV"
       - name: Prepare isolated Python environment
         run: |
           set -euo pipefail
@@ -80,6 +123,7 @@ jobs:
           set -euo pipefail
           .venv-offline-golden/bin/python tools/offline_analysis_golden_replay.py \
             --pcap "$VOIP_OFFLINE_GOLDEN_001_PCAP" \
+            --tshark "$TSHARK_BINARY" \
             --require-fixture \
             --result validation/offline_analysis_golden_001.json \
             --artifacts validation/offline_analysis_golden_001_artifacts
