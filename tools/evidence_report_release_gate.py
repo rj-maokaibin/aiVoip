@@ -54,6 +54,8 @@ def main() -> int:
              "backend/tests/test_candidate_audio_artifacts_v1.py",
              "backend/tests/test_candidate_decision_profile_v1.py",
              "backend/tests/test_candidate_decision_diagnosis_boundary_v1.py",
+             "backend/tests/test_offline_analysis_golden_e2e_v1.py",
+             "backend/tests/test_offline_analysis_golden_manifest_v1.py",
              "backend/tests/test_evidence_report_authority_v1.py",
              "backend/tests/test_evidence_bundle_contract_v1.py",
              "backend/tests/test_evidence_bundle_profile_v1.py",
@@ -72,23 +74,64 @@ def main() -> int:
         {"key": "LIVE_FEISHU_TENANT", "status": "UNVERIFIED", "blocking_for_production": True,
          "detail": "需要真实飞书应用/Tenant 验证 Docx Block、PNG/WAV、权限和卡片更新。"},
         {"key": "REAL_DUT_END_TO_END", "status": "UNVERIFIED", "blocking_for_production": True,
-         "detail": "需要真实 DUT 完成 PCAP+PCM RX/TX→Call→Analyzer→Report→Bundle→Cleanup。"},
-        {"key": "REAL_GOLDEN_DATASET", "status": "UNVERIFIED", "blocking_for_production": True,
-         "detail": "需要 Synthetic + Lab Real + Field Confirmed 的真实标注集验证最终 Recall/Precision/Boundary 指标。"},
+         "detail": "需要真实 DUT 完成 PCAP+PCM RX/TX→Call→Analyzer→Report→Bundle→Cleanup；Offline Golden 不覆盖采集可靠性。"},
     ]
+
+    offline_fixture = os.getenv("VOIP_OFFLINE_GOLDEN_001_PCAP")
+    if offline_fixture:
+        offline_gate = run(
+            "OFFLINE_ANALYSIS_GOLDEN_001",
+            [sys.executable, "tools/offline_analysis_golden_replay.py",
+             "--pcap", offline_fixture,
+             "--require-fixture",
+             "--result", str(ROOT / "validation" / "offline_analysis_golden_001.json"),
+             "--artifacts", str(ROOT / "validation" / "offline_analysis_golden_001_artifacts")],
+            category="REAL_GOLDEN", timeout=600,
+        )
+        environment_gates.append({
+            "key": offline_gate.key,
+            "status": offline_gate.status,
+            "blocking_for_production": True,
+            "detail": offline_gate.detail,
+        })
+    else:
+        environment_gates.append({
+            "key": "OFFLINE_ANALYSIS_GOLDEN_001",
+            "status": "UNVERIFIED",
+            "blocking_for_production": True,
+            "detail": "设置 VOIP_OFFLINE_GOLDEN_001_PCAP 指向 SHA256=b038aa7c...e3f0 的外部 PCAP fixture 后，执行真实 Imported-Evidence Golden E2E。",
+        })
+
+    environment_gates.append({
+        "key": "BROADER_REAL_GOLDEN_DATASET",
+        "status": "UNVERIFIED",
+        "blocking_for_production": True,
+        "detail": "单个 Offline Golden 不能代表最终 Recall/Precision；仍需 Synthetic + Lab Real + 更多 Field/Imported Confirmed 样本覆盖正常、负控及各故障族。",
+    })
+    environment_fail = any(x.get("blocking_for_production") and x.get("status") == "FAIL" for x in environment_gates)
+    environment_pending = any(x.get("blocking_for_production") and x.get("status") == "UNVERIFIED" for x in environment_gates)
+    if not software_pass:
+        production_status = "SOFTWARE_BLOCKED"
+    elif environment_fail:
+        production_status = "ENVIRONMENT_GATE_FAILED"
+    elif environment_pending:
+        production_status = "ENVIRONMENT_GATES_PENDING"
+    else:
+        production_status = "PASS"
+
     payload = {
         "schema_version": "preliminary-evidence-report-release-gate-v1",
         "software_status": "PASS" if software_pass else "FAIL",
-        "production_status": "ENVIRONMENT_GATES_PENDING" if software_pass else "SOFTWARE_BLOCKED",
+        "production_status": production_status,
         "gates": [asdict(x) for x in gates],
         "environment_gates": environment_gates,
-        "allowed_pending_environment_gates": [x["key"] for x in environment_gates],
-        "claim": "When software_status=PASS, all machine-verifiable V1.0 software requirements are closed. Production acceptance still requires exactly the three listed environment gates.",
+        "allowed_pending_environment_gates": [x["key"] for x in environment_gates if x.get("status") == "UNVERIFIED"],
+        "claim": "software_status covers machine-verifiable software gates. production_status also evaluates configured real/offline Golden fixtures; missing external fixtures remain explicit UNVERIFIED gates rather than being silently treated as PASS.",
     }
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(json.dumps({"software_status": payload["software_status"], "production_status": payload["production_status"], "out": str(args.out)}, ensure_ascii=False, indent=2))
-    return 0 if software_pass else 2
+    return 0 if software_pass and not environment_fail else 2
 
 
 if __name__ == "__main__":
