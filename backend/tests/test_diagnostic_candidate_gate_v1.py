@@ -1,5 +1,7 @@
 from app.analyzers.candidate_gate import (
-    COUNTERPART_RTP_NOT_SILENT,
+    COUNTERPART_RTP_ACTIVE,
+    COUNTERPART_RTP_ACTIVITY_UNAVAILABLE,
+    COUNTERPART_RTP_LOW_ENERGY,
     COUNTERPART_RTP_SILENCE,
     DTMF_TRANSIENT_OVERLAP,
     RTP_MAPPING_MISSING,
@@ -42,8 +44,25 @@ def _event(ftype, when=10.5, *, duration_ms=500.0):
     }
 
 
-def _media(events, *, correlation=0.8, rtp_silence=None):
+def _activity_profile(levels):
     return {
+        "stream_id": "rtp-down",
+        "start_time": 10.0,
+        "end_time": 13.0,
+        "source_artifact": "rtp-down-waveform.json",
+        "waveform": {
+            "sample_rate": 4,
+            "bin_size_samples": 1,
+            "duration_seconds": len(levels) / 4,
+            "bins": [{"t": i / 4, "rms_dbfs": float(level)} for i, level in enumerate(levels)],
+        },
+    }
+
+
+def _media(events, *, correlation=0.8, rtp_silence=None, rtp_levels=None, include_activity=True):
+    if rtp_levels is None:
+        rtp_levels = [-20.0] * 12
+    result = {
         "active_media_audio_events": events,
         "cross_layer_events": list(events),
         "correlations": [{
@@ -63,6 +82,9 @@ def _media(events, *, correlation=0.8, rtp_silence=None):
         }],
         "periodic_interference_paths": [],
     }
+    if include_activity:
+        result["rtp_activity_profiles"] = [_activity_profile(rtp_levels)]
+    return result
 
 
 def test_raw_pcm_click_and_silence_are_detector_only_and_cannot_bypass_candidate_gate():
@@ -106,35 +128,51 @@ def test_click_outside_dtmf_window_is_accepted_with_candidate_provenance():
     assert click["metrics"]["candidate_decision"] == "ACCEPT"
 
 
-def test_silence_is_suppressed_when_correlated_rtp_is_silent_in_same_window():
+def test_silence_is_suppressed_when_correlated_rtp_window_is_low_energy():
     pcm = _pcm()
-    media = _media(
-        [_event("UNEXPECTED_SILENCE", 10.5, duration_ms=500.0)],
-        rtp_silence=[{"start_seconds": 0.45, "end_seconds": 1.10, "duration_ms": 650.0}],
-    )
+    media = _media([_event("UNEXPECTED_SILENCE", 10.5, duration_ms=500.0)], rtp_levels=[-82.0] * 12)
     candidates = build_diagnostic_candidates(pcm=pcm, media=media)
     candidate = candidates[0]
     assert candidate["decision"] == CandidateDecision.SUPPRESS.value
-    assert COUNTERPART_RTP_SILENCE in candidate["reason_codes"]
+    assert COUNTERPART_RTP_LOW_ENERGY in candidate["reason_codes"]
+    assert candidate["context"]["counterpart_rtp_activity"]["status"] == "LOW_ENERGY"
 
     media["diagnostic_candidates"] = candidates
     findings = compose_findings(pcm=pcm, media=media, source_run_ids={"media_intelligence": "media-run"})
     assert "UNEXPECTED_SILENCE" not in [x["type"] for x in findings]
 
 
-def test_silence_is_accepted_when_correlated_rtp_is_not_silent_in_same_window():
+def test_silence_is_accepted_only_with_positive_correlated_rtp_activity_evidence():
     pcm = _pcm()
-    media = _media([_event("UNEXPECTED_SILENCE", 10.5, duration_ms=500.0)], rtp_silence=[])
+    media = _media([_event("UNEXPECTED_SILENCE", 10.5, duration_ms=500.0)], rtp_levels=[-20.0] * 12)
     candidates = build_diagnostic_candidates(pcm=pcm, media=media)
     candidate = candidates[0]
     assert candidate["decision"] == CandidateDecision.ACCEPT.value
-    assert COUNTERPART_RTP_NOT_SILENT in candidate["reason_codes"]
+    assert COUNTERPART_RTP_ACTIVE in candidate["reason_codes"]
+    assert candidate["context"]["counterpart_rtp_activity"]["active_fraction"] >= 0.2
 
     media["diagnostic_candidates"] = candidates
     findings = compose_findings(pcm=pcm, media=media, source_run_ids={"media_intelligence": "media-run"})
     silence = next(x for x in findings if x["type"] == "UNEXPECTED_SILENCE")
     assert silence["metrics"]["counterpart_rtp_stream_id"] == "rtp-down"
     assert silence["metrics"]["pcm_rtp_absolute_correlation"] == 0.8
+
+
+def test_legacy_result_with_explicit_counterpart_silence_can_suppress_but_cannot_accept():
+    pcm = _pcm()
+    media = _media(
+        [_event("UNEXPECTED_SILENCE", 10.5, duration_ms=500.0)],
+        rtp_silence=[{"start_seconds": 0.45, "end_seconds": 1.10, "duration_ms": 650.0}],
+        include_activity=False,
+    )
+    candidate = build_diagnostic_candidates(pcm=pcm, media=media)[0]
+    assert candidate["decision"] == CandidateDecision.SUPPRESS.value
+    assert COUNTERPART_RTP_SILENCE in candidate["reason_codes"]
+
+    media = _media([_event("UNEXPECTED_SILENCE", 10.5)], include_activity=False)
+    candidate = build_diagnostic_candidates(pcm=pcm, media=media)[0]
+    assert candidate["decision"] == CandidateDecision.INCONCLUSIVE.value
+    assert COUNTERPART_RTP_ACTIVITY_UNAVAILABLE in candidate["reason_codes"]
 
 
 def test_silence_without_cross_layer_rtp_mapping_stays_inconclusive():
