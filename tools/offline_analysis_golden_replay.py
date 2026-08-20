@@ -5,6 +5,7 @@ import argparse
 import json
 import os
 import sys
+from dataclasses import asdict
 from pathlib import Path
 
 import yaml
@@ -17,6 +18,7 @@ from app.golden.offline_analysis_e2e import (
     sha256_file,
     validation_payload,
 )
+from app.golden.offline_analysis_extended_checks import validate_extended_offline_truth
 
 
 DEFAULT_MANIFEST = ROOT / "golden_cases" / "OFFLINE_ANALYSIS_20260814_001" / "manifest.yaml"
@@ -86,6 +88,11 @@ def main() -> int:
         tshark_binary=args.tshark,
     )
     payload = validation_payload(bundle, manifest)
+    extended = validate_extended_offline_truth(bundle, manifest)
+    payload["checks"].extend(asdict(item) for item in extended)
+    payload["checks_passed"] += sum(1 for item in extended if item.passed)
+    payload["checks_total"] += len(extended)
+    payload["passed"] = bool(payload["passed"] and all(item.passed for item in extended if item.blocking))
     payload["status"] = "PASS" if payload["passed"] else "FAIL"
     payload["fixture_path"] = str(fixture)
     payload["manifest_path"] = str(args.manifest)
