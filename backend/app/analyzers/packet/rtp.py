@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections import defaultdict
 from dataclasses import asdict, dataclass
 from statistics import mean, median
-from typing import Iterable
+from typing import Iterable, Mapping
 
 from .sdp import STATIC_PAYLOADS
 from .types import NormalizedPacket
@@ -150,6 +150,7 @@ class RtpStreamAnalyzer:
                         ptime_ms=ptime_ms,
                         threshold_ms=high_threshold,
                         clock_rate=clock_rate,
+                        config=self.config,
                     )
                     events.append(RtpEvent(
                         type="HIGH_DELTA",
@@ -269,7 +270,7 @@ class RtpStreamAnalyzer:
 def _high_delta_semantics(*, packets: list[NormalizedPacket], current_index: int,
                           previous_packet: NormalizedPacket, current_packet: NormalizedPacket,
                           delta_ms: float, ptime_ms: float, threshold_ms: float,
-                          clock_rate: int | None) -> dict:
+                          clock_rate: int | None, config: Mapping[str, object]) -> dict:
     prev_seq = previous_packet.rtp.sequence if previous_packet.rtp else None
     curr_seq = current_packet.rtp.sequence if current_packet.rtp else None
     seq_step = ((int(curr_seq) - int(prev_seq)) & 0xFFFF) if prev_seq is not None and curr_seq is not None else None
@@ -281,7 +282,8 @@ def _high_delta_semantics(*, packets: list[NormalizedPacket], current_index: int
     rtp_timestamp_step = ((int(curr_rtp_ts) - int(prev_rtp_ts)) & 0xFFFFFFFF) if prev_rtp_ts is not None and curr_rtp_ts is not None else None
     expected_rtp_timestamp_step = round(clock_rate * ptime_ms / 1000.0) if clock_rate else None
     if rtp_timestamp_step is not None and expected_rtp_timestamp_step:
-        tolerance = max(1, round(expected_rtp_timestamp_step * 0.05))
+        tolerance_ratio = float(config["high_delta_timestamp_tolerance_ratio"])
+        tolerance = max(1, round(expected_rtp_timestamp_step * tolerance_ratio))
         rtp_timestamp_continuous = abs(rtp_timestamp_step - expected_rtp_timestamp_step) <= tolerance
     else:
         rtp_timestamp_continuous = None
@@ -300,7 +302,7 @@ def _high_delta_semantics(*, packets: list[NormalizedPacket], current_index: int
         loss_semantics = "BOUNDARY_SEQUENCE_SEMANTICS_UNAVAILABLE"
 
     excess = max(0.0, delta_ms - ptime_ms)
-    catch_up = _catch_up_after_high_delta(packets, current_index, ptime_ms, excess)
+    catch_up = _catch_up_after_high_delta(packets, current_index, ptime_ms, excess, config)
     return {
         "semantic_version": HIGH_DELTA_SEMANTICS_VERSION,
         "classification": classification,
@@ -326,26 +328,31 @@ def _high_delta_semantics(*, packets: list[NormalizedPacket], current_index: int
 
 def _catch_up_after_high_delta(packets: list[NormalizedPacket], current_index: int,
                                ptime_ms: float, excess_delay_ms: float,
-                               max_following_packets: int = 8) -> dict:
+                               config: Mapping[str, object]) -> dict:
     deltas: list[float] = []
     recovered_ms = 0.0
     accelerated = 0
+    max_following_packets = int(config["high_delta_catch_up_max_packets"])
+    accelerated_ratio = float(config["high_delta_catch_up_accelerated_ratio"])
+    full_ratio = float(config["high_delta_catch_up_full_recovery_ratio"])
+    partial_ratio = float(config["high_delta_catch_up_partial_recovery_ratio"])
     end = min(len(packets), current_index + 1 + max_following_packets)
     for idx in range(current_index + 1, end):
         delta = max(0.0, (packets[idx].timestamp - packets[idx - 1].timestamp) * 1000.0)
         deltas.append(delta)
         if delta < ptime_ms:
             recovered_ms += ptime_ms - delta
-        if delta <= ptime_ms * 0.75:
+        if delta <= ptime_ms * accelerated_ratio:
             accelerated += 1
-        if excess_delay_ms > 0 and recovered_ms >= excess_delay_ms * 0.8:
+        if excess_delay_ms > 0 and recovered_ms >= excess_delay_ms * full_ratio:
             break
 
+    recovery_ratio = min(1.0, recovered_ms / excess_delay_ms) if excess_delay_ms > 0 else 0.0
     if excess_delay_ms <= 0 or not deltas:
         status = "NONE"
-    elif recovered_ms >= excess_delay_ms * 0.8:
+    elif recovery_ratio >= full_ratio:
         status = "FULL"
-    elif recovered_ms >= max(1.0, excess_delay_ms * 0.1):
+    elif recovery_ratio >= partial_ratio:
         status = "PARTIAL"
     else:
         status = "NONE"
@@ -358,7 +365,13 @@ def _catch_up_after_high_delta(packets: list[NormalizedPacket], current_index: i
         "min_delta_ms": round(min(deltas), 3) if deltas else None,
         "recovered_delay_ms": round(recovered_ms, 3),
         "excess_delay_ms": round(excess_delay_ms, 3),
-        "recovery_ratio": round(min(1.0, recovered_ms / excess_delay_ms), 3) if excess_delay_ms > 0 else 0.0,
+        "recovery_ratio": round(recovery_ratio, 3),
+        "profile_thresholds": {
+            "max_following_packets": max_following_packets,
+            "accelerated_ratio": accelerated_ratio,
+            "full_recovery_ratio": full_ratio,
+            "partial_recovery_ratio": partial_ratio,
+        },
         "definition": "catch-up 表示 HIGH_DELTA 后若干 RTP 到达间隔短于 ptime，回收了部分/大部分先前停顿时间；不代表接收端一定无听感影响。",
     }
 
