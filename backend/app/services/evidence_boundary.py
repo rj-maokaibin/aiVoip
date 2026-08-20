@@ -1,6 +1,14 @@
 from __future__ import annotations
 
+from app.reports.diagnostic_contract import (
+    attach_finding_diagnostic_links,
+    build_diagnostic_contract_snapshot,
+    validate_diagnostic_contract_snapshot,
+)
 from app.reports.finding_composer import derive_first_observable_layer
+
+
+_DIAGNOSTIC_SNAPSHOT_KEY = "__diagnostic_contract_snapshot"
 
 
 def _periodic_abnormal(node: dict | None) -> tuple[bool,bool]:
@@ -10,8 +18,56 @@ def _periodic_abnormal(node: dict | None) -> tuple[bool,bool]:
     return True, level in {"MEDIUM","HIGH"}
 
 
+def _take_diagnostic_snapshot(payload: dict) -> dict:
+    """Consume the temporary Analyzer→Composer transport without leaking it in UI summaries."""
+    media_summary=payload.get("media_summary")
+    if isinstance(media_summary,dict):
+        snapshot=media_summary.pop(_DIAGNOSTIC_SNAPSHOT_KEY,None)
+        if isinstance(snapshot,dict):
+            return snapshot
+    pcm_summary=payload.get("pcm_summary") or {}
+    embedded=pcm_summary.get("summary") if isinstance(pcm_summary,dict) else None
+    if isinstance(embedded,dict):
+        snapshot=embedded.pop(_DIAGNOSTIC_SNAPSHOT_KEY,None)
+        if isinstance(snapshot,dict):
+            return snapshot
+    # Direct unit callers of build_report_payload do not pass through
+    # load_analyzer_results. Start from an empty valid snapshot; the Finding
+    # adapter below will create explicit compatibility events rather than hiding
+    # the missing source projection.
+    return build_diagnostic_contract_snapshot(results={},analyzer_states={})
+
+
+def _attach_diagnostic_contract(payload: dict) -> None:
+    findings=payload.get("findings",[]) or []
+    snapshot=_take_diagnostic_snapshot(payload)
+    attach_finding_diagnostic_links(findings=findings,snapshot=snapshot)
+    validate_diagnostic_contract_snapshot(snapshot,findings=findings)
+    payload["diagnostic_contract"]=snapshot
+
+    # EvidenceFinding currently has no dedicated DB JSON column for the PR7
+    # contract. Persist only stable references in correlation_json; the complete
+    # immutable Event/Decision objects remain authoritative in report.snapshot_json.
+    for finding in findings:
+        link=finding.get("diagnostic") or {}
+        correlation=dict(finding.get("correlation") or {})
+        correlation["diagnostic_contract"]={
+            "schema_version":link.get("schema_version"),
+            "event_ids":link.get("event_ids") or [],
+            "decision_ids":link.get("decision_ids") or [],
+            "accepted_event_ids":link.get("accepted_event_ids") or [],
+            "merged_event_ids":link.get("merged_event_ids") or [],
+        }
+        finding["correlation"]=correlation
+
+
 def apply_first_observable_boundaries(payload:dict) -> dict:
-    """Enrich cross-layer Findings without creating new root-cause authority."""
+    """Enrich Findings without creating new root-cause authority.
+
+    PR7 also finalizes the canonical DiagnosticEvent/CandidateDecision/Finding
+    linkage here because this stage runs after Finding composition and before
+    persistence, Artifact binding, Grounding and report publication.
+    """
     for finding in payload.get("findings",[]) or []:
         if finding.get("type") not in {"LOCAL_CAPTURE_PERIODIC_INTERFERENCE","PERIODIC_INTERFERENCE_PATH_COMPARISON"}:
             continue
@@ -35,4 +91,5 @@ def apply_first_observable_boundaries(payload:dict) -> dict:
             finding["interpretation"]=(finding.get("interpretation") or "")+" "+result.get("statement","")
         elif result.get("status")=="UNKNOWN":
             finding["interpretation"]=(finding.get("interpretation") or "")+" 当前上游/对照层证据不完整，首次异常层保持 UNKNOWN（未知）。"
+    _attach_diagnostic_contract(payload)
     return payload
