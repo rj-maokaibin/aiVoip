@@ -274,4 +274,9 @@ def attach_evidence_cards(payload: dict) -> dict:
         "cards_with_visuals": sum(1 for c in cards if c["visual_evidence"]),
         "cards_with_packet_refs": sum(1 for c in cards if c["packet_refs"]),
     }
+    # PR6 runtime hard gate: render_report_html() always passes through this
+    # function after Artifact refs are attached. BLOCKER-level contradictions
+    # therefore stop HTML/JSON publication rather than only failing CI later.
+    from app.reports.report_grounding import apply_report_grounding
+    apply_report_grounding(payload, raise_on_blocker=True)
     return payload
