@@ -1,12 +1,9 @@
 from __future__ import annotations
 
-from collections import defaultdict
-from typing import Any
-
-
-SUBJECT_IDENTITY_UNAVAILABLE = "UNAVAILABLE"
-SUBJECT_IDENTITY_UNIQUE = "UNIQUE"
-SUBJECT_IDENTITY_AMBIGUOUS = "AMBIGUOUS"
+from app.analyzers.media.subject_identity import (
+    SUBJECT_IDENTITY_UNIQUE,
+    infer_pcm_source_device_identity as _infer_pcm_source_device_identity,
+)
 
 
 def _pcm_payload(results: dict[str, dict | None]) -> tuple[dict | None, str | None]:
@@ -21,37 +18,7 @@ def _pcm_payload(results: dict[str, dict | None]) -> tuple[dict | None, str | No
 
 def infer_pcm_source_device_identity(results: dict[str, dict | None]) -> dict:
     pcm, source = _pcm_payload(results)
-    if not pcm:
-        return {"status": SUBJECT_IDENTITY_UNAVAILABLE, "source": source, "candidate_ips": [], "selected_ip": None, "reason": "PCM_RESULT_UNAVAILABLE"}
-
-    by_ip: dict[str, dict[str, Any]] = {}
-    populated_taps: set[str] = set()
-    for stream in pcm.get("streams", []) or []:
-        tap_name = str((stream.get("tap") or {}).get("name") or "")
-        if int(stream.get("packet_count") or 0) > 0:
-            populated_taps.add(tap_name)
-        for endpoint in stream.get("source_endpoints", []) or []:
-            ip = str(endpoint.get("ip") or "").strip()
-            if not ip:
-                continue
-            row = by_ip.setdefault(ip, {"ip": ip, "packet_count": 0, "taps": set(), "ports": set()})
-            row["packet_count"] += int(endpoint.get("packet_count") or 0)
-            if tap_name:
-                row["taps"].add(tap_name)
-            if endpoint.get("port") is not None:
-                row["ports"].add(int(endpoint["port"]))
-
-    candidates = [{"ip": row["ip"], "packet_count": row["packet_count"], "taps": sorted(row["taps"]), "ports": sorted(row["ports"])} for row in by_ip.values()]
-    candidates.sort(key=lambda row: (-int(row["packet_count"]), row["ip"]))
-    if not candidates:
-        return {"status": SUBJECT_IDENTITY_UNAVAILABLE, "source": source, "candidate_ips": [], "selected_ip": None, "reason": "PCM_SOURCE_ENDPOINTS_UNAVAILABLE"}
-
-    complete = [row for row in candidates if populated_taps and set(row["taps"]) >= populated_taps]
-    if len(complete) == 1:
-        return {"status": SUBJECT_IDENTITY_UNIQUE, "source": source, "candidate_ips": candidates, "selected_ip": complete[0]["ip"], "populated_taps": sorted(populated_taps), "reason": "ONE_PCM_SOURCE_IP_COVERS_ALL_POPULATED_TAPS"}
-    if len(candidates) == 1:
-        return {"status": SUBJECT_IDENTITY_UNIQUE, "source": source, "candidate_ips": candidates, "selected_ip": candidates[0]["ip"], "populated_taps": sorted(populated_taps), "reason": "ONLY_ONE_PCM_SOURCE_IP"}
-    return {"status": SUBJECT_IDENTITY_AMBIGUOUS, "source": source, "candidate_ips": candidates, "selected_ip": None, "populated_taps": sorted(populated_taps), "reason": "MULTIPLE_PCM_SOURCE_DEVICE_CANDIDATES"}
+    return _infer_pcm_source_device_identity(pcm, source=source)
 
 
 def _sdp_connection_ips(call: dict) -> set[str]:
@@ -102,7 +69,14 @@ def score_call_for_subject(call: dict, packet: dict, subject_ip: str) -> dict:
     if subject_ip in _sip_ladder_ips(call):
         score += 10
         reasons.append({"type": "SIP_SIGNALING_ENDPOINT_MATCH", "weight": 10})
-    return {"call_id": call.get("call_id"), "score": score, "subject_ip": subject_ip, "sdp_connection_ips": sorted(sdp_ips), "matched_rtp_stream_ids": [s.get("stream_id") for s in subject_streams], "reasons": reasons}
+    return {
+        "call_id": call.get("call_id"),
+        "score": score,
+        "subject_ip": subject_ip,
+        "sdp_connection_ips": sorted(sdp_ips),
+        "matched_rtp_stream_ids": [s.get("stream_id") for s in subject_streams],
+        "reasons": reasons,
+    }
 
 
 def _latest_call(valid_calls: list[tuple[int, dict]]) -> tuple[int, dict]:
