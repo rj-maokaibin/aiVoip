@@ -48,6 +48,8 @@ def main() -> int:
              "backend/tests/test_preliminary_evidence_report_v1.py",
              "backend/tests/test_evidence_report_offline_context_v1.py",
              "backend/tests/test_evidence_report_context_provenance_v1.py",
+             "backend/tests/test_offline_subject_call_selection_v1.py",
+             "backend/tests/test_pcm_source_provenance_v1.py",
              "backend/tests/test_candidate_decision_negative_control_v1.py",
              "backend/tests/test_candidate_decision_rtp_activity_v1.py",
              "backend/tests/test_candidate_decision_field_regression_v1.py",
@@ -89,12 +91,7 @@ def main() -> int:
              "--artifacts", str(ROOT / "validation" / "offline_analysis_golden_001_artifacts")],
             category="REAL_GOLDEN", timeout=600,
         )
-        environment_gates.append({
-            "key": offline_gate.key,
-            "status": offline_gate.status,
-            "blocking_for_production": True,
-            "detail": offline_gate.detail,
-        })
+        environment_gates.append({"key": offline_gate.key, "status": offline_gate.status, "blocking_for_production": True, "detail": offline_gate.detail})
     else:
         environment_gates.append({
             "key": "OFFLINE_ANALYSIS_GOLDEN_001",
