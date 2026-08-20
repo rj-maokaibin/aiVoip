@@ -11,6 +11,7 @@ from app.reports.diagnostic_contract import build_diagnostic_contract_snapshot
 
 REPORT_ANALYZERS = {"packet_intelligence", "pcm_intelligence", "media_intelligence"}
 TERMINAL_ANALYZER_STATES = {"SUCCESS", "PARTIAL_SUCCESS", "FAILED", "UNAVAILABLE", "TIMEOUT"}
+DIAGNOSTIC_SNAPSHOT_KEY = "__diagnostic_contract_snapshot"
 
 
 def scope_value(value: EvidenceReportScope | str) -> str:
@@ -145,15 +146,10 @@ def load_analyzer_results(storage, runs: dict[str, AnalyzerRun]) -> tuple[dict[s
     # exposed to the Finding composer as user-visible anomalies.
     results=apply_candidate_decisions(results)
 
-    # PR7 compatibility projection. Analyzer output contracts remain unchanged;
-    # the in-memory report path receives one canonical DiagnosticEvent /
-    # CandidateDecision snapshot. The snapshot is temporarily carried inside an
-    # Analyzer summary so the existing Report Composer signature does not change.
+    # PR7 compatibility projection. Analyzer outputs remain unchanged. Carry the
+    # canonical snapshot through an Analyzer-state extension because analyzer
+    # states are always present, including packet-only reports. evidence_boundary
+    # consumes/removes this private transport before publication.
     snapshot=build_diagnostic_contract_snapshot(results=results,analyzer_states=states)
-    media=results.get("media_intelligence")
-    pcm=results.get("pcm_intelligence")
-    if isinstance(media,dict):
-        media.setdefault("summary",{})["__diagnostic_contract_snapshot"]=snapshot
-    elif isinstance(pcm,dict):
-        pcm.setdefault("summary",{})["__diagnostic_contract_snapshot"]=snapshot
+    states.setdefault("packet_intelligence",{})[DIAGNOSTIC_SNAPSHOT_KEY]=snapshot
     return results,states
