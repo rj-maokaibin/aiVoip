@@ -106,6 +106,18 @@ def _add_measurement(out: list[dict], label: str, value: Any, unit: str | None =
     out.append({"label": label, "value": value, "unit": unit, "meaning": meaning})
 
 
+def _periodic_rep(result: dict | None) -> dict:
+    return (result or {}).get("representative") or {}
+
+
+def _periodic_ac20(result: dict | None) -> Any:
+    return (_periodic_rep(result).get("autocorrelation") or {}).get("20ms")
+
+
+def _periodic_comb_hits(result: dict | None) -> Any:
+    return ((result or {}).get("comb") or {}).get("hit_count")
+
+
 def _measurements(finding: dict) -> list[dict]:
     metrics = finding.get("metrics") or {}
     ftype = str(finding.get("type") or "")
@@ -117,7 +129,20 @@ def _measurements(finding: dict) -> list[dict]:
         _add_measurement(out, "最大超额延迟", metrics.get("max_excess_delay_ms"), "ms")
         _add_measurement(out, "RTP 丢包数", metrics.get("stream_lost_packets"), "packets", "Sequence 连续时 HIGH_DELTA 不等于 Packet Loss。")
         _add_measurement(out, "全部事件 Sequence 连续", metrics.get("all_sequence_continuous"), None)
-    elif ftype in {"PERIODIC_LOW_FREQUENCY_INTERFERENCE", "LOCAL_CAPTURE_PERIODIC_INTERFERENCE", "PERIODIC_INTERFERENCE_PATH_COMPARISON"}:
+    elif ftype in {"LOCAL_CAPTURE_PERIODIC_INTERFERENCE", "PERIODIC_INTERFERENCE_PATH_COMPARISON"} and metrics.get("pcm_rx"):
+        pcm_rx = metrics.get("pcm_rx") or {}
+        upstream = metrics.get("upstream_rtp") or {}
+        downstream = metrics.get("downstream_rtp") or {}
+        strength = metrics.get("strength") or {}
+        _add_measurement(out, "PCM_RX 周期等级", pcm_rx.get("level"))
+        _add_measurement(out, "PCM_RX 20ms 自相关", _periodic_ac20(pcm_rx))
+        _add_measurement(out, "PCM_RX 频梳命中", _periodic_comb_hits(pcm_rx), "peaks")
+        _add_measurement(out, "PCM_RX 周期强度", strength.get("pcm_rx"))
+        _add_measurement(out, "上行 RTP 周期强度", strength.get("upstream_rtp"))
+        _add_measurement(out, "反向 RTP 周期强度", strength.get("downstream_rtp"))
+        _add_measurement(out, "上行 RTP 20ms 自相关", _periodic_ac20(upstream))
+        _add_measurement(out, "反向 RTP 20ms 自相关", _periodic_ac20(downstream))
+    elif ftype == "PERIODIC_LOW_FREQUENCY_INTERFERENCE":
         hum = metrics.get("hum") or metrics
         _add_measurement(out, "主周期/工频族", hum.get("dominant_family"))
         _add_measurement(out, "周期特征得分", hum.get("score") or metrics.get("periodicity_strength"))
@@ -184,11 +209,17 @@ def _packet_refs(finding: dict) -> list[dict]:
 
 
 def _artifact_kind(ref: dict) -> str:
+    """Classify only explicit report-safe Artifact types.
+
+    MIME is intentionally not an authority boundary. Full PCM/RTP WAV and raw
+    analyzer audio also use audio/wav, but they require VIEW_RAW_EVIDENCE and must
+    never become an Evidence Card clip or Feishu inline media merely because their
+    content type happens to be audio.
+    """
     atype = str(ref.get("type") or "").upper()
-    ctype = str(ref.get("content_type") or "").lower()
-    if atype in _IMAGE_TYPES or ctype == "image/png":
+    if atype in _IMAGE_TYPES:
         return "IMAGE"
-    if atype in _AUDIO_TYPES or ctype.startswith("audio/"):
+    if atype in _AUDIO_TYPES:
         return "AUDIO"
     return "DETAIL"
 
@@ -218,14 +249,15 @@ def _artifact_display(ref: dict) -> dict:
     meta = ref.get("metadata") or {}
     annotation = meta.get("annotation_contract") or {}
     artifact_id = ref.get("artifact_id")
+    kind = _artifact_kind(ref)
     return {
         "artifact_id": artifact_id,
         "type": ref.get("type"),
         "filename": ref.get("filename"),
         "content_type": ref.get("content_type"),
         "role": ref.get("role"),
-        "kind": _artifact_kind(ref),
-        "content_url": f"/api/v1/artifacts/{artifact_id}/content" if artifact_id else None,
+        "kind": kind,
+        "content_url": f"/api/v1/artifacts/{artifact_id}/content" if artifact_id and kind in {"IMAGE", "AUDIO"} else None,
         "caption": annotation.get("caption") or annotation.get("title") or ref.get("filename"),
         "source": meta.get("source") or {},
         "time_window": meta.get("time_window") or meta.get("anomaly_window") or {},
