@@ -37,10 +37,6 @@ class MediaIntelligenceEngine:
         try:
             packets = list(self.packet_engine.tshark.iter_packets(path))
             packet_result = self.packet_engine.analyze_packets(packets)
-            # Some captures contain valid RTP but TShark cannot bind dynamic UDP ports to RTP
-            # (for example incomplete SIP/SDP or vendor-specific capture ordering).  In that
-            # case preserve all TShark SIP/SDP facts and supplement only the RTP layer with the
-            # deliberately restricted continuity-checked fallback parser.
             if not packet_result.get('rtp_streams'):
                 excluded = {tap.dst_port for tap in self.pcm_profile.taps}
                 fallback_rtp = read_rtp_packets_fallback(path, exclude_ports=excluded)
@@ -102,8 +98,6 @@ class MediaIntelligenceEngine:
         scoped_audio_events = self._active_media_audio_events(pcm_signals, packet_result, pcm_result, tracks, correlations)
         candidate_clips = self._write_candidate_decision_clips(scoped_audio_events, pcm_signals, output_dir)
         artifacts.extend(candidate_clips['artifacts']); media_events.extend(candidate_clips['events'])
-        # A delayed RX/TX correlation is a path observation.  Whether it is a
-        # user-visible echo fault is decided later using symptom context.
         echo_events = self._pcm_echo_events(pcm_signals)
         cross = []
         try:
@@ -169,7 +163,7 @@ class MediaIntelligenceEngine:
         return None
 
     @staticmethod
-    def _best_pcm_rtp_correlation(correlations: list[dict], *, tap_name: str, session_index: int) -> tuple[str | None, float | None, str | None]:
+    def _best_pcm_rtp_correlation(correlations: list[dict], *, tap_name: str, session_index: int) -> tuple[str | None, float | None, str | None, float]:
         best=None
         for item in correlations:
             if item.get('type') != 'PCM_RTP_CORRELATION':
@@ -179,20 +173,14 @@ class MediaIntelligenceEngine:
                 continue
             corr=details.get('correlation') or {}; score=abs(float(corr.get('absolute_correlation') or 0.0))
             if best is None or score > best[0]:
-                best=(score,details.get('rtp_stream_id'),corr.get('quality'))
+                best=(score,details.get('rtp_stream_id'),corr.get('quality'),float(corr.get('lag_ms') or 0.0))
         if best is None:
-            return None,None,None
-        return best[1],best[0],best[2]
+            return None,None,None,0.0
+        return best[1],best[0],best[2],best[3]
 
     def _active_media_audio_events(self, pcm_signals: list[dict], packet_result: dict, pcm_result: dict,
                                    tracks: list[RenderedRtpTrack], correlations: list[dict]) -> list[dict]:
-        """Classify active-media audio candidates with deterministic negative controls.
-
-        Raw detector output is never report-authoritative. Click/Pop is masked by
-        DTMF/media-boundary controls. Silence requires a correlated RTP counterpart
-        and direct same-window RTP energy evidence while the decoded samples are
-        still available in this analyzer.
-        """
+        """Classify active-media audio candidates with lag-aligned cross-layer controls."""
         calls=[c for c in packet_result.get('calls',[]) if c.get('media_start_time') is not None and c.get('media_end_time') is not None]
         min_active=float(self.analyzer_profile.section('silence')['active_media_min_seconds'])
         track_by_id={t.stream_id:t for t in tracks}
@@ -205,8 +193,9 @@ class MediaIntelligenceEngine:
                 ds=pcm['start_time']+float(dtmf.get('start_seconds') or 0.0)
                 de=pcm['start_time']+float(dtmf.get('end_seconds') if dtmf.get('end_seconds') is not None else dtmf.get('start_seconds') or 0.0)
                 dtmf_intervals.append({'digit':dtmf.get('digit'),'start':ds,'end':de,'confidence':dtmf.get('confidence')})
-            stream_id,corr_score,corr_quality=self._best_pcm_rtp_correlation(correlations,tap_name=tap_name,session_index=session_index)
+            stream_id,corr_score,corr_quality,corr_lag_ms=self._best_pcm_rtp_correlation(correlations,tap_name=tap_name,session_index=session_index)
             counterpart=track_by_id.get(stream_id) if stream_id else None
+            counterpart_has_synthetic_gaps=bool(counterpart and (counterpart.inserted_loss_samples>0 or counterpart.missing_payload_packets>0))
             for call in calls:
                 start=max(float(pcm['start_time']),float(call['media_start_time']))
                 end=min(float(pcm['end_time']),float(call['media_end_time']))
@@ -220,20 +209,34 @@ class MediaIntelligenceEngine:
                 for ev in detect_unexpected_silence(chunk,sr):
                     abs_start=start+float(ev['start_seconds'])
                     abs_end=start+float(ev.get('end_seconds',ev['start_seconds']))
+                    aligned_start=abs_start-corr_lag_ms/1000.0
+                    aligned_end=abs_end-corr_lag_ms/1000.0
                     counterpart_metrics=None
-                    if counterpart is not None:
-                        metrics=audio_window_metrics(counterpart.samples,counterpart.sample_rate,counterpart.start_time,abs_start,abs_end)
+                    if counterpart is not None and not counterpart_has_synthetic_gaps:
+                        metrics=audio_window_metrics(counterpart.samples,counterpart.sample_rate,counterpart.start_time,aligned_start,aligned_end)
                         if metrics.get('sample_count',0)>0:
+                            metrics.update({'pcm_absolute_start_time':abs_start,'pcm_absolute_end_time':abs_end,
+                                            'correlation_lag_ms':corr_lag_ms,
+                                            'alignment_rule':'rtp_window = pcm_window - correlation_lag'})
                             counterpart_metrics=metrics
                     decision=decide_silence(ev,absolute_start=abs_start,absolute_end=abs_end,scope=scope,
                                             counterpart_stream_id=stream_id,counterpart_correlation=corr_score,
                                             counterpart_metrics=counterpart_metrics)
-                    decision.setdefault('positive_evidence',{})['correlation_quality']=corr_quality
+                    evidence=decision.setdefault('positive_evidence',{})
+                    evidence['correlation_quality']=corr_quality
+                    evidence['correlation_lag_ms']=corr_lag_ms
+                    evidence['counterpart_aligned_start_time']=aligned_start
+                    evidence['counterpart_aligned_end_time']=aligned_end
+                    evidence['counterpart_inserted_loss_samples']=counterpart.inserted_loss_samples if counterpart else None
+                    evidence['counterpart_missing_payload_packets']=counterpart.missing_payload_packets if counterpart else None
+                    if counterpart_has_synthetic_gaps:
+                        decision['status']='INCONCLUSIVE'
+                        decision['reason_code']='RTP_COUNTERPART_CONTAINS_SYNTHETIC_GAPS'
                     events.append({'type':'UNEXPECTED_SILENCE','time':abs_start,'start_time':abs_start,'end_time':abs_end,
                                    'severity':'MEDIUM','evidence_level':'L2','scope':scope,
                                    'details':{**ev,'absolute_start_time':abs_start,'absolute_end_time':abs_end,
                                               'candidate_decision':decision,
-                                              'interpretation':'活跃媒体静音候选已执行跨层 CandidateDecision；仅在相关 RTP 同窗明确活动且 PCM 静音时才升级为异常 Finding。'}})
+                                              'interpretation':'活跃媒体静音候选已按 PCM↔RTP correlation lag 对齐执行跨层 CandidateDecision；只有对应 RTP 源窗口明确活动且无合成补零时才升级为异常 Finding。'}})
                 for ev in detect_click_pop_robust(chunk,sr):
                     abs_t=start+float(ev['time_seconds'])
                     decision=decide_click_pop(ev,absolute_time=abs_t,scope=scope,dtmf_intervals=dtmf_intervals,media_start=start,media_end=end)
@@ -325,9 +328,11 @@ class MediaIntelligenceEngine:
             cid=str(decision.get('candidate_id') or f'candidate-{count}')
             path=output_dir/f"candidate_{count:03d}_{event.get('type')}_{cid[-8:]}.wav"
             write_wav(path,pcm['samples'][a:b],sr,1)
+            positive=decision.get('positive_evidence') or {}
             meta={'pcm_tap':scope.get('pcm_tap'),'session_index':scope.get('pcm_session_index'),'event_type':event.get('type'),
                   'event_time':event.get('time'),'candidate_id':decision.get('candidate_id'),'candidate_decision_status':'PROMOTED',
-                  'candidate_reason_code':decision.get('reason_code'),'clip_start_time':pcm['start_time']+a/sr,'clip_end_time':pcm['start_time']+b/sr}
+                  'candidate_reason_code':decision.get('reason_code'),'correlation_lag_ms':positive.get('correlation_lag_ms'),
+                  'clip_start_time':pcm['start_time']+a/sr,'clip_end_time':pcm['start_time']+b/sr}
             artifacts.append(_artifact(path,'AUDIO_CLIP','audio/wav',meta)); count+=1
             events.append({'time':event.get('time'),'source':scope.get('pcm_tap'),'type':'AUDIO_CLIP_CREATED','severity':'INFO',
                            'details':{'event_type':event.get('type'),'filename':path.name,'candidate_id':decision.get('candidate_id'),'candidate_decision_status':'PROMOTED'}})
@@ -392,7 +397,6 @@ class MediaIntelligenceEngine:
         min_overlap=float(corr_cfg['min_overlap_seconds']); emit_min=float(corr_cfg['emit_min_correlation'])
         for pcm in pcm_signals:
             for track in tracks:
-                # Only compare sessions whose capture-time ranges substantially overlap.
                 overlap=min(pcm['end_time'],track.end_time)-max(pcm['start_time'],track.start_time)
                 if overlap < min_overlap: continue
                 corr=correlate_tracks(pcm['samples'],pcm['sample_rate'],pcm['start_time'],track.samples,track.sample_rate,track.start_time)
