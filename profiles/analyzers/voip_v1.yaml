@@ -49,6 +49,8 @@ candidate_decision:
   media_boundary_guard_ms: 120.0
   silence_counterpart_overlap_ratio: 0.50
   silence_min_correlation: 0.55
+  silence_counterpart_active_ratio: 0.50
+  silence_counterpart_active_margin_db: 6.0
 echo:
   min_delay_ms: 20
   max_delay_ms: 500
