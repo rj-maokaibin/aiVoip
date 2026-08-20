@@ -58,7 +58,7 @@ def test_context_binding_uses_only_packet_call_source_analyzer_input_evidence_id
     assert [x["id"] for x in selected] == ["current-runtime-pcap"]
 
 
-def test_context_binding_uses_media_run_inputs_when_call_falls_back_to_media_packet_result():
+def test_context_binding_uses_media_run_inputs_only_when_dedicated_packet_result_is_absent():
     evidences = [
         {"id": "old-packet-input", "type": "PCAP", "session_id": "old-session", "call_id": "old-call"},
         {"id": "current-offline-pcap", "type": "PCAP", "session_id": None, "call_id": None},
@@ -68,7 +68,7 @@ def test_context_binding_uses_media_run_inputs_when_call_falls_back_to_media_pac
         "media_intelligence": SimpleNamespace(input_evidence_ids=["current-offline-pcap"]),
     }
     results = {
-        "packet_intelligence": {"calls": []},
+        "packet_intelligence": None,
         "pcm_intelligence": None,
         "media_intelligence": {"packet": {"calls": [{"call_id": "sip-media-fallback"}]}},
     }
@@ -78,6 +78,27 @@ def test_context_binding_uses_media_run_inputs_when_call_falls_back_to_media_pac
     assert analyzer_name == "media_intelligence"
     assert input_ids == ["current-offline-pcap"]
     assert [x["id"] for x in selected] == ["current-offline-pcap"]
+
+
+def test_context_binding_does_not_override_explicit_zero_call_packet_result_with_media_packet():
+    evidences = [
+        {"id": "packet-current", "type": "PCAP", "session_id": None, "call_id": None},
+        {"id": "media-older", "type": "PCAP", "session_id": "old-session", "call_id": "old-call"},
+    ]
+    runs = {
+        "packet_intelligence": SimpleNamespace(input_evidence_ids=["packet-current"]),
+        "media_intelligence": SimpleNamespace(input_evidence_ids=["media-older"]),
+    }
+    results = {
+        "packet_intelligence": {"summary": {"call_count": 0}, "calls": []},
+        "media_intelligence": {"packet": {"calls": [{"call_id": "old-media-call"}]}},
+    }
+
+    selected,input_ids,analyzer_name=_analysis_context_evidences(evidences,runs,results)
+
+    assert analyzer_name=="packet_intelligence"
+    assert input_ids==["packet-current"]
+    assert [x["id"] for x in selected]==["packet-current"]
 
 
 def test_context_binding_falls_back_to_scoped_evidence_when_source_run_has_no_input_ids():
