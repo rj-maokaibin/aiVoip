@@ -17,6 +17,8 @@ Every Finding must expose, when applicable:
 9. root-cause boundary — what is not confirmed;
 10. deterministic next action.
 
+A periodic-interference Finding must use a non-zero representative low-energy evidence window for human review. The broader active-media analysis window remains available in metrics/provenance and must not be collapsed into `start == end`.
+
 ## Artifact binding
 
 Event audio must not be attached by PCM Tap alone. For event clips the binding must agree on:
@@ -25,7 +27,9 @@ Event audio must not be attached by PCM Tap alone. For event clips the binding m
 - RTP Stream or PCM Tap/session where present;
 - anomaly time window where present.
 
-Rejected `CANDIDATE_AUDIO_CLIP` is never report-safe and never substitutes for a promoted anomaly clip.
+Artifact `type` is the authority boundary for report-safe media. MIME such as `audio/wav` or `image/png` must never promote a raw/deep Artifact into an Evidence Card image/audio surface. Only explicit `AUDIO_CLIP` and `PERIODIC_AUDIO_CLIP` types are playable report audio.
+
+Rejected `CANDIDATE_AUDIO_CLIP` is never report-safe and never substitutes for a promoted anomaly clip. Full `PCM_WAV`, `RTP_WAV`, `AUDIO_WAV`, raw PCAP and other deep evidence retain their stronger permissions and are never inlined into Feishu merely because they share an audio MIME type.
 
 ## Renderer V2
 
@@ -51,7 +55,7 @@ Required readable semantics:
 
 The primary report surface shows key visual/audio artifacts inside the matching Finding. Section 10 remains the complete attachment area for leftovers and bundles.
 
-Feishu inserts at most 12 key media objects inline per report; remaining eligible media stays in the attachment section.
+Feishu inserts at most 12 key media objects inline per report; remaining eligible media stays in the attachment section. Feishu may inline only media selected by the Evidence Card report-safe type boundary; it must not bypass report permissions by reading a raw/full WAV directly from Object Storage.
 
 ## Release gates
 
