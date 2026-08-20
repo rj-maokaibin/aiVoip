@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from app.contracts.evidence_report import AnalysisMode, CallOrigin, CallScope
+from app.services.evidence_report_subject_call import select_subject_call
 
 
 REPORT_SEMANTIC_CONTRADICTION = "REPORT_SEMANTIC_CONTRADICTION"
@@ -108,21 +109,6 @@ def _packet_result_with_calls(results: dict[str, dict | None]) -> tuple[dict | N
     return None, None
 
 
-def _packet_call_sort_key(item: tuple[int, dict]) -> tuple[float, float, int]:
-    index, call = item
-    end = _as_float(call.get("media_end_time"))
-    if end is None:
-        end = _as_float(call.get("end_time"))
-    start = _as_float(call.get("media_start_time"))
-    if start is None:
-        start = _as_float(call.get("start_time"))
-    return (
-        end if end is not None else float("-inf"),
-        start if start is not None else float("-inf"),
-        index,
-    )
-
-
 def _stable_packet_call_id(call: dict, *, source_index: int) -> str:
     material = "|".join(
         [
@@ -220,21 +206,49 @@ def _has_rtp_media(packet: dict | None) -> bool:
 
 
 def select_reconstructed_packet_call(results: dict[str, dict | None]) -> tuple[dict | None, dict]:
+    """Select the report-facing diagnostic Call without conflating B2BUA SIP legs.
+
+    A single reconstructed SIP Call is safe to select directly. For multi-leg
+    captures, the selector requires deterministic subject-device evidence. The PCM
+    diagnostic UDP source identity is used when available; ambiguous captures fail
+    closed instead of falling back to "latest Call by end time".
+    """
     packet, analyzer_source = _packet_result_with_calls(results)
     calls = list((packet or {}).get("calls") or [])
     valid = [(idx, call) for idx, call in enumerate(calls) if isinstance(call, dict) and call.get("call_id")]
+    base = {
+        "reconstructed_call_count": len(valid),
+        "raw_sip_leg_count": len(valid),
+        "packet_call_count": _packet_call_count(packet),
+        "packet_call_source": analyzer_source,
+        "bidirectional_call_media": _has_bidirectional_call_media(packet),
+        "rtp_media_present": _has_rtp_media(packet),
+    }
     if not valid:
         return None, {
-            "reconstructed_call_count": 0,
+            **base,
+            "diagnostic_call_count": 0,
             "selected_sip_call_id": None,
             "selection_rule": "NO_RECONSTRUCTABLE_PACKET_CALL",
-            "packet_call_source": analyzer_source,
-            "packet_call_count": _packet_call_count(packet),
-            "bidirectional_call_media": _has_bidirectional_call_media(packet),
-            "rtp_media_present": _has_rtp_media(packet),
+            "subject_identity": None,
+            "call_selection_status": "UNAVAILABLE",
+            "call_selection_scores": [],
         }
 
-    selected_source_index, selected = max(valid, key=_packet_call_sort_key)
+    selection = select_subject_call(valid, packet or {}, results)
+    selected = selection.get("call")
+    selected_source_index = selection.get("source_index")
+    if not isinstance(selected, dict) or selected_source_index is None:
+        return None, {
+            **base,
+            "diagnostic_call_count": 0,
+            "selected_sip_call_id": None,
+            "selection_rule": selection.get("selection_rule"),
+            "subject_identity": selection.get("subject_identity"),
+            "call_selection_status": selection.get("status"),
+            "call_selection_scores": selection.get("scores") or [],
+        }
+
     display_ordinal = next(i for i, item in enumerate(valid) if item[0] == selected_source_index)
     serialized = _serialize_packet_call(
         selected,
@@ -244,13 +258,13 @@ def select_reconstructed_packet_call(results: dict[str, dict | None]) -> tuple[d
         analyzer_source=analyzer_source or "packet_intelligence",
     )
     return serialized, {
-        "reconstructed_call_count": len(valid),
+        **base,
+        "diagnostic_call_count": 1,
         "selected_sip_call_id": selected.get("call_id"),
-        "selection_rule": "LATEST_RECONSTRUCTED_CALL_BY_END_THEN_START_TIME",
-        "packet_call_source": analyzer_source,
-        "packet_call_count": _packet_call_count(packet),
-        "bidirectional_call_media": _has_bidirectional_call_media(packet),
-        "rtp_media_present": _has_rtp_media(packet),
+        "selection_rule": selection.get("selection_rule"),
+        "subject_identity": selection.get("subject_identity"),
+        "call_selection_status": selection.get("status"),
+        "call_selection_scores": selection.get("scores") or [],
     }
 
 
@@ -276,6 +290,8 @@ def _semantic_issues(
     if int(metadata.get("packet_call_count") or 0) > 0 and display_call is None:
         issues.append(REPORT_SEMANTIC_CONTRADICTION)
     if bool(metadata.get("bidirectional_call_media")) and display_call is None:
+        issues.append(CALL_BINDING_INCOMPLETE)
+    if metadata.get("call_selection_status") == "AMBIGUOUS":
         issues.append(CALL_BINDING_INCOMPLETE)
     if mode == AnalysisMode.REPRODUCTION and reconstructed_call is not None and runtime_call is None:
         issues.append(CALL_BINDING_INCOMPLETE)
@@ -344,6 +360,7 @@ def resolve_report_analysis_context(
         metadata=metadata,
     )
     offline_suppressed = mode == AnalysisMode.OFFLINE_IMPORTED and bool(session or runtime_call)
+    subject_identity = metadata.get("subject_identity") or {}
     analysis_context = {
         "analysis_mode": mode.value,
         "capture_origin": _capture_origin(evidences),
@@ -355,10 +372,16 @@ def resolve_report_analysis_context(
         "runtime_context_suppressed": offline_suppressed,
         "call_reconstruction": "ENABLED",
         "reconstructed_call_count": metadata.get("reconstructed_call_count", 0),
+        "raw_sip_leg_count": metadata.get("raw_sip_leg_count", 0),
+        "diagnostic_call_count": metadata.get("diagnostic_call_count", 0),
         "packet_call_count": metadata.get("packet_call_count", 0),
         "call_origin": call_origin.value if call_origin else None,
         "call_scope": call_scope.value,
         "selection_rule": selection_rule,
+        "call_selection_status": metadata.get("call_selection_status"),
+        "call_selection_scores": metadata.get("call_selection_scores") or [],
+        "subject_device_identity": subject_identity,
+        "subject_device_ip": subject_identity.get("selected_ip"),
         "packet_call_source": metadata.get("packet_call_source"),
         "selected_sip_call_id": metadata.get("selected_sip_call_id"),
         "semantic_status": "OK" if not issues else "INCOMPLETE",
@@ -384,6 +407,11 @@ def build_analysis_context(
         results=results,
     )
     context = dict(resolved["analysis_context"])
-    context.update({"mode": context["analysis_mode"], "offline": context["analysis_mode"] == AnalysisMode.OFFLINE_IMPORTED.value,
-                    "session": session, "call": resolved["display_call"], "call_source": context.get("call_origin")})
+    context.update({
+        "mode": context["analysis_mode"],
+        "offline": context["analysis_mode"] == AnalysisMode.OFFLINE_IMPORTED.value,
+        "session": session,
+        "call": resolved["display_call"],
+        "call_source": context.get("call_origin"),
+    })
     return context
