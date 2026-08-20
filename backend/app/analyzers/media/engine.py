@@ -5,6 +5,7 @@ from dataclasses import asdict
 from pathlib import Path
 import numpy as np
 
+from app.analyzers.audio.candidate_decision import audio_window_metrics, decide_click_pop, decide_silence
 from app.analyzers.audio.features import waveform_envelope, spectrogram_data, spectral_tone_analysis
 from app.analyzers.audio.quality import detect_unexpected_silence, detect_click_pop_robust, analyze_echo_path
 from app.analyzers.audio.rtp_audio import render_rtp_tracks, RenderedRtpTrack
@@ -23,7 +24,7 @@ from app.analyzers.pcm.wav import write_wav
 
 class MediaIntelligenceEngine:
     analyzer_name = 'media_intelligence'
-    analyzer_version = '0.4.0'
+    analyzer_version = '0.5.0'
 
     def __init__(self, pcm_profile: PcmProfile, tshark: TSharkAdapter | None = None):
         self.pcm_profile = pcm_profile
@@ -98,7 +99,9 @@ class MediaIntelligenceEngine:
             artifacts.extend(item.pop('_artifacts'))
             media_events.extend(item.pop('_events'))
         correlations = self._correlate_pcm_rtp(pcm_signals, tracks)
-        scoped_audio_events = self._active_media_audio_events(pcm_signals, packet_result)
+        scoped_audio_events = self._active_media_audio_events(pcm_signals, packet_result, pcm_result, tracks, correlations)
+        candidate_clips = self._write_candidate_decision_clips(scoped_audio_events, pcm_signals, output_dir)
+        artifacts.extend(candidate_clips['artifacts']); media_events.extend(candidate_clips['events'])
         # A delayed RX/TX correlation is a path observation.  Whether it is a
         # user-visible echo fault is decided later using symptom context.
         echo_events = self._pcm_echo_events(pcm_signals)
@@ -115,6 +118,7 @@ class MediaIntelligenceEngine:
         cross.extend(scoped_audio_events)
         cross.extend(echo_events)
         timeline = build_unified_timeline(packet_result, pcm_result, media_events, correlations + cross)
+        candidate_decisions=[(e.get('details') or {}).get('candidate_decision') for e in scoped_audio_events if (e.get('details') or {}).get('candidate_decision')]
         return {
             'analyzer': self.analyzer_name,
             'version': self.analyzer_version,
@@ -129,8 +133,13 @@ class MediaIntelligenceEngine:
                 'pcm_session_count': pcm_result.get('summary',{}).get('session_count',0),
                 'pcm_rtp_high_correlation_count': sum(1 for c in correlations if c.get('details',{}).get('correlation',{}).get('quality')=='HIGH'),
                 'periodic_interference_count': sum(1 for e in periodic_paths if e.get('type')=='LOCAL_CAPTURE_PERIODIC_INTERFERENCE'),
-                'unexpected_silence_count': sum(1 for e in scoped_audio_events if e.get('type')=='UNEXPECTED_SILENCE'),
-                'click_pop_count': sum(1 for e in scoped_audio_events if e.get('type')=='CLICK_POP'),
+                'unexpected_silence_candidate_count': sum(1 for e in scoped_audio_events if e.get('type')=='UNEXPECTED_SILENCE'),
+                'unexpected_silence_count': sum(1 for e in scoped_audio_events if e.get('type')=='UNEXPECTED_SILENCE' and ((e.get('details') or {}).get('candidate_decision') or {}).get('status')=='PROMOTED'),
+                'click_pop_candidate_count': sum(1 for e in scoped_audio_events if e.get('type')=='CLICK_POP'),
+                'click_pop_count': sum(1 for e in scoped_audio_events if e.get('type')=='CLICK_POP' and ((e.get('details') or {}).get('candidate_decision') or {}).get('status')=='PROMOTED'),
+                'candidate_promoted_count': sum(1 for d in candidate_decisions if d.get('status')=='PROMOTED'),
+                'candidate_suppressed_count': sum(1 for d in candidate_decisions if d.get('status')=='SUPPRESSED'),
+                'candidate_inconclusive_count': sum(1 for d in candidate_decisions if d.get('status')=='INCONCLUSIVE'),
                 'echo_path_count': sum(1 for e in echo_events if e.get('type')=='ECHO_PATH_DETECTED'),
                 'timeline_event_count': len(timeline),
                 'artifact_count': len(artifacts),
@@ -143,22 +152,61 @@ class MediaIntelligenceEngine:
             'cross_layer_events': cross,
             'periodic_interference_paths': periodic_paths,
             'active_media_audio_events': scoped_audio_events,
+            'candidate_decisions': candidate_decisions,
             'echo_paths': echo_events,
             'timeline': timeline,
             'artifacts': artifacts,
         }
 
+    @staticmethod
+    def _pcm_result_session(pcm_result: dict, tap_name: str, session_index: int) -> dict | None:
+        for stream in pcm_result.get('streams',[]) or []:
+            if (stream.get('tap') or {}).get('name') != tap_name:
+                continue
+            for session in stream.get('sessions',[]) or []:
+                if session.get('session_index') == session_index:
+                    return session
+        return None
 
-    def _active_media_audio_events(self, pcm_signals: list[dict], packet_result: dict) -> list[dict]:
-        """Promote audio anomalies only when they occur inside a SIP active-media window.
+    @staticmethod
+    def _best_pcm_rtp_correlation(correlations: list[dict], *, tap_name: str, session_index: int) -> tuple[str | None, float | None, str | None]:
+        best=None
+        for item in correlations:
+            if item.get('type') != 'PCM_RTP_CORRELATION':
+                continue
+            details=item.get('details') or {}
+            if details.get('pcm_tap') != tap_name or details.get('pcm_session_index') != session_index:
+                continue
+            corr=details.get('correlation') or {}; score=abs(float(corr.get('absolute_correlation') or 0.0))
+            if best is None or score > best[0]:
+                best=(score,details.get('rtp_stream_id'),corr.get('quality'))
+        if best is None:
+            return None,None,None
+        return best[1],best[0],best[2]
 
-        Raw per-session detectors remain useful diagnostics, but only scoped events are fed to
-        the diagnosis layer as call-context evidence.
+    def _active_media_audio_events(self, pcm_signals: list[dict], packet_result: dict, pcm_result: dict,
+                                   tracks: list[RenderedRtpTrack], correlations: list[dict]) -> list[dict]:
+        """Classify active-media audio candidates with deterministic negative controls.
+
+        Raw detector output is never report-authoritative. Click/Pop is masked by
+        DTMF/media-boundary controls. Silence requires a correlated RTP counterpart
+        and direct same-window RTP energy evidence while the decoded samples are
+        still available in this analyzer.
         """
         calls=[c for c in packet_result.get('calls',[]) if c.get('media_start_time') is not None and c.get('media_end_time') is not None]
         min_active=float(self.analyzer_profile.section('silence')['active_media_min_seconds'])
+        track_by_id={t.stream_id:t for t in tracks}
         events=[]
         for pcm in pcm_signals:
+            tap_name=pcm['tap']['name']; session_index=pcm['session_index']
+            session_result=self._pcm_result_session(pcm_result,tap_name,session_index) or {}
+            dtmf_intervals=[]
+            for dtmf in session_result.get('dtmf_events',[]) or []:
+                ds=pcm['start_time']+float(dtmf.get('start_seconds') or 0.0)
+                de=pcm['start_time']+float(dtmf.get('end_seconds') if dtmf.get('end_seconds') is not None else dtmf.get('start_seconds') or 0.0)
+                dtmf_intervals.append({'digit':dtmf.get('digit'),'start':ds,'end':de,'confidence':dtmf.get('confidence')})
+            stream_id,corr_score,corr_quality=self._best_pcm_rtp_correlation(correlations,tap_name=tap_name,session_index=session_index)
+            counterpart=track_by_id.get(stream_id) if stream_id else None
             for call in calls:
                 start=max(float(pcm['start_time']),float(call['media_start_time']))
                 end=min(float(pcm['end_time']),float(call['media_end_time']))
@@ -168,12 +216,31 @@ class MediaIntelligenceEngine:
                 chunk=pcm['samples'][a:b]
                 if chunk.size < sr//2:
                     continue
+                scope={'call_id':call.get('call_id'),'pcm_tap':tap_name,'pcm_session_index':session_index,'active_media_window':{'start_time':start,'end_time':end}}
                 for ev in detect_unexpected_silence(chunk,sr):
-                    abs_t=start+float(ev['start_seconds'])
-                    events.append({'type':'UNEXPECTED_SILENCE','time':abs_t,'severity':'MEDIUM','evidence_level':'L2','scope':{'call_id':call.get('call_id'),'pcm_tap':pcm['tap']['name'],'pcm_session_index':pcm['session_index'],'active_media_window':{'start_time':start,'end_time':end}},'details':{**ev,'absolute_start_time':abs_t,'interpretation':'活跃通话媒体窗口内出现被语音/能量上下文包围的持续静音，属于中断候选；需结合对端方向与用户感知确认。'}})
+                    abs_start=start+float(ev['start_seconds'])
+                    abs_end=start+float(ev.get('end_seconds',ev['start_seconds']))
+                    counterpart_metrics=None
+                    if counterpart is not None:
+                        metrics=audio_window_metrics(counterpart.samples,counterpart.sample_rate,counterpart.start_time,abs_start,abs_end)
+                        if metrics.get('sample_count',0)>0:
+                            counterpart_metrics=metrics
+                    decision=decide_silence(ev,absolute_start=abs_start,absolute_end=abs_end,scope=scope,
+                                            counterpart_stream_id=stream_id,counterpart_correlation=corr_score,
+                                            counterpart_metrics=counterpart_metrics)
+                    decision.setdefault('positive_evidence',{})['correlation_quality']=corr_quality
+                    events.append({'type':'UNEXPECTED_SILENCE','time':abs_start,'start_time':abs_start,'end_time':abs_end,
+                                   'severity':'MEDIUM','evidence_level':'L2','scope':scope,
+                                   'details':{**ev,'absolute_start_time':abs_start,'absolute_end_time':abs_end,
+                                              'candidate_decision':decision,
+                                              'interpretation':'活跃媒体静音候选已执行跨层 CandidateDecision；仅在相关 RTP 同窗明确活动且 PCM 静音时才升级为异常 Finding。'}})
                 for ev in detect_click_pop_robust(chunk,sr):
                     abs_t=start+float(ev['time_seconds'])
-                    events.append({'type':'CLICK_POP','time':abs_t,'severity':'MEDIUM','evidence_level':'L3','scope':{'call_id':call.get('call_id'),'pcm_tap':pcm['tap']['name'],'pcm_session_index':pcm['session_index'],'active_media_window':{'start_time':start,'end_time':end}},'details':{**ev,'absolute_time':abs_t,'interpretation':'活跃通话媒体窗口内的多特征Click/Pop候选；已要求同时满足突变、短时能量抬升和宽带成分。'}})
+                    decision=decide_click_pop(ev,absolute_time=abs_t,scope=scope,dtmf_intervals=dtmf_intervals,media_start=start,media_end=end)
+                    events.append({'type':'CLICK_POP','time':abs_t,'start_time':abs_t,'end_time':abs_t,
+                                   'severity':'MEDIUM','evidence_level':'L3','scope':scope,
+                                   'details':{**ev,'absolute_time':abs_t,'candidate_decision':decision,
+                                              'interpretation':'活跃媒体 Click/Pop 候选已执行 DTMF、媒体边界及置信度 Negative Control；仅 PROMOTED 候选进入异常 Finding。'}})
         return events
 
     def _pcm_echo_events(self, pcm_signals: list[dict]) -> list[dict]:
@@ -221,14 +288,8 @@ class MediaIntelligenceEngine:
             events.append({'time':abs_t,'source':'RTP_AUDIO','type':'AUDIO_CLIP_CREATED','severity':'INFO','details':{'stream_id':track.stream_id,'rtp_event_type':event.get('type'),'filename':path.name,'note':'原始媒体内容片段；不会模拟接收端抖动缓冲行为'}})
         return {'artifacts':artifacts,'events':events}
 
-
     def _write_pcm_artifacts(self, pcm_signals: list[dict], pcm_result: dict, output_dir: Path) -> list[dict]:
         out=[]
-        result_lookup={}
-        for stream in pcm_result.get('streams',[]):
-            tap_name=stream.get('tap',{}).get('name')
-            for sess in stream.get('sessions',[]):
-                result_lookup[(tap_name,sess.get('session_index'))]=sess
         for pcm in pcm_signals:
             tap=pcm['tap']['name']; idx=pcm['session_index']; base=f'pcm_{tap}_{idx:02d}'
             wav=output_dir/f'{base}.wav'; write_wav(wav,pcm['samples'],pcm['sample_rate'],1)
@@ -239,23 +300,38 @@ class MediaIntelligenceEngine:
                 _artifact(wave_json,'WAVEFORM_JSON','application/json',{'pcm_tap':tap,'session_index':idx}),
                 _artifact(spec_json,'SPECTROGRAM_JSON','application/json',{'pcm_tap':tap,'session_index':idx}),
             ]
-            events=[]; sess=result_lookup.get((tap,idx),{})
-            anomaly_specs=[]
-            clicks=sorted(sess.get('click_pop_events',[]), key=lambda x: float(x.get('jump',0)), reverse=True)[:2]
-            for click in clicks:
-                anomaly_specs.append(('CLICK_POP',float(click.get('time_seconds',0)),0.4,0.6))
-            silences=sorted((x for x in sess.get('silence_events',[]) if float(x.get('duration_ms',0))>=200), key=lambda x: float(x.get('duration_ms',0)), reverse=True)[:1]
-            for silence in silences:
-                anomaly_specs.append(('SILENCE',float(silence.get('start_seconds',0)),0.4,min(1.5,float(silence.get('duration_ms',0))/1000+0.4)))
-            anomaly_specs=anomaly_specs[:2]
-            for n,(kind,rel,pre,post) in enumerate(anomaly_specs):
-                a=max(0,int((rel-pre)*pcm['sample_rate'])); b=min(pcm['samples'].size,int((rel+post)*pcm['sample_rate']))
-                if b<=a: continue
-                clip=output_dir/f'{base}_event_{n:03d}_{kind}.wav'; write_wav(clip,pcm['samples'][a:b],pcm['sample_rate'],1)
-                artifacts.append(_artifact(clip,'AUDIO_CLIP','audio/wav',{'pcm_tap':tap,'session_index':idx,'event_type':kind,'event_time':pcm['start_time']+rel}))
-                events.append({'time':pcm['start_time']+rel,'source':tap,'type':'AUDIO_CLIP_CREATED','severity':'INFO','details':{'event_type':kind,'filename':clip.name}})
-            out.append({'pcm_tap':tap,'direction':pcm['tap']['direction'],'session_index':idx,'start_time':pcm['start_time'],'end_time':pcm['end_time'],'sample_rate':pcm['sample_rate'],'duration_seconds':round(pcm['samples'].size/pcm['sample_rate'],6),'artifact_files':[a['filename'] for a in artifacts],'_artifacts':artifacts,'_events':events})
+            out.append({'pcm_tap':tap,'direction':pcm['tap']['direction'],'session_index':idx,'start_time':pcm['start_time'],'end_time':pcm['end_time'],'sample_rate':pcm['sample_rate'],'duration_seconds':round(pcm['samples'].size/pcm['sample_rate'],6),'artifact_files':[a['filename'] for a in artifacts],'_artifacts':artifacts,'_events':[]})
         return out
+
+    def _write_candidate_decision_clips(self, scoped_events: list[dict], pcm_signals: list[dict], output_dir: Path) -> dict:
+        artifacts=[]; events=[]; lookup={(p['tap']['name'],p['session_index']):p for p in pcm_signals}; count=0
+        for event in scoped_events:
+            details=event.get('details') or {}; decision=details.get('candidate_decision') or {}
+            if decision.get('status')!='PROMOTED' or event.get('type') not in {'CLICK_POP','UNEXPECTED_SILENCE'}:
+                continue
+            if count>=10:
+                break
+            scope=event.get('scope') or {}; pcm=lookup.get((scope.get('pcm_tap'),scope.get('pcm_session_index')))
+            if pcm is None:
+                continue
+            start=float(event.get('start_time',event.get('time',pcm['start_time']))); end=float(event.get('end_time',start))
+            if event.get('type')=='CLICK_POP':
+                clip_start=start-0.5; clip_end=start+0.5
+            else:
+                clip_start=start-1.0; clip_end=end+1.0
+            sr=pcm['sample_rate']; a=max(0,int(round((clip_start-pcm['start_time'])*sr))); b=min(pcm['samples'].size,int(round((clip_end-pcm['start_time'])*sr)))
+            if b<=a:
+                continue
+            cid=str(decision.get('candidate_id') or f'candidate-{count}')
+            path=output_dir/f"candidate_{count:03d}_{event.get('type')}_{cid[-8:]}.wav"
+            write_wav(path,pcm['samples'][a:b],sr,1)
+            meta={'pcm_tap':scope.get('pcm_tap'),'session_index':scope.get('pcm_session_index'),'event_type':event.get('type'),
+                  'event_time':event.get('time'),'candidate_id':decision.get('candidate_id'),'candidate_decision_status':'PROMOTED',
+                  'candidate_reason_code':decision.get('reason_code'),'clip_start_time':pcm['start_time']+a/sr,'clip_end_time':pcm['start_time']+b/sr}
+            artifacts.append(_artifact(path,'AUDIO_CLIP','audio/wav',meta)); count+=1
+            events.append({'time':event.get('time'),'source':scope.get('pcm_tap'),'type':'AUDIO_CLIP_CREATED','severity':'INFO',
+                           'details':{'event_type':event.get('type'),'filename':path.name,'candidate_id':decision.get('candidate_id'),'candidate_decision_status':'PROMOTED'}})
+        return {'artifacts':artifacts,'events':events}
 
     def _extract_pcm_signals(self, path: str | Path) -> list[dict]:
         if not self.pcm_profile.can_decode:
