@@ -1,0 +1,56 @@
+{
+  "schema_version": "pr2-field-candidate-golden-v1",
+  "id": "FIELD_20260814_DUT_PCM_RTP_CANDIDATE_DECISION",
+  "description": "Field-confirmed calibration contract for PR2 CandidateDecision. Raw PCAP bytes are intentionally not committed; controlled hosts inject the file and must match SHA256 before evaluation.",
+  "source": {
+    "filename_hint": "tcpdump-2026-08-14(2).pcap",
+    "sha256": "b038aa7c9a0644581f2815f654fcdee4620860796382265b178823fccba2e3f0",
+    "size_bytes": 4544926,
+    "classification": "FIELD_CAPTURE_EXTERNAL_PAYLOAD"
+  },
+  "profiles": {
+    "pcm_profile": "profiles/pcm/ruijie_aim_diag_v1.yaml",
+    "analyzer_profile_id": "voip_analyzer_v1",
+    "analyzer_profile_version": "1.2.0"
+  },
+  "expected": {
+    "sip_call_id": "00ad1c804c33b255@192.168.3.200",
+    "dtmf_sequence": "601",
+    "raw_pcm_click_negative_control": {
+      "pcm_tap": "pcm_rx",
+      "absolute_time": 1786690964.332755,
+      "time_tolerance_ms": 30.0,
+      "status": "SUPPRESSED",
+      "reason_code": "NEGCTRL_DTMF_TRANSIENT"
+    },
+    "pcm_tx_silence": {
+      "active_media_candidate_count": 8,
+      "promoted_count": 0,
+      "suppressed_count": 8,
+      "required_reason_code": "NEGCTRL_MATCHED_RTP_SOURCE_SILENCE"
+    },
+    "pcm_tx_rtp_correlation": {
+      "minimum_absolute_correlation": 0.85,
+      "expected_quality": "HIGH",
+      "expected_lag_ms": 44.0,
+      "lag_tolerance_ms": 10.0,
+      "alignment_rule": "rtp_window = pcm_window - correlation_lag"
+    },
+    "packet_invariants": {
+      "maximum_rtp_loss_rate": 0.0
+    },
+    "report_invariants": {
+      "must_not_contain_finding_types": ["UNEXPECTED_SILENCE"],
+      "must_contain_any_finding_types": [
+        "LOCAL_CAPTURE_PERIODIC_INTERFERENCE",
+        "PERIODIC_LOW_FREQUENCY_INTERFERENCE"
+      ]
+    }
+  },
+  "calibration_notes": [
+    "The Click candidate is approximately 9 ms after DTMF digit 6 onset; the local PCM spectrum is dominated near 770 Hz and 1477 Hz, consistent with digit 6.",
+    "Repository-style PCM_TX to downlink RTP correlation is approximately 0.899879 with +44 ms lag.",
+    "Equal-timestamp comparison makes two of eight silence windows appear active. Lag-aligned RTP source windows make all eight quiet/low-energy under PR2 thresholds.",
+    "This contract is a field regression checkpoint, not a substitute for the complete Lab Real + Field Confirmed production dataset."
+  ]
+}
