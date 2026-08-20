@@ -4,9 +4,6 @@ name: AI E1-E6 + M7 + Evidence Report Gate
 # performed with tools/voip_ai_release_gate.sh on a controlled Linux host.
 on:
   workflow_dispatch:
-  pull_request:
-    branches:
-      - feat/pr6-report-grounding-validator
 
 permissions:
   contents: read
@@ -14,23 +11,8 @@ permissions:
 jobs:
   ai-contracts:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      - name: Show controlled Linux environment
-        run: |
-          uname -a
-          python3 --version
-          docker --version
-          npm --version
-          git rev-parse HEAD
       - name: Run VOIP AI software release gate
         run: bash tools/voip_ai_release_gate.sh
-      - name: Upload validation artifacts
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: pr3-pr7-controlled-linux-validation
-          path: validation/**
-          if-no-files-found: warn
-          retention-days: 14
