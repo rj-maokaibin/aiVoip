@@ -1,4 +1,4 @@
-name: AI E1-E6 + M7 + Evidence Report Gate
+name: Real Offline Golden 001 (Temporary)
 
 # Temporary validation branch only. Product branches remain workflow_dispatch-only.
 on:
@@ -15,33 +15,53 @@ permissions:
   contents: read
 
 jobs:
-  ai-contracts:
+  offline-golden-001:
     runs-on:
       - self-hosted
       - linux
       - x64
       - voip-controlled-linux
     timeout-minutes: 30
+    env:
+      VOIP_OFFLINE_GOLDEN_001_PCAP: /data/voip-golden/tcpdump-2026-08-14(2).pcap
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
-      - name: Controlled Linux environment
+      - name: Preflight external fixture and tshark
         run: |
-          uname -a
-          python3 --version
-          docker --version
-          docker info
-          node --version
-          npm --version
-          git rev-parse HEAD
-      - name: Run VOIP AI software release gate
-        run: bash tools/voip_ai_release_gate.sh
-      - name: Upload validation artifacts
+          set -euo pipefail
+          echo "Runner: $RUNNER_NAME"
+          echo "Fixture: $VOIP_OFFLINE_GOLDEN_001_PCAP"
+          test -f "$VOIP_OFFLINE_GOLDEN_001_PCAP"
+          actual_sha="$(sha256sum "$VOIP_OFFLINE_GOLDEN_001_PCAP" | awk '{print $1}')"
+          expected_sha="b038aa7c9a0644581f2815f654fcdee4620860796382265b178823fccba2e3f0"
+          echo "Fixture SHA256: $actual_sha"
+          test "$actual_sha" = "$expected_sha"
+          tshark --version | head -n 2
+      - name: Prepare isolated Python environment
+        run: |
+          set -euo pipefail
+          python3 -m venv .venv-offline-golden
+          .venv-offline-golden/bin/python -m pip install --upgrade pip
+          .venv-offline-golden/bin/python -m pip install -r backend/requirements.txt
+      - name: Run real Offline Golden 001 replay
+        run: |
+          set -euo pipefail
+          .venv-offline-golden/bin/python tools/offline_analysis_golden_replay.py \
+            --require-fixture \
+            --result validation/offline_analysis_golden_001.json \
+            --artifacts validation/offline_analysis_golden_001_artifacts
+      - name: Re-run synthetic Evidence Report Golden gate
+        run: .venv-offline-golden/bin/python tools/evidence_report_golden_gate.py
+      - name: Upload Offline Golden validation artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: voip-ai-pr3-pr7-validation
-          path: validation/**
+          name: voip-offline-golden-001-validation
+          path: |
+            validation/offline_analysis_golden_001.json
+            validation/offline_analysis_golden_001_artifacts/**
+            validation/evidence_report_golden_gate.json
           if-no-files-found: warn
           retention-days: 14
