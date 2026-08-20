@@ -49,6 +49,7 @@ def main() -> int:
              "backend/tests/test_evidence_report_offline_context_v1.py",
              "backend/tests/test_evidence_report_context_provenance_v1.py",
              "backend/tests/test_diagnostic_candidate_gate_v1.py",
+             "backend/tests/test_rtp_incident_contract_v1.py",
              "backend/tests/test_evidence_report_authority_v1.py",
              "backend/tests/test_evidence_bundle_contract_v1.py",
              "backend/tests/test_evidence_bundle_profile_v1.py",
