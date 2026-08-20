@@ -1,14 +1,14 @@
 name: AI E1-E6 + M7 + Evidence Report Gate
 
-# Temporary controlled validation branch only. Product branches remain opt-in.
+# Temporary validation branch only. Product branches remain workflow_dispatch-only.
 on:
   workflow_dispatch:
-  push:
+  pull_request:
     branches:
-      - ci/pr7-controlled-gate
+      - feat/pr7-diagnostic-contracts
 
 concurrency:
-  group: pr7-controlled-gate
+  group: pr7-controlled-gate-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -25,7 +25,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.sha }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - name: Controlled Linux environment
         run: |
           uname -a
