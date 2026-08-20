@@ -27,8 +27,10 @@ def _bundle() -> dict:
             "summary": {"total_packets": 13050},
             "format": {"sample_rate": 8000, "bit_depth": 16, "endian": "little", "udp_payload_bytes": 160},
             "streams": [
-                {"tap": {"name": "pcm_rx", "direction": "RX"}, "packet_count": 6525, "sessions": []},
-                {"tap": {"name": "pcm_tx", "direction": "TX"}, "packet_count": 6525, "sessions": []},
+                {"tap": {"name": "pcm_rx", "direction": "RX"}, "packet_count": 6525,
+                 "source_endpoints": [{"ip": "192.168.150.4", "port": 48741, "packet_count": 6525}], "sessions": []},
+                {"tap": {"name": "pcm_tx", "direction": "TX"}, "packet_count": 6525,
+                 "source_endpoints": [{"ip": "192.168.150.4", "port": 46812, "packet_count": 6525}], "sessions": []},
             ],
         },
         "packet": {
@@ -72,6 +74,12 @@ def test_pcm_format_regression_is_blocked():
     bundle = _bundle()
     bundle["pcm"]["format"]["sample_rate"] = 16000
     assert "pcm.format.sample_rate" in _failed(bundle)
+
+
+def test_pcm_source_device_identity_regression_is_blocked():
+    bundle = _bundle()
+    bundle["pcm"]["streams"][1]["source_endpoints"][0]["ip"] = "192.168.150.99"
+    assert "pcm.source_device_ip" in _failed(bundle)
 
 
 def test_high_delta_frame_or_sequence_drift_is_blocked():
