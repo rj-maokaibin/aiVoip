@@ -115,6 +115,14 @@ def aggregate_high_delta_findings(items: list[dict], head: dict) -> dict:
         "catch_up_status_counts": dict(catch_up_status),
         "events": events,
     }
+    head["semantic_summary"] = {
+        "event_family": "HIGH_DELTA",
+        "event_count": len(events),
+        "loss_interpretation": "DELAY_NOT_PACKET_LOSS" if all_sequence_continuous else "CHECK_SEQUENCE_GAP_AND_PACKET_LOSS_EVIDENCE",
+        "all_sequence_continuous": all_sequence_continuous,
+        "catch_up_observed_count": catch_up_status.get("FULL", 0) + catch_up_status.get("PARTIAL", 0),
+        "classification_counts": dict(classifications),
+    }
     direction = (head.get("scope") or {}).get("direction") or (head.get("scope") or {}).get("rtp_stream_id") or "当前 RTP Stream"
     sequence_text = "全部事件 Sequence 连续，未观察到对应 RTP 丢包" if all_sequence_continuous else "部分事件 Sequence 非连续或证据不足，需与丢包事件联合判断"
     max_delta = max(deltas) if deltas else None
