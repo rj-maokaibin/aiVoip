@@ -9,6 +9,7 @@ from app.golden.offline_analysis_extended_checks import validate_extended_offlin
 
 ROOT = Path(__file__).resolve().parents[2]
 MANIFEST = ROOT / "golden_cases" / "OFFLINE_ANALYSIS_20260814_001" / "manifest.yaml"
+CALL_ID = "00ad1c804c33b255@192.168.3.200"
 
 
 def _manifest() -> dict:
@@ -20,8 +21,9 @@ def _bundle() -> dict:
         {"type": "HIGH_DELTA", "details": {"delta_ms": 146.083, "previous_frame_number": 20272, "current_frame_number": 20285, "previous_sequence": 46511, "current_sequence": 46512}},
         {"type": "HIGH_DELTA", "details": {"delta_ms": 175.043, "previous_frame_number": 20329, "current_frame_number": 20344, "previous_sequence": 46519, "current_sequence": 46520}},
     ]
-    call = {"id": "CALL-001", "sip_call_id": "00ad1c804c33b255@192.168.3.200", "dialed_number": "601"}
+    call = {"id": "CALL-001", "sip_call_id": CALL_ID, "dialed_number": "601"}
     context = {"analysis_mode": "OFFLINE_IMPORTED", "call_origin": "RECONSTRUCTED_FROM_PCAP", "call_scope": "BOUND", "semantic_status": "OK", "reviewability": "FULLY_REVIEWABLE"}
+    dtmf = {"type": "DTMF_SIP_DIAL_MATCH", "scope": {"call_id": CALL_ID, "pcm_tap": "pcm_rx"}, "details": {"call_id": CALL_ID, "pcm_digits": "601", "sip_target": "601"}}
     return {
         "pcm": {
             "summary": {"total_packets": 13050},
@@ -40,6 +42,7 @@ def _bundle() -> dict:
                 "events": high_delta,
             }]
         },
+        "media": {"cross_layer_events": [dtmf]},
         "analysis_context": context,
         "display_call": call,
         "report": {
@@ -88,6 +91,20 @@ def test_high_delta_frame_or_sequence_drift_is_blocked():
     failed = _failed(bundle)
     assert "rtp.high_delta.1.current_sequence" in failed
     assert "rtp.high_delta.1.sequence_continuity" in failed
+
+
+def test_b2bua_duplicate_dtmf_match_is_blocked():
+    bundle = _bundle()
+    duplicate = {"type": "DTMF_SIP_DIAL_MATCH", "scope": {"call_id": "pbx-leg"}, "details": {"call_id": "pbx-leg", "pcm_digits": "601", "sip_target": "601"}}
+    bundle["media"]["cross_layer_events"].append(duplicate)
+    assert "dtmf.match_count" in _failed(bundle)
+
+
+def test_dtmf_must_bind_to_subject_call():
+    bundle = _bundle()
+    bundle["media"]["cross_layer_events"][0]["details"]["call_id"] = "pbx-leg"
+    bundle["media"]["cross_layer_events"][0]["scope"]["call_id"] = "pbx-leg"
+    assert "dtmf.subject_call_id" in _failed(bundle)
 
 
 def test_required_report_finding_disappearing_is_blocked():
