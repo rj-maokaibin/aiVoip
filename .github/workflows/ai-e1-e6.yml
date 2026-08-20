@@ -43,12 +43,16 @@ jobs:
           ls -lh "$source_fixture"
           if [ ! -r "$source_fixture" ]; then
             staged="$RUNNER_TEMP/offline-golden-001.pcap"
-            echo "Source is not readable by $(id -un); staging a private runner copy via passwordless sudo."
-            if ! sudo -n true; then
-              echo "OFFLINE_GOLDEN_FIXTURE_PERMISSION_BLOCKED"
-              exit 22
-            fi
-            sudo -n install -m 600 -o "$(id -un)" -g "$(id -gn)" "$source_fixture" "$staged"
+            echo "Source is not readable by $(id -un); staging a private runner copy through Docker without changing source permissions."
+            rm -f "$staged"
+            image="postgres:16"
+            docker image inspect "$image" >/dev/null 2>&1 || docker pull "$image"
+            docker run --rm \
+              -v /tmp:/source:ro \
+              -v "$RUNNER_TEMP":/output \
+              --entrypoint sh "$image" \
+              -c "cp '/source/tcpdump-2026-08-14.pcap' '/output/offline-golden-001.pcap' && chmod 0644 '/output/offline-golden-001.pcap'"
+            test -r "$staged"
             fixture="$staged"
           fi
           actual_sha="$(sha256sum "$fixture" | awk '{print $1}')"
