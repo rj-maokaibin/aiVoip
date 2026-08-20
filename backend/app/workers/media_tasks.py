@@ -11,6 +11,7 @@ from celery.utils.log import get_task_logger
 
 from app.contracts.enums import JobStatus, RunStatus
 from app.analyzers.media import MediaIntelligenceEngine
+from app.analyzers.media.candidate_artifacts import gate_candidate_audio_artifacts
 from app.analyzers.media.candidate_decision import apply_candidate_decisions
 from app.analyzers.packet import TSharkAdapter
 from app.analyzers.pcm import load_pcm_profile
@@ -77,6 +78,10 @@ def analyze_media_evidence(self, job_id: str, evidence_id: str, profile_id: str 
                 'media_intelligence': raw_result,
             })
             result=gated['media_intelligence'] or raw_result
+            # PCM detector clips are also candidates. Rejected/inconclusive clips
+            # remain downloadable audit artifacts but are not exposed as main
+            # AUDIO_CLIP attachments unless their CandidateDecision was promoted.
+            result=gate_candidate_audio_artifacts(result)
             artifact_rows=[]
             for spec in result.get('artifacts', []):
                 local_path=Path(spec.pop('local_path'))
@@ -97,7 +102,8 @@ def analyze_media_evidence(self, job_id: str, evidence_id: str, profile_id: str 
         transition_job(db, job, JobStatus(final_status), reason='media_analysis_complete')
         audit(db,case_id=job.case_id,event_type='MEDIA_ANALYSIS_FINISHED',target_type='analyzer_run',target_id=run.id,
               detail={'evidence_id':evidence.id,'profile_id':profile.id,'summary':result.get('summary'),'artifact_count':len(result.get('artifacts',[])),
-                      'candidate_decision':(result.get('summary') or {}).get('candidate_decision')})
+                      'candidate_decision':(result.get('summary') or {}).get('candidate_decision'),
+                      'candidate_audio_artifacts':(result.get('summary') or {}).get('candidate_audio_artifacts')})
         db.commit()
         from app.workers.diagnosis_tasks import notify_case_changed
         notify_case_changed(job.case_id); _notify_reports(job.case_id,'media_analysis_complete')
