@@ -20,12 +20,7 @@ def _pcm_payload(results: dict[str, dict | None]) -> tuple[dict | None, str | No
 
 
 def infer_pcm_source_device_identity(results: dict[str, dict | None]) -> dict:
-    """Infer the device emitting diagnostic PCM from packet provenance only.
-
-    The PCM diag profile defines the destination ports (40000/50000), while the
-    UDP source IP belongs to the device that emitted those diagnostic samples.
-    This function never consumes Golden expected values or configured DUT IPs.
-    """
+    """Infer the device emitting diagnostic PCM from packet provenance only."""
     pcm, source = _pcm_payload(results)
     if not pcm:
         return {
@@ -72,9 +67,6 @@ def infer_pcm_source_device_identity(results: dict[str, dict | None]) -> dict:
             "reason": "PCM_SOURCE_ENDPOINTS_UNAVAILABLE",
         }
 
-    # A trustworthy subject identity must explain every populated PCM tap. This is
-    # stronger than simply choosing the highest packet count and avoids silently
-    # selecting one device when an imported capture contains multiple DUTs.
     complete = [row for row in candidates if populated_taps and set(row["taps"]) >= populated_taps]
     if len(complete) == 1:
         return {
@@ -129,8 +121,6 @@ def _sip_ladder_ips(call: dict) -> set[str]:
     for item in call.get("ladder", []) or []:
         for key in ("src", "dst"):
             raw = str(item.get(key) or "")
-            # Current ladder endpoint representation is IPv4:port. Do not attempt
-            # generic hostname or IPv6 inference here; SDP/RTP remain authoritative.
             if raw.count(":") == 1:
                 ip, _port = raw.rsplit(":", 1)
                 if ip:
@@ -150,14 +140,9 @@ def score_call_for_subject(call: dict, packet: dict, subject_ip: str) -> dict:
     streams = _call_rtp_streams(call, packet)
     subject_streams = [s for s in streams if subject_ip in {str(s.get("src_ip") or ""), str(s.get("dst_ip") or "")}]
     if subject_streams:
-        # One matched stream is already strong evidence; both directions add a small
-        # deterministic bonus but must not outweigh an SDP identity mismatch.
-        score += 50 + min(20, 5 * len(subject_streams))
-        reasons.append({
-            "type": "RTP_ENDPOINT_MATCH",
-            "weight": 50 + min(20, 5 * len(subject_streams)),
-            "stream_ids": [s.get("stream_id") for s in subject_streams],
-        })
+        weight = 50 + min(20, 5 * len(subject_streams))
+        score += weight
+        reasons.append({"type": "RTP_ENDPOINT_MATCH", "weight": weight, "stream_ids": [s.get("stream_id") for s in subject_streams]})
 
     ladder_ips = _sip_ladder_ips(call)
     if subject_ip in ladder_ips:
@@ -174,8 +159,38 @@ def score_call_for_subject(call: dict, packet: dict, subject_ip: str) -> dict:
     }
 
 
+def _latest_call(valid_calls: list[tuple[int, dict]]) -> tuple[int, dict]:
+    def key(item: tuple[int, dict]):
+        index, call = item
+        end = call.get("media_end_time") if call.get("media_end_time") is not None else call.get("end_time")
+        start = call.get("media_start_time") if call.get("media_start_time") is not None else call.get("start_time")
+        try:
+            end_value = float(end) if end is not None else float("-inf")
+        except (TypeError, ValueError):
+            end_value = float("-inf")
+        try:
+            start_value = float(start) if start is not None else float("-inf")
+        except (TypeError, ValueError):
+            start_value = float("-inf")
+        return end_value, start_value, index
+    return max(valid_calls, key=key)
+
+
+def _fallback(valid_calls: list[tuple[int, dict]], *, identity: dict, scores: list[dict], reason: str) -> dict:
+    index, call = _latest_call(valid_calls)
+    return {
+        "status": "FALLBACK_UNVERIFIED",
+        "source_index": index,
+        "call": call,
+        "selection_rule": "LATEST_RECONSTRUCTED_CALL_BY_END_THEN_START_TIME",
+        "subject_identity": identity,
+        "scores": scores,
+        "fallback_reason": reason,
+    }
+
+
 def select_subject_call(valid_calls: list[tuple[int, dict]], packet: dict, results: dict[str, dict | None]) -> dict:
-    """Select one diagnostic Call or fail closed when a multi-leg capture is ambiguous."""
+    """Select a diagnostic Call; unverified latest-leg fallback is never authoritative."""
     identity = infer_pcm_source_device_identity(results)
     if len(valid_calls) == 1:
         index, call = valid_calls[0]
@@ -190,27 +205,13 @@ def select_subject_call(valid_calls: list[tuple[int, dict]], packet: dict, resul
 
     subject_ip = identity.get("selected_ip") if identity.get("status") == SUBJECT_IDENTITY_UNIQUE else None
     if not subject_ip:
-        return {
-            "status": "AMBIGUOUS",
-            "source_index": None,
-            "call": None,
-            "selection_rule": "MULTI_CALL_REQUIRES_SUBJECT_DEVICE_IDENTITY",
-            "subject_identity": identity,
-            "scores": [],
-        }
+        return _fallback(valid_calls, identity=identity, scores=[], reason="MULTI_CALL_SUBJECT_DEVICE_IDENTITY_UNAVAILABLE")
 
     scored = [(index, call, score_call_for_subject(call, packet, str(subject_ip))) for index, call in valid_calls]
     best_score = max((item[2]["score"] for item in scored), default=0)
     winners = [item for item in scored if item[2]["score"] == best_score and best_score > 0]
     if len(winners) != 1:
-        return {
-            "status": "AMBIGUOUS",
-            "source_index": None,
-            "call": None,
-            "selection_rule": "PCM_SOURCE_DEVICE_IDENTITY_NOT_UNIQUE_TO_ONE_CALL",
-            "subject_identity": identity,
-            "scores": [item[2] for item in scored],
-        }
+        return _fallback(valid_calls, identity=identity, scores=[item[2] for item in scored], reason="SUBJECT_DEVICE_IDENTITY_NOT_UNIQUE_TO_ONE_CALL")
 
     index, call, _score = winners[0]
     return {
