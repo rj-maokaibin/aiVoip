@@ -134,10 +134,26 @@ echo AIVOIP_PRODUCER_START_REQUESTED
             packets_dropped_kernel=count(r"(?m)^\s*(\d+)\s+packets dropped by kernel\s*$"),
         )
 
+    async def _wait_identity_gone(
+        self,
+        *,
+        pid: int,
+        starttime: int,
+        attempts: int = 20,
+        interval_seconds: float = 0.1,
+    ) -> bool:
+        """Poll from the controller host, never with fractional BusyBox sleep on DUT."""
+        for _ in range(attempts):
+            if not await self.reader.process_matches(pid=pid, starttime=starttime):
+                return True
+            await asyncio.sleep(interval_seconds)
+        return not await self.reader.process_matches(pid=pid, starttime=starttime)
+
     async def stop_identity(self, token: LeaseToken, producer: ProducerIdentity) -> None:
         pid = int(producer.pid)
         starttime = int(producer.process_starttime)
-        body = f'''
+
+        term_body = f'''
 PID={pid}
 EXPECTED_ST={shlex.quote(str(starttime))}
 if [ ! -r "/proc/$PID/stat" ]; then
@@ -147,30 +163,40 @@ fi
 CUR_ST=$(awk '{{print $22}}' "/proc/$PID/stat" 2>/dev/null || true)
 [ "$CUR_ST" = "$EXPECTED_ST" ] || exit 74
 kill "$PID" 2>/dev/null || true
-i=0
-while [ "$i" -lt 20 ]; do
-  [ -r "/proc/$PID/stat" ] || {{ echo AIVOIP_PRODUCER_STOPPED; exit 0; }}
-  CUR_ST=$(awk '{{print $22}}' "/proc/$PID/stat" 2>/dev/null || true)
-  [ "$CUR_ST" = "$EXPECTED_ST" ] || {{ echo AIVOIP_PRODUCER_STOPPED; exit 0; }}
-  sleep 0.1
-  i=$((i+1))
-done
-kill -9 "$PID" 2>/dev/null || true
-sleep 0.1
-if [ -r "/proc/$PID/stat" ]; then
-  CUR_ST=$(awk '{{print $22}}' "/proc/$PID/stat" 2>/dev/null || true)
-  [ "$CUR_ST" != "$EXPECTED_ST" ] || exit 76
-fi
-echo AIVOIP_PRODUCER_STOPPED
+echo AIVOIP_PRODUCER_TERM_REQUESTED
 '''
         try:
-            await self.mutator.execute_fenced(token, body=body)
+            await self.mutator.execute_fenced(token, body=term_body)
         except CaptureV2Error as exc:
             if exc.code != "MUTATION_RESULT_UNKNOWN":
                 raise
-            # Observe-before-retry: absence/swap means stop already took effect.
+            # Observe-before-retry: a lost TERM response may still mean TERM took effect.
             if not await self.reader.process_matches(pid=pid, starttime=starttime):
                 return
-            raise
-        if await self.reader.process_matches(pid=pid, starttime=starttime):
-            raise CaptureV2Error("PRODUCER_STOP_FAILED", details={"pid": pid})
+
+        if await self._wait_identity_gone(pid=pid, starttime=starttime):
+            return
+
+        kill_body = f'''
+PID={pid}
+EXPECTED_ST={shlex.quote(str(starttime))}
+if [ ! -r "/proc/$PID/stat" ]; then
+  echo AIVOIP_PRODUCER_ALREADY_STOPPED
+  exit 0
+fi
+CUR_ST=$(awk '{{print $22}}' "/proc/$PID/stat" 2>/dev/null || true)
+[ "$CUR_ST" = "$EXPECTED_ST" ] || exit 74
+kill -9 "$PID" 2>/dev/null || true
+echo AIVOIP_PRODUCER_KILL_REQUESTED
+'''
+        try:
+            await self.mutator.execute_fenced(token, body=kill_body)
+        except CaptureV2Error as exc:
+            if exc.code != "MUTATION_RESULT_UNKNOWN":
+                raise
+            if not await self.reader.process_matches(pid=pid, starttime=starttime):
+                return
+
+        if await self._wait_identity_gone(pid=pid, starttime=starttime, attempts=10):
+            return
+        raise CaptureV2Error("PRODUCER_STOP_FAILED", details={"pid": pid})
