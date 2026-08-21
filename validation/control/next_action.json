@@ -1,10 +1,10 @@
 {
   "schema_version": "capture-v2-remote-action-v1",
-  "action_id": "R2-APF1250-ADOPT-RC6",
-  "sequence": 20,
-  "created_at": "2026-08-21T13:43:00+00:00",
-  "expires_at": "2026-08-21T15:43:00+00:00",
-  "action_type": "GATE_OWNERSHIP_ADOPT",
+  "action_id": "R3-APF1250-SEGMENT-RC6",
+  "sequence": 21,
+  "created_at": "2026-08-21T13:45:00+00:00",
+  "expires_at": "2026-08-21T15:45:00+00:00",
+  "action_type": "GATE_SEGMENT",
   "parameters": {
     "device_id": "259f16e6-af9e-4dff-969b-2bb5eac43eb2",
     "model": "APF1250",
@@ -18,11 +18,13 @@
     "object_root": "/tmp/voip-reproduction-objects",
     "output_root": "/tmp/capture-v2-gates",
     "repo_root": "..",
-    "reproduction_session_id": "FROM_STATE",
-    "worker_id": "r2-apf1250-rc6-b",
-    "before_state": "/tmp/capture-v2-control/r2-apf1250-rc6-before.json",
-    "gate_id": "R2-01-ADOPT-RC6",
-    "timeout_seconds": 300
+    "reproduction_session_id": "2deb3ef0-c1d8-40c0-8faf-f024a21408eb",
+    "worker_id": "r3-apf1250-rc6-a",
+    "gate_id": "R3-01-RC6",
+    "duration": 30,
+    "interval": 0.5,
+    "transport": "scp",
+    "timeout_seconds": 600
   },
   "safety": {
     "require_clean_git": true,
@@ -33,5 +35,5 @@
     "expected_head": "7c92787c1abb9cc3ddeba2583c039178070ec180"
   },
   "requested_by": "ChatGPT-remote-validation-controller",
-  "note": "RC6 APF1250 takeover after the fresh establish lease naturally expired. Worker B must adopt the identical PID/starttime/CaptureEpoch, increase lease_epoch, preserve exactly one producer, and leave zero unrecovered gaps. Secret remains local via DB:<SN>; Production V2 stays disabled."
+  "note": "RC6 APF1250 normal Segment/Transfer/ACK gate continuing the fresh R2 validation ReproductionSession. Use SCP for Dropbear compatibility. No destructive fault injection. V1 remains authoritative and Production V2 remains disabled."
 }
