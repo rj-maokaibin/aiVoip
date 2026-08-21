@@ -1,12 +1,27 @@
 {
   "schema_version": "capture-v2-remote-action-v1",
-  "action_id": "RC9-SW-001",
-  "sequence": 45,
-  "created_at": "2026-08-21T16:29:00+00:00",
-  "expires_at": "2026-08-21T18:29:00+00:00",
-  "action_type": "SOFTWARE_REGRESSION",
+  "action_id": "R2-02-APF1250-LEGACY-ORPHAN-RC9",
+  "sequence": 46,
+  "created_at": "2026-08-21T16:30:00+00:00",
+  "expires_at": "2026-08-21T18:30:00+00:00",
+  "action_type": "GATE_OWNERSHIP",
   "parameters": {
-    "timeout_seconds": 1200
+    "device_id": "259f16e6-af9e-4dff-969b-2bb5eac43eb2",
+    "model": "APF1250",
+    "host": "10.48.8.74",
+    "port": 10001,
+    "username": "root",
+    "platform_id": "mt7621",
+    "password_env": "DB:G1V030E010214",
+    "profile_root": "../profiles",
+    "profile_id": "voip-standard",
+    "object_root": "/tmp/voip-reproduction-objects",
+    "output_root": "/tmp/capture-v2-gates",
+    "repo_root": "..",
+    "reproduction_session_id": "AUTO_NEW",
+    "worker_id": "r2-02-apf1250-rc9",
+    "gate_id": "R2-02-APF1250-RC9",
+    "timeout_seconds": 600
   },
   "safety": {
     "require_clean_git": true,
@@ -17,5 +32,5 @@
     "expected_head": "958dc06d2bb1f29df44a4166f463739b6534f68a"
   },
   "requested_by": "ChatGPT-remote-validation-controller",
-  "note": "RC9 software regression for automated R2 legacy/multiple/fencing/reboot, R3 spool/reboot, strict evaluators, and control Git timeout/divergence recovery. Production V2 remains disabled."
+  "note": "RC9 automated Legacy Orphan Gate on APF1250. Gate creates and exactly cleans its own legacy producer precondition; recovery must observe orphan, stop it by exact PID/starttime, record and close the continuity gap, and end with one V2 producer. Production V2 remains disabled."
 }
