@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -31,6 +32,7 @@ class ControlPolicy:
         ".capture-v2-control/",
     )
     CONTROL_COMMIT_PREFIXES = ("validation/control/",)
+    _PORCELAIN_PREFIX_RE = re.compile(r"^[ MADRCU?!]{1,2}\s+")
 
     def __init__(self, repo_root: Path):
         self.repo_root = repo_root.resolve()
@@ -46,6 +48,16 @@ class ControlPolicy:
     def _add(argv: list[str], flag: str, value: Any) -> None:
         if value is not None and value != "":
             argv.extend([flag, str(value)])
+
+    @classmethod
+    def _porcelain_path(cls, line: str) -> str:
+        """Extract a path from porcelain output across 1- and 2-column status forms.
+
+        Some Git builds/wrappers expose lines as `M path`, while stock porcelain v1
+        commonly uses ` M path`/`M  path`.  Generated control files must be ignored
+        in either representation without weakening the product-source clean check.
+        """
+        return cls._PORCELAIN_PREFIX_RE.sub("", line, count=1).strip().strip('"')
 
     def _git(self, *args: str) -> str:
         cp = subprocess.run(
@@ -91,7 +103,7 @@ class ControlPolicy:
             status = self._git("status", "--porcelain", "--untracked-files=all")
             dirty = []
             for line in status.splitlines():
-                path = line[3:] if len(line) > 3 else ""
+                path = self._porcelain_path(line)
                 if not any(path.startswith(prefix) for prefix in self.GENERATED_PREFIXES):
                     dirty.append(line)
             if dirty:
