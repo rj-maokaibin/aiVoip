@@ -119,6 +119,30 @@ def test_stop_uses_exact_pid_starttime_and_verifies_absence():
     assert mutator.calls == 1
 
 
+def test_stop_never_uses_fractional_sleep_on_dut_and_escalates_from_controller(monkeypatch):
+    reader = FakeReader(initial=1)
+    producer = asyncio.run(ProducerManager(reader, FakeMutator(reader)).inspect_owned())[0]
+
+    async def no_wait(_seconds):
+        return None
+
+    monkeypatch.setattr("app.capture_v2.producer.manager.asyncio.sleep", no_wait)
+
+    class StickyTermMutator(FakeMutator):
+        async def execute_fenced(self, token, *, body, operation_id=None):
+            self.calls += 1
+            assert "sleep 0.1" not in body
+            if "kill -9" in body:
+                self.reader.alive = False
+            return "OK"
+
+    mutator = StickyTermMutator(reader)
+    manager = ProducerManager(reader, mutator)
+    asyncio.run(manager.stop_identity(Token(), producer))
+    assert reader.alive is False
+    assert mutator.calls == 2
+
+
 def test_start_timeout_but_process_exists_succeeds_via_readback_without_retry():
     reader = FakeReader()
 
