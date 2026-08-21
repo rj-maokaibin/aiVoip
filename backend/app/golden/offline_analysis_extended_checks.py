@@ -97,6 +97,18 @@ def validate_extended_offline_truth(bundle: dict, manifest: dict) -> list[Golden
         if max_delta_range:
             actual_delta = float(stream.get("max_delta_ms") or 0.0)
             add(f"rtp.{label}.max_arrival_delta_ms", float(max_delta_range.get("min") or 0.0) <= actual_delta <= float(max_delta_range.get("max") or 0.0), actual_delta, max_delta_range, "RTP_ACCOUNTING")
+        duplicate_exp = list(flow_exp.get("duplicate_events") or [])
+        if duplicate_exp:
+            duplicate_actual = list(stream.get("duplicate_events") or [])
+            duplicate_exp.sort(key=lambda e: int(e.get("sequence") or -1));duplicate_actual.sort(key=lambda e: int(e.get("sequence") or -1))
+            add(f"rtp.{label}.duplicate_event_count", len(duplicate_actual) == len(duplicate_exp), len(duplicate_actual), len(duplicate_exp), "RTP_DUPLICATE_FRAME")
+            if len(duplicate_actual) == len(duplicate_exp):
+                for index,(actual_event,expected_event) in enumerate(zip(duplicate_actual,duplicate_exp),start=1):
+                    for field in ("sequence","first_frame_number","duplicate_frame_number","rtp_timestamp"):
+                        add(f"rtp.{label}.duplicate.{index}.{field}", int(actual_event.get(field) or -1) == int(expected_event.get(field) or -2), actual_event.get(field), expected_event.get(field), "RTP_DUPLICATE_FRAME")
+                    delta_range = expected_event.get("arrival_delta_ms") or {};delta=float(actual_event.get("arrival_delta_ms") or 0.0)
+                    add(f"rtp.{label}.duplicate.{index}.arrival_delta_ms", float(delta_range.get("min") or 0.0) <= delta <= float(delta_range.get("max") or 0.0), delta, delta_range, "RTP_DUPLICATE_FRAME")
+                    add(f"rtp.{label}.duplicate.{index}.same_rtp_timestamp", actual_event.get("rtp_timestamp") == actual_event.get("first_rtp_timestamp"), {"first":actual_event.get("first_rtp_timestamp"),"duplicate":actual_event.get("rtp_timestamp")}, "same RTP timestamp", "RTP_DUPLICATE_FRAME")
 
     rtp_exp = rtp_all_exp.get("primary_uplink") or {};primary = find_rtp(rtp_exp) if rtp_exp else None
     actual_high_delta = [e for e in (primary or {}).get("events", []) or [] if e.get("type") == "HIGH_DELTA"]
