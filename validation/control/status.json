@@ -1,115 +1,33 @@
 {
   "schema_version": "capture-v2-remote-status-v1",
-  "action_id": "R2-APF3260M-ADOPT-RC5",
-  "sequence": 13,
+  "action_id": "R2-APF1250-ADOPT-RC5-RETRY2",
+  "sequence": 14,
   "action_type": "GATE_OWNERSHIP_ADOPT",
-  "state": "SUCCEEDED",
+  "state": "FAILED",
   "runner_id": "srv:2933695",
-  "action_sha256": "4ff6f8502080bdea017c94f5e39f08605ca0c247e0600bd7ff9499f74eb26df6",
-  "updated_at": "2026-08-21T13:09:37.227834+00:00",
+  "action_sha256": "19a17473ff4c392df73093a26e0e53f55f555358d34f58c276e02c17dfaf530e",
+  "updated_at": "2026-08-21T13:21:55.758071+00:00",
   "started_at": null,
-  "finished_at": "2026-08-21T13:09:37.227834+00:00",
-  "return_code": 0,
-  "verdict": "PASS",
-  "result_path": "validation/control/results/R2-APF3260M-ADOPT-RC5/result.json",
-  "stdout_sha256": "009fe50a01894b5b2bc48e10492f7ce4d6086682ba7a8803d1be52bace845960",
-  "stderr_sha256": "b8258e86248ce6f15dfea1a12afcd2ad3fde62ba6d3cd24536ffc8cb3bb61c48",
+  "finished_at": "2026-08-21T13:21:55.758071+00:00",
+  "return_code": 2,
+  "verdict": null,
+  "result_path": "validation/control/results/R2-APF1250-ADOPT-RC5-RETRY2/result.json",
+  "stdout_sha256": "81ad8d2b4ee54e040973cc49b8bfaf1d7020727342eb19e5b9d17eb69bd80758",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "error": null,
   "detail": {
     "safety": {
       "capture_engine_version": "V1",
       "capture_v2_production_enabled": "false",
-      "git_head": "7a95374f96d3d9b0b86fae8344bfaca156d1ea21",
+      "git_head": "8d35b53d1939b682d420ea436fa8a388232a1b6e",
       "expected_product_head": "068c8586947e426b7924442839cd35c751618aa4"
     },
     "parsed_output": {
-      "checks": [
-        {
-          "details": {},
-          "expected": 1,
-          "name": "exactly_one_owned_producer",
-          "observed": 1,
-          "passed": true,
-          "verdict": "PASS"
-        },
-        {
-          "details": {},
-          "expected": 1,
-          "name": "one_running_epoch",
-          "observed": 1,
-          "passed": true,
-          "verdict": "PASS"
-        },
-        {
-          "details": {},
-          "expected": "one ACTIVE lease",
-          "name": "lease_active",
-          "observed": [
-            {
-              "lease_epoch": 16,
-              "state": "ACTIVE"
-            }
-          ],
-          "passed": true,
-          "verdict": "PASS"
-        },
-        {
-          "details": {},
-          "expected": 0,
-          "name": "no_unrecovered_gap",
-          "observed": 0,
-          "passed": true,
-          "verdict": "PASS"
-        },
-        {
-          "details": {},
-          "expected": 20202,
-          "name": "producer_pid_adopted",
-          "observed": 20202,
-          "passed": true,
-          "verdict": "PASS"
-        },
-        {
-          "details": {},
-          "expected": 9149604,
-          "name": "producer_starttime_adopted",
-          "observed": 9149604,
-          "passed": true,
-          "verdict": "PASS"
-        },
-        {
-          "details": {},
-          "expected": "012ec263-730e-474d-97b8-0d0f06fab712",
-          "name": "capture_epoch_unchanged",
-          "observed": "012ec263-730e-474d-97b8-0d0f06fab712",
-          "passed": true,
-          "verdict": "PASS"
-        },
-        {
-          "details": {},
-          "expected": "> before",
-          "name": "lease_epoch_increased",
-          "observed": 16,
-          "passed": true,
-          "verdict": "PASS"
-        }
-      ],
-      "created_at": "2026-08-21T13:09:36.949930+00:00",
-      "evidence_bundle": "/tmp/capture-v2-gates/20260821T130933Z_R2-01-ADOPT-RC5_c132f336-df1b-4285-b175-01d848f23b5d",
-      "facts": {
-        "after_capture_epoch_id": "012ec263-730e-474d-97b8-0d0f06fab712",
-        "after_lease_epoch": 16,
-        "after_pid": 20202,
-        "after_starttime": 9149604,
-        "before_capture_epoch_id": "012ec263-730e-474d-97b8-0d0f06fab712",
-        "before_lease_epoch": 15,
-        "before_pid": 20202,
-        "before_starttime": 9149604,
-        "recovery_status": "ADOPTED"
+      "details": {
+        "message": "SSH_CONNECT_FAILED:ConnectionRefusedError: tunnel/device unreachable (re-open/rebuild the EWEB tunnel - expired 3h or device reboot - and share the new host:port/web_url)"
       },
-      "gate_id": "R2-01-ADOPT-RC5",
-      "summary": "Ownership/recovery invariant",
-      "verdict": "PASS"
+      "error": "GATE_COMMAND_EXCEPTION:DeviceConnectionError",
+      "ok": false
     }
   }
 }
