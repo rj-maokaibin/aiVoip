@@ -350,6 +350,15 @@ def main(argv: list[str] | None = None) -> int:
     except CaptureV2Error as exc:
         _json({"ok": False, "error": exc.code, "details": exc.details})
         return 2
+    except Exception as exc:
+        # Fail closed but return a structured, bounded diagnostic to the remote
+        # controller. No credential values are included in this payload.
+        _json({
+            "ok": False,
+            "error": f"GATE_COMMAND_EXCEPTION:{type(exc).__name__}",
+            "details": {"message": str(exc)[:500]},
+        })
+        return 2
 
 
 if __name__ == "__main__":
