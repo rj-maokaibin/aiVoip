@@ -1,26 +1,26 @@
 {
   "schema_version": "capture-v2-remote-status-v1",
-  "action_id": "R2-APF1250-ADOPT-RC4",
-  "sequence": 9,
-  "action_type": "GATE_OWNERSHIP_ADOPT",
-  "state": "FAILED",
+  "action_id": "RC5-SW-001",
+  "sequence": 10,
+  "action_type": "SOFTWARE_REGRESSION",
+  "state": "SUCCEEDED",
   "runner_id": "srv:2933695",
-  "action_sha256": "d4d31b47bbaed09b2e34829c3c54ca138f10b351e8088b1889280a961dd46297",
-  "updated_at": "2026-08-21T12:55:04.555075+00:00",
+  "action_sha256": "05197d9f3b228b03a4ff87370762c2bec2795addbb4616a33ebf4a0d00dcbbb0",
+  "updated_at": "2026-08-21T12:57:08.506407+00:00",
   "started_at": null,
-  "finished_at": "2026-08-21T12:55:04.555075+00:00",
-  "return_code": 1,
+  "finished_at": "2026-08-21T12:57:08.506407+00:00",
+  "return_code": 0,
   "verdict": null,
-  "result_path": "validation/control/results/R2-APF1250-ADOPT-RC4/result.json",
-  "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-  "stderr_sha256": "ccbb2aacee25325f87d3540a3e1050e8aa806d3d4dd5803869305668f25919d8",
+  "result_path": "validation/control/results/RC5-SW-001/result.json",
+  "stdout_sha256": "92a3015ef0e0f7fbad74a1960889fc3e14686d73a400cc9d93fea839d1382ee7",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "error": null,
   "detail": {
     "safety": {
       "capture_engine_version": "V1",
       "capture_v2_production_enabled": "false",
-      "git_head": "9f99a24521ff35d8d306248becc12a876256b2e8",
-      "expected_product_head": "e87c4c97944590b21c4fc1f932e9f073bb82bea4"
+      "git_head": "8f661912e0c86642fb69c2be4b52d3f89b5211bd",
+      "expected_product_head": "068c8586947e426b7924442839cd35c751618aa4"
     },
     "parsed_output": null
   }
