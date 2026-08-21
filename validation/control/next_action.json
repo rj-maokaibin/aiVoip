@@ -1,9 +1,9 @@
 {
   "schema_version": "capture-v2-remote-action-v1",
-  "action_id": "RC2-SW-001",
-  "sequence": 3,
-  "created_at": "2026-08-21T08:33:00+00:00",
-  "expires_at": "2026-08-21T10:33:00+00:00",
+  "action_id": "RC3-SW-001",
+  "sequence": 4,
+  "created_at": "2026-08-21T08:37:30+00:00",
+  "expires_at": "2026-08-21T10:37:30+00:00",
   "action_type": "SOFTWARE_REGRESSION",
   "parameters": {
     "timeout_seconds": 1800
@@ -14,8 +14,8 @@
     "require_v2_disabled": true,
     "allow_worker_kill": false,
     "allow_server_quarantine": false,
-    "expected_head": "4bcf0b21ae211705c309e51b9d8f6aaba3a8558b"
+    "expected_head": "00fa975d6a2fd250394f6344b35eddddea6eb11c"
   },
   "requested_by": "ChatGPT-remote-validation-controller",
-  "note": "RC2 software regression after adding the allowlisted real PostgreSQL stale-lease fencing Gate. Must pass before R1-02 executes."
+  "note": "RC3 software regression after fixing generated-control porcelain path handling and adding the R1 stale-fencing Gate. Must pass before R1-02 executes."
 }
