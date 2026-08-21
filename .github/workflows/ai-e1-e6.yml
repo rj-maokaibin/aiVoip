@@ -1,4 +1,4 @@
-name: PR7 RTP Accounting + Real Offline Golden 001 (Temporary)
+name: PR7 RTP Accounting + Real Offline Golden 001 + Full Release Gate (Temporary)
 
 on:
   pull_request:
@@ -13,13 +13,13 @@ permissions:
   contents: read
 
 jobs:
-  targeted-and-real-golden:
+  targeted-real-golden-and-release-gate:
     runs-on:
       - self-hosted
       - linux
       - x64
       - voip-controlled-linux
-    timeout-minutes: 30
+    timeout-minutes: 40
     env:
       VOIP_OFFLINE_GOLDEN_001_PCAP: /tmp/tcpdump-2026-08-14.pcap
     steps:
@@ -112,13 +112,16 @@ jobs:
             --result validation/offline_analysis_golden_001.json \
             --artifacts validation/offline_analysis_golden_001_artifacts
 
+      - name: Run full VOIP AI software release gate
+        run: |
+          set -euo pipefail
+          bash tools/voip_ai_release_gate.sh
+
       - name: Upload validation artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: voip-pr7-rtp-accounting-validation
-          path: |
-            validation/offline_analysis_golden_001.json
-            validation/offline_analysis_golden_001_artifacts/**
+          name: voip-pr7-full-release-validation
+          path: validation/**
           if-no-files-found: warn
           retention-days: 14
