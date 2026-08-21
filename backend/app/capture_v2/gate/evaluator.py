@@ -93,6 +93,7 @@ class GateEvaluator:
         return detail.get("cause") if isinstance(detail, dict) else None
 
     def _r3(self, gate_id: str) -> GateCaseResult:
+        facts = dict(self.manifest.get("facts") or {})
         segments = self._db("capture_segments")
         events = self._db("capture_events")
         store = self._store()
@@ -126,6 +127,27 @@ class GateEvaluator:
         if gate_id.startswith("R3-04"):
             recovered = [s.get("id") for s in segments if s.get("state") == "REMOTE_DELETED" and s.get("last_error_code") == "GATE_INJECTED_AFTER_DURABLE_BEFORE_DB"]
             checks.append(GateCheck("after_durable_before_db_fault_recovered", len(recovered) > 0, ">0 recovered injected segment", recovered))
+        elif gate_id.startswith("R3-05"):
+            fault_id = facts.get("fault_segment_id")
+            target = next((s for s in segments if s.get("id") == fault_id), None)
+            recovered = bool(
+                target
+                and target.get("state") == "REMOTE_DELETED"
+                and target.get("persisted_at")
+                and target.get("acked_at")
+                and target.get("remote_deleted_at")
+            )
+            checks.extend([
+                GateCheck("persisted_before_ack_fault_segment_recorded", bool(fault_id), ">0 fault segment", fault_id),
+                GateCheck("persisted_before_ack_crash_recovered", recovered, "fault segment REMOTE_DELETED after persisted crash", target),
+                GateCheck("persisted_before_ack_same_producer", facts.get("before_pid") == facts.get("after_pid") and facts.get("before_starttime") == facts.get("after_starttime"),
+                          {"pid": facts.get("before_pid"), "starttime": facts.get("before_starttime")},
+                          {"pid": facts.get("after_pid"), "starttime": facts.get("after_starttime")}),
+                GateCheck("persisted_before_ack_same_capture_epoch", facts.get("before_capture_epoch_id") == facts.get("after_capture_epoch_id"),
+                          facts.get("before_capture_epoch_id"), facts.get("after_capture_epoch_id")),
+                GateCheck("persisted_before_ack_lease_epoch_increased", int(facts.get("after_lease_epoch", 0)) > int(facts.get("before_lease_epoch", 0)),
+                          "> before", facts.get("after_lease_epoch")),
+            ])
         elif gate_id.startswith("R3-06"):
             recovered = [s.get("id") for s in segments if s.get("state") == "REMOTE_DELETED" and s.get("last_error_code") == "REMOTE_DELETE_PENDING" and self._error_cause(s) == "MUTATION_RESULT_UNKNOWN"]
             checks.append(GateCheck("ack_response_lost_recovered_idempotently", len(recovered) > 0, ">0 recovered unknown-result segment", recovered))
@@ -138,4 +160,4 @@ class GateEvaluator:
             checks.append(GateCheck("server_copy_loss_repaired_before_dut_delete", len(recovered) > 0, ">0 repaired then deleted segment", recovered))
 
         verdict = _checks_verdict(checks)
-        return GateCaseResult(gate_id, verdict, tuple(checks), "Reliable Segment / SFTP / ACK", str(self.bundle), dict(self.manifest.get("facts") or {}))
+        return GateCaseResult(gate_id, verdict, tuple(checks), "Reliable Segment / SFTP / ACK", str(self.bundle), facts)
