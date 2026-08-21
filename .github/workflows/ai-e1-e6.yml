@@ -1,39 +1,157 @@
-name: AI E1-E6 + M7 + Evidence Report Gate
+name: RTP Count Probe Real Offline Golden 001 (Temporary)
 
-# GitHub-hosted CI is intentionally opt-in. Software release acceptance is
-# performed with tools/voip_ai_release_gate.sh on a controlled Linux host.
 on:
-  workflow_dispatch:
+  pull_request:
+    branches:
+      - feat/pr7-diagnostic-contracts
 
 permissions:
   contents: read
 
 jobs:
-  ai-contracts:
+  rtp-count-probe:
     runs-on:
       - self-hosted
       - linux
       - x64
       - voip-controlled-linux
     timeout-minutes: 30
+    env:
+      VOIP_OFFLINE_GOLDEN_001_PCAP: /tmp/tcpdump-2026-08-14.pcap
     steps:
       - uses: actions/checkout@v4
-      - name: Controlled Linux environment
-        run: |
-          uname -a
-          python3 --version
-          docker --version
-          docker info
-          node --version
-          npm --version
-          git rev-parse HEAD
-      - name: Run VOIP AI software release gate
-        run: bash tools/voip_ai_release_gate.sh
-      - name: Upload validation artifacts
-        if: always()
-        uses: actions/upload-artifact@v4
         with:
-          name: voip-ai-pr3-pr7-validation
-          path: validation/**
-          if-no-files-found: warn
-          retention-days: 14
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Stage and verify fixture
+        run: |
+          set -euo pipefail
+          expected_sha="b038aa7c9a0644581f2815f654fcdee4620860796382265b178823fccba2e3f0"
+          source_fixture="$VOIP_OFFLINE_GOLDEN_001_PCAP"
+          fixture="$source_fixture"
+          test -f "$source_fixture"
+          if [ ! -r "$source_fixture" ]; then
+            staged="$RUNNER_TEMP/offline-golden-001.pcap"
+            rm -f "$staged"
+            docker run --rm -v /tmp:/source:ro -v "$RUNNER_TEMP":/output --entrypoint sh postgres:16 \
+              -c "cp '/source/tcpdump-2026-08-14.pcap' '/output/offline-golden-001.pcap' && chmod 0644 '/output/offline-golden-001.pcap'"
+            fixture="$staged"
+          fi
+          actual_sha="$(sha256sum "$fixture" | awk '{print $1}')"
+          test "$actual_sha" = "$expected_sha"
+          echo "VOIP_OFFLINE_GOLDEN_001_PCAP=$fixture" >> "$GITHUB_ENV"
+
+      - name: Prepare user-space tshark
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/tshark-root"
+          debs="$RUNNER_TEMP/tshark-debs"
+          rm -rf "$root" "$debs"
+          mkdir -p "$root" "$debs"
+          mapfile -t packages < <(
+            apt-cache depends --recurse --no-recommends --no-suggests --no-conflicts --no-breaks --no-replaces --no-enhances tshark \
+              | awk '/^[^ <][^:]*$/ {print $1}' | sort -u
+          )
+          missing=()
+          for pkg in "${packages[@]}"; do
+            if ! dpkg-query -W -f='${Status}' "$pkg" 2>/dev/null | grep -q 'install ok installed'; then missing+=("$pkg"); fi
+          done
+          cd "$debs"
+          if [ "${#missing[@]}" -gt 0 ]; then apt-get download "${missing[@]}"; fi
+          shopt -s nullglob
+          for deb in ./*.deb; do dpkg-deb -x "$deb" "$root"; done
+          wrapper="$RUNNER_TEMP/tshark-userspace"
+          cat > "$wrapper" <<EOF
+          #!/usr/bin/env bash
+          set -euo pipefail
+          export LD_LIBRARY_PATH="$root/usr/lib/x86_64-linux-gnu:$root/lib/x86_64-linux-gnu:\${LD_LIBRARY_PATH:-}"
+          export WIRESHARK_DATA_DIR="$root/usr/share/wireshark"
+          exec "$root/usr/bin/tshark" "\$@"
+          EOF
+          chmod +x "$wrapper"
+          "$wrapper" -v | head -n 2
+          echo "TSHARK_BINARY=$wrapper" >> "$GITHUB_ENV"
+
+      - name: Prepare Python
+        run: |
+          python3 -m venv .venv-probe
+          .venv-probe/bin/python -m pip install -q -r backend/requirements.txt
+
+      - name: Probe RTP raw vs unique packets and duplicate frames
+        run: |
+          set -euo pipefail
+          mkdir -p validation/rtp_count_probe
+          PYTHONPATH=backend .venv-probe/bin/python - <<'PY'
+          import json, os
+          from collections import defaultdict
+          from pathlib import Path
+          from app.analyzers.packet.engine import PacketIntelligenceEngine
+          from app.analyzers.packet.tshark import TSharkAdapter
+
+          pcap = Path(os.environ['VOIP_OFFLINE_GOLDEN_001_PCAP'])
+          tshark = TSharkAdapter(binary=os.environ['TSHARK_BINARY'])
+          packets = list(tshark.iter_packets(pcap))
+          result = PacketIntelligenceEngine(tshark=tshark).analyze_packets(packets)
+
+          targets = []
+          duplicate_details = []
+          grouped = defaultdict(list)
+          for p in packets:
+              if not p.rtp or p.rtp.sequence is None:
+                  continue
+              key = (p.src_ip, p.src_port, p.dst_ip, p.dst_port, p.rtp.ssrc)
+              grouped[key].append(p)
+
+          for stream in result['rtp_streams']:
+              if stream.get('src_ip') == '192.168.3.200' and stream.get('src_port') == 11446 and stream.get('dst_ip') == '192.168.150.4' and stream.get('dst_port') == 10000:
+                  targets.append({k: stream.get(k) for k in [
+                      'stream_id','ssrc','packet_count','unique_packet_count','expected_packets','lost_packets',
+                      'duplicate_packets','out_of_order_packets','first_frame_number','last_frame_number',
+                      'first_sequence_ext','last_sequence_ext','payload_type','payload_types','payload_change_count'
+                  ]})
+                  key=(stream['src_ip'],stream['src_port'],stream['dst_ip'],stream['dst_port'],stream['ssrc'])
+                  seen={}
+                  for p in sorted(grouped[key], key=lambda x:(x.timestamp,x.frame_number)):
+                      seq=int(p.rtp.sequence)&0xffff
+                      if seq in seen:
+                          prev=seen[seq]
+                          duplicate_details.append({
+                              'sequence': seq,
+                              'first_frame': prev.frame_number,
+                              'duplicate_frame': p.frame_number,
+                              'first_time': prev.timestamp,
+                              'duplicate_time': p.timestamp,
+                              'delta_ms': round((p.timestamp-prev.timestamp)*1000,6),
+                              'payload_type_first': prev.rtp.payload_type,
+                              'payload_type_duplicate': p.rtp.payload_type,
+                              'timestamp_first': prev.rtp.timestamp,
+                              'timestamp_duplicate': p.rtp.timestamp,
+                          })
+                      else:
+                          seen[seq]=p
+
+          probe={'target_streams':targets,'duplicate_details':duplicate_details}
+          print(json.dumps(probe, ensure_ascii=False, indent=2))
+          Path('validation/rtp_count_probe/result.json').write_text(json.dumps(probe,ensure_ascii=False,indent=2)+'\n')
+          PY
+
+      - name: Independent tshark sequence duplicate count
+        run: |
+          set -euo pipefail
+          "$TSHARK_BINARY" -r "$VOIP_OFFLINE_GOLDEN_001_PCAP" \
+            -Y 'rtp && ip.src==192.168.3.200 && udp.srcport==11446 && ip.dst==192.168.150.4 && udp.dstport==10000' \
+            -T fields -e frame.number -e frame.time_epoch -e rtp.ssrc -e rtp.seq -e rtp.timestamp -e rtp.p_type \
+            > validation/rtp_count_probe/tshark_downstream.tsv
+          awk -F '\t' '{count[$4]++; frames[$4]=frames[$4] " " $1} END {for (s in count) if(count[s]>1) print s, count[s], frames[s]}' \
+            validation/rtp_count_probe/tshark_downstream.tsv | sort -n \
+            > validation/rtp_count_probe/duplicate_sequences.txt
+          echo "raw_rows=$(wc -l < validation/rtp_count_probe/tshark_downstream.tsv)"
+          echo "unique_seq=$(cut -f4 validation/rtp_count_probe/tshark_downstream.tsv | sort -u | wc -l)"
+          cat validation/rtp_count_probe/duplicate_sequences.txt
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rtp-count-probe-real-offline-golden-001
+          path: validation/rtp_count_probe/**
+          retention-days: 7
