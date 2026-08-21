@@ -1,105 +1,27 @@
 {
   "schema_version": "capture-v2-remote-status-v1",
-  "action_id": "R3-08-APF3260M-SERVER-COPY-LOSS-RC7",
-  "sequence": 41,
-  "action_type": "GATE_SEGMENT",
+  "action_id": "RC8-SW-001",
+  "sequence": 42,
+  "action_type": "SOFTWARE_REGRESSION",
   "state": "SUCCEEDED",
   "runner_id": "srv:3090258",
-  "action_sha256": "93429e3607f1b8dcfa7fca97b312205debfdaad9444e46b902ca02994fcca8b5",
-  "updated_at": "2026-08-21T15:31:47.523048+00:00",
+  "action_sha256": "54ab7d58f6452de60858665a91b476eda217e18447a4ef3cb38ceed2f9e3a93c",
+  "updated_at": "2026-08-21T16:15:53.341420+00:00",
   "started_at": null,
-  "finished_at": "2026-08-21T15:31:47.523048+00:00",
+  "finished_at": "2026-08-21T16:15:53.341420+00:00",
   "return_code": 0,
-  "verdict": "PASS",
-  "result_path": "validation/control/results/R3-08-APF3260M-SERVER-COPY-LOSS-RC7/result.json",
-  "stdout_sha256": "3be8de5258f6037baa1129210d20e0472b931cdf31ba13792a199d63cf3dc3ed",
-  "stderr_sha256": "b8258e86248ce6f15dfea1a12afcd2ad3fde62ba6d3cd24536ffc8cb3bb61c48",
+  "verdict": null,
+  "result_path": "validation/control/results/RC8-SW-001/result.json",
+  "stdout_sha256": "dea79eae118951fc8c7b0d523d8dc1cdf6cb83075f67cad2ebfce7fdd6d7eab0",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "error": null,
   "detail": {
     "safety": {
       "capture_engine_version": "V1",
       "capture_v2_production_enabled": "false",
-      "git_head": "6eae10bc62436f7921ffb7ef302b8c8f5945c729",
-      "expected_product_head": "d4fa41626a967980b2a2418070612a31a3195319"
+      "git_head": "a9818ce39df5a038eaab6f7bfb3f29d7df20cfbd",
+      "expected_product_head": "c7d8e2412615c0904c799c2f698241d7990a7709"
     },
-    "parsed_output": {
-      "checks": [
-        {
-          "details": {},
-          "expected": ">0",
-          "name": "at_least_one_segment",
-          "observed": 195,
-          "passed": true,
-          "verdict": "PASS"
-        },
-        {
-          "details": {},
-          "expected": ">0 REMOTE_DELETED",
-          "name": "at_least_one_full_chain",
-          "observed": 195,
-          "passed": true,
-          "verdict": "PASS"
-        },
-        {
-          "details": {},
-          "expected": true,
-          "name": "server_store_observable",
-          "observed": [],
-          "passed": true,
-          "verdict": "PASS"
-        },
-        {
-          "details": {},
-          "expected": [],
-          "name": "no_server_and_dut_double_loss",
-          "observed": [],
-          "passed": true,
-          "verdict": "PASS"
-        },
-        {
-          "details": {},
-          "expected": [],
-          "name": "acked_segments_have_server_copy",
-          "observed": [],
-          "passed": true,
-          "verdict": "PASS"
-        },
-        {
-          "details": {},
-          "expected": true,
-          "name": "no_unacked_eviction",
-          "observed": null,
-          "passed": true,
-          "verdict": "PASS"
-        },
-        {
-          "details": {},
-          "expected": ">0 repaired then deleted segment",
-          "name": "server_copy_loss_repaired_before_dut_delete",
-          "observed": [
-            "3b532fd1-712b-4ae2-8451-1c7ba6552b33"
-          ],
-          "passed": true,
-          "verdict": "PASS"
-        }
-      ],
-      "created_at": "2026-08-21T15:31:47.219663+00:00",
-      "evidence_bundle": "/tmp/capture-v2-gates/20260821T153146Z_R3-08-APF3260M-RC7_c132f336-df1b-4285-b175-01d848f23b5d",
-      "facts": {
-        "acked": 7,
-        "capture_epoch_id": "12863dd3-f731-4520-b7ad-051838c6a95a",
-        "capture_session_id": "35718771-2c1f-4102-baba-6ca5ce6ee963",
-        "control_authority": "ACTIVE",
-        "cycles": 51,
-        "deleted": 7,
-        "errors": 1,
-        "lease_epoch": 28,
-        "sealed": 7,
-        "transferred": 7
-      },
-      "gate_id": "R3-08-APF3260M-RC7",
-      "summary": "Reliable Segment / SFTP / ACK",
-      "verdict": "PASS"
-    }
+    "parsed_output": null
   }
 }
