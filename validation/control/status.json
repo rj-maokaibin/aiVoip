@@ -1,101 +1,19 @@
 {
   "schema_version": "capture-v2-remote-status-v1",
-  "action_id": "R1-RC3-002",
-  "sequence": 5,
-  "action_type": "GATE_LEASE_FENCING",
-  "state": "SUCCEEDED",
-  "runner_id": "srv:2919873",
-  "action_sha256": "b6cfbb59e00a169c02f5f813c7a8c573daa0ff65d3931564c38f85af7ce2926b",
-  "updated_at": "2026-08-21T09:07:21.635312+00:00",
+  "action_id": "RC4-SW-001",
+  "sequence": 6,
+  "action_type": "SOFTWARE_REGRESSION",
+  "state": "REJECTED",
+  "runner_id": "srv:2933695",
+  "action_sha256": "e7c6bb699ef13a064e978eb15ad63e5d2c2ad5ea9188147c0e55384118d3b370",
+  "updated_at": "2026-08-21T12:51:03.902735+00:00",
   "started_at": null,
-  "finished_at": "2026-08-21T09:07:21.635312+00:00",
-  "return_code": 0,
-  "verdict": "PASS",
-  "result_path": "validation/control/results/R1-RC3-002/result.json",
-  "stdout_sha256": "578f2e4d3be4ebc2c147b98ed602a8acabc2c23cc427b1a4edeed10b4be38874",
+  "finished_at": "2026-08-21T12:51:03.902735+00:00",
+  "return_code": null,
+  "verdict": null,
+  "result_path": "validation/control/results/RC4-SW-001/result.json",
+  "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-  "error": null,
-  "detail": {
-    "safety": {
-      "capture_engine_version": "V1",
-      "capture_v2_production_enabled": "false",
-      "git_head": "ff8483e50a3eeedbadb82dd160d47e4405face5c",
-      "expected_product_head": "00fa975d6a2fd250394f6344b35eddddea6eb11c"
-    },
-    "parsed_output": {
-      "checks": [
-        {
-          "details": {},
-          "expected": 26,
-          "name": "takeover_increments_epoch",
-          "observed": 26,
-          "passed": true,
-          "verdict": "PASS"
-        },
-        {
-          "details": {},
-          "expected": "LEASE_FENCED",
-          "name": "stale_renew_fenced",
-          "observed": "LEASE_FENCED",
-          "passed": true,
-          "verdict": "PASS"
-        },
-        {
-          "details": {},
-          "expected": "LEASE_FENCED",
-          "name": "stale_validate_fenced",
-          "observed": "LEASE_FENCED",
-          "passed": true,
-          "verdict": "PASS"
-        },
-        {
-          "details": {},
-          "expected": "LEASE_FENCED",
-          "name": "stale_release_fenced",
-          "observed": "LEASE_FENCED",
-          "passed": true,
-          "verdict": "PASS"
-        },
-        {
-          "details": {},
-          "expected": {
-            "capture_session_id": "d141aea6-06f8-4650-84e0-ff5d1b52d1f8",
-            "lease_epoch": 26,
-            "owner_worker_id": "rc3-r1-stale-b",
-            "state": "ACTIVE"
-          },
-          "name": "new_owner_remains_active",
-          "observed": {
-            "capture_session_id": "d141aea6-06f8-4650-84e0-ff5d1b52d1f8",
-            "device_id": "259f16e6-af9e-4dff-969b-2bb5eac43eb2",
-            "lease_epoch": 26,
-            "owner_worker_id": "rc3-r1-stale-b",
-            "state": "ACTIVE"
-          },
-          "passed": true,
-          "verdict": "PASS"
-        }
-      ],
-      "created_at": "2026-08-21T09:07:21.436151+00:00",
-      "evidence_bundle": "/tmp/capture-v2-gates/20260821T090721Z_R1-02-RC3_259f16e6-af9e-4dff-969b-2bb5eac43eb2",
-      "facts": {
-        "after_lease_epoch": 26,
-        "before_lease_epoch": 25,
-        "current_lease": {
-          "capture_session_id": "d141aea6-06f8-4650-84e0-ff5d1b52d1f8",
-          "device_id": "259f16e6-af9e-4dff-969b-2bb5eac43eb2",
-          "lease_epoch": 26,
-          "owner_worker_id": "rc3-r1-stale-b",
-          "state": "ACTIVE"
-        },
-        "stale_release_code": "LEASE_FENCED",
-        "stale_renew_code": "LEASE_FENCED",
-        "stale_validate_code": "LEASE_FENCED",
-        "ttl_seconds": 10.0
-      },
-      "gate_id": "R1-02-RC3",
-      "summary": "PostgreSQL expired takeover and stale-token fencing",
-      "verdict": "PASS"
-    }
-  }
+  "error": "SAFETY_GIT_DIRTY:?? validation/capture_v2/run_control_runner.sh",
+  "detail": {}
 }

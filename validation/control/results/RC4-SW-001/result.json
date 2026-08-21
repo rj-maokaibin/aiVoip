@@ -1,0 +1,36 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "RC4-SW-001",
+    "sequence": 6,
+    "created_at": "2026-08-21T12:46:00+00:00",
+    "expires_at": "2026-08-21T14:46:00+00:00",
+    "action_type": "SOFTWARE_REGRESSION",
+    "parameters": {
+      "timeout_seconds": 1800
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "c6280d4a953a0b747eb1cfef47137187d59e544d"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "RC4 regression after adding DB:<SN> local credential resolution and AUTO_NEW/FROM_STATE R2 validation-session flow. No plaintext DUT secret is stored in Git. Must pass before any real DUT R2 action."
+  },
+  "action_sha256": "e7c6bb699ef13a064e978eb15ad63e5d2c2ad5ea9188147c0e55384118d3b370",
+  "runner_id": "srv:2933695",
+  "state": "REJECTED",
+  "return_code": null,
+  "verdict": null,
+  "error": "SAFETY_GIT_DIRTY:?? validation/capture_v2/run_control_runner.sh",
+  "finished_at": "2026-08-21T12:51:03.902735+00:00",
+  "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "local_stdout": ".capture-v2-control/logs/RC4-SW-001/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/RC4-SW-001/stderr.log",
+  "detail": {}
+}
