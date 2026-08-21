@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import copy
 import json
 import os
 import sys
 from pathlib import Path
+
+from sqlalchemy import select
 
 from app.capture_v2.errors import CaptureV2Error
 from app.capture_v2.gate.context import build_asyncssh_adapter
@@ -14,7 +17,15 @@ from app.capture_v2.gate.evaluator import GateEvaluator
 from app.capture_v2.gate.faults import GateFaultInjector, GateFaultPlan
 from app.capture_v2.gate.models import GateDeviceSpec, GateRunPaths
 from app.capture_v2.gate.runner import GateRunner
+from app.contracts.enums import (
+    CaptureStage,
+    CleanupStatus,
+    EvidenceCompleteness,
+    EvidenceSufficiency,
+    ReproductionState,
+)
 from app.core.config import settings
+from app.db.models import ReproductionSession
 from app.db.session import SessionLocal
 
 
@@ -42,7 +53,11 @@ def _common_device(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--port", type=int, default=22)
     parser.add_argument("--username", default=getattr(settings, "ssh_username", "admin"))
     parser.add_argument("--platform-id", choices=["mt7621", "mt7981"])
-    parser.add_argument("--password-env", default="CAPTURE_GATE_SSH_PASSWORD")
+    parser.add_argument(
+        "--password-env",
+        default="CAPTURE_GATE_SSH_PASSWORD",
+        help="Gate-local password source: ENV name, ENV:<name>, or DB:<device SN>. Never pass plaintext.",
+    )
 
 
 def _runner(adapter, args) -> GateRunner:
@@ -65,20 +80,84 @@ def _base_paths(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--repo-root", default="")
 
 
+def _create_r2_validation_session(device_id: str) -> str:
+    """Create a clean R2-only ReproductionSession using the latest device profile snapshot.
+
+    This deliberately clones only immutable/profile context. Runtime state, ownership,
+    calls, attempts and cleanup state are reset, so the R2 evidence is independent
+    from historical validation sessions.
+    """
+    with SessionLocal() as db:
+        template = db.scalar(
+            select(ReproductionSession)
+            .where(ReproductionSession.device_id == device_id)
+            .order_by(ReproductionSession.created_at.desc())
+            .limit(1)
+        )
+        if template is None:
+            raise CaptureV2Error(
+                "R2_REPRO_SESSION_TEMPLATE_NOT_FOUND",
+                details={"device_id": device_id},
+            )
+        row = ReproductionSession(
+            case_id=template.case_id,
+            device_id=device_id,
+            profile_key=template.profile_key,
+            profile_version=template.profile_version,
+            profile_checksum=template.profile_checksum,
+            effective_profile_snapshot=copy.deepcopy(template.effective_profile_snapshot),
+            platform_profile_id=template.platform_profile_id,
+            platform_profile_version=template.platform_profile_version,
+            state=ReproductionState.CREATED.value,
+            capture_stage=CaptureStage.BASE.value,
+            cleanup_required=False,
+            cleanup_status=CleanupStatus.NOT_REQUIRED.value,
+            capture_completeness=EvidenceCompleteness.UNAVAILABLE.value,
+            evidence_sufficiency=EvidenceSufficiency.NOT_EVALUATED.value,
+        )
+        db.add(row)
+        db.flush()
+        session_id = str(row.id)
+        db.commit()
+        return session_id
+
+
+def _resolve_reproduction_session_id(value: str, *, device_id: str, before_state: dict | None = None) -> str:
+    marker = str(value or "").strip()
+    if marker == "AUTO_NEW":
+        return _create_r2_validation_session(device_id)
+    if marker == "FROM_STATE":
+        session_id = str((before_state or {}).get("reproduction_session_id") or "").strip()
+        if not session_id:
+            raise CaptureV2Error("R2_REPRO_SESSION_MISSING_FROM_STATE")
+        return session_id
+    if not marker:
+        raise CaptureV2Error("REPRODUCTION_SESSION_ID_REQUIRED")
+    return marker
+
+
 async def _cmd_ownership(args) -> int:
     spec = _device(args)
+    reproduction_session_id = _resolve_reproduction_session_id(
+        args.reproduction_session_id,
+        device_id=spec.device_id,
+    )
     adapter = build_asyncssh_adapter(spec, password_env=args.password_env)
     await adapter.connect()
     try:
         result, facts = await _runner(adapter, args).ownership_establish(
-            reproduction_session_id=args.reproduction_session_id,
+            reproduction_session_id=reproduction_session_id,
             device=spec.as_profile_device(),
             worker_id=args.worker_id,
             gate_id=args.gate_id,
         )
-        _json(result)
+        facts = {**facts, "reproduction_session_id": reproduction_session_id}
+        payload = {"result": result.as_dict(), "state": facts}
+        _json(payload)
         if args.state_file:
-            Path(args.state_file).write_text(json.dumps(facts, indent=2) + "\n", encoding="utf-8")
+            state_path = Path(args.state_file)
+            state_path.parent.mkdir(parents=True, exist_ok=True)
+            state_path.write_text(json.dumps(facts, indent=2) + "\n", encoding="utf-8")
         if args.hold_seconds > 0:
             await asyncio.sleep(args.hold_seconds)
         return 0 if result.verdict.value == "PASS" else 2
@@ -89,11 +168,16 @@ async def _cmd_ownership(args) -> int:
 async def _cmd_ownership_adopt(args) -> int:
     spec = _device(args)
     before = json.loads(Path(args.before_state).read_text(encoding="utf-8"))
+    reproduction_session_id = _resolve_reproduction_session_id(
+        args.reproduction_session_id,
+        device_id=spec.device_id,
+        before_state=before,
+    )
     adapter = build_asyncssh_adapter(spec, password_env=args.password_env)
     await adapter.connect()
     try:
         result = await _runner(adapter, args).ownership_adopt(
-            reproduction_session_id=args.reproduction_session_id,
+            reproduction_session_id=reproduction_session_id,
             device=spec.as_profile_device(), worker_id=args.worker_id,
             before_state=before, gate_id=args.gate_id,
         )
@@ -193,7 +277,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     own = sub.add_parser("ownership", help="Establish A/B ownership and collect evidence")
     _common_device(own); _base_paths(own)
-    own.add_argument("--reproduction-session-id", required=True)
+    own.add_argument("--reproduction-session-id", required=True, help="Existing UUID or AUTO_NEW")
     own.add_argument("--worker-id", required=True)
     own.add_argument("--gate-id", default="R2-ESTABLISH")
     own.add_argument("--state-file", default="")
@@ -201,7 +285,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     adopt = sub.add_parser("ownership-adopt", help="R2-01 takeover and compare against a pre-crash state file")
     _common_device(adopt); _base_paths(adopt)
-    adopt.add_argument("--reproduction-session-id", required=True)
+    adopt.add_argument("--reproduction-session-id", required=True, help="Existing UUID or FROM_STATE")
     adopt.add_argument("--worker-id", required=True)
     adopt.add_argument("--before-state", required=True)
     adopt.add_argument("--gate-id", default="R2-01")
