@@ -58,7 +58,6 @@ class ControlPolicy:
 
     def check_safety(self, action: RemoteAction) -> dict[str, str]:
         facts: dict[str, str] = {}
-        # These are hard runner invariants, not controller-configurable preferences.
         if not action.safety.require_v1_authority or not action.safety.require_v2_disabled:
             raise ControlPolicyError("SAFETY_DOWNGRADE_FORBIDDEN")
         if not action.safety.require_clean_git:
@@ -79,10 +78,6 @@ class ControlPolicy:
         expected = action.safety.expected_head
         facts["expected_product_head"] = expected
         if head != expected:
-            # The control action/result may itself be committed on top of the product
-            # commit. That is allowed only when every intervening path lives under
-            # validation/control/. Any code/config change after expected_head fences
-            # the action instead of silently validating a different build.
             anc = subprocess.run(["git", "merge-base", "--is-ancestor", expected, head],
                                  cwd=self.repo_root, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             if anc.returncode != 0:
@@ -140,6 +135,19 @@ class ControlPolicy:
                 ("profile_root", "--profile-root"), ("profile_id", "--profile-id"),
                 ("object_root", "--object-root"), ("output_root", "--output-root"),
                 ("repo_root", "--repo-root"),
+            ]:
+                self._add(argv, flag, p.get(key))
+            return PreparedCommand(argv, self.backend_root, timeout, env)
+
+        if action.action_type == ControlActionType.GATE_LEASE_FENCING:
+            self._required(p, "device_id", "capture_session_a", "capture_session_b")
+            argv = [sys.executable, "-m", "app.capture_v2.control.r1_fencing_gate"]
+            for key, flag in [
+                ("device_id", "--device-id"), ("capture_session_a", "--capture-session-a"),
+                ("capture_session_b", "--capture-session-b"), ("worker_a", "--worker-a"),
+                ("worker_b", "--worker-b"), ("gate_id", "--gate-id"),
+                ("ttl_seconds", "--ttl-seconds"), ("object_root", "--object-root"),
+                ("output_root", "--output-root"), ("repo_root", "--repo-root"),
             ]:
                 self._add(argv, flag, p.get(key))
             return PreparedCommand(argv, self.backend_root, timeout, env)
