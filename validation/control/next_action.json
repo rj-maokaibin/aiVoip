@@ -1,30 +1,30 @@
 {
   "schema_version": "capture-v2-remote-action-v1",
-  "action_id": "R3-02B-APF3260M-AFTER-GET-RC6",
-  "sequence": 29,
-  "created_at": "2026-08-21T14:38:00+00:00",
-  "expires_at": "2026-08-21T16:38:00+00:00",
+  "action_id": "R3-02-APF1250-SCP-INTERRUPT-RC6",
+  "sequence": 30,
+  "created_at": "2026-08-21T14:40:00+00:00",
+  "expires_at": "2026-08-21T16:40:00+00:00",
   "action_type": "GATE_SEGMENT",
   "parameters": {
-    "device_id": "c132f336-df1b-4285-b175-01d848f23b5d",
-    "model": "APF3260-M",
-    "host": "47.104.155.247",
-    "port": 64821,
+    "device_id": "259f16e6-af9e-4dff-969b-2bb5eac43eb2",
+    "model": "APF1250",
+    "host": "47.104.22.0",
+    "port": 63111,
     "username": "root",
-    "platform_id": "mt7981",
-    "password_env": "DB:G1U060H000384",
+    "platform_id": "mt7621",
+    "password_env": "DB:G1V030E010214",
     "profile_root": "../profiles",
     "profile_id": "voip-standard",
     "object_root": "/tmp/voip-reproduction-objects",
     "output_root": "/tmp/capture-v2-gates",
     "repo_root": "..",
-    "reproduction_session_id": "03ff8a5b-23be-4196-a53f-48fb4557fc84",
-    "worker_id": "r3-02b-apf3260m-rc6",
-    "gate_id": "R3-02B-RC6",
+    "reproduction_session_id": "2deb3ef0-c1d8-40c0-8faf-f024a21408eb",
+    "worker_id": "r3-02-apf1250-rc6",
+    "gate_id": "R3-02-APF1250-RC6",
     "duration": 30,
     "interval": 0.5,
     "transport": "scp",
-    "fault_plan": "../validation/control/fault_plans/r3-scp-after-get-once.json",
+    "fault_plan": "../validation/control/fault_plans/r3-scp-before-get-once.json",
     "timeout_seconds": 600
   },
   "safety": {
@@ -36,5 +36,5 @@
     "expected_head": "7c92787c1abb9cc3ddeba2583c039178070ec180"
   },
   "requested_by": "remote-validation-controller",
-  "note": "Run RC6 Gate-only lost transfer response scenario. V1 stays authoritative and Production V2 stays disabled."
+  "note": "Run the one-shot SCP interruption scenario on APF1250/mt7621. V1 stays authoritative and Production V2 stays disabled."
 }
