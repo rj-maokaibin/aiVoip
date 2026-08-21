@@ -1,29 +1,12 @@
 {
   "schema_version": "capture-v2-remote-action-v1",
-  "action_id": "R2-APF1250-ESTABLISH-RC5-FRESH",
-  "sequence": 17,
-  "created_at": "2026-08-21T13:37:00+00:00",
-  "expires_at": "2026-08-21T15:37:00+00:00",
-  "action_type": "GATE_OWNERSHIP",
+  "action_id": "RC6-SW-001",
+  "sequence": 18,
+  "created_at": "2026-08-21T13:39:00+00:00",
+  "expires_at": "2026-08-21T15:39:00+00:00",
+  "action_type": "SOFTWARE_REGRESSION",
   "parameters": {
-    "device_id": "259f16e6-af9e-4dff-969b-2bb5eac43eb2",
-    "model": "APF1250",
-    "host": "47.104.22.0",
-    "port": 63111,
-    "username": "root",
-    "platform_id": "mt7621",
-    "password_env": "DB:G1V030E010214",
-    "profile_root": "../profiles",
-    "profile_id": "voip-standard",
-    "object_root": "/tmp/voip-reproduction-objects",
-    "output_root": "/tmp/capture-v2-gates",
-    "repo_root": "..",
-    "reproduction_session_id": "AUTO_NEW",
-    "worker_id": "r2-apf1250-rc5-a",
-    "gate_id": "R2-01-ESTABLISH-RC5-FRESH",
-    "state_file": "/tmp/capture-v2-control/r2-apf1250-rc5-before.json",
-    "hold_seconds": 35,
-    "timeout_seconds": 360
+    "timeout_seconds": 1800
   },
   "safety": {
     "require_clean_git": true,
@@ -31,8 +14,8 @@
     "require_v2_disabled": true,
     "allow_worker_kill": false,
     "allow_server_quarantine": false,
-    "expected_head": "068c8586947e426b7924442839cd35c751618aa4"
+    "expected_head": "7c92787c1abb9cc3ddeba2583c039178070ec180"
   },
   "requested_by": "ChatGPT-remote-validation-controller",
-  "note": "Fresh clean-RC5 APF1250 R2 establish on refreshed EWEB tunnel. Create an independent validation ReproductionSession, establish exactly one Capture Authority/producer, persist before-state, then hold 35s so the 30s lease naturally expires before the follow-up adopt. Secret remains local via DB:<SN>; V1 remains authoritative and Production V2 stays disabled."
+  "note": "RC6 software regression after making ProducerManager.stop_identity BusyBox-portable. Run all test_capture_v2_*.py before any further real-device validation. V1 remains authoritative and Production V2 stays disabled."
 }
