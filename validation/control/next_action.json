@@ -1,12 +1,29 @@
 {
   "schema_version": "capture-v2-remote-action-v1",
-  "action_id": "RC6-SW-001",
-  "sequence": 18,
-  "created_at": "2026-08-21T13:39:00+00:00",
-  "expires_at": "2026-08-21T15:39:00+00:00",
-  "action_type": "SOFTWARE_REGRESSION",
+  "action_id": "R2-APF1250-ESTABLISH-RC6",
+  "sequence": 19,
+  "created_at": "2026-08-21T13:42:00+00:00",
+  "expires_at": "2026-08-21T15:42:00+00:00",
+  "action_type": "GATE_OWNERSHIP",
   "parameters": {
-    "timeout_seconds": 1800
+    "device_id": "259f16e6-af9e-4dff-969b-2bb5eac43eb2",
+    "model": "APF1250",
+    "host": "47.104.22.0",
+    "port": 63111,
+    "username": "root",
+    "platform_id": "mt7621",
+    "password_env": "DB:G1V030E010214",
+    "profile_root": "../profiles",
+    "profile_id": "voip-standard",
+    "object_root": "/tmp/voip-reproduction-objects",
+    "output_root": "/tmp/capture-v2-gates",
+    "repo_root": "..",
+    "reproduction_session_id": "AUTO_NEW",
+    "worker_id": "r2-apf1250-rc6-a",
+    "gate_id": "R2-01-ESTABLISH-RC6",
+    "state_file": "/tmp/capture-v2-control/r2-apf1250-rc6-before.json",
+    "hold_seconds": 35,
+    "timeout_seconds": 360
   },
   "safety": {
     "require_clean_git": true,
@@ -17,5 +34,5 @@
     "expected_head": "7c92787c1abb9cc3ddeba2583c039178070ec180"
   },
   "requested_by": "ChatGPT-remote-validation-controller",
-  "note": "RC6 software regression after making ProducerManager.stop_identity BusyBox-portable. Run all test_capture_v2_*.py before any further real-device validation. V1 remains authoritative and Production V2 stays disabled."
+  "note": "Fresh RC6 APF1250 R2 establish on refreshed tunnel after BusyBox-portable producer-stop fix. Create a new validation ReproductionSession, establish exactly one Capture Authority/producer, persist before-state, and hold 35s so the lease naturally expires before adopt. Secret remains local via DB:<SN>; Production V2 stays disabled."
 }
