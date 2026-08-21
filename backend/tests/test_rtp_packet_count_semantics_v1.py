@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from app.analyzers.packet.engine import PacketIntelligenceEngine
+from app.analyzers.packet.rtp import RtpStreamAnalyzer
+from app.analyzers.packet.types import NormalizedPacket, RtpData
 from app.reports.evidence_brief import build_packet_summary
 
 
@@ -29,6 +31,52 @@ def _call() -> dict:
             },
         },
     }
+
+
+def _rtp_packet(frame: int, arrival: float, sequence: int, rtp_timestamp: int) -> NormalizedPacket:
+    return NormalizedPacket(
+        frame_number=frame,
+        timestamp=arrival,
+        src_ip="192.168.3.200",
+        src_port=11446,
+        dst_ip="192.168.150.4",
+        dst_port=10000,
+        transport="UDP",
+        protocols=["rtp"],
+        rtp=RtpData(
+            ssrc=602295830,
+            sequence=sequence,
+            timestamp=rtp_timestamp,
+            payload_type=0,
+        ),
+    )
+
+
+def test_rtp_analyzer_retains_frame_level_duplicate_evidence_without_loss():
+    stream = RtpStreamAnalyzer().analyze([
+        _rtp_packet(10, 1.000000, 100, 16000),
+        _rtp_packet(11, 1.020000, 101, 16160),
+        _rtp_packet(12, 1.020150, 101, 16160),
+    ])[0]
+
+    assert stream["packet_count"] == 3
+    assert stream["unique_packet_count"] == 2
+    assert stream["expected_packets"] == 2
+    assert stream["duplicate_packets"] == 1
+    assert stream["lost_packets"] == 0
+    assert stream["duplicate_events"] == [{
+        "sequence": 101,
+        "sequence_ext": 101,
+        "first_frame_number": 11,
+        "duplicate_frame_number": 12,
+        "first_timestamp": 1.02,
+        "duplicate_timestamp": 1.02015,
+        "arrival_delta_ms": 0.15,
+        "rtp_timestamp": 16160,
+        "first_rtp_timestamp": 16160,
+        "payload_type": 0,
+        "first_payload_type": 0,
+    }]
 
 
 def test_media_direction_health_uses_unique_packets_not_duplicate_datagrams():
