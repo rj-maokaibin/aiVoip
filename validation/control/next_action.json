@@ -1,40 +1,21 @@
 {
   "schema_version": "capture-v2-remote-action-v1",
-  "action_id": "R3-08-APF3260M-SERVER-COPY-LOSS-RC7",
-  "sequence": 41,
-  "created_at": "2026-08-21T15:30:25+00:00",
-  "expires_at": "2026-08-21T17:30:25+00:00",
-  "action_type": "GATE_SEGMENT",
+  "action_id": "RC8-SW-001",
+  "sequence": 42,
+  "created_at": "2026-08-21T16:15:30+00:00",
+  "expires_at": "2026-08-21T18:15:30+00:00",
+  "action_type": "SOFTWARE_REGRESSION",
   "parameters": {
-    "device_id": "c132f336-df1b-4285-b175-01d848f23b5d",
-    "model": "APF3260-M",
-    "host": "10.48.8.74",
-    "port": 10002,
-    "username": "root",
-    "platform_id": "mt7981",
-    "password_env": "DB:G1U060H000384",
-    "profile_root": "../profiles",
-    "profile_id": "voip-standard",
-    "object_root": "/tmp/voip-reproduction-objects",
-    "output_root": "/tmp/capture-v2-gates",
-    "repo_root": "..",
-    "reproduction_session_id": "03ff8a5b-23be-4196-a53f-48fb4557fc84",
-    "worker_id": "r3-08-apf3260m-rc7",
-    "gate_id": "R3-08-APF3260M-RC7",
-    "duration": 30,
-    "interval": 0.5,
-    "transport": "scp",
-    "fault_plan": "../validation/control/fault_plans/r3-server-copy-loss-before-delete-once.json",
-    "timeout_seconds": 600
+    "timeout_seconds": 1200
   },
   "safety": {
     "require_clean_git": true,
     "require_v1_authority": true,
     "require_v2_disabled": true,
     "allow_worker_kill": false,
-    "allow_server_quarantine": true,
-    "expected_head": "d4fa41626a967980b2a2418070612a31a3195319"
+    "allow_server_quarantine": false,
+    "expected_head": "c7d8e2412615c0904c799c2f698241d7990a7709"
   },
   "requested_by": "ChatGPT-remote-validation-controller",
-  "note": "RC7 R3-08 on APF3260-M. Reversibly quarantine one real durable server segment immediately before delete verification; DUT evidence must remain, exact bytes must repair the server copy, then remote DELETE may complete."
+  "note": "RC8 software regression for R3-05 persisted-before-ACK crash harness. Keep V1 authoritative and Production V2 disabled."
 }
