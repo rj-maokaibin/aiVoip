@@ -1,28 +1,12 @@
 {
   "schema_version": "capture-v2-remote-action-v1",
-  "action_id": "R2-APF3260M-ADOPT-RC6",
-  "sequence": 23,
-  "created_at": "2026-08-21T13:48:00+00:00",
-  "expires_at": "2026-08-21T15:48:00+00:00",
-  "action_type": "GATE_OWNERSHIP_ADOPT",
+  "action_id": "RC6-SW-RECOVERY-001",
+  "sequence": 24,
+  "created_at": "2026-08-21T14:20:00+00:00",
+  "expires_at": "2026-08-21T16:20:00+00:00",
+  "action_type": "SOFTWARE_REGRESSION",
   "parameters": {
-    "device_id": "c132f336-df1b-4285-b175-01d848f23b5d",
-    "model": "APF3260-M",
-    "host": "47.104.155.247",
-    "port": 64821,
-    "username": "root",
-    "platform_id": "mt7981",
-    "password_env": "DB:G1U060H000384",
-    "profile_root": "../profiles",
-    "profile_id": "voip-standard",
-    "object_root": "/tmp/voip-reproduction-objects",
-    "output_root": "/tmp/capture-v2-gates",
-    "repo_root": "..",
-    "reproduction_session_id": "FROM_STATE",
-    "worker_id": "r2-apf3260m-rc6-b",
-    "before_state": "/tmp/capture-v2-control/r2-apf3260m-rc6-before.json",
-    "gate_id": "R2-01-ADOPT-RC6",
-    "timeout_seconds": 300
+    "timeout_seconds": 1200
   },
   "safety": {
     "require_clean_git": true,
@@ -33,5 +17,5 @@
     "expected_head": "7c92787c1abb9cc3ddeba2583c039178070ec180"
   },
   "requested_by": "ChatGPT-remote-validation-controller",
-  "note": "RC6 APF3260-M takeover after fresh establish lease expiry. Must adopt identical PID/starttime/CaptureEpoch, increment lease_epoch, keep exactly one producer, and preserve zero unrecovered gaps. Secret remains local via DB:<SN>; Production V2 stays disabled."
+  "note": "Control recovery probe after sequence 23 produced no GitHub result/status across a systemd restart. Sequence 23 is superseded for release evidence because its execution/publication state is uncertain. Run the RC6 software regression to prove the restarted Runner can consume and publish again. Keep V1 authoritative and Production V2 disabled."
 }
