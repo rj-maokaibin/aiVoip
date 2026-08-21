@@ -87,8 +87,14 @@ class GateEvaluator:
         verdict = _checks_verdict(checks)
         return GateCaseResult(gate_id, verdict, tuple(checks), "Ownership/recovery invariant", str(self.bundle), facts)
 
+    @staticmethod
+    def _error_cause(row: dict[str, Any]) -> str | None:
+        detail = row.get("last_error_detail") or {}
+        return detail.get("cause") if isinstance(detail, dict) else None
+
     def _r3(self, gate_id: str) -> GateCaseResult:
         segments = self._db("capture_segments")
+        events = self._db("capture_events")
         store = self._store()
         store_by_id = {o.get("segment_id"): o for o in store}
         double_loss = []
@@ -116,5 +122,20 @@ class GateEvaluator:
             GateCheck("acked_segments_have_server_copy", len(bad_durable) == 0, [], bad_durable),
             GateCheck("no_unacked_eviction", not any(s.get("state") == "REMOTE_DELETED" and not s.get("acked_at") for s in segments), True, None),
         ]
+
+        if gate_id.startswith("R3-04"):
+            recovered = [s.get("id") for s in segments if s.get("state") == "REMOTE_DELETED" and s.get("last_error_code") == "GATE_INJECTED_AFTER_DURABLE_BEFORE_DB"]
+            checks.append(GateCheck("after_durable_before_db_fault_recovered", len(recovered) > 0, ">0 recovered injected segment", recovered))
+        elif gate_id.startswith("R3-06"):
+            recovered = [s.get("id") for s in segments if s.get("state") == "REMOTE_DELETED" and s.get("last_error_code") == "REMOTE_DELETE_PENDING" and self._error_cause(s) == "MUTATION_RESULT_UNKNOWN"]
+            checks.append(GateCheck("ack_response_lost_recovered_idempotently", len(recovered) > 0, ">0 recovered unknown-result segment", recovered))
+        elif gate_id.startswith("R3-07"):
+            recovered = [s.get("id") for s in segments if s.get("state") == "REMOTE_DELETED" and s.get("last_error_code") == "REMOTE_DELETE_PENDING" and self._error_cause(s) == "DEVICE_MUTATION_FAILED"]
+            checks.append(GateCheck("remote_delete_failure_retried", len(recovered) > 0, ">0 recovered delete-failure segment", recovered))
+        elif gate_id.startswith("R3-08"):
+            repaired_ids = {e.get("entity_id") for e in events if e.get("event_type") == "SEGMENT_SERVER_COPY_REPAIRED"}
+            recovered = [s.get("id") for s in segments if s.get("id") in repaired_ids and s.get("state") == "REMOTE_DELETED"]
+            checks.append(GateCheck("server_copy_loss_repaired_before_dut_delete", len(recovered) > 0, ">0 repaired then deleted segment", recovered))
+
         verdict = _checks_verdict(checks)
         return GateCaseResult(gate_id, verdict, tuple(checks), "Reliable Segment / SFTP / ACK", str(self.bundle), dict(self.manifest.get("facts") or {}))
