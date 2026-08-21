@@ -1,12 +1,29 @@
 {
   "schema_version": "capture-v2-remote-action-v1",
-  "action_id": "RC4-SW-002",
-  "sequence": 7,
-  "created_at": "2026-08-21T12:52:00+00:00",
-  "expires_at": "2026-08-21T14:52:00+00:00",
-  "action_type": "SOFTWARE_REGRESSION",
+  "action_id": "R2-APF1250-ESTABLISH-RC4",
+  "sequence": 8,
+  "created_at": "2026-08-21T12:53:00+00:00",
+  "expires_at": "2026-08-21T14:53:00+00:00",
+  "action_type": "GATE_OWNERSHIP",
   "parameters": {
-    "timeout_seconds": 1800
+    "device_id": "259f16e6-af9e-4dff-969b-2bb5eac43eb2",
+    "model": "APF1250",
+    "host": "47.104.22.0",
+    "port": 65394,
+    "username": "root",
+    "platform_id": "mt7621",
+    "password_env": "DB:G1V030E010214",
+    "profile_root": "../profiles",
+    "profile_id": "voip-standard",
+    "object_root": "/tmp/voip-reproduction-objects",
+    "output_root": "/tmp/capture-v2-gates",
+    "repo_root": "..",
+    "reproduction_session_id": "AUTO_NEW",
+    "worker_id": "r2-apf1250-a",
+    "gate_id": "R2-01-ESTABLISH-RC4",
+    "state_file": "/tmp/capture-v2-control/r2-apf1250-before.json",
+    "hold_seconds": 0,
+    "timeout_seconds": 300
   },
   "safety": {
     "require_clean_git": true,
@@ -17,5 +34,5 @@
     "expected_head": "e87c4c97944590b21c4fc1f932e9f073bb82bea4"
   },
   "requested_by": "ChatGPT-remote-validation-controller",
-  "note": "RC4 regression retry after explicitly ignoring only the validation-host local runner helper. Product-source clean-git remains fail-closed. Validates DB:<SN> credential resolution and AUTO_NEW/FROM_STATE R2 flow before real DUT use."
+  "note": "Clean RC4 APF1250 R2 establish. Creates a fresh validation ReproductionSession, resolves SSH password locally from device_credentials by SN, establishes exactly one Capture Authority/producer, and persists local before-state for takeover verification. No plaintext secret in Git."
 }
