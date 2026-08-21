@@ -1,0 +1,10 @@
+{
+  "sftp_fail_before_get_count": 1,
+  "sftp_fail_after_get_count": 0,
+  "persist_fail_count": 0,
+  "metadata": {
+    "gate": "R3-06",
+    "mode": "ACK_RESPONSE_LOST_ONCE",
+    "purpose": "Execute the fenced immutable-segment DELETE once, then drop the SSH response. Retry must observe the already-completed mutation idempotently and commit REMOTE_DELETED without evidence loss."
+  }
+}
