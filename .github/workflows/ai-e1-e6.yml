@@ -1,39 +1,124 @@
-name: AI E1-E6 + M7 + Evidence Report Gate
+name: PR7 RTP Accounting + Real Offline Golden 001 (Temporary)
 
-# GitHub-hosted CI is intentionally opt-in. Software release acceptance is
-# performed with tools/voip_ai_release_gate.sh on a controlled Linux host.
 on:
-  workflow_dispatch:
+  pull_request:
+    branches:
+      - feat/pr7-diagnostic-contracts
+
+concurrency:
+  group: pr7-rtp-accounting-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
 
 jobs:
-  ai-contracts:
+  targeted-and-real-golden:
     runs-on:
       - self-hosted
       - linux
       - x64
       - voip-controlled-linux
     timeout-minutes: 30
+    env:
+      VOIP_OFFLINE_GOLDEN_001_PCAP: /tmp/tcpdump-2026-08-14.pcap
     steps:
       - uses: actions/checkout@v4
-      - name: Controlled Linux environment
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Stage and verify Real Offline Golden 001 fixture
         run: |
-          uname -a
-          python3 --version
-          docker --version
-          docker info
-          node --version
-          npm --version
-          git rev-parse HEAD
-      - name: Run VOIP AI software release gate
-        run: bash tools/voip_ai_release_gate.sh
+          set -euo pipefail
+          expected_sha="b038aa7c9a0644581f2815f654fcdee4620860796382265b178823fccba2e3f0"
+          source_fixture="$VOIP_OFFLINE_GOLDEN_001_PCAP"
+          fixture="$source_fixture"
+          test -f "$source_fixture" || { echo "OFFLINE_GOLDEN_FIXTURE_NOT_FOUND"; exit 20; }
+          if [ ! -r "$source_fixture" ]; then
+            staged="$RUNNER_TEMP/offline-golden-001.pcap"
+            rm -f "$staged"
+            image="postgres:16"
+            docker image inspect "$image" >/dev/null 2>&1 || docker pull "$image"
+            docker run --rm \
+              -v /tmp:/source:ro \
+              -v "$RUNNER_TEMP":/output \
+              --entrypoint sh "$image" \
+              -c "cp '/source/tcpdump-2026-08-14.pcap' '/output/offline-golden-001.pcap' && chmod 0644 '/output/offline-golden-001.pcap'"
+            fixture="$staged"
+          fi
+          actual_sha="$(sha256sum "$fixture" | awk '{print $1}')"
+          echo "Fixture SHA256: $actual_sha"
+          test "$actual_sha" = "$expected_sha" || { echo "OFFLINE_GOLDEN_FIXTURE_SHA_MISMATCH"; exit 21; }
+          echo "VOIP_OFFLINE_GOLDEN_001_PCAP=$fixture" >> "$GITHUB_ENV"
+
+      - name: Prepare user-space tshark
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/tshark-root"
+          debs="$RUNNER_TEMP/tshark-debs"
+          rm -rf "$root" "$debs"
+          mkdir -p "$root" "$debs"
+          mapfile -t packages < <(
+            apt-cache depends --recurse \
+              --no-recommends --no-suggests --no-conflicts --no-breaks \
+              --no-replaces --no-enhances tshark \
+            | awk '/^[^ <][^:]*$/ {print $1}' | sort -u
+          )
+          missing=()
+          for pkg in "${packages[@]}"; do
+            if ! dpkg-query -W -f='${Status}' "$pkg" 2>/dev/null | grep -q 'install ok installed'; then
+              missing+=("$pkg")
+            fi
+          done
+          cd "$debs"
+          if [ "${#missing[@]}" -gt 0 ]; then apt-get download "${missing[@]}"; fi
+          shopt -s nullglob
+          for deb in ./*.deb; do dpkg-deb -x "$deb" "$root"; done
+          wrapper="$RUNNER_TEMP/tshark-userspace"
+          cat > "$wrapper" <<EOF
+          #!/usr/bin/env bash
+          set -euo pipefail
+          export LD_LIBRARY_PATH="$root/usr/lib/x86_64-linux-gnu:$root/lib/x86_64-linux-gnu:\${LD_LIBRARY_PATH:-}"
+          export WIRESHARK_DATA_DIR="$root/usr/share/wireshark"
+          exec "$root/usr/bin/tshark" "\$@"
+          EOF
+          chmod +x "$wrapper"
+          "$wrapper" -v | head -n 2
+          echo "TSHARK_BINARY=$wrapper" >> "$GITHUB_ENV"
+
+      - name: Prepare isolated Python environment
+        run: |
+          set -euo pipefail
+          python3 -m venv .venv-offline-golden
+          .venv-offline-golden/bin/python -m pip install --upgrade pip
+          .venv-offline-golden/bin/python -m pip install -r backend/requirements.txt
+
+      - name: Run targeted production regressions
+        run: |
+          set -euo pipefail
+          PYTHONPATH=backend .venv-offline-golden/bin/python -m pytest -q \
+            backend/tests/test_rtp_packet_count_semantics_v1.py \
+            backend/tests/test_packet_nested_sdp_ek_regression_v1.py \
+            backend/tests/test_dtmf_subject_call_correlation_v1.py \
+            backend/tests/test_offline_subject_call_selection_v1.py
+
+      - name: Run complete Real Offline Golden 001
+        run: |
+          set -euo pipefail
+          .venv-offline-golden/bin/python tools/offline_analysis_golden_replay.py \
+            --pcap "$VOIP_OFFLINE_GOLDEN_001_PCAP" \
+            --tshark "$TSHARK_BINARY" \
+            --require-fixture \
+            --result validation/offline_analysis_golden_001.json \
+            --artifacts validation/offline_analysis_golden_001_artifacts
+
       - name: Upload validation artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: voip-ai-pr3-pr7-validation
-          path: validation/**
+          name: voip-pr7-rtp-accounting-validation
+          path: |
+            validation/offline_analysis_golden_001.json
+            validation/offline_analysis_golden_001_artifacts/**
           if-no-files-found: warn
           retention-days: 14
