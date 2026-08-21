@@ -13,6 +13,22 @@ from uuid import uuid4
 from app.capture_v2.errors import CaptureV2Error
 
 
+class GateSimulatedWorkerCrash(BaseException):
+    """Gate-only control-flow signal that models a worker process disappearing.
+
+    It intentionally does not inherit from Exception/CaptureV2Error so the
+    ReliableSegmentPump cannot convert the crash boundary into a normal ERROR
+    transition. The Gate harness catches it outside the worker-session context,
+    stops renewing the lease, waits for persisted TTL expiry, and then starts a
+    new controller that must recover the already-durable PERSISTED segment.
+    """
+
+    def __init__(self, *, phase: str, segment_id: str):
+        super().__init__(f"{phase}:{segment_id}")
+        self.phase = str(phase)
+        self.segment_id = str(segment_id)
+
+
 @dataclass
 class GateFaultPlan:
     """Process-local deterministic failpoints consumed only by Gate tooling.
@@ -130,17 +146,9 @@ class FaultInjectingStore:
                 "GATE_INJECTED_AFTER_DURABLE_BEFORE_DB",
                 details={"storage_key": kwargs.get("storage_key")},
             )
-        # PERSISTED_BEFORE_ACK consumes its counter from the Pump phase hook.
+        # PERSISTED_BEFORE_ACK consumes its counter from FaultInjectingPersister.
         # SERVER_COPY_LOSS_BEFORE_DELETE consumes its counter in verify().
         return persisted
-
-    def gate_after_persisted_before_ack(self, segment_id: str) -> None:
-        if self.plan.mode == "PERSISTED_BEFORE_ACK" and self.plan.persist_fail_count > 0:
-            self.plan.persist_fail_count -= 1
-            raise CaptureV2Error(
-                "GATE_INJECTED_PERSISTED_BEFORE_ACK",
-                details={"segment_id": segment_id},
-            )
 
     def verify(self, *, storage_key: str, size: int, sha256: str) -> bool:
         if self.plan.mode == "SERVER_COPY_LOSS_BEFORE_DELETE" and self.plan.persist_fail_count > 0:
@@ -169,6 +177,33 @@ class FaultInjectingStore:
                 self.plan.persist_fail_count -= 1
                 return False
         return self._store.verify(storage_key=storage_key, size=size, sha256=sha256)
+
+
+class FaultInjectingPersister:
+    """Gate-only wrapper for a crash after DB PERSISTED and before ACK.
+
+    The wrapped SegmentPersister first performs the real durable-store write and
+    commits PERSISTED to the real DB. Only after that commit returns do we raise a
+    BaseException control-flow signal. This faithfully preserves the crash
+    boundary required by R3-05 without changing production composition.
+    """
+
+    def __init__(self, persister, plan: GateFaultPlan):
+        self._persister = persister
+        self.plan = plan
+
+    def __getattr__(self, name: str):
+        return getattr(self._persister, name)
+
+    def persist(self, segment_id: str, local_path: Path) -> str:
+        key = self._persister.persist(segment_id, local_path)
+        if self.plan.mode == "PERSISTED_BEFORE_ACK" and self.plan.persist_fail_count > 0:
+            self.plan.persist_fail_count -= 1
+            raise GateSimulatedWorkerCrash(
+                phase="PERSISTED_BEFORE_ACK",
+                segment_id=segment_id,
+            )
+        return key
 
 
 class GateFaultInjector:
