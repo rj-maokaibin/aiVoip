@@ -91,6 +91,7 @@
 
 `192.168.3.200:11446 -> 192.168.150.4:10000`
 
+- SSRC：602295830
 - PT=0 / PCMU
 - observed packets：2427
 - unique/effective packets：2425
@@ -100,6 +101,26 @@
 - 最大到包间隔约 `36.10 ms`
 
 因此此前人工记录的“2425 packets”指 **2425 个唯一/有效 RTP Sequence 包**，不是 2427 个原始观察 Datagram。`2427 = 2425 unique + 2 duplicate`；这 2 个 duplicate 是独立 RTP 证据，但既不能当作额外有效媒体包，也不能当作 Packet Loss。
+
+### 反向流 Duplicate #1
+
+- RTP Seq：14555
+- 首次 Frame：20413，时间 `1786691020.547524`
+- 重复 Frame：20414，时间 `1786691020.547664`
+- 两包 RTP timestamp 均为 `492033328`
+- 两包 PT 均为 0
+- 重复到达间隔约 `0.139952 ms`
+
+### 反向流 Duplicate #2
+
+- RTP Seq：14556
+- 首次 Frame：20416，时间 `1786691020.565765`
+- 重复 Frame：20417，时间 `1786691020.565925`
+- 两包 RTP timestamp 均为 `492033488`
+- 两包 PT 均为 0
+- 重复到达间隔约 `0.159979 ms`
+
+这两组都满足“相同 Sequence + 相同 RTP timestamp + 极短时间内再次出现”，因此 Ground Truth 明确为重复 RTP Datagram。它们发生在 DUT-facing Call 尾部，不改变该方向 `lost_packets=0` 的事实。
 
 PBX 还把 DUT 上行媒体转发至 `192.168.150.8`；该 mirrored stream 属于 PBX 内部腿，不能让主 Call 的 HIGH_DELTA 语义变成“Packet Loss”，也不能因为同一音频内容被转发就抢占 subject Call identity。
 
