@@ -66,8 +66,39 @@ def validate_extended_offline_truth(bundle: dict, manifest: dict) -> list[Golden
     expected_source_ip = pcm_exp.get("source_device_ip")
     if expected_source_ip:add("pcm.source_device_ip", source_ips == {str(expected_source_ip)}, sorted(source_ips), [str(expected_source_ip)], "PCM_PROVENANCE")
 
-    rtp_exp = (expected.get("rtp") or {}).get("primary_uplink") or {}
-    primary = next((s for s in (bundle.get("packet") or {}).get("rtp_streams", []) or [] if s.get("src_ip") == rtp_exp.get("src_ip") and int(s.get("src_port") or 0) == int(rtp_exp.get("src_port") or 0) and s.get("dst_ip") == rtp_exp.get("dst_ip") and int(s.get("dst_port") or 0) == int(rtp_exp.get("dst_port") or 0)), None)
+    rtp_all_exp = expected.get("rtp") or {};rtp_streams = (bundle.get("packet") or {}).get("rtp_streams", []) or []
+
+    def find_rtp(exp: dict) -> dict | None:
+        return next((s for s in rtp_streams if s.get("src_ip") == exp.get("src_ip") and int(s.get("src_port") or 0) == int(exp.get("src_port") or 0) and s.get("dst_ip") == exp.get("dst_ip") and int(s.get("dst_port") or 0) == int(exp.get("dst_port") or 0)), None)
+
+    for label in ("primary_uplink", "primary_downlink"):
+        flow_exp = rtp_all_exp.get(label) or {}
+        if not flow_exp:continue
+        stream = find_rtp(flow_exp)
+        add(f"rtp.{label}.exists", stream is not None, bool(stream), True, "RTP_ACCOUNTING")
+        if not stream:continue
+        if flow_exp.get("codec") is not None:add(f"rtp.{label}.codec", str(stream.get("codec") or "").upper() == str(flow_exp.get("codec") or "").upper(), stream.get("codec"), flow_exp.get("codec"), "RTP_ACCOUNTING")
+        field_map = {
+            "observed_packet_count": "packet_count",
+            "unique_packet_count": "unique_packet_count",
+            "duplicate_packets": "duplicate_packets",
+            "expected_packets": "expected_packets",
+            "lost_packets": "lost_packets",
+        }
+        for expected_field, actual_field in field_map.items():
+            if expected_field not in flow_exp:continue
+            actual_value = int(stream.get(actual_field) or 0);wanted_value = int(flow_exp.get(expected_field) or 0)
+            add(f"rtp.{label}.{expected_field}", actual_value == wanted_value, actual_value, wanted_value, "RTP_ACCOUNTING")
+        observed = int(stream.get("packet_count") or 0);unique = int(stream.get("unique_packet_count") or 0);duplicates = int(stream.get("duplicate_packets") or 0)
+        expected_packets = int(stream.get("expected_packets") or 0);lost = int(stream.get("lost_packets") or 0)
+        add(f"rtp.{label}.accounting.observed_equals_unique_plus_duplicates", observed == unique + duplicates, {"observed":observed,"unique":unique,"duplicates":duplicates}, "observed = unique + duplicates", "RTP_ACCOUNTING")
+        add(f"rtp.{label}.accounting.expected_equals_unique_plus_loss", expected_packets == unique + lost, {"expected":expected_packets,"unique":unique,"lost":lost}, "expected = unique + lost", "RTP_ACCOUNTING")
+        max_delta_range = flow_exp.get("max_arrival_delta_ms") or {}
+        if max_delta_range:
+            actual_delta = float(stream.get("max_delta_ms") or 0.0)
+            add(f"rtp.{label}.max_arrival_delta_ms", float(max_delta_range.get("min") or 0.0) <= actual_delta <= float(max_delta_range.get("max") or 0.0), actual_delta, max_delta_range, "RTP_ACCOUNTING")
+
+    rtp_exp = rtp_all_exp.get("primary_uplink") or {};primary = find_rtp(rtp_exp) if rtp_exp else None
     actual_high_delta = [e for e in (primary or {}).get("events", []) or [] if e.get("type") == "HIGH_DELTA"]
     expected_high_delta = list(rtp_exp.get("high_delta_events") or [])
     actual_high_delta.sort(key=lambda e: float((e.get("details") or {}).get("delta_ms") or 0.0));expected_high_delta.sort(key=lambda e: float((e.get("delta_ms") or {}).get("min") or 0.0))
@@ -99,6 +130,18 @@ def validate_extended_offline_truth(bundle: dict, manifest: dict) -> list[Golden
 
     report = _project_real_analyzer_artifacts_to_cards(bundle);report_exp = expected.get("report") or {};findings = report.get("findings", []) or [];finding_types = [str(f.get("type")) for f in findings]
     for required in report_exp.get("required_finding_types", []) or []:add(f"report.required_finding.{required}", required in finding_types, finding_types, f"must contain {required}", "REPORT")
+
+    packet_summary = report.get("packet_summary") or {};summary_rows = packet_summary.get("streams") or []
+    for label in ("primary_uplink", "primary_downlink"):
+        flow_exp = rtp_all_exp.get(label) or {}
+        if not flow_exp:continue
+        row = next((s for s in summary_rows if str(s.get("source")) == f"{flow_exp.get('src_ip')}:{flow_exp.get('src_port')}" and str(s.get("destination")) == f"{flow_exp.get('dst_ip')}:{flow_exp.get('dst_port')}"), None)
+        add(f"report.rtp.{label}.exists", row is not None, bool(row), True, "REPORT_SEMANTIC")
+        if not row:continue
+        add(f"report.rtp.{label}.packet_count_semantics", row.get("packet_count_semantics") == "UNIQUE_EFFECTIVE_RTP_PACKETS", row.get("packet_count_semantics"), "UNIQUE_EFFECTIVE_RTP_PACKETS", "REPORT_SEMANTIC")
+        if "unique_packet_count" in flow_exp:add(f"report.rtp.{label}.effective_packet_count", int(row.get("packet_count") or 0) == int(flow_exp.get("unique_packet_count") or 0), row.get("packet_count"), flow_exp.get("unique_packet_count"), "REPORT_SEMANTIC")
+        if "observed_packet_count" in flow_exp:add(f"report.rtp.{label}.observed_packet_count", int(row.get("observed_packet_count") or 0) == int(flow_exp.get("observed_packet_count") or 0), row.get("observed_packet_count"), flow_exp.get("observed_packet_count"), "REPORT_SEMANTIC")
+        if "duplicate_packets" in flow_exp:add(f"report.rtp.{label}.duplicate_packets", int(row.get("duplicate_packets") or 0) == int(flow_exp.get("duplicate_packets") or 0), row.get("duplicate_packets"), flow_exp.get("duplicate_packets"), "REPORT_SEMANTIC")
 
     high_delta_report_exp = report_exp.get("high_delta_primary_stream_finding") or {}
     if high_delta_report_exp:
