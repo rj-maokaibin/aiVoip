@@ -1,0 +1,44 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "RC4-SW-002",
+    "sequence": 7,
+    "created_at": "2026-08-21T12:52:00+00:00",
+    "expires_at": "2026-08-21T14:52:00+00:00",
+    "action_type": "SOFTWARE_REGRESSION",
+    "parameters": {
+      "timeout_seconds": 1800
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "e87c4c97944590b21c4fc1f932e9f073bb82bea4"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "RC4 regression retry after explicitly ignoring only the validation-host local runner helper. Product-source clean-git remains fail-closed. Validates DB:<SN> credential resolution and AUTO_NEW/FROM_STATE R2 flow before real DUT use."
+  },
+  "action_sha256": "f64bf9945eec4bd13a864e9d22f7e607aa0e454f931c3943ea3f6fbcb1de66bc",
+  "runner_id": "srv:2933695",
+  "state": "SUCCEEDED",
+  "return_code": 0,
+  "verdict": null,
+  "error": null,
+  "finished_at": "2026-08-21T12:52:25.274257+00:00",
+  "stdout_sha256": "7483f83f200e2f2ee5334519ec355d235d0dd924d03c0f3f06d76274a29662ec",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "local_stdout": ".capture-v2-control/logs/RC4-SW-002/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/RC4-SW-002/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "a8140a03dfd62148892832b6fe44887e4446a9d5",
+      "expected_product_head": "e87c4c97944590b21c4fc1f932e9f073bb82bea4"
+    },
+    "parsed_output": null
+  }
+}

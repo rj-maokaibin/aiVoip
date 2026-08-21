@@ -1,19 +1,27 @@
 {
   "schema_version": "capture-v2-remote-status-v1",
-  "action_id": "RC4-SW-001",
-  "sequence": 6,
+  "action_id": "RC4-SW-002",
+  "sequence": 7,
   "action_type": "SOFTWARE_REGRESSION",
-  "state": "REJECTED",
+  "state": "SUCCEEDED",
   "runner_id": "srv:2933695",
-  "action_sha256": "e7c6bb699ef13a064e978eb15ad63e5d2c2ad5ea9188147c0e55384118d3b370",
-  "updated_at": "2026-08-21T12:51:03.902735+00:00",
+  "action_sha256": "f64bf9945eec4bd13a864e9d22f7e607aa0e454f931c3943ea3f6fbcb1de66bc",
+  "updated_at": "2026-08-21T12:52:25.274257+00:00",
   "started_at": null,
-  "finished_at": "2026-08-21T12:51:03.902735+00:00",
-  "return_code": null,
+  "finished_at": "2026-08-21T12:52:25.274257+00:00",
+  "return_code": 0,
   "verdict": null,
-  "result_path": "validation/control/results/RC4-SW-001/result.json",
-  "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "result_path": "validation/control/results/RC4-SW-002/result.json",
+  "stdout_sha256": "7483f83f200e2f2ee5334519ec355d235d0dd924d03c0f3f06d76274a29662ec",
   "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-  "error": "SAFETY_GIT_DIRTY:?? validation/capture_v2/run_control_runner.sh",
-  "detail": {}
+  "error": null,
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "a8140a03dfd62148892832b6fe44887e4446a9d5",
+      "expected_product_head": "e87c4c97944590b21c4fc1f932e9f073bb82bea4"
+    },
+    "parsed_output": null
+  }
 }
