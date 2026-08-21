@@ -4,35 +4,59 @@
 
 Base commit: `a805e2dfefdc8ca62fae90bc403166bfeea61827`.
 
-This branch carries the real-gate tooling source, tests, Runbook and a bootstrap helper for the previously validated A-F Software Baseline.
+This branch carries:
 
-Baseline artifact expected by `bootstrap_from_baseline.sh`:
+- Capture V2 real-gate tooling;
+- SCP adaptation for Dropbear DUTs without SFTP subsystem;
+- validation-time fixes committed to the branch where available;
+- Git-mediated Remote Validation Control Loop under `backend/app/capture_v2/control/`;
+- real-gate evidence summaries and bootstrap helper for the historical A-F Software Baseline.
 
-- file: `Capture_Engine_V2.1.1_A-F_Software_Baseline.zip`
-- SHA256: `5728424bbeebb6a666935c467b3ed556fdb0833282121d159a5072b9737c3b01`
-- software regression before Gate tooling: 97 passed
-- Gate tooling delta: 9 passed
-- combined Capture V2 regression: 106 passed
+## Current release status
 
-## Materialize the A-F baseline
+The historical real-device run executed substantial R1-R7 validation, but final evidence audit does **not** accept the earlier blanket `R1-R7 all PASS` statement as release-grade proof.
+
+Current audited state:
+
+- R1 PostgreSQL: `PASS_WITH_PROVENANCE_GAP`
+- R2 Ownership/Recovery: `PASS_WITH_PROVENANCE_GAP`
+- R3 Segment/Transfer/ACK: `PARTIAL`
+- R4 Readiness/FXS: `PARTIAL`
+- R5 Coverage: `PARTIAL`
+- R6 Evidence-first Report E2E: `NOT_PASS_FOR_PRODUCT_E2E`
+- R7 Shadow/Long-run/Rollback: `PARTIAL`
+- Production V2: **OFF / RELEASE BLOCKED**
+
+The key provenance issue is that historical primary manifests were captured from a dirty worktree. Release-grade revalidation must run from one clean immutable release-candidate commit.
+
+## Remote Validation Control Loop
+
+Start the local runner only after materializing a clean RC commit:
 
 ```bash
-bash validation/capture_v2/bootstrap_from_baseline.sh /path/to/Capture_Engine_V2.1.1_A-F_Software_Baseline.zip
+export CAPTURE_ENGINE_VERSION=V1
+export CAPTURE_V2_PRODUCTION_ENABLED=false
+export CAPTURE_GATE_SSH_PASSWORD='...'
+
 cd backend
-PYTHONPATH=. pytest -q tests/test_capture_v2_*.py
+PYTHONPATH=. python -m app.capture_v2.control_cli run \
+  --repo-root .. \
+  --branch feat/capture-v2.1.1-real-gates \
+  --git-sync \
+  --poll-seconds 10
 ```
 
-Then inspect the CLI:
+The remote controller writes `validation/control/next_action.json`; the runner executes only registered allowlisted Gate operations and publishes structured status/results back through Git.
 
-```bash
-python -m app.capture_v2.gate_cli --help
-```
+See:
 
-See `docs/CAPTURE_V2_GATE_TOOLING_RUNBOOK.md`.
+- `validation/control/README.md`
+- `docs/03_Implementation_Trace/CAPTURE_V2_REMOTE_VALIDATION_CONTROL_LOOP.md`
 
 ## Safety
 
-- Keep `CAPTURE_ENGINE_VERSION=V1`.
-- Keep `CAPTURE_V2_PRODUCTION_ENABLED=false`.
-- The branch must not be merged as-is.
-- Real R1-R7 release gates remain mandatory before Production V2 can be enabled.
+- keep `CAPTURE_ENGINE_VERSION=V1`;
+- keep `CAPTURE_V2_PRODUCTION_ENABLED=false`;
+- no arbitrary shell through control JSON;
+- clean Git + immutable `expected_head` required;
+- PR #27 remains Draft and must not be merged for Production cutover.
