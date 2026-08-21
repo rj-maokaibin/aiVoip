@@ -174,6 +174,26 @@ class PacketIntelligenceEngine:
             return True
         return float(se) >= float(start) - tolerance_seconds and float(ss) <= float(end) + tolerance_seconds
 
+    @staticmethod
+    def _direction_packet_accounting(scoped: list[dict], src: tuple[str, int], dst: tuple[str, int]) -> dict[str, int]:
+        """Return RTP packet accounting for one negotiated media direction.
+
+        ``packet_count`` is the number of observed RTP datagrams and therefore includes
+        duplicates. Media-health decisions must be based on unique/effective sequence
+        packets so retransmitted/duplicated datagrams cannot manufacture media presence
+        or inflate the meaningful-media threshold. Raw observations and duplicates are
+        preserved separately for evidence/reporting.
+        """
+        matched = [
+            stream for stream in scoped
+            if (stream.get("src_ip"), stream.get("src_port")) == src
+            and (stream.get("dst_ip"), stream.get("dst_port")) == dst
+        ]
+        observed = sum(int(stream.get("packet_count") or 0) for stream in matched)
+        unique = sum(int(stream.get("unique_packet_count", stream.get("packet_count", 0)) or 0) for stream in matched)
+        duplicates = sum(int(stream.get("duplicate_packets") or 0) for stream in matched)
+        return {"observed": observed, "unique": unique, "duplicates": duplicates}
+
     def _attach_media_direction_health(self, calls: list[dict], streams: list[dict]) -> None:
         """Derive call-scoped RTP direction completeness from negotiated audio endpoints.
 
@@ -181,6 +201,10 @@ class PacketIntelligenceEngine:
         when SIP INVITE/2xx/ACK capture completeness is good, both audio endpoints are
         known, SDP expects bidirectional media, and one direction has a meaningful RTP
         stream while the reverse direction is entirely absent.
+
+        Directional media presence is classified with unique RTP sequence packets, not
+        raw observed datagrams. Duplicate packets remain evidence but do not count as
+        additional effective media packets.
         """
         min_packets = int(self.rtp_config["one_way_min_packets"])
         for call in calls:
@@ -189,8 +213,13 @@ class PacketIntelligenceEngine:
                 "expected_bidirectional": False,
                 "endpoint_a": None,
                 "endpoint_b": None,
+                "packet_count_semantics": "UNIQUE_EFFECTIVE_RTP_PACKETS",
                 "a_to_b_packets": 0,
                 "b_to_a_packets": 0,
+                "a_to_b_observed_packets": 0,
+                "b_to_a_observed_packets": 0,
+                "a_to_b_duplicate_packets": 0,
+                "b_to_a_duplicate_packets": 0,
                 "status": "UNKNOWN",
                 "reason": None,
             }
@@ -219,14 +248,24 @@ class PacketIntelligenceEngine:
             health["endpoint_b"] = {"ip": b[0], "port": b[1]}
             matched_ids = set(call.get("rtp_stream_ids") or [])
             scoped = [s for s in streams if s.get("stream_id") in matched_ids]
-            a_to_b = sum(int(s.get("packet_count", 0)) for s in scoped if (s.get("src_ip"), s.get("src_port")) == a and (s.get("dst_ip"), s.get("dst_port")) == b)
-            b_to_a = sum(int(s.get("packet_count", 0)) for s in scoped if (s.get("src_ip"), s.get("src_port")) == b and (s.get("dst_ip"), s.get("dst_port")) == a)
-            health.update({"eligible": True, "a_to_b_packets": a_to_b, "b_to_a_packets": b_to_a})
-            if a_to_b >= min_packets and b_to_a >= min_packets:
+            a_to_b = self._direction_packet_accounting(scoped, a, b)
+            b_to_a = self._direction_packet_accounting(scoped, b, a)
+            a_to_b_effective = a_to_b["unique"]
+            b_to_a_effective = b_to_a["unique"]
+            health.update({
+                "eligible": True,
+                "a_to_b_packets": a_to_b_effective,
+                "b_to_a_packets": b_to_a_effective,
+                "a_to_b_observed_packets": a_to_b["observed"],
+                "b_to_a_observed_packets": b_to_a["observed"],
+                "a_to_b_duplicate_packets": a_to_b["duplicates"],
+                "b_to_a_duplicate_packets": b_to_a["duplicates"],
+            })
+            if a_to_b_effective >= min_packets and b_to_a_effective >= min_packets:
                 health["status"] = "BIDIRECTIONAL"
-            elif a_to_b >= min_packets and b_to_a == 0:
+            elif a_to_b_effective >= min_packets and b_to_a_effective == 0:
                 health["status"] = "ONE_WAY_A_TO_B"
-            elif b_to_a >= min_packets and a_to_b == 0:
+            elif b_to_a_effective >= min_packets and a_to_b_effective == 0:
                 health["status"] = "ONE_WAY_B_TO_A"
             else:
                 health["status"] = "INSUFFICIENT_MEDIA"
@@ -273,9 +312,14 @@ class PacketIntelligenceEngine:
                         "status": media_health.get("status"),
                         "endpoint_a": media_health.get("endpoint_a"),
                         "endpoint_b": media_health.get("endpoint_b"),
+                        "packet_count_semantics": media_health.get("packet_count_semantics"),
                         "a_to_b_packets": media_health.get("a_to_b_packets"),
                         "b_to_a_packets": media_health.get("b_to_a_packets"),
-                        "note": "SDP期望双向媒体且SIP抓包完整；当前仅检测到一个方向的持续RTP。该事实确认单向RTP现象，但不能单独确认网络、DSP、NAT/PBX中的具体根因。",
+                        "a_to_b_observed_packets": media_health.get("a_to_b_observed_packets"),
+                        "b_to_a_observed_packets": media_health.get("b_to_a_observed_packets"),
+                        "a_to_b_duplicate_packets": media_health.get("a_to_b_duplicate_packets"),
+                        "b_to_a_duplicate_packets": media_health.get("b_to_a_duplicate_packets"),
+                        "note": "SDP期望双向媒体且SIP抓包完整；当前仅检测到一个方向的持续RTP。方向有效包数按唯一 RTP Sequence 计数，重复包只作为独立证据保留，不用于制造媒体存在。该事实确认单向RTP现象，但不能单独确认网络、DSP、NAT/PBX中的具体根因。",
                     },
                 })
             if call.get("sdp", {}).get("codec_mismatch"):
