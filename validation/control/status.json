@@ -1,93 +1,27 @@
 {
   "schema_version": "capture-v2-remote-status-v1",
-  "action_id": "R2-APF1250-ESTABLISH-RC4",
-  "sequence": 8,
-  "action_type": "GATE_OWNERSHIP",
-  "state": "SUCCEEDED",
+  "action_id": "R2-APF1250-ADOPT-RC4",
+  "sequence": 9,
+  "action_type": "GATE_OWNERSHIP_ADOPT",
+  "state": "FAILED",
   "runner_id": "srv:2933695",
-  "action_sha256": "0f9ccc189293aa9bb616bfca2c442608e3fab08bbd0e551beb05ee5542a67597",
-  "updated_at": "2026-08-21T12:54:03.151789+00:00",
+  "action_sha256": "d4d31b47bbaed09b2e34829c3c54ca138f10b351e8088b1889280a961dd46297",
+  "updated_at": "2026-08-21T12:55:04.555075+00:00",
   "started_at": null,
-  "finished_at": "2026-08-21T12:54:03.151789+00:00",
-  "return_code": 0,
-  "verdict": "PASS",
-  "result_path": "validation/control/results/R2-APF1250-ESTABLISH-RC4/result.json",
-  "stdout_sha256": "86d064e1c73da49dcb69b45825141327274bd006ce49f89e576cb03f712dee74",
-  "stderr_sha256": "b8258e86248ce6f15dfea1a12afcd2ad3fde62ba6d3cd24536ffc8cb3bb61c48",
+  "finished_at": "2026-08-21T12:55:04.555075+00:00",
+  "return_code": 1,
+  "verdict": null,
+  "result_path": "validation/control/results/R2-APF1250-ADOPT-RC4/result.json",
+  "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "stderr_sha256": "ccbb2aacee25325f87d3540a3e1050e8aa806d3d4dd5803869305668f25919d8",
   "error": null,
   "detail": {
     "safety": {
       "capture_engine_version": "V1",
       "capture_v2_production_enabled": "false",
-      "git_head": "25169fae5a7134bc10f18ba0f2d6c862a6122561",
+      "git_head": "9f99a24521ff35d8d306248becc12a876256b2e8",
       "expected_product_head": "e87c4c97944590b21c4fc1f932e9f073bb82bea4"
     },
-    "parsed_output": {
-      "result": {
-        "checks": [
-          {
-            "details": {},
-            "expected": 1,
-            "name": "exactly_one_owned_producer",
-            "observed": 1,
-            "passed": true,
-            "verdict": "PASS"
-          },
-          {
-            "details": {},
-            "expected": 1,
-            "name": "one_running_epoch",
-            "observed": 1,
-            "passed": true,
-            "verdict": "PASS"
-          },
-          {
-            "details": {},
-            "expected": "one ACTIVE lease",
-            "name": "lease_active",
-            "observed": [
-              {
-                "lease_epoch": 27,
-                "state": "ACTIVE"
-              }
-            ],
-            "passed": true,
-            "verdict": "PASS"
-          },
-          {
-            "details": {},
-            "expected": 0,
-            "name": "no_unrecovered_gap",
-            "observed": 0,
-            "passed": true,
-            "verdict": "PASS"
-          }
-        ],
-        "created_at": "2026-08-21T12:54:02.827935+00:00",
-        "evidence_bundle": "/tmp/capture-v2-gates/20260821T125359Z_R2-01-ESTABLISH-RC4_259f16e6-af9e-4dff-969b-2bb5eac43eb2",
-        "facts": {
-          "capture_epoch_id": "cd7eae82-0f4c-4b57-9b42-5faa04ae7034",
-          "capture_epoch_token": "CAP_b2da931b_0001_1af4d027",
-          "capture_session_id": "b2da931b-c8f0-401c-a2c9-29690e7446ac",
-          "lease_epoch": 27,
-          "producer_pid": 5148,
-          "producer_starttime": 9647000,
-          "recovery_status": "REPAIRED"
-        },
-        "gate_id": "R2-01-ESTABLISH-RC4",
-        "summary": "Ownership/recovery invariant",
-        "verdict": "PASS"
-      },
-      "state": {
-        "capture_epoch_id": "cd7eae82-0f4c-4b57-9b42-5faa04ae7034",
-        "capture_epoch_token": "CAP_b2da931b_0001_1af4d027",
-        "capture_session_id": "b2da931b-c8f0-401c-a2c9-29690e7446ac",
-        "lease_epoch": 27,
-        "producer_pid": 5148,
-        "producer_starttime": 9647000,
-        "recovery_status": "REPAIRED",
-        "reproduction_session_id": "793742e4-0ba4-42ae-b2c4-388b1c0bcdd9"
-      }
-    }
+    "parsed_output": null
   }
 }
