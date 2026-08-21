@@ -1,31 +1,12 @@
 {
   "schema_version": "capture-v2-remote-action-v1",
-  "action_id": "R3-05-APF3260M-PERSISTED-BEFORE-ACK-RC8",
-  "sequence": 44,
-  "created_at": "2026-08-21T16:18:00+00:00",
-  "expires_at": "2026-08-21T18:18:00+00:00",
-  "action_type": "GATE_SEGMENT",
+  "action_id": "RC9-SW-001",
+  "sequence": 45,
+  "created_at": "2026-08-21T16:29:00+00:00",
+  "expires_at": "2026-08-21T18:29:00+00:00",
+  "action_type": "SOFTWARE_REGRESSION",
   "parameters": {
-    "device_id": "c132f336-df1b-4285-b175-01d848f23b5d",
-    "model": "APF3260-M",
-    "host": "10.48.8.74",
-    "port": 10002,
-    "username": "root",
-    "platform_id": "mt7981",
-    "password_env": "DB:G1U060H000384",
-    "profile_root": "../profiles",
-    "profile_id": "voip-standard",
-    "object_root": "/tmp/voip-reproduction-objects",
-    "output_root": "/tmp/capture-v2-gates",
-    "repo_root": "..",
-    "reproduction_session_id": "03ff8a5b-23be-4196-a53f-48fb4557fc84",
-    "worker_id": "r3-05-apf3260m-rc8",
-    "gate_id": "R3-05-APF3260M-RC8",
-    "duration": 30,
-    "interval": 0.5,
-    "transport": "scp",
-    "fault_plan": "../validation/control/fault_plans/r3-persisted-before-ack-once.json",
-    "timeout_seconds": 600
+    "timeout_seconds": 1200
   },
   "safety": {
     "require_clean_git": true,
@@ -33,8 +14,8 @@
     "require_v2_disabled": true,
     "allow_worker_kill": false,
     "allow_server_quarantine": false,
-    "expected_head": "c7d8e2412615c0904c799c2f698241d7990a7709"
+    "expected_head": "958dc06d2bb1f29df44a4166f463739b6534f68a"
   },
   "requested_by": "ChatGPT-remote-validation-controller",
-  "note": "R3-05 RC8 APF3260-M. Simulate worker disappearance only after DB PERSISTED commit and before ACK; leave tcpdump alive, wait lease TTL, adopt same producer/capture epoch with a higher lease epoch, then finish the exact immutable segment."
+  "note": "RC9 software regression for automated R2 legacy/multiple/fencing/reboot, R3 spool/reboot, strict evaluators, and control Git timeout/divergence recovery. Production V2 remains disabled."
 }
