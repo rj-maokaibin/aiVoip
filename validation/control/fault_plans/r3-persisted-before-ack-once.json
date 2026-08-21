@@ -1,0 +1,10 @@
+{
+  "sftp_fail_before_get_count": 0,
+  "sftp_fail_after_get_count": 0,
+  "persist_fail_count": 1,
+  "metadata": {
+    "gate": "R3-05",
+    "mode": "PERSISTED_BEFORE_ACK",
+    "purpose": "After the real SegmentPersister commits PERSISTED, simulate worker disappearance before ACK. Stop renewal, wait lease expiry, then require a new worker to adopt the same producer/capture epoch and finish the same immutable segment without evidence loss."
+  }
+}
