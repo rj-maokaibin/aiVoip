@@ -117,7 +117,7 @@ class FaultInjectingStore:
 
     def persist(self, **kwargs):
         mode = self.plan.mode
-        if mode not in {"AFTER_DURABLE_BEFORE_DB", "SERVER_COPY_LOSS_BEFORE_DELETE"}:
+        if mode not in {"AFTER_DURABLE_BEFORE_DB", "PERSISTED_BEFORE_ACK", "SERVER_COPY_LOSS_BEFORE_DELETE"}:
             if self.plan.persist_fail_count > 0:
                 self.plan.persist_fail_count -= 1
                 raise CaptureV2Error("GATE_INJECTED_SERVER_STORE_FAILURE")
@@ -130,8 +130,17 @@ class FaultInjectingStore:
                 "GATE_INJECTED_AFTER_DURABLE_BEFORE_DB",
                 details={"storage_key": kwargs.get("storage_key")},
             )
-        # SERVER_COPY_LOSS_BEFORE_DELETE consumes its counter in verify(), not here.
+        # PERSISTED_BEFORE_ACK consumes its counter from the Pump phase hook.
+        # SERVER_COPY_LOSS_BEFORE_DELETE consumes its counter in verify().
         return persisted
+
+    def gate_after_persisted_before_ack(self, segment_id: str) -> None:
+        if self.plan.mode == "PERSISTED_BEFORE_ACK" and self.plan.persist_fail_count > 0:
+            self.plan.persist_fail_count -= 1
+            raise CaptureV2Error(
+                "GATE_INJECTED_PERSISTED_BEFORE_ACK",
+                details={"segment_id": segment_id},
+            )
 
     def verify(self, *, storage_key: str, size: int, sha256: str) -> bool:
         if self.plan.mode == "SERVER_COPY_LOSS_BEFORE_DELETE" and self.plan.persist_fail_count > 0:
