@@ -7,6 +7,7 @@ import subprocess
 import sys
 import time
 from dataclasses import asdict
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -15,7 +16,13 @@ from app.capture_v2.c_bridge import CaptureV2CBridge
 from app.capture_v2.errors import CaptureV2Error
 from app.capture_v2.gate.evidence import GateEvidenceCollector
 from app.capture_v2.gate.evaluator import GateEvaluator
-from app.capture_v2.gate.faults import FaultInjectingAdapter, FaultInjectingStore, GateFaultPlan
+from app.capture_v2.gate.faults import (
+    FaultInjectingAdapter,
+    FaultInjectingPersister,
+    FaultInjectingStore,
+    GateFaultPlan,
+    GateSimulatedWorkerCrash,
+)
 from app.capture_v2.gate.models import GateCaseResult, GateRunPaths
 from app.capture_v2.lease.manager import CaptureLeaseManager
 
@@ -127,11 +134,69 @@ class GateRunner:
             session.components["persister"].store = wrapped
             session.components["reconciler"].store = wrapped
             session.components["reconciler"].persister.store = wrapped
-        async with session:
-            cycles = await session.drain_for(
-                duration_seconds=duration_seconds,
-                cycle_interval_seconds=cycle_interval_seconds,
+
+        cycles: list[Any] = []
+        crash_facts: dict[str, Any] = {}
+        if plan.mode == "PERSISTED_BEFORE_ACK" and plan.persist_fail_count:
+            # The Gate persister raises a BaseException only after the real
+            # SegmentPersister has committed PERSISTED. Pump cannot convert that
+            # crash into ERROR. Exiting the session stops only lease renewal and
+            # deliberately leaves the producer alive, matching a real worker crash.
+            wrapped_persister = FaultInjectingPersister(session.components["persister"], plan)
+            session.components["persister"] = wrapped_persister
+            session.components["pump"].persister = wrapped_persister
+            before_pid = session.bootstrap.ownership.producer.pid
+            before_starttime = session.bootstrap.ownership.producer.process_starttime
+            before_epoch = session.bootstrap.ownership.capture_epoch_id
+            before_lease = session.token.lease_epoch
+            try:
+                async with session:
+                    cycles.extend(await session.drain_for(
+                        duration_seconds=duration_seconds,
+                        cycle_interval_seconds=cycle_interval_seconds,
+                    ))
+            except GateSimulatedWorkerCrash as exc:
+                crash_facts = {
+                    "fault_mode": exc.phase,
+                    "fault_segment_id": exc.segment_id,
+                    "before_pid": before_pid,
+                    "before_starttime": before_starttime,
+                    "before_capture_epoch_id": before_epoch,
+                    "before_lease_epoch": before_lease,
+                }
+            else:
+                raise CaptureV2Error("GATE_PERSISTED_BEFORE_ACK_FAULT_NOT_TRIGGERED")
+
+            expires = session.token.expires_at
+            if expires.tzinfo is None:
+                expires = expires.replace(tzinfo=timezone.utc)
+            wait_seconds = max(0.0, (expires - datetime.now(timezone.utc)).total_seconds()) + 0.5
+            await asyncio.sleep(wait_seconds)
+
+            recovered = await bridge.establish(
+                reproduction_session_id=reproduction_session_id,
+                device=device,
+                worker_id=f"{worker_id}-recovery",
             )
+            async with recovered:
+                cycles.extend(await recovered.drain_for(
+                    duration_seconds=max(10.0, min(duration_seconds, 30.0)),
+                    cycle_interval_seconds=cycle_interval_seconds,
+                ))
+            crash_facts.update({
+                "after_pid": recovered.bootstrap.ownership.producer.pid,
+                "after_starttime": recovered.bootstrap.ownership.producer.process_starttime,
+                "after_capture_epoch_id": recovered.bootstrap.ownership.capture_epoch_id,
+                "after_lease_epoch": recovered.token.lease_epoch,
+            })
+            session = recovered
+        else:
+            async with session:
+                cycles.extend(await session.drain_for(
+                    duration_seconds=duration_seconds,
+                    cycle_interval_seconds=cycle_interval_seconds,
+                ))
+
         facts = {
             "capture_session_id": session.bootstrap.capture_session_id,
             "lease_epoch": session.token.lease_epoch,
@@ -143,6 +208,7 @@ class GateRunner:
             "deleted": sum(x.pump.deleted for x in cycles),
             "errors": sum(x.pump.errors for x in cycles),
             "control_authority": session.control_authority,
+            **crash_facts,
         }
         paths = GateRunPaths.create(self.output_root, gate_id, device.id)
         collector = await self._collector(adapter=adapter)
