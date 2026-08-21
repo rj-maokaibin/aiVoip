@@ -60,6 +60,24 @@ class GateSftpAdapter:
         except Exception as exc:
             raise CaptureV2Error("SFTP_GET_FAILED", details={"exception": type(exc).__name__}) from exc
 
+    async def scp_get(self, remote_path: str, local_path: str, timeout: float | None = None) -> None:
+        native = getattr(type(self._adapter), "scp_get", None)
+        if native is not None:
+            return await native(self._adapter, remote_path, local_path, timeout=timeout)
+        conn = getattr(self._adapter, "conn", None)
+        if conn is None:
+            raise CaptureV2Error("SSH_NOT_CONNECTED")
+        try:
+            import asyncssh
+
+            async def _get():
+                await asyncssh.scp((conn, remote_path), local_path)
+            await asyncio.wait_for(_get(), timeout=timeout or 60.0)
+        except asyncio.TimeoutError as exc:
+            raise CaptureV2Error("SCP_TIMEOUT") from exc
+        except Exception as exc:
+            raise CaptureV2Error("SCP_GET_FAILED", details={"exception": type(exc).__name__}) from exc
+
 
 def build_asyncssh_adapter(spec: GateDeviceSpec, *, password_env: str = "CAPTURE_GATE_SSH_PASSWORD"):
     # Delayed import keeps unit tests independent from asyncssh.

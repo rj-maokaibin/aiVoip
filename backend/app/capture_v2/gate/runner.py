@@ -101,7 +101,8 @@ class GateRunner:
 
     async def segment_normal(self, *, reproduction_session_id: str, device: Any, worker_id: str,
                              duration_seconds: float, cycle_interval_seconds: float = 0.5,
-                             gate_id: str = "R3-01", fault_plan: GateFaultPlan | None = None) -> GateCaseResult:
+                             gate_id: str = "R3-01", fault_plan: GateFaultPlan | None = None,
+                             transport: str = "sftp") -> GateCaseResult:
         adapter = self.adapter
         plan = fault_plan or GateFaultPlan()
         if plan.sftp_fail_before_get_count or plan.sftp_fail_after_get_count:
@@ -111,6 +112,7 @@ class GateRunner:
             adapter=adapter,
             profile_root=self.profile_root,
             requested_profile_id=self.requested_profile_id,
+            transport=transport,
         )
         session = await bridge.establish(
             reproduction_session_id=reproduction_session_id,

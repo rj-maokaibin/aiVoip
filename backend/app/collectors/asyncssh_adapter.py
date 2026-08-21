@@ -133,6 +133,49 @@ class AsyncSSHDeviceAdapter(DeviceAdapter):
                 raise DeviceCommandError(f'SSH_COMMAND_FAILED:{type(exc).__name__}') from exc
         raise DeviceCommandError('SSH_COMMAND_TIMEOUT') from last
 
+    async def sftp_get(self, remote_path: str, local_path: str, timeout: float | None = None) -> None:
+        """Download one exact immutable remote file over SFTP.
+
+        Capture V2 owns retry semantics above this layer, so one call performs one
+        transfer only and retries must always target the same Segment identity.
+        """
+        if not self.conn:
+            raise DeviceConnectionError('SSH_NOT_CONNECTED')
+        try:
+            async def _get():
+                async with self.conn.start_sftp_client() as sftp:
+                    await sftp.get(remote_path, local_path, preserve=False)
+            await asyncio.wait_for(
+                _get(), timeout=timeout or max(settings.ssh_command_timeout, 30)
+            )
+        except asyncio.TimeoutError as exc:
+            raise DeviceCommandError('SFTP_TIMEOUT') from exc
+        except Exception as exc:
+            raise DeviceCommandError(f'SFTP_GET_FAILED:{type(exc).__name__}') from exc
+
+    async def scp_get(self, remote_path: str, local_path: str, timeout: float | None = None) -> None:
+        """Download one exact immutable remote file over SCP.
+
+        Used on platforms whose Dropbear lacks an SFTP subsystem (no sftp-server
+        binary). Keeps the same exact-transfer contract as sftp_get: one call is
+        one transfer only, and Capture V2 owns retry semantics above this layer.
+        """
+        if not self.conn:
+            raise DeviceConnectionError('SSH_NOT_CONNECTED')
+        try:
+            import asyncssh
+
+            async def _get():
+                await asyncssh.scp((self.conn, remote_path), local_path)
+
+            await asyncio.wait_for(
+                _get(), timeout=timeout or max(settings.ssh_command_timeout, 30)
+            )
+        except asyncio.TimeoutError as exc:
+            raise DeviceCommandError('SCP_TIMEOUT') from exc
+        except Exception as exc:
+            raise DeviceCommandError(f'SCP_GET_FAILED:{type(exc).__name__}') from exc
+
     async def _ensure_aim_session(self, timeout:float, retries:int=3):
         """Ensure the persistent AIM PTY session is open, retrying the initial
         spawn when the DUT's AIM prompt is not immediately available.

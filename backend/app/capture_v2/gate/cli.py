@@ -114,6 +114,7 @@ async def _cmd_segment(args) -> int:
             device=spec.as_profile_device(), worker_id=args.worker_id,
             duration_seconds=args.duration, cycle_interval_seconds=args.interval,
             gate_id=args.gate_id, fault_plan=plan,
+            transport=args.transport,
         )
         _json(result)
         return 0 if result.verdict.value == "PASS" else 2
@@ -213,6 +214,8 @@ def build_parser() -> argparse.ArgumentParser:
     seg.add_argument("--duration", type=float, default=30.0)
     seg.add_argument("--interval", type=float, default=0.5)
     seg.add_argument("--fault-plan", default="", help="Gate-only JSON failpoint plan")
+    seg.add_argument("--transport", choices=["sftp", "scp"], default="sftp",
+                    help="Exact download transport (scp for Dropbear without SFTP subsystem)")
 
     collect = sub.add_parser("collect", help="Collect immutable Gate evidence bundle")
     _common_device(collect); _base_paths(collect)

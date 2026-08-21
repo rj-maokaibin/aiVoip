@@ -58,6 +58,19 @@ class FaultInjectingAdapter:
             raise CaptureV2Error("GATE_INJECTED_SFTP_FAILURE", details={"phase": "AFTER_GET"})
         return result
 
+    async def scp_get(self, remote_path: str, local_path: str, timeout: float | None = None):
+        # Same deterministic failpoints for SCP transport (R3-02 interrupt under
+        # --transport scp): fail before the exact GET, or fail after a successful
+        # GET to simulate a lost transfer response.
+        if self.plan.sftp_fail_before_get_count > 0:
+            self.plan.sftp_fail_before_get_count -= 1
+            raise CaptureV2Error("GATE_INJECTED_SCP_FAILURE", details={"phase": "BEFORE_GET"})
+        result = await self._adapter.scp_get(remote_path, local_path, timeout=timeout)
+        if self.plan.sftp_fail_after_get_count > 0:
+            self.plan.sftp_fail_after_get_count -= 1
+            raise CaptureV2Error("GATE_INJECTED_SCP_FAILURE", details={"phase": "AFTER_GET"})
+        return result
+
 
 class FaultInjectingStore:
     def __init__(self, store, plan: GateFaultPlan):

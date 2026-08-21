@@ -5,6 +5,7 @@ import asyncio
 from sqlalchemy import select
 
 from app.collectors.asyncssh_adapter import DeviceCommandError, DeviceConnectionError
+from app.capture_v2.runtime import assert_v1_live_capture_allowed
 from app.core.config import settings
 from app.db.models import ReproductionSession
 from app.db.session import SessionLocal
@@ -227,6 +228,12 @@ def _build_orchestrator_for(session: ReproductionSession, *, connect: bool = Fal
 def start_reproduction(self, session_id: str):
     if settings.app_env.lower()=='production' and settings.reproduction_platform_mode=='mock':
         raise RuntimeError('REPRODUCTION_PLATFORM_NOT_CONFIGURED')
+    # V2.1-A/B owns fenced producer authority only; C/D have not installed
+    # durable segment transfer/readiness yet. If V2 is selected, fail closed
+    # before the V1 orchestrator can start its own ring producer. Ownership B-Gates
+    # use CaptureV2ABBridge directly. Default V1 behavior is unchanged.
+    if str(settings.reproduction_platform_mode or 'mock').lower() != 'mock':
+        assert_v1_live_capture_allowed()
     with SessionLocal() as db:
         row=db.get(ReproductionSession,session_id)
         if not row: return {'status':'NOT_FOUND','session_id':session_id}
