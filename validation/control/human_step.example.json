@@ -1,0 +1,21 @@
+{
+  "schema_version": "capture-v2-remote-action-v1",
+  "action_id": "R4-APF3260-HOOK-001",
+  "sequence": 2,
+  "created_at": "2026-08-21T07:00:00+00:00",
+  "expires_at": "2026-08-21T09:00:00+00:00",
+  "action_type": "HUMAN_STEP",
+  "parameters": {
+    "instruction": "On APF3260-M: pick up the handset, dial 1001, keep the call for 10 seconds, then hang up.",
+    "ack_token": "<RANDOM_ONE_TIME_TOKEN>"
+  },
+  "safety": {
+    "require_clean_git": true,
+    "require_v1_authority": true,
+    "require_v2_disabled": true,
+    "allow_worker_kill": false,
+    "allow_server_quarantine": false,
+    "expected_head": "<IMMUTABLE_RELEASE_CANDIDATE_SHA>"
+  },
+  "requested_by": "ChatGPT-remote-validation-controller"
+}
