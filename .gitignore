@@ -45,3 +45,5 @@ frontend/tsconfig.tsbuildinfo
 # Capture V2.1.1 real-gate validation evidence (local only, never committed)
 validation_results/
 Capture_V2.1.1_Real_Gates_Evidence_*.tgz
+# Local systemd/tmux runner helper generated on the validation host only.
+validation/capture_v2/run_control_runner.sh
