@@ -1,0 +1,9 @@
+{
+  "schema_version": "capture-v2-real-gates-validation-v1",
+  "base_commit": "a805e2dfefdc8ca62fae90bc403166bfeea61827",
+  "baseline_zip_sha256": "5728424bbeebb6a666935c467b3ed556fdb0833282121d159a5072b9737c3b01",
+  "software_regression": {"baseline": 97, "gate_tooling_delta": 9, "combined": 106},
+  "production_v2_enabled": false,
+  "merge_ready": false,
+  "required_real_gates": ["R1_POSTGRESQL", "R2_OWNERSHIP_RECOVERY", "R3_SEGMENT_SFTP_ACK", "R4_READINESS_FXS", "R5_COVERAGE", "R6_REPORT_E2E", "R7_SHADOW_LONGRUN_ROLLBACK_CUTOVER"]
+}

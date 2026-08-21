@@ -1,0 +1,6 @@
+{
+  "sftp_fail_before_get_count": 1,
+  "sftp_fail_after_get_count": 0,
+  "persist_fail_count": 0,
+  "metadata": {"gate": "R3-02", "description": "fail exact SFTP once before GET"}
+}
