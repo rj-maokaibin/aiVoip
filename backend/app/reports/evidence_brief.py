@@ -53,9 +53,14 @@ def build_packet_summary(packet:dict|None)->dict:
     if not packet:return {"available":False}
     summary=packet.get("summary") or {};streams=[]
     for stream in packet.get("rtp_streams",[]) or []:
+        observed=int(stream.get("packet_count") or 0)
+        unique=int(stream.get("unique_packet_count",stream.get("packet_count",0)) or 0)
+        duplicates=int(stream.get("duplicate_packets") or 0)
         streams.append({"stream_id":stream.get("stream_id"),"source":f"{stream.get('src_ip')}:{stream.get('src_port')}",
                         "destination":f"{stream.get('dst_ip')}:{stream.get('dst_port')}","ssrc":stream.get("ssrc"),
-                        "packet_count":stream.get("packet_count"),"lost_packets":stream.get("lost_packets",stream.get("lost")),
+                        "packet_count_semantics":"UNIQUE_EFFECTIVE_RTP_PACKETS","packet_count":unique,
+                        "unique_packet_count":unique,"observed_packet_count":observed,"duplicate_packets":duplicates,
+                        "expected_packets":stream.get("expected_packets"),"lost_packets":stream.get("lost_packets",stream.get("lost")),
                         "loss_rate":stream.get("loss_rate"),"avg_jitter_ms":stream.get("avg_rfc3550_jitter_ms"),
                         "p95_jitter_ms":stream.get("p95_rfc3550_jitter_ms"),"max_jitter_ms":stream.get("max_rfc3550_jitter_ms"),
                         "max_delta_ms":stream.get("max_delta_ms"),"codec":stream.get("codec"),"ptime_ms":stream.get("ptime_ms")})
@@ -227,7 +232,7 @@ def render_report_html(payload:dict)->str:
     capture_rows="".join(f"<tr><td>{_esc(k)}</td><td>{'✅ 可用' if v else '⚠️ 缺失/不可用'}</td></tr>" for k,v in cap.items())
     normal="".join(f"<li>✅ {_esc(x.get('text'))}</li>" for x in payload.get("normal_and_exclusion_evidence",[])) or "<li>暂无可展示的排除性证据。</li>"
     packet=payload.get("packet_summary") or {}
-    stream_rows="".join(f"<tr><td>{_esc(s.get('source'))}</td><td>{_esc(s.get('destination'))}</td><td>{_esc(s.get('packet_count'))}</td><td>{_esc(s.get('lost_packets'))}</td><td>{_esc(s.get('loss_rate'))}</td><td>{_esc(s.get('p95_jitter_ms'))}</td><td>{_esc(s.get('codec'))}</td><td>{_esc(s.get('ptime_ms'))}</td></tr>" for s in packet.get("streams",[]))
+    stream_rows="".join(f"<tr><td>{_esc(s.get('source'))}</td><td>{_esc(s.get('destination'))}</td><td>{_esc(s.get('packet_count'))}</td><td>{_esc(s.get('observed_packet_count'))}</td><td>{_esc(s.get('duplicate_packets'))}</td><td>{_esc(s.get('lost_packets'))}</td><td>{_esc(s.get('loss_rate'))}</td><td>{_esc(s.get('p95_jitter_ms'))}</td><td>{_esc(s.get('codec'))}</td><td>{_esc(s.get('ptime_ms'))}</td></tr>" for s in packet.get("streams",[]))
     pcm_rows=[]
     for stream in (payload.get("pcm_summary") or {}).get("streams",[]) or []:
         tap=(stream.get("tap") or {}).get("name")
@@ -260,7 +265,7 @@ body{{font-family:Arial,'Microsoft YaHei',sans-serif;max-width:1180px;margin:28p
 <h2>6. A/B 对比</h2>{_ab_html(payload)}
 <h2>7. 历次 Reproduction Session（复现会话）</h2><p>{_esc(session_history)}</p>
 <h2>8. 正常项 / 排除性证据</h2><ul>{normal}</ul>
-<h2>9. 完整技术证据</h2><h3>9.1 SIP / RTP</h3><p>总帧/包数：{_esc(packet.get('packet_count'))}；SIP 消息：{_esc(packet.get('sip_message_count'))}；Call：{_esc(packet.get('call_count'))}；RTP Stream：{_esc(packet.get('rtp_stream_count'))}</p><table><thead><tr><th>源</th><th>目的</th><th>包数</th><th>丢包</th><th>丢包率</th><th>P95 抖动(ms)</th><th>Codec</th><th>ptime(ms)</th></tr></thead><tbody>{stream_rows}</tbody></table>
+<h2>9. 完整技术证据</h2><h3>9.1 SIP / RTP</h3><p>总帧/包数：{_esc(packet.get('packet_count'))}；SIP 消息：{_esc(packet.get('sip_message_count'))}；Call：{_esc(packet.get('call_count'))}；RTP Stream：{_esc(packet.get('rtp_stream_count'))}</p><p class='small'>RTP“有效包数”按唯一 Sequence 计数；“观察包数”是抓包中实际看到的 RTP Datagram 数，包含重复包。重复包不会被计为额外有效媒体，也不会被写成 Packet Loss。</p><table><thead><tr><th>源</th><th>目的</th><th>有效包数</th><th>观察包数</th><th>重复包</th><th>丢包</th><th>丢包率</th><th>P95 抖动(ms)</th><th>Codec</th><th>ptime(ms)</th></tr></thead><tbody>{stream_rows}</tbody></table>
 <h3>9.2 PCM / 音频</h3><table><thead><tr><th>Tap</th><th>Session</th><th>包数</th><th>RMS dBFS</th><th>Peak dBFS</th><th>工频族</th><th>等级</th></tr></thead><tbody>{''.join(pcm_rows)}</tbody></table><p>RMS/Peak dBFS 均为数字电平，不等价于真实声压级 dB SPL。</p>
 <h2>10. Evidence Bundle / 附件</h2><p>这里保留完整 Artifact 清单；用于理解 Finding 的关键图/音频已优先放在对应 Evidence Card 内。</p><ul>{artifact_list}</ul><p>完整原始证据包由 Bundle API 生成，包含 Manifest 与 SHA256SUMS。</p>
 <h2>11. 报告版本与审计记录</h2><p>Schema：{_esc(payload.get('schema_version'))}｜Composer：{_esc(payload.get('composer_version'))}｜Evidence Card：{_esc(card_summary.get('version'))}｜Generated：{_esc(payload.get('generated_at'))}</p></body></html>"""
