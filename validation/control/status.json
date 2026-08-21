@@ -1,115 +1,36 @@
 {
   "schema_version": "capture-v2-remote-status-v1",
-  "action_id": "R2-APF1250-ADOPT-RC5-RETRY3",
-  "sequence": 16,
-  "action_type": "GATE_OWNERSHIP_ADOPT",
-  "state": "SUCCEEDED",
+  "action_id": "R2-APF1250-ESTABLISH-RC5-FRESH",
+  "sequence": 17,
+  "action_type": "GATE_OWNERSHIP",
+  "state": "FAILED",
   "runner_id": "srv:2933695",
-  "action_sha256": "89631d41f90083dda0a60c3127bf818a4c6dfdf122e9469ede5e024e654bc67d",
-  "updated_at": "2026-08-21T13:36:17.529795+00:00",
+  "action_sha256": "d0a8f66f840b59a3492d72219e2693988a5568a2c53aaac490bd5362d7d7efb3",
+  "updated_at": "2026-08-21T13:37:45.709697+00:00",
   "started_at": null,
-  "finished_at": "2026-08-21T13:36:17.529795+00:00",
-  "return_code": 0,
-  "verdict": "PASS",
-  "result_path": "validation/control/results/R2-APF1250-ADOPT-RC5-RETRY3/result.json",
-  "stdout_sha256": "aa6c3174eb8a2805b3a685f51ad64108d3945d423c495a0c715c5f68e12ffe5d",
+  "finished_at": "2026-08-21T13:37:45.709697+00:00",
+  "return_code": 2,
+  "verdict": null,
+  "result_path": "validation/control/results/R2-APF1250-ESTABLISH-RC5-FRESH/result.json",
+  "stdout_sha256": "4f427b87905f5d51de91dd41b3acfbf69e345f60f0b8f9579d830019e778b8d9",
   "stderr_sha256": "b8258e86248ce6f15dfea1a12afcd2ad3fde62ba6d3cd24536ffc8cb3bb61c48",
   "error": null,
   "detail": {
     "safety": {
       "capture_engine_version": "V1",
       "capture_v2_production_enabled": "false",
-      "git_head": "cf292978054979027b31452df53d6f119422461e",
+      "git_head": "dc5c22aa26b650e2168757ee27cc8b693abacdde",
       "expected_product_head": "068c8586947e426b7924442839cd35c751618aa4"
     },
     "parsed_output": {
-      "checks": [
-        {
-          "details": {},
-          "expected": 1,
-          "name": "exactly_one_owned_producer",
-          "observed": 1,
-          "passed": true,
-          "verdict": "PASS"
-        },
-        {
-          "details": {},
-          "expected": 1,
-          "name": "one_running_epoch",
-          "observed": 1,
-          "passed": true,
-          "verdict": "PASS"
-        },
-        {
-          "details": {},
-          "expected": "one ACTIVE lease",
-          "name": "lease_active",
-          "observed": [
-            {
-              "lease_epoch": 28,
-              "state": "ACTIVE"
-            }
-          ],
-          "passed": true,
-          "verdict": "PASS"
-        },
-        {
-          "details": {},
-          "expected": 0,
-          "name": "no_unrecovered_gap",
-          "observed": 0,
-          "passed": true,
-          "verdict": "PASS"
-        },
-        {
-          "details": {},
-          "expected": 5148,
-          "name": "producer_pid_adopted",
-          "observed": 5148,
-          "passed": true,
-          "verdict": "PASS"
-        },
-        {
-          "details": {},
-          "expected": 9647000,
-          "name": "producer_starttime_adopted",
-          "observed": 9647000,
-          "passed": true,
-          "verdict": "PASS"
-        },
-        {
-          "details": {},
-          "expected": "cd7eae82-0f4c-4b57-9b42-5faa04ae7034",
-          "name": "capture_epoch_unchanged",
-          "observed": "cd7eae82-0f4c-4b57-9b42-5faa04ae7034",
-          "passed": true,
-          "verdict": "PASS"
-        },
-        {
-          "details": {},
-          "expected": "> before",
-          "name": "lease_epoch_increased",
-          "observed": 28,
-          "passed": true,
-          "verdict": "PASS"
-        }
-      ],
-      "created_at": "2026-08-21T13:36:17.228812+00:00",
-      "evidence_bundle": "/tmp/capture-v2-gates/20260821T133613Z_R2-01-ADOPT-RC5-RETRY3_259f16e6-af9e-4dff-969b-2bb5eac43eb2",
-      "facts": {
-        "after_capture_epoch_id": "cd7eae82-0f4c-4b57-9b42-5faa04ae7034",
-        "after_lease_epoch": 28,
-        "after_pid": 5148,
-        "after_starttime": 9647000,
-        "before_capture_epoch_id": "cd7eae82-0f4c-4b57-9b42-5faa04ae7034",
-        "before_lease_epoch": 27,
-        "before_pid": 5148,
-        "before_starttime": 9647000,
-        "recovery_status": "ADOPTED"
+      "details": {
+        "exit_status": 76,
+        "operation_id": "5f3e0b71-0045-43a1-b1a3-8f0e6fd34de3",
+        "stderr": "sleep: invalid number '0.1'\nsleep: invalid number '0.1'\nsleep: invalid number '0.1'\nsleep: invalid number '0.1'\nsleep: invalid number '0.1'\nsleep: invalid number '0.1'\nsleep: invalid number '0.1'\nsleep: invalid number '0.1'\nsleep: invalid number '0.1'\nsleep: invalid number '0.1'\nsleep: invalid number '0.1'\nsleep: invalid number '0.1'\nsleep: invalid number '0.1'\nsleep: invalid number '0.1'\nsleep: invalid number '0.1'\nsleep: invalid number '0.1'\nsleep: invalid number '0.1'\nsleep: invalid number '0.1'\nsleep: invalid number '0.1'\nsleep: invalid number '0.1'\nsleep: invalid number '0.1'\n",
+        "stdout": ""
       },
-      "gate_id": "R2-01-ADOPT-RC5-RETRY3",
-      "summary": "Ownership/recovery invariant",
-      "verdict": "PASS"
+      "error": "DEVICE_MUTATION_FAILED",
+      "ok": false
     }
   }
 }
