@@ -1,0 +1,9 @@
+diff --git a/backend/migrations/env.py b/backend/migrations/env.py
+--- a/backend/migrations/env.py
++++ b/backend/migrations/env.py
+@@ -8,4 +8,5 @@
+ from app.db import feishu_governance_models  # noqa: F401
+ from app.db import ai_intelligence_models  # noqa: F401
++from app.capture_v2 import db_models as capture_v2_models  # noqa: F401
+ 
+ config = context.config

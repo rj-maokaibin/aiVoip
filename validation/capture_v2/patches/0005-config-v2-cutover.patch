@@ -1,0 +1,13 @@
+diff --git a/backend/app/core/config.py b/backend/app/core/config.py
+--- a/backend/app/core/config.py
++++ b/backend/app/core/config.py
+@@ -51,4 +51,9 @@ class Settings(BaseSettings):
+     capture_v2_worker_id: str = ""
+     capture_v2_lease_ttl_seconds: float = 30.0
+     capture_v2_lease_renew_seconds: float = 10.0
++    # Production V2 stays fail-closed until a machine-readable release artifact
++    # proves the deferred real-device/E2E/rollback gates. Software completion alone
++    # can never flip capture authority.
++    capture_v2_production_enabled: bool = False
++    capture_v2_release_gate_artifact: Path = Path("/app/validation/capture_v2_release_gate.json")
+     reasoning_gateway_url: str = ""

@@ -1,0 +1,12 @@
+schema_version: 1
+platform_id: mt7981
+profile_version: "1"
+models:
+  - APF3260-M
+  - APF1260(MG-P)
+  - APF1261(MG)
+resource:
+  max_transfer_parallelism: 1
+  # Frozen in Phase C after SFTP/backlog fault injection.
+  spool_max_unacked_bytes: null
+  spool_min_free_bytes: null

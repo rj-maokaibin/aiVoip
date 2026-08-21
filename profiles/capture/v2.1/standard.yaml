@@ -1,0 +1,62 @@
+schema_version: 2
+profile_id: voip-standard
+profile_version: 2.1.1
+
+capture:
+  mode: FULL_VOICE
+  snaplen: 0
+  segment_seconds: 5
+
+transfer:
+  protocol: SFTP
+  parallelism: 1
+  server_sha256: true
+  remote_sha256: false
+
+channels:
+  pcap: REQUIRED
+  fxs: REQUIRED
+  pcm_rx: CONDITIONAL_REQUIRED
+  pcm_tx: CONDITIONAL_REQUIRED
+  debug: OPTIONAL
+
+# Operational initial values, intentionally profile-versioned. They are not hard invariants.
+lease:
+  ttl_seconds: 30
+  renew_interval_seconds: 10
+
+spool:
+  max_oldest_unacked_seconds: null
+  pressure_policy: FAIL_CLOSED_NO_EVICT_UNACKED
+
+fxs:
+  hook_glitch_max_ms: 100
+  post_onhook_rebound_window_ms: 500
+  stable_offhook_confirm_ms: 100
+  # Software defaults; calibrate on real DUT before production enable.
+  hook_flash_min_ms: 100
+  hook_flash_max_ms: 1000
+
+readiness:
+  watchdog_interval_seconds: 2
+  pcm_readiness_timeout_seconds: 1
+  sip_expectation_timeout_seconds: 3
+  rtp_expectation_timeout_seconds: 3
+  pcm_media_expectation_timeout_seconds: 2
+
+coverage:
+  pre_trigger_seconds: 10
+  post_trigger_seconds: 10
+  possible_gap_downgrades_complete: true
+
+quality:
+  policy_version: capture-quality-v2.1
+  confidence_requires_complete_capture: true
+
+
+lifecycle:
+  post_target_seconds: 10
+  evidence_finalize_timeout_seconds: 120
+
+retention:
+  server_rolling_retention_seconds: 300
