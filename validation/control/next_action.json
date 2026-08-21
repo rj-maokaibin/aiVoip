@@ -1,10 +1,10 @@
 {
   "schema_version": "capture-v2-remote-action-v1",
-  "action_id": "R2-APF1250-ADOPT-RC5-RETRY3",
-  "sequence": 16,
-  "created_at": "2026-08-21T13:34:00+00:00",
-  "expires_at": "2026-08-21T15:34:00+00:00",
-  "action_type": "GATE_OWNERSHIP_ADOPT",
+  "action_id": "R2-APF1250-ESTABLISH-RC5-FRESH",
+  "sequence": 17,
+  "created_at": "2026-08-21T13:37:00+00:00",
+  "expires_at": "2026-08-21T15:37:00+00:00",
+  "action_type": "GATE_OWNERSHIP",
   "parameters": {
     "device_id": "259f16e6-af9e-4dff-969b-2bb5eac43eb2",
     "model": "APF1250",
@@ -18,11 +18,12 @@
     "object_root": "/tmp/voip-reproduction-objects",
     "output_root": "/tmp/capture-v2-gates",
     "repo_root": "..",
-    "reproduction_session_id": "FROM_STATE",
-    "worker_id": "r2-apf1250-b-retry3",
-    "before_state": "/tmp/capture-v2-control/r2-apf1250-before.json",
-    "gate_id": "R2-01-ADOPT-RC5-RETRY3",
-    "timeout_seconds": 300
+    "reproduction_session_id": "AUTO_NEW",
+    "worker_id": "r2-apf1250-rc5-a",
+    "gate_id": "R2-01-ESTABLISH-RC5-FRESH",
+    "state_file": "/tmp/capture-v2-control/r2-apf1250-rc5-before.json",
+    "hold_seconds": 35,
+    "timeout_seconds": 360
   },
   "safety": {
     "require_clean_git": true,
@@ -33,5 +34,5 @@
     "expected_head": "068c8586947e426b7924442839cd35c751618aa4"
   },
   "requested_by": "ChatGPT-remote-validation-controller",
-  "note": "Retry APF1250 R2 takeover using refreshed EWEB SSH tunnel 47.104.22.0:63111. Secret stays local via DB:<SN>. Must adopt the same DUT producer with identical PID/starttime/CaptureEpoch, increased lease_epoch, exactly one producer, and no unrecovered gap. Keep V1 authoritative and Production V2 disabled."
+  "note": "Fresh clean-RC5 APF1250 R2 establish on refreshed EWEB tunnel. Create an independent validation ReproductionSession, establish exactly one Capture Authority/producer, persist before-state, then hold 35s so the 30s lease naturally expires before the follow-up adopt. Secret remains local via DB:<SN>; V1 remains authoritative and Production V2 stays disabled."
 }
