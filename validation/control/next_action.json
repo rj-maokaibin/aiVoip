@@ -1,12 +1,31 @@
 {
   "schema_version": "capture-v2-remote-action-v1",
-  "action_id": "RC8-SW-001",
-  "sequence": 42,
-  "created_at": "2026-08-21T16:15:30+00:00",
-  "expires_at": "2026-08-21T18:15:30+00:00",
-  "action_type": "SOFTWARE_REGRESSION",
+  "action_id": "R3-05-APF1250-PERSISTED-BEFORE-ACK-RC8",
+  "sequence": 43,
+  "created_at": "2026-08-21T16:16:00+00:00",
+  "expires_at": "2026-08-21T18:16:00+00:00",
+  "action_type": "GATE_SEGMENT",
   "parameters": {
-    "timeout_seconds": 1200
+    "device_id": "259f16e6-af9e-4dff-969b-2bb5eac43eb2",
+    "model": "APF1250",
+    "host": "10.48.8.74",
+    "port": 10001,
+    "username": "root",
+    "platform_id": "mt7621",
+    "password_env": "DB:G1V030E010214",
+    "profile_root": "../profiles",
+    "profile_id": "voip-standard",
+    "object_root": "/tmp/voip-reproduction-objects",
+    "output_root": "/tmp/capture-v2-gates",
+    "repo_root": "..",
+    "reproduction_session_id": "2deb3ef0-c1d8-40c0-8faf-f024a21408eb",
+    "worker_id": "r3-05-apf1250-rc8",
+    "gate_id": "R3-05-APF1250-RC8",
+    "duration": 30,
+    "interval": 0.5,
+    "transport": "scp",
+    "fault_plan": "../validation/control/fault_plans/r3-persisted-before-ack-once.json",
+    "timeout_seconds": 600
   },
   "safety": {
     "require_clean_git": true,
@@ -17,5 +36,5 @@
     "expected_head": "c7d8e2412615c0904c799c2f698241d7990a7709"
   },
   "requested_by": "ChatGPT-remote-validation-controller",
-  "note": "RC8 software regression for R3-05 persisted-before-ACK crash harness. Keep V1 authoritative and Production V2 disabled."
+  "note": "R3-05 RC8 APF1250. Simulate worker disappearance only after DB PERSISTED commit and before ACK; leave tcpdump alive, wait lease TTL, adopt same producer/capture epoch with a higher lease epoch, then finish the exact immutable segment."
 }
