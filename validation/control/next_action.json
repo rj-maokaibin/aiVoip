@@ -1,12 +1,20 @@
 {
   "schema_version": "capture-v2-remote-action-v1",
-  "action_id": "RC1-SW-001",
-  "sequence": 1,
-  "created_at": "2026-08-21T08:20:00+00:00",
-  "expires_at": "2026-08-21T10:20:00+00:00",
-  "action_type": "SOFTWARE_REGRESSION",
+  "action_id": "R1-RC1-001",
+  "sequence": 2,
+  "created_at": "2026-08-21T08:27:00+00:00",
+  "expires_at": "2026-08-21T10:27:00+00:00",
+  "action_type": "GATE_LEASE_RACE",
   "parameters": {
-    "timeout_seconds": 1800
+    "device_id": "259f16e6-af9e-4dff-969b-2bb5eac43eb2",
+    "capture_session_a": "8113cb2a-6067-4a9d-b73e-287a60b09bd6",
+    "capture_session_b": "d141aea6-06f8-4650-84e0-ff5d1b52d1f8",
+    "worker_a": "rc1-r1-a",
+    "worker_b": "rc1-r1-b",
+    "gate_id": "R1-01-RC1",
+    "output_root": "/tmp/capture-v2-gates",
+    "repo_root": "..",
+    "timeout_seconds": 300
   },
   "safety": {
     "require_clean_git": true,
@@ -17,5 +25,5 @@
     "expected_head": "dfa6e2ef5bcdd3248904628b1a05c97bd9159ae6"
   },
   "requested_by": "ChatGPT-remote-validation-controller",
-  "note": "RC1 clean-commit software regression. Run all test_capture_v2_*.py before any real-device targeted revalidation."
+  "note": "Clean-RC R1-01 PostgreSQL concurrent first-acquire race. Reuses two existing CaptureSession rows from the prior real-gate database; validates exactly one winner and one LEASE_BUSY loser on the immutable RC product code."
 }
