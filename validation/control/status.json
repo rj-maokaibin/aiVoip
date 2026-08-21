@@ -1,36 +1,27 @@
 {
   "schema_version": "capture-v2-remote-status-v1",
-  "action_id": "R2-APF1250-ESTABLISH-RC5-FRESH",
-  "sequence": 17,
-  "action_type": "GATE_OWNERSHIP",
-  "state": "FAILED",
+  "action_id": "RC6-SW-001",
+  "sequence": 18,
+  "action_type": "SOFTWARE_REGRESSION",
+  "state": "SUCCEEDED",
   "runner_id": "srv:2933695",
-  "action_sha256": "d0a8f66f840b59a3492d72219e2693988a5568a2c53aaac490bd5362d7d7efb3",
-  "updated_at": "2026-08-21T13:37:45.709697+00:00",
+  "action_sha256": "37205936a1c4601a76fbf724046238c82c03737957d516acdc219c47b500b1f9",
+  "updated_at": "2026-08-21T13:41:11.891806+00:00",
   "started_at": null,
-  "finished_at": "2026-08-21T13:37:45.709697+00:00",
-  "return_code": 2,
+  "finished_at": "2026-08-21T13:41:11.891806+00:00",
+  "return_code": 0,
   "verdict": null,
-  "result_path": "validation/control/results/R2-APF1250-ESTABLISH-RC5-FRESH/result.json",
-  "stdout_sha256": "4f427b87905f5d51de91dd41b3acfbf69e345f60f0b8f9579d830019e778b8d9",
-  "stderr_sha256": "b8258e86248ce6f15dfea1a12afcd2ad3fde62ba6d3cd24536ffc8cb3bb61c48",
+  "result_path": "validation/control/results/RC6-SW-001/result.json",
+  "stdout_sha256": "220ac89bf8b2c12ba860ca20b222fc7f71c73d26f377bd48d6933e53f83b4471",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "error": null,
   "detail": {
     "safety": {
       "capture_engine_version": "V1",
       "capture_v2_production_enabled": "false",
-      "git_head": "dc5c22aa26b650e2168757ee27cc8b693abacdde",
-      "expected_product_head": "068c8586947e426b7924442839cd35c751618aa4"
+      "git_head": "faaf94a41854b7791d25ff5cfd925ca91ca6a318",
+      "expected_product_head": "7c92787c1abb9cc3ddeba2583c039178070ec180"
     },
-    "parsed_output": {
-      "details": {
-        "exit_status": 76,
-        "operation_id": "5f3e0b71-0045-43a1-b1a3-8f0e6fd34de3",
-        "stderr": "sleep: invalid number '0.1'\nsleep: invalid number '0.1'\nsleep: invalid number '0.1'\nsleep: invalid number '0.1'\nsleep: invalid number '0.1'\nsleep: invalid number '0.1'\nsleep: invalid number '0.1'\nsleep: invalid number '0.1'\nsleep: invalid number '0.1'\nsleep: invalid number '0.1'\nsleep: invalid number '0.1'\nsleep: invalid number '0.1'\nsleep: invalid number '0.1'\nsleep: invalid number '0.1'\nsleep: invalid number '0.1'\nsleep: invalid number '0.1'\nsleep: invalid number '0.1'\nsleep: invalid number '0.1'\nsleep: invalid number '0.1'\nsleep: invalid number '0.1'\nsleep: invalid number '0.1'\n",
-        "stdout": ""
-      },
-      "error": "DEVICE_MUTATION_FAILED",
-      "ok": false
-    }
+    "parsed_output": null
   }
 }
