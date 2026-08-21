@@ -24,7 +24,7 @@
 
 ## 三、关键技术发现（平台差异）
 
-1. **AIM debug 语法平台差异**：APF3260-M 不接受缩写 `de cm de`，必须用全拼 `debug cm debug` + `debug print`；APF1250 接受 `FULL_DEBUG_ENABLE` 缩写。根因：两平台 AIM CLI 解析器实现不同。
+1. **AIM debug 语法**（已修正）：APF1250 与 APF3260-M **均接受** `FULL_DEBUG_ENABLE`（缩写 `de cm de`），无平台差异。此前误判 3260 需全拼语法，经受控 OFF->ON 实验纠正。APF3260-M 上 0 事件的真正原因是现场无摘挂机动作，而非 debug 未生效。
 2. **宿主机访问容器服务**：`DATABASE_URL`（`postgres`→`172.18.0.4`）、`MINIO_ENDPOINT`（`minio`→`172.18.0.3`）需替换为 docker IP；MinIO 需显式注入 `MINIO_ACCESS_KEY/SECRET_KEY`。
 3. **设备无 SFTP 只有 SCP**：Dropbear 裁剪了 sftp-server，R3 由 SFTP 改 SCP transport。
 4. **设备凭据在 DB**：DUT 密码在 `device_credentials` 表（SN 关联），不在 secret.yaml。
