@@ -1,21 +1,12 @@
 {
   "schema_version": "capture-v2-remote-action-v1",
-  "action_id": "R1-RC3-002",
-  "sequence": 5,
-  "created_at": "2026-08-21T09:05:00+00:00",
-  "expires_at": "2026-08-21T11:05:00+00:00",
-  "action_type": "GATE_LEASE_FENCING",
+  "action_id": "RC4-SW-001",
+  "sequence": 6,
+  "created_at": "2026-08-21T12:46:00+00:00",
+  "expires_at": "2026-08-21T14:46:00+00:00",
+  "action_type": "SOFTWARE_REGRESSION",
   "parameters": {
-    "device_id": "259f16e6-af9e-4dff-969b-2bb5eac43eb2",
-    "capture_session_a": "8113cb2a-6067-4a9d-b73e-287a60b09bd6",
-    "capture_session_b": "d141aea6-06f8-4650-84e0-ff5d1b52d1f8",
-    "worker_a": "rc3-r1-stale-a",
-    "worker_b": "rc3-r1-stale-b",
-    "gate_id": "R1-02-RC3",
-    "ttl_seconds": 10,
-    "output_root": "/tmp/capture-v2-gates",
-    "repo_root": "..",
-    "timeout_seconds": 180
+    "timeout_seconds": 1800
   },
   "safety": {
     "require_clean_git": true,
@@ -23,8 +14,8 @@
     "require_v2_disabled": true,
     "allow_worker_kill": false,
     "allow_server_quarantine": false,
-    "expected_head": "00fa975d6a2fd250394f6344b35eddddea6eb11c"
+    "expected_head": "c6280d4a953a0b747eb1cfef47137187d59e544d"
   },
   "requested_by": "ChatGPT-remote-validation-controller",
-  "note": "Clean RC3 R1-02: real PostgreSQL lease expiry/takeover followed by stale token renew/validate/release. All stale operations must return LEASE_FENCED and the new owner must remain ACTIVE."
+  "note": "RC4 regression after adding DB:<SN> local credential resolution and AUTO_NEW/FROM_STATE R2 validation-session flow. No plaintext DUT secret is stored in Git. Must pass before any real DUT R2 action."
 }
