@@ -1,9 +1,26 @@
 {
-  "schema_version": "capture-v2-real-gates-validation-v1",
+  "schema_version": "capture-v2-real-gates-validation-v2",
   "base_commit": "a805e2dfefdc8ca62fae90bc403166bfeea61827",
-  "baseline_zip_sha256": "5728424bbeebb6a666935c467b3ed556fdb0833282121d159a5072b9737c3b01",
-  "software_regression": {"baseline": 97, "gate_tooling_delta": 9, "combined": 106},
+  "historical_baseline_zip_sha256": "5728424bbeebb6a666935c467b3ed556fdb0833282121d159a5072b9737c3b01",
   "production_v2_enabled": false,
   "merge_ready": false,
-  "required_real_gates": ["R1_POSTGRESQL", "R2_OWNERSHIP_RECOVERY", "R3_SEGMENT_SFTP_ACK", "R4_READINESS_FXS", "R5_COVERAGE", "R6_REPORT_E2E", "R7_SHADOW_LONGRUN_ROLLBACK_CUTOVER"]
+  "remote_control_loop": {
+    "implemented": true,
+    "local_unit_tests_passed": 12,
+    "compileall_passed": true,
+    "arbitrary_shell_allowed": false,
+    "clean_git_required": true,
+    "expected_head_required": true
+  },
+  "evidence_audit": {
+    "status": "RELEASE_BLOCKED",
+    "R1_POSTGRESQL": "PASS_WITH_PROVENANCE_GAP",
+    "R2_OWNERSHIP_RECOVERY": "PASS_WITH_PROVENANCE_GAP",
+    "R3_SEGMENT_TRANSFER_ACK": "PARTIAL",
+    "R4_READINESS_FXS": "PARTIAL",
+    "R5_COVERAGE": "PARTIAL",
+    "R6_REPORT_E2E": "NOT_PASS_FOR_PRODUCT_E2E",
+    "R7_SHADOW_LONGRUN_ROLLBACK": "PARTIAL"
+  },
+  "next_required_step": "MATERIALIZE_CLEAN_RELEASE_CANDIDATE_COMMIT_THEN_TARGETED_REAL_REVALIDATION"
 }
