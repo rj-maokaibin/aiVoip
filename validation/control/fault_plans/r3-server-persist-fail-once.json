@@ -1,0 +1,9 @@
+{
+  "sftp_fail_before_get_count": 0,
+  "sftp_fail_after_get_count": 0,
+  "persist_fail_count": 1,
+  "metadata": {
+    "gate": "R3-03",
+    "purpose": "Inject exactly one server-store persist failure; verify retry preserves DUT evidence until durable server copy exists before ACK/delete."
+  }
+}
