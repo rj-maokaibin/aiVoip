@@ -1,27 +1,33 @@
 {
   "schema_version": "capture-v2-remote-status-v1",
-  "action_id": "RC5-SW-001",
-  "sequence": 10,
-  "action_type": "SOFTWARE_REGRESSION",
-  "state": "SUCCEEDED",
+  "action_id": "R2-APF1250-ADOPT-RC5",
+  "sequence": 11,
+  "action_type": "GATE_OWNERSHIP_ADOPT",
+  "state": "FAILED",
   "runner_id": "srv:2933695",
-  "action_sha256": "05197d9f3b228b03a4ff87370762c2bec2795addbb4616a33ebf4a0d00dcbbb0",
-  "updated_at": "2026-08-21T12:57:08.506407+00:00",
+  "action_sha256": "714fa1a0eaa18fc9871a291ab8cb902adf52ba4facba32923d8a4dd6b16ce857",
+  "updated_at": "2026-08-21T12:57:56.119423+00:00",
   "started_at": null,
-  "finished_at": "2026-08-21T12:57:08.506407+00:00",
-  "return_code": 0,
+  "finished_at": "2026-08-21T12:57:56.119423+00:00",
+  "return_code": 2,
   "verdict": null,
-  "result_path": "validation/control/results/RC5-SW-001/result.json",
-  "stdout_sha256": "92a3015ef0e0f7fbad74a1960889fc3e14686d73a400cc9d93fea839d1382ee7",
+  "result_path": "validation/control/results/R2-APF1250-ADOPT-RC5/result.json",
+  "stdout_sha256": "81ad8d2b4ee54e040973cc49b8bfaf1d7020727342eb19e5b9d17eb69bd80758",
   "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "error": null,
   "detail": {
     "safety": {
       "capture_engine_version": "V1",
       "capture_v2_production_enabled": "false",
-      "git_head": "8f661912e0c86642fb69c2be4b52d3f89b5211bd",
+      "git_head": "d7a4b9f4329acd95a51cb388bc04ae597720f124",
       "expected_product_head": "068c8586947e426b7924442839cd35c751618aa4"
     },
-    "parsed_output": null
+    "parsed_output": {
+      "details": {
+        "message": "SSH_CONNECT_FAILED:ConnectionRefusedError: tunnel/device unreachable (re-open/rebuild the EWEB tunnel - expired 3h or device reboot - and share the new host:port/web_url)"
+      },
+      "error": "GATE_COMMAND_EXCEPTION:DeviceConnectionError",
+      "ok": false
+    }
   }
 }
