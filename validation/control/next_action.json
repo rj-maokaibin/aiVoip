@@ -1,10 +1,10 @@
 {
   "schema_version": "capture-v2-remote-action-v1",
-  "action_id": "R2-APF3260M-ESTABLISH-RC5",
-  "sequence": 12,
-  "created_at": "2026-08-21T13:00:00+00:00",
-  "expires_at": "2026-08-21T15:00:00+00:00",
-  "action_type": "GATE_OWNERSHIP",
+  "action_id": "R2-APF3260M-ADOPT-RC5",
+  "sequence": 13,
+  "created_at": "2026-08-21T13:08:15+00:00",
+  "expires_at": "2026-08-21T15:08:15+00:00",
+  "action_type": "GATE_OWNERSHIP_ADOPT",
   "parameters": {
     "device_id": "c132f336-df1b-4285-b175-01d848f23b5d",
     "model": "APF3260-M",
@@ -18,11 +18,10 @@
     "object_root": "/tmp/voip-reproduction-objects",
     "output_root": "/tmp/capture-v2-gates",
     "repo_root": "..",
-    "reproduction_session_id": "AUTO_NEW",
-    "worker_id": "r2-apf3260m-a",
-    "gate_id": "R2-01-ESTABLISH-RC5",
-    "state_file": "/tmp/capture-v2-control/r2-apf3260m-before.json",
-    "hold_seconds": 0,
+    "reproduction_session_id": "FROM_STATE",
+    "worker_id": "r2-apf3260m-b",
+    "before_state": "/tmp/capture-v2-control/r2-apf3260m-before.json",
+    "gate_id": "R2-01-ADOPT-RC5",
     "timeout_seconds": 300
   },
   "safety": {
@@ -34,5 +33,5 @@
     "expected_head": "068c8586947e426b7924442839cd35c751618aa4"
   },
   "requested_by": "ChatGPT-remote-validation-controller",
-  "note": "Clean RC5 APF3260-M R2 establish. Creates a fresh validation ReproductionSession and resolves the SSH secret locally from device_credentials by SN. Establishes one Capture Authority/producer and persists local before-state for takeover verification. No plaintext secret is stored in Git."
+  "note": "Clean RC5 APF3260-M R2 takeover after the establish lease naturally expired. Worker B must adopt the same DUT producer: identical PID/starttime/CaptureEpoch, increased lease_epoch, exactly one producer, and no unrecovered gap. Secret remains local via DB:<SN>."
 }
