@@ -1,92 +1,19 @@
 {
   "schema_version": "capture-v2-remote-status-v1",
-  "action_id": "R1-RC1-001",
-  "sequence": 2,
-  "action_type": "GATE_LEASE_RACE",
-  "state": "SUCCEEDED",
+  "action_id": "RC2-SW-001",
+  "sequence": 3,
+  "action_type": "SOFTWARE_REGRESSION",
+  "state": "REJECTED",
   "runner_id": "srv:2903921",
-  "action_sha256": "b0f25d04f5ba36ea4d45c88835dd0842a737530d9f17ded98c7911ad56dbb5a9",
-  "updated_at": "2026-08-21T08:31:46.513116+00:00",
+  "action_sha256": "fccd39cc4313d37270602725c07d351d7d3cf6b48aed9e0643452625c04addd1",
+  "updated_at": "2026-08-21T08:36:40.191705+00:00",
   "started_at": null,
-  "finished_at": "2026-08-21T08:31:46.513116+00:00",
-  "return_code": 0,
-  "verdict": "PASS",
-  "result_path": "validation/control/results/R1-RC1-001/result.json",
-  "stdout_sha256": "ba0048abef39398b4e7110a7cff0859f8ccaa921bed7b34efe1fab8af98fe7f3",
+  "finished_at": "2026-08-21T08:36:40.191705+00:00",
+  "return_code": null,
+  "verdict": null,
+  "result_path": "validation/control/results/RC2-SW-001/result.json",
+  "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-  "error": null,
-  "detail": {
-    "safety": {
-      "capture_engine_version": "V1",
-      "capture_v2_production_enabled": "false",
-      "git_head": "3b2918681a711f8c5cf1c521f076fcbb97177f81",
-      "expected_product_head": "dfa6e2ef5bcdd3248904628b1a05c97bd9159ae6"
-    },
-    "parsed_output": {
-      "checks": [
-        {
-          "details": {},
-          "expected": 1,
-          "name": "exactly_one_winner",
-          "observed": 1,
-          "passed": true,
-          "verdict": "PASS"
-        },
-        {
-          "details": {},
-          "expected": 1,
-          "name": "exactly_one_loser",
-          "observed": 1,
-          "passed": true,
-          "verdict": "PASS"
-        },
-        {
-          "details": {},
-          "expected": "LEASE_BUSY",
-          "name": "loser_is_lease_busy",
-          "observed": "LEASE_BUSY",
-          "passed": true,
-          "verdict": "PASS"
-        },
-        {
-          "details": {},
-          "expected": 1,
-          "name": "single_lease_row",
-          "observed": 1,
-          "passed": true,
-          "verdict": "PASS"
-        }
-      ],
-      "created_at": "2026-08-21T08:31:46.317343+00:00",
-      "evidence_bundle": "/tmp/capture-v2-gates/20260821T083146Z_R1-01-RC1_259f16e6-af9e-4dff-969b-2bb5eac43eb2",
-      "facts": {
-        "loser_code": "LEASE_BUSY",
-        "loser_count": 1,
-        "results": [
-          {
-            "lease_epoch": 24,
-            "ok": true,
-            "session": "8113cb2a-6067-4a9d-b73e-287a60b09bd6",
-            "worker": "rc1-r1-a"
-          },
-          {
-            "code": "LEASE_BUSY",
-            "details": {
-              "device_id": "259f16e6-af9e-4dff-969b-2bb5eac43eb2",
-              "expires_at": "2026-08-21T08:32:16.128415+00:00",
-              "lease_epoch": 24,
-              "owner_worker_id": "rc1-r1-a"
-            },
-            "ok": false,
-            "session": "d141aea6-06f8-4650-84e0-ff5d1b52d1f8",
-            "worker": "rc1-r1-b"
-          }
-        ],
-        "winner_count": 1
-      },
-      "gate_id": "R1-01-RC1",
-      "summary": "PostgreSQL lease race",
-      "verdict": "PASS"
-    }
-  }
+  "error": "SAFETY_GIT_DIRTY:M validation/control/status.json",
+  "detail": {}
 }
