@@ -5,8 +5,12 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
+from sqlalchemy import select
+
 from app.capture_v2.errors import CaptureV2Error
 from app.capture_v2.gate.models import GateDeviceSpec
+from app.db.models import DeviceCredential
+from app.db.session import SessionLocal
 
 
 @dataclass(frozen=True)
@@ -27,6 +31,35 @@ def password_from_env(env_name: str = "CAPTURE_GATE_SSH_PASSWORD") -> str:
             details={"env": env_name},
         )
     return value
+
+
+def password_from_source(source: str = "CAPTURE_GATE_SSH_PASSWORD") -> str:
+    """Resolve a Gate-only SSH password without ever placing it in Git.
+
+    Backward compatibility: a plain value is treated as an environment-variable
+    name. ``ENV:<name>`` is an explicit environment reference. ``DB:<SN>`` reads
+    the already-provisioned local ``device_credentials`` row by SN.  The password
+    itself is never returned in Gate output or logs.
+    """
+    ref = str(source or "CAPTURE_GATE_SSH_PASSWORD").strip()
+    if ref.startswith("ENV:"):
+        return password_from_env(ref[4:])
+    if not ref.startswith("DB:"):
+        return password_from_env(ref)
+
+    sn = ref[3:].strip()
+    if not sn:
+        raise CaptureV2Error("CAPTURE_GATE_SSH_CREDENTIAL_REF_INVALID")
+    with SessionLocal() as db:
+        credential = db.scalar(
+            select(DeviceCredential).where(DeviceCredential.sn == sn)
+        )
+        if credential is None or not str(credential.password or ""):
+            raise CaptureV2Error(
+                "CAPTURE_GATE_SSH_CREDENTIAL_MISSING",
+                details={"source": "device_credentials", "sn": sn},
+            )
+        return str(credential.password)
 
 
 class GateSftpAdapter:
@@ -87,6 +120,6 @@ def build_asyncssh_adapter(spec: GateDeviceSpec, *, password_env: str = "CAPTURE
         ip=spec.host,
         port=int(spec.port),
         username=spec.username,
-        password=password_from_env(password_env),
+        password=password_from_source(password_env),
     )
     return GateSftpAdapter(adapter)
