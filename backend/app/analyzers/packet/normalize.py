@@ -54,7 +54,7 @@ def _to_epoch(value: Any) -> float | None:
 
     TShark EK serializes ``frame.time_epoch`` as ISO-8601 (e.g.
     ``2026-08-14T07:02:49.100710000Z``) on modern versions, while older builds
-    and tests emit a numeric epoch.  Accept both so the normalizer never drops
+    and tests emit a numeric epoch. Accept both so the normalizer never drops
     packets just because of a timestamp representation change.
     """
     value = _first(value)
@@ -94,6 +94,31 @@ def _flatten(obj: Any, prefix: str = "") -> dict[str, list[Any]]:
     return out
 
 
+def _contains_protocol_layer(value: Any, target: str) -> bool:
+    """Return True when a protocol subtree exists anywhere below ``layers``.
+
+    Modern TShark EK can nest a dissected protocol under another protocol
+    instead of exposing it as a top-level layer.  A concrete example is SIP
+    with an SDP body, emitted by Wireshark 4.2 as ``layers.sip.sdp``.  The
+    protocol fields are still fully present and ``frame.protocols`` contains
+    ``sip:sdp``; treating only top-level keys as layers silently discards SDP
+    and breaks downstream Call/RTP binding.
+
+    Only dict/list-valued keys count as protocol subtrees. Scalar field names
+    are deliberately ignored so a normal field named like a protocol cannot
+    manufacture a false layer.
+    """
+    if isinstance(value, dict):
+        for key, child in value.items():
+            if _norm_key(str(key)) == target and isinstance(child, (dict, list)):
+                return True
+            if isinstance(child, (dict, list)) and _contains_protocol_layer(child, target):
+                return True
+    elif isinstance(value, list):
+        return any(_contains_protocol_layer(item, target) for item in value)
+    return False
+
+
 class FieldIndex:
     """Best-effort field lookup across Wireshark/TShark output versions.
 
@@ -124,7 +149,7 @@ class FieldIndex:
 
     def has_layer(self, name: str) -> bool:
         target = _norm_key(name)
-        return any(_norm_key(k) == target for k in self.layers)
+        return _contains_protocol_layer(self.layers, target)
 
 
 def _reason_from_status_line(status_line: Any) -> str | None:
@@ -210,11 +235,20 @@ def normalize_ek_record(record: dict[str, Any]) -> NormalizedPacket | None:
 
     sdp = None
     if idx.has_layer("sdp"):
-        attrs = [str(x) for x in idx.get_all("sdp.attribute", "sdp_sdp_attribute", "sdp.media_attribute_field")]
+        attrs = [str(x) for x in idx.get_all(
+            "sdp.attribute",
+            "sdp_sdp_attribute",
+            "sdp.media_attribute_field",
+            "sdp.media_attr",
+            "sdp_sdp_media_attr",
+        )]
         conn = _first(idx.get("sdp.connection_info.address", "sdp_sdp_connection_info_address", "sdp.connection_address"))
         media_port = _to_int(idx.get("sdp.media.port", "sdp_sdp_media_port"))
         media_protocol = _first(idx.get("sdp.media.proto", "sdp_sdp_media_proto", "sdp.media_protocol"))
-        payloads = _parse_payload_types(idx.get_all("sdp.media.format", "sdp_sdp_media_format", "sdp.media"))
+        payload_values = idx.get_all("sdp.media", "sdp_sdp_media")
+        if not payload_values:
+            payload_values = idx.get_all("sdp.media.format", "sdp_sdp_media_format")
+        payloads = _parse_payload_types(payload_values)
         raw = _first(idx.get("sdp.raw", "sdp_sdp_raw"))
         sdp = SdpData(
             raw=str(raw) if raw else None,
