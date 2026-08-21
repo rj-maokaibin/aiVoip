@@ -42,27 +42,114 @@ def _bundle() -> dict:
         },
     ]
     high_delta = [{"type": "HIGH_DELTA", "details": dict(details)} for details in high_delta_details]
+    duplicate_events = [
+        {
+            "sequence": 14555,
+            "first_frame_number": 20413,
+            "duplicate_frame_number": 20414,
+            "first_rtp_timestamp": 492033328,
+            "rtp_timestamp": 492033328,
+            "arrival_delta_ms": 0.139952,
+        },
+        {
+            "sequence": 14556,
+            "first_frame_number": 20416,
+            "duplicate_frame_number": 20417,
+            "first_rtp_timestamp": 492033488,
+            "rtp_timestamp": 492033488,
+            "arrival_delta_ms": 0.159979,
+        },
+    ]
     call = {"id": "CALL-001", "sip_call_id": CALL_ID, "dialed_number": "601"}
-    context = {"analysis_mode": "OFFLINE_IMPORTED", "call_origin": "RECONSTRUCTED_FROM_PCAP", "call_scope": "BOUND", "semantic_status": "OK", "reviewability": "FULLY_REVIEWABLE"}
-    dtmf = {"type": "DTMF_SIP_DIAL_MATCH", "scope": {"call_id": CALL_ID, "pcm_tap": "pcm_rx"}, "details": {"call_id": CALL_ID, "pcm_digits": "601", "sip_target": "601"}}
+    context = {
+        "analysis_mode": "OFFLINE_IMPORTED",
+        "call_origin": "RECONSTRUCTED_FROM_PCAP",
+        "call_scope": "BOUND",
+        "semantic_status": "OK",
+        "reviewability": "FULLY_REVIEWABLE",
+    }
+    dtmf = {
+        "type": "DTMF_SIP_DIAL_MATCH",
+        "scope": {"call_id": CALL_ID, "pcm_tap": "pcm_rx"},
+        "details": {"call_id": CALL_ID, "pcm_digits": "601", "sip_target": "601"},
+    }
+    packet_summary_rows = [
+        {
+            "stream_id": "RTP-UP-001",
+            "source": "192.168.150.4:10000",
+            "destination": "192.168.3.200:11446",
+            "packet_count_semantics": "UNIQUE_EFFECTIVE_RTP_PACKETS",
+            "packet_count": 2423,
+            "unique_packet_count": 2423,
+            "observed_packet_count": 2423,
+            "duplicate_packets": 0,
+            "lost_packets": 0,
+        },
+        {
+            "stream_id": "RTP-DOWN-001",
+            "source": "192.168.3.200:11446",
+            "destination": "192.168.150.4:10000",
+            "packet_count_semantics": "UNIQUE_EFFECTIVE_RTP_PACKETS",
+            "packet_count": 2425,
+            "unique_packet_count": 2425,
+            "observed_packet_count": 2427,
+            "duplicate_packets": 2,
+            "lost_packets": 0,
+        },
+    ]
     return {
         "pcm": {
             "summary": {"total_packets": 13050},
             "format": {"sample_rate": 8000, "bit_depth": 16, "endian": "little", "udp_payload_bytes": 160},
             "streams": [
-                {"tap": {"name": "pcm_rx", "direction": "RX"}, "packet_count": 6525,
-                 "source_endpoints": [{"ip": "192.168.150.4", "port": 48741, "packet_count": 6525}], "sessions": []},
-                {"tap": {"name": "pcm_tx", "direction": "TX"}, "packet_count": 6525,
-                 "source_endpoints": [{"ip": "192.168.150.4", "port": 46812, "packet_count": 6525}], "sessions": []},
+                {
+                    "tap": {"name": "pcm_rx", "direction": "RX"},
+                    "packet_count": 6525,
+                    "source_endpoints": [{"ip": "192.168.150.4", "port": 48741, "packet_count": 6525}],
+                    "sessions": [],
+                },
+                {
+                    "tap": {"name": "pcm_tx", "direction": "TX"},
+                    "packet_count": 6525,
+                    "source_endpoints": [{"ip": "192.168.150.4", "port": 46812, "packet_count": 6525}],
+                    "sessions": [],
+                },
             ],
         },
         "packet": {
-            "rtp_streams": [{
-                "stream_id": "RTP-UP-001",
-                "src_ip": "192.168.150.4", "src_port": 10000,
-                "dst_ip": "192.168.3.200", "dst_port": 11446,
-                "events": high_delta,
-            }]
+            "rtp_streams": [
+                {
+                    "stream_id": "RTP-UP-001",
+                    "src_ip": "192.168.150.4",
+                    "src_port": 10000,
+                    "dst_ip": "192.168.3.200",
+                    "dst_port": 11446,
+                    "codec": "PCMU",
+                    "packet_count": 2423,
+                    "unique_packet_count": 2423,
+                    "duplicate_packets": 0,
+                    "expected_packets": 2423,
+                    "lost_packets": 0,
+                    "max_delta_ms": 175.043,
+                    "events": high_delta,
+                },
+                {
+                    "stream_id": "RTP-DOWN-001",
+                    "src_ip": "192.168.3.200",
+                    "src_port": 11446,
+                    "dst_ip": "192.168.150.4",
+                    "dst_port": 10000,
+                    "codec": "PCMU",
+                    "packet_count": 2427,
+                    "unique_packet_count": 2425,
+                    "duplicate_packets": 2,
+                    "expected_packets": 2425,
+                    "lost_packets": 0,
+                    "max_delta_ms": 36.10,
+                    "duplicate_events": duplicate_events,
+                    "events": [],
+                },
+            ]
         },
         "media": {"cross_layer_events": [dtmf]},
         "analysis_context": context,
@@ -90,6 +177,7 @@ def _bundle() -> dict:
         "report": {
             "analysis_context": context,
             "display_call": call,
+            "packet_summary": {"available": True, "streams": packet_summary_rows},
             "findings": [
                 {
                     "type": "HIGH_DELTA",
@@ -151,9 +239,33 @@ def test_high_delta_frame_or_sequence_drift_is_blocked():
     assert "rtp.high_delta.1.sequence_continuity" in failed
 
 
+def test_downlink_duplicate_accounting_regression_is_blocked():
+    bundle = _bundle()
+    bundle["packet"]["rtp_streams"][1]["duplicate_packets"] = 1
+    failed = _failed(bundle)
+    assert "rtp.primary_downlink.duplicate_packets" in failed
+    assert "rtp.primary_downlink.accounting.observed_equals_unique_plus_duplicates" in failed
+
+
+def test_downlink_duplicate_frame_drift_is_blocked():
+    bundle = _bundle()
+    bundle["packet"]["rtp_streams"][1]["duplicate_events"][0]["duplicate_frame_number"] = 20415
+    assert "rtp.primary_downlink.duplicate.1.duplicate_frame_number" in _failed(bundle)
+
+
+def test_report_effective_packet_count_must_not_use_observed_datagrams():
+    bundle = _bundle()
+    bundle["report"]["packet_summary"]["streams"][1]["packet_count"] = 2427
+    assert "report.rtp.primary_downlink.effective_packet_count" in _failed(bundle)
+
+
 def test_b2bua_duplicate_dtmf_match_is_blocked():
     bundle = _bundle()
-    duplicate = {"type": "DTMF_SIP_DIAL_MATCH", "scope": {"call_id": "pbx-leg"}, "details": {"call_id": "pbx-leg", "pcm_digits": "601", "sip_target": "601"}}
+    duplicate = {
+        "type": "DTMF_SIP_DIAL_MATCH",
+        "scope": {"call_id": "pbx-leg"},
+        "details": {"call_id": "pbx-leg", "pcm_digits": "601", "sip_target": "601"},
+    }
     bundle["media"]["cross_layer_events"].append(duplicate)
     assert "dtmf.match_count" in _failed(bundle)
 
