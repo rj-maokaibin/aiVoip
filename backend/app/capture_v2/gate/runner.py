@@ -14,6 +14,7 @@ from typing import Any
 from app.capture_v2.bridge import CaptureV2ABBridge
 from app.capture_v2.c_bridge import CaptureV2CBridge
 from app.capture_v2.errors import CaptureV2Error
+from app.capture_v2.gate.advanced import maybe_run_ownership_scenario, maybe_run_segment_scenario
 from app.capture_v2.gate.evidence import GateEvidenceCollector
 from app.capture_v2.gate.evaluator import GateEvaluator
 from app.capture_v2.gate.faults import (
@@ -49,6 +50,16 @@ class GateRunner:
 
     async def ownership_establish(self, *, reproduction_session_id: str, device: Any,
                                   worker_id: str, gate_id: str = "R2-ESTABLISH") -> tuple[GateCaseResult, dict[str, Any]]:
+        special = await maybe_run_ownership_scenario(
+            self,
+            reproduction_session_id=reproduction_session_id,
+            device=device,
+            worker_id=worker_id,
+            gate_id=gate_id,
+        )
+        if special is not None:
+            return special
+
         bridge = CaptureV2ABBridge(
             session_factory=self.session_factory,
             adapter=self.adapter,
@@ -112,6 +123,21 @@ class GateRunner:
                              transport: str = "sftp") -> GateCaseResult:
         adapter = self.adapter
         plan = fault_plan or GateFaultPlan()
+
+        special = await maybe_run_segment_scenario(
+            self,
+            reproduction_session_id=reproduction_session_id,
+            device=device,
+            worker_id=worker_id,
+            gate_id=gate_id,
+            plan=plan,
+            transport=transport,
+            duration_seconds=duration_seconds,
+            cycle_interval_seconds=cycle_interval_seconds,
+        )
+        if special is not None:
+            return special
+
         if plan.sftp_fail_before_get_count or plan.sftp_fail_after_get_count:
             adapter = FaultInjectingAdapter(adapter, plan)
         bridge = CaptureV2CBridge(
