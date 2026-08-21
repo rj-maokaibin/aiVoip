@@ -109,6 +109,17 @@ expected:
       expected_packets: 2425
       lost_packets: 0
       max_arrival_delta_ms: {min: 35.5, max: 36.7}
+      duplicate_events:
+        - sequence: 14555
+          first_frame_number: 20413
+          duplicate_frame_number: 20414
+          rtp_timestamp: 492033328
+          arrival_delta_ms: {min: 0.13, max: 0.15}
+        - sequence: 14556
+          first_frame_number: 20416
+          duplicate_frame_number: 20417
+          rtp_timestamp: 492033488
+          arrival_delta_ms: {min: 0.15, max: 0.17}
     forbidden_anomaly_types: [PACKET_LOSS, BURST_LOSS]
     semantic_rules:
       high_delta_must_not_be_labeled_packet_loss: true
@@ -190,6 +201,7 @@ notes:
   - PCM DTMF 601 只能与选中的 DUT-facing SIP leg 形成 1 条 DTMF_SIP_DIAL_MATCH；同一 DTMF 不得复制到 PBX B2BUA 内部腿。
   - PCM 原始 UDP 人工复核为 40000/50000 各 6525 包，每包 payload 160 bytes；按已知 Profile 为 8kHz/16-bit little-endian，每包对应 10ms 音频。
   - RTP packet_count 口径已显式冻结：有效媒体包按唯一 RTP Sequence 计数；抓包观察 Datagram 单独记录 observed_packet_count；重复 Datagram 记录 duplicate_packets。下行观察 2427 包，其中唯一 Sequence 2425、重复 2、丢失 0；不得把 2427 写成 2427 个有效媒体包，也不得把 2 个重复包写成 Packet Loss。
+  - 下行两个 duplicate 已做 Frame/Seq 级复核：Seq 14555 为 Frame 20413→20414，RTP timestamp 492033328；Seq 14556 为 Frame 20416→20417，RTP timestamp 492033488。两组均为相同 Sequence + 相同 RTP timestamp 的快速重复 Datagram。
   - 两个主上行 HIGH_DELTA 的边界 Frame/Seq 已人工复核：20272/46511→20285/46512，以及 20329/46519→20344/46520；Sequence 连续，因此不能写成 Packet Loss。high_delta_ms 是算法容差范围，high_delta_events 保存人工复核的精确 Frame/Seq Ground Truth。
   - 两次主上行 HIGH_DELTA 后均可见快速到包/补偿性 burst；Golden 只要求存在 catch-up 证据，不冻结具体 recovery ratio，避免把实现算法数值当成人工 Ground Truth。
   - HIGH_DELTA 表示到包/发送节奏间隔异常，不等同于 RTP Sequence Loss；Report 必须将 DUT 主上行 2 次事件聚合为同一 Stream Finding，并保留逐事件 Frame/Seq 下钻。
