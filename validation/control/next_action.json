@@ -1,27 +1,27 @@
 {
   "schema_version": "capture-v2-remote-action-v1",
-  "action_id": "R2-APF3260M-ADOPT-RC5",
-  "sequence": 13,
-  "created_at": "2026-08-21T13:08:15+00:00",
-  "expires_at": "2026-08-21T15:08:15+00:00",
+  "action_id": "R2-APF1250-ADOPT-RC5-RETRY2",
+  "sequence": 14,
+  "created_at": "2026-08-21T13:20:00+00:00",
+  "expires_at": "2026-08-21T15:20:00+00:00",
   "action_type": "GATE_OWNERSHIP_ADOPT",
   "parameters": {
-    "device_id": "c132f336-df1b-4285-b175-01d848f23b5d",
-    "model": "APF3260-M",
-    "host": "47.104.155.247",
-    "port": 64821,
+    "device_id": "259f16e6-af9e-4dff-969b-2bb5eac43eb2",
+    "model": "APF1250",
+    "host": "47.104.22.0",
+    "port": 65394,
     "username": "root",
-    "platform_id": "mt7981",
-    "password_env": "DB:G1U060H000384",
+    "platform_id": "mt7621",
+    "password_env": "DB:G1V030E010214",
     "profile_root": "../profiles",
     "profile_id": "voip-standard",
     "object_root": "/tmp/voip-reproduction-objects",
     "output_root": "/tmp/capture-v2-gates",
     "repo_root": "..",
     "reproduction_session_id": "FROM_STATE",
-    "worker_id": "r2-apf3260m-b",
-    "before_state": "/tmp/capture-v2-control/r2-apf3260m-before.json",
-    "gate_id": "R2-01-ADOPT-RC5",
+    "worker_id": "r2-apf1250-b-retry2",
+    "before_state": "/tmp/capture-v2-control/r2-apf1250-before.json",
+    "gate_id": "R2-01-ADOPT-RC5-RETRY2",
     "timeout_seconds": 300
   },
   "safety": {
@@ -33,5 +33,5 @@
     "expected_head": "068c8586947e426b7924442839cd35c751618aa4"
   },
   "requested_by": "ChatGPT-remote-validation-controller",
-  "note": "Clean RC5 APF3260-M R2 takeover after the establish lease naturally expired. Worker B must adopt the same DUT producer: identical PID/starttime/CaptureEpoch, increased lease_epoch, exactly one producer, and no unrecovered gap. Secret remains local via DB:<SN>."
+  "note": "Retry APF1250 R2 takeover using the user-confirmed current SSH endpoint. Secret stays local via DB:<SN>. Must adopt the same DUT producer with identical PID/starttime/CaptureEpoch, increased lease_epoch, exactly one producer, and no unrecovered gap. Keep V1 authoritative and Production V2 disabled."
 }
