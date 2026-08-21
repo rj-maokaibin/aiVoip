@@ -1,9 +1,9 @@
 {
   "schema_version": "capture-v2-remote-action-v1",
-  "action_id": "RC4-SW-001",
-  "sequence": 6,
-  "created_at": "2026-08-21T12:46:00+00:00",
-  "expires_at": "2026-08-21T14:46:00+00:00",
+  "action_id": "RC4-SW-002",
+  "sequence": 7,
+  "created_at": "2026-08-21T12:52:00+00:00",
+  "expires_at": "2026-08-21T14:52:00+00:00",
   "action_type": "SOFTWARE_REGRESSION",
   "parameters": {
     "timeout_seconds": 1800
@@ -14,8 +14,8 @@
     "require_v2_disabled": true,
     "allow_worker_kill": false,
     "allow_server_quarantine": false,
-    "expected_head": "c6280d4a953a0b747eb1cfef47137187d59e544d"
+    "expected_head": "e87c4c97944590b21c4fc1f932e9f073bb82bea4"
   },
   "requested_by": "ChatGPT-remote-validation-controller",
-  "note": "RC4 regression after adding DB:<SN> local credential resolution and AUTO_NEW/FROM_STATE R2 validation-session flow. No plaintext DUT secret is stored in Git. Must pass before any real DUT R2 action."
+  "note": "RC4 regression retry after explicitly ignoring only the validation-host local runner helper. Product-source clean-git remains fail-closed. Validates DB:<SN> credential resolution and AUTO_NEW/FROM_STATE R2 flow before real DUT use."
 }
