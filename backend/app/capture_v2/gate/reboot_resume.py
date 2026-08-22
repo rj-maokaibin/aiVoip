@@ -6,7 +6,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from sqlalchemy import select
+
 from app.capture_v2.bridge import CaptureV2ABBridge
+from app.capture_v2.db_models import CaptureEpoch, CaptureLease, CaptureSession
 from app.capture_v2.errors import CaptureV2Error
 from app.capture_v2.gate.evaluator import GateEvaluator
 from app.capture_v2.gate.evidence import GateEvidenceCollector
@@ -42,18 +45,86 @@ def _write_checkpoint(path: Path, payload: dict[str, Any]) -> None:
     tmp.replace(path)
 
 
-def _load_checkpoint(path: Path, *, reproduction_session_id: str, device_id: str) -> dict[str, Any]:
-    if not path.is_file():
-        raise CaptureV2Error(
-            "GATE_REBOOT_CHECKPOINT_NOT_FOUND",
-            details={"reproduction_session_id": reproduction_session_id},
-        )
-    payload = json.loads(path.read_text(encoding="utf-8"))
+def _validate_checkpoint(payload: dict[str, Any], *, reproduction_session_id: str,
+                         device_id: str) -> dict[str, Any]:
     if str(payload.get("reproduction_session_id")) != str(reproduction_session_id):
         raise CaptureV2Error("GATE_REBOOT_CHECKPOINT_SESSION_MISMATCH")
     if str(payload.get("device_id")) != str(device_id):
         raise CaptureV2Error("GATE_REBOOT_CHECKPOINT_DEVICE_MISMATCH")
     return payload
+
+
+def _load_or_rebuild_checkpoint(runner, path: Path, *, reproduction_session_id: str,
+                                device_id: str) -> dict[str, Any]:
+    """Load an explicit stage-A checkpoint or reconstruct one from durable DB state.
+
+    The reconstruction path salvages historical single-process reboot attempts that
+    already persisted CaptureSession/CaptureEpoch/Lease state before the external
+    EWEB tunnel disappeared. It is fail-closed: the device lease must still point at
+    the exact CaptureSession for this ReproductionSession.
+    """
+    if path.is_file():
+        return _validate_checkpoint(
+            json.loads(path.read_text(encoding="utf-8")),
+            reproduction_session_id=reproduction_session_id,
+            device_id=device_id,
+        )
+
+    with runner.session_factory() as db:
+        capture = db.scalar(
+            select(CaptureSession)
+            .where(
+                CaptureSession.reproduction_session_id == reproduction_session_id,
+                CaptureSession.device_id == device_id,
+            )
+            .limit(1)
+        )
+        if capture is None:
+            raise CaptureV2Error(
+                "GATE_REBOOT_CHECKPOINT_NOT_FOUND",
+                details={"reproduction_session_id": reproduction_session_id},
+            )
+        epoch = db.scalar(
+            select(CaptureEpoch)
+            .where(CaptureEpoch.capture_session_id == capture.id)
+            .order_by(CaptureEpoch.epoch_index.desc())
+            .limit(1)
+        )
+        lease = db.get(CaptureLease, device_id)
+        if epoch is None or lease is None:
+            raise CaptureV2Error("GATE_REBOOT_CHECKPOINT_REBUILD_INCOMPLETE")
+        if str(lease.capture_session_id or "") != str(capture.id):
+            raise CaptureV2Error(
+                "GATE_REBOOT_CHECKPOINT_LEASE_SESSION_MISMATCH",
+                details={
+                    "lease_capture_session_id": lease.capture_session_id,
+                    "capture_session_id": capture.id,
+                },
+            )
+        if not epoch.boot_id or epoch.producer_pid is None or epoch.producer_starttime is None:
+            raise CaptureV2Error("GATE_REBOOT_CHECKPOINT_EPOCH_IDENTITY_INCOMPLETE")
+        payload = {
+            "schema_version": "capture-v2-reboot-checkpoint-v1",
+            "state": "REBUILT_FROM_DURABLE_DB",
+            "created_at": _utcnow_iso(),
+            "reproduction_session_id": reproduction_session_id,
+            "device_id": device_id,
+            "old_boot_id": epoch.boot_id,
+            "before_capture_session_id": capture.id,
+            "before_capture_epoch_id": epoch.id,
+            "before_capture_epoch_token": epoch.epoch_token,
+            "before_lease_epoch": int(lease.lease_epoch),
+            "before_lease_expires_at": lease.expires_at.isoformat() if lease.expires_at else None,
+            "before_pid": int(epoch.producer_pid),
+            "before_starttime": int(epoch.producer_starttime),
+            "rebuild_source": "capture_sessions+capture_epochs+capture_leases",
+        }
+    _write_checkpoint(path, payload)
+    return _validate_checkpoint(
+        payload,
+        reproduction_session_id=reproduction_session_id,
+        device_id=device_id,
+    )
 
 
 async def _collect(runner, *, gate_id: str, capture_session_id: str,
@@ -158,7 +229,8 @@ async def _r2_reboot_stage_b(runner, *, reproduction_session_id: str,
                              device: Any, worker_id: str, gate_id: str):
     """Resume a checkpointed reboot after the external control tunnel is restored."""
     checkpoint_path = _checkpoint_path(runner, reproduction_session_id)
-    checkpoint = _load_checkpoint(
+    checkpoint = _load_or_rebuild_checkpoint(
+        runner,
         checkpoint_path,
         reproduction_session_id=reproduction_session_id,
         device_id=str(device.id),
@@ -198,6 +270,7 @@ async def _r2_reboot_stage_b(runner, *, reproduction_session_id: str,
         "recovery_status": second.ownership.recovery.status.value,
         "recovery_classification": second.ownership.recovery.classification.value,
         "checkpoint_path": str(checkpoint_path),
+        "checkpoint_source": checkpoint.get("rebuild_source", "explicit_stage_a"),
     }
     result = await _collect(
         runner,
