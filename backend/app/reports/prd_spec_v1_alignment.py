@@ -13,6 +13,9 @@ ARTIFACT_PROVENANCE_FIELDS = (
     "source_artifact_ids", "analyzer_name", "analyzer_version", "profile_version",
     "time_range", "sha256", "size", "mime_type", "storage_location", "created_at",
 )
+PROVENANCE_NON_NULL_FIELDS = (
+    "artifact_id", "type", "case_id", "sha256", "size", "mime_type", "storage_location", "created_at",
+)
 
 
 def _bool(value: Any) -> bool:
@@ -79,7 +82,7 @@ def _artifact_provenance(item: dict, *, report: Any) -> dict:
     metadata = item.get("metadata") or {}
     source = metadata.get("source") or {}
     analyzer = metadata.get("analyzer") or {}
-    time_range = metadata.get("time_range") or metadata.get("window") or {}
+    time_range = metadata.get("time_range") or metadata.get("time_window") or metadata.get("window") or {}
     source_ids = metadata.get("source_artifact_ids") or []
     source_id = source.get("source_artifact_id")
     if source_id and source_id not in source_ids:
@@ -97,7 +100,7 @@ def _artifact_provenance(item: dict, *, report: Any) -> dict:
         "profile_version": metadata.get("profile_version") or source.get("profile_version"),
         "time_range": time_range,
         "sha256": item.get("sha256"),
-        "size": item.get("size") or item.get("size_bytes") or metadata.get("size_bytes"),
+        "size": item.get("size") if item.get("size") is not None else item.get("size_bytes", metadata.get("size_bytes")),
         "mime_type": item.get("mime_type") or item.get("content_type"),
         "storage_location": item.get("storage_location") or item.get("object_key") or metadata.get("object_key"),
         "created_at": item.get("created_at") or metadata.get("created_at"),
@@ -105,8 +108,19 @@ def _artifact_provenance(item: dict, *, report: Any) -> dict:
 
 
 def validate_artifact_provenance(provenance: dict) -> list[str]:
-    """Return missing frozen provenance fields without throwing away legacy data."""
-    return [name for name in ARTIFACT_PROVENANCE_FIELDS if provenance.get(name) in (None, "")]
+    """Validate frozen field persistence without rejecting legitimate N/A scope values.
+
+    SPEC §13 requires every provenance field to be saved. session_id/call_id,
+    source_artifact_ids, analyzer/profile and time_range may legitimately be empty
+    for Case/report-derived artifacts, so their presence is the contract. Core
+    identity/integrity/storage fields must additionally carry values.
+    """
+    missing = [name for name in ARTIFACT_PROVENANCE_FIELDS if name not in provenance]
+    missing.extend(
+        name for name in PROVENANCE_NON_NULL_FIELDS
+        if name in provenance and provenance.get(name) in (None, "")
+    )
+    return sorted(set(missing))
 
 
 def finalize_report_contract(report: Any, payload: dict) -> dict:
@@ -122,8 +136,6 @@ def finalize_report_contract(report: Any, payload: dict) -> dict:
     if frozen_completeness["state"] != "COMPLETE":
         legacy_completeness["state"] = "PARTIAL"
 
-    # Report state must follow the final, seven-dimension completeness contract.
-    # This prevents a contradictory COMPLETE row with PARTIAL capture_quality.
     final_status = "COMPLETE" if legacy_completeness.get("state") == "COMPLETE" else "PARTIAL_COMPLETE"
     if hasattr(report, "status"):
         report.status = final_status
