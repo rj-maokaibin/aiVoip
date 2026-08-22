@@ -158,8 +158,9 @@ class FeishuEvidenceDocumentService:
             if not 0<=index<len(created_blocks):continue
             artifact=artifact_by_id.get(item.get("artifact_id"));block_id=(created_blocks[index] or {}).get("block_id")
             if not artifact or not block_id or artifact.size_bytes>20*1024*1024:continue
-            data=self.storage.get_bytes(artifact.object_key);is_image=bool(item.get("is_image"));token=await self._upload_media(block_id=block_id,filename=artifact.filename,data=data,parent_type="docx_image" if is_image else "docx_file")
-            await self._replace_media(document_id,block_id,token,image=is_image);used.add(artifact.id)
+            data=self.storage.get_bytes(artifact.object_key);is_image=bool(item.get("is_image"))
+            await self._upload_media(block_id=block_id,filename=artifact.filename,data=data,parent_type="docx_image" if is_image else "docx_file")
+            used.add(artifact.id)
         return used
 
     async def project(self,db:Session,*,case_id:str,report_id:str)->FeishuEvidenceDocumentBinding:
@@ -186,8 +187,8 @@ class FeishuEvidenceDocumentService:
             for (artifact,is_image),block in zip(candidates,created):
                 block_id=block.get("block_id")
                 if not block_id:continue
-                data=self.storage.get_bytes(artifact.object_key);token=await self._upload_media(block_id=block_id,filename=artifact.filename,data=data,parent_type="docx_image" if is_image else "docx_file")
-                await self._replace_media(binding.document_id,block_id,token,image=is_image)
+                data=self.storage.get_bytes(artifact.object_key)
+                await self._upload_media(block_id=block_id,filename=artifact.filename,data=data,parent_type="docx_image" if is_image else "docx_file")
         binding.projected_report_id=report.id;binding.projection_version+=1;binding.status="SYNCED";binding.last_error=None
         binding.metadata_json={"report_version":report.version,"report_status":report.status,"finding_count":payload.get("finding_count"),"ordering_contract":"D112",
                                "inline_evidence_count":len(inline_ids),"attachment_count":len(candidates),"analysis_mode":(payload.get("analysis_context") or {}).get("analysis_mode"),
