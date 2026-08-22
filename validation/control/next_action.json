@@ -1,12 +1,29 @@
 {
   "schema_version": "capture-v2-remote-action-v1",
-  "action_id": "RC29-EXIT-STATS-COVERAGE-SW-001",
-  "sequence": 122,
-  "created_at": "2026-08-22T09:44:00+00:00",
-  "expires_at": "2026-08-22T21:44:00+00:00",
-  "action_type": "SOFTWARE_REGRESSION",
+  "action_id": "R4-00-APF1250-EXIT-STATS-RC29",
+  "sequence": 123,
+  "created_at": "2026-08-22T09:48:00+00:00",
+  "expires_at": "2026-08-22T21:48:00+00:00",
+  "action_type": "GATE_READINESS_FXS",
   "parameters": {
-    "timeout_seconds": 1800
+    "device_id": "259f16e6-af9e-4dff-969b-2bb5eac43eb2",
+    "model": "APF1250",
+    "host": "10.48.8.74",
+    "port": 10001,
+    "username": "root",
+    "platform_id": "mt7621",
+    "password_env": "DB:G1V030E010214",
+    "profile_root": "../profiles",
+    "profile_id": "voip-standard",
+    "object_root": "/tmp/voip-reproduction-objects",
+    "output_root": "/tmp/capture-v2-gates",
+    "repo_root": "..",
+    "reproduction_session_id": "AUTO_NEW",
+    "worker_id": "r4-00-apf1250-exit-stats-rc29",
+    "gate_id": "R4-00-APF1250-EXIT-STATS-RC29",
+    "duration": 12,
+    "transport": "scp",
+    "timeout_seconds": 600
   },
   "safety": {
     "require_clean_git": true,
@@ -17,5 +34,5 @@
     "expected_head": "c0a13d048763cc51e7b8128c31a1bcfc9c5ccc50"
   },
   "requested_by": "ChatGPT-remote-validation-controller",
-  "note": "Regression after fixing tcpdump exit-stat persistence and R5 validation CoverageInterval source_kind DB-contract handling. Production V2 remains disabled."
+  "note": "No-handset APF1250 verification after tcpdump stdio persistence fix. Inspect exit_stats for real packets captured/received/dropped-by-kernel evidence; do not infer null as zero."
 }
