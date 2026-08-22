@@ -1,9 +1,9 @@
 {
   "schema_version": "capture-v2-remote-action-v1",
-  "action_id": "R4-02-APF3260M-HOOK-FLASH-RC27",
-  "sequence": 118,
-  "created_at": "2026-08-22T09:21:00+00:00",
-  "expires_at": "2026-08-22T21:21:00+00:00",
+  "action_id": "R4-03-APF3260M-REBOUND-RC27",
+  "sequence": 119,
+  "created_at": "2026-08-22T09:27:00+00:00",
+  "expires_at": "2026-08-22T21:27:00+00:00",
   "action_type": "GATE_READINESS_FXS",
   "parameters": {
     "device_id": "c132f336-df1b-4285-b175-01d848f23b5d",
@@ -19,8 +19,8 @@
     "output_root": "/tmp/capture-v2-gates",
     "repo_root": "..",
     "reproduction_session_id": "AUTO_NEW",
-    "worker_id": "r4-02-apf3260m-hook-flash-rc27",
-    "gate_id": "R4-02-APF3260M-HOOK-FLASH-RC27",
+    "worker_id": "r4-03-apf3260m-rebound-rc27",
+    "gate_id": "R4-03-APF3260M-REBOUND-RC27",
     "duration": 300,
     "transport": "scp",
     "timeout_seconds": 900
@@ -34,5 +34,5 @@
     "expected_head": "0a95a50772f8aa5dd06a38acd58042a1655eef8e"
   },
   "requested_by": "ChatGPT-remote-validation-controller",
-  "note": "Real APF3260-M Hook Flash validation. Accept only a physical 100..1000ms ONHOOK pulse during an active FXS Attempt; require FXS_HOOK_FLASH on the same Attempt, post-flash DTMF continuity, final ONHOOK source-time preservation, and no Attempt split. Out-of-window operator pulse is INCONCLUSIVE rather than product FAIL."
+  "note": "Real APF3260-M post-ONHOOK rebound calibration. After one normal physical Attempt ends, accept only a real OFFHOOK->ONHOOK rebound starting within 500ms of the final ONHOOK and lasting <=100ms. Require FXS_HOOK_GLITCH evidence and no second confirmed/normal business Attempt. If the operator cannot produce an in-window pulse, result is INCONCLUSIVE rather than product FAIL."
 }
