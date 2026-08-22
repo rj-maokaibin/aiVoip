@@ -1,1 +1,83 @@
-{}
+{
+  "schema_version": "capture-v2-final-blocker-audit-v1",
+  "audit_id": "RC25-FINAL-BLOCKER-AUDIT",
+  "audited_at": "2026-08-22T03:53:00+00:00",
+  "latest_software_regressed_product_head": "9395bb97ebd8cdaafc700c0701482a960a514bf5",
+  "final_software_regression": {
+    "action_id": "RC25-FINAL-SW-001",
+    "sequence": 113,
+    "state": "SUCCEEDED",
+    "return_code": 0,
+    "result_path": "validation/control/results/RC25-FINAL-SW-001/result.json"
+  },
+  "safety": {
+    "capture_engine_version": "V1",
+    "capture_v2_production_enabled": false,
+    "approved": false,
+    "pr_27_must_remain_draft": true,
+    "merge_or_cutover_authorized": false
+  },
+  "closed_without_user_assistance": {
+    "R1_postgresql_lease_fencing": "PASS",
+    "R2_dual_platform_ownership_recovery": "PASS",
+    "R3_dual_platform_segment_transfer_ack": "PASS",
+    "R4_non_physical_pre_offhook_readiness": {
+      "status": "PASS",
+      "evidence": [
+        "validation/control/results/R4-00-APF1250-IDLE-READY-RC24/result.json",
+        "validation/control/results/R4-00-APF3260M-IDLE-READY-RC24/result.json"
+      ]
+    },
+    "R5_historical_real_golden_multi_plane": "PASS",
+    "R5_real_postgresql_coverage_ledger_runtime": {
+      "status": "PASS",
+      "evidence": [
+        "validation/control/results/R6-DB-APF1250-RC24/result.json#coverage_db_validation",
+        "validation/control/results/R6-DB-APF3260M-RC24/result.json#coverage_db_validation"
+      ]
+    },
+    "R6_real_postgresql_evidence_first_runtime": {
+      "status": "PASS",
+      "evidence": [
+        "validation/control/results/R6-DB-APF1250-RC24/result.json#report_db_validation",
+        "validation/control/results/R6-DB-APF3260M-RC24/result.json#report_db_validation"
+      ]
+    },
+    "R7_dual_platform_validation_state_soak": {
+      "status": "PASS",
+      "evidence": [
+        "validation/control/results/R7-00-APF1250-SOAK300-RC24/result.json",
+        "validation/control/results/R7-00-APF3260M-SOAK300-RC24/result.json"
+      ]
+    },
+    "final_software_regression": "PASS",
+    "post_product_head_provenance": "PASS"
+  },
+  "provenance": {
+    "compare_base": "9395bb97ebd8cdaafc700c0701482a960a514bf5",
+    "compare_head_before_status_sync": "fe9c399135327fdb670e036ece824d850f11d915",
+    "commits": 16,
+    "only_validation_control_paths_changed": true,
+    "production_runtime_changed": false
+  },
+  "remaining_without_user_assistance_or_activation_authorization": [],
+  "remaining_physical_handset": [
+    "fresh APF1250 OFFHOOK -> digit -> ONHOOK",
+    "fresh APF3260-M OFFHOOK -> digit -> ONHOOK",
+    "real Hook Flash behavior",
+    "APF3260-M approximately-20ms rebound calibration",
+    "fresh real call consumed by live V2 path with automatic CoverageWindow/Track/Interval COMPLETE finalization",
+    "real first-digit-loss abnormal Golden with full FXS + PCAP + PCM -> analyzer -> report E2E"
+  ],
+  "remaining_requires_explicit_activation_authorization": [
+    "actual V1/V2 shadow or V2_ACTIVE observation",
+    "REAL_DUT PRE_V1 -> V2_ACTIVE -> ROLLED_BACK_V1 rehearsal",
+    "prove V1 health restored after rollback",
+    "prove zero residual V2 producer after rollback",
+    "Production V2 enable",
+    "approved=true",
+    "PR ready / merge / cutover"
+  ],
+  "release_decision": "BLOCKED",
+  "next_step": "NO_MORE_AUTONOMOUS_NON_PHYSICAL_UNPRIVILEGED_GATES_REMAIN"
+}
