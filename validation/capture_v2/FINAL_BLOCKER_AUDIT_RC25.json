@@ -60,7 +60,7 @@
     "only_validation_control_paths_changed": true,
     "production_runtime_changed": false
   },
-  "remaining_without_user_assistance_or_activation_authorization": [],
+  "remaining_autonomous_non_physical_without_activation_authorization": [],
   "remaining_physical_handset": [
     "fresh APF1250 OFFHOOK -> digit -> ONHOOK",
     "fresh APF3260-M OFFHOOK -> digit -> ONHOOK",
