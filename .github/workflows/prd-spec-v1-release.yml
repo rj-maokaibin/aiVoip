@@ -1,0 +1,87 @@
+name: PRD SPEC V1 Full Software Acceptance
+
+on:
+  pull_request:
+    paths:
+      - 'backend/**'
+      - 'frontend/**'
+      - 'tools/**'
+      - 'golden_cases/**'
+      - 'profiles/**'
+      - 'docs/02_Core_Documents/Preliminary_Evidence_Report_V1.0/**'
+      - '.github/workflows/preliminary-evidence-v1.yml'
+      - '.github/workflows/prd-spec-v1-release.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  full-software-acceptance:
+    runs-on:
+      - self-hosted
+      - linux
+      - x64
+      - voip-controlled-linux
+    timeout-minutes: 45
+    env:
+      OFFLINE_GOLDEN_PCAP: /tmp/tcpdump-2026-08-14.pcap
+      OFFLINE_GOLDEN_SHA256: b038aa7c9a0644581f2815f654fcdee4620860796382265b178823fccba2e3f0
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Environment and prepared-PCAP identity
+        run: |
+          set -euo pipefail
+          printf 'ACCEPTANCE_HEAD=%s\n' "$(git rev-parse HEAD)"
+          printf 'PYTHON=%s\n' "$(python3 --version 2>&1)"
+          printf 'NODE=%s\n' "$(node --version 2>&1)"
+          printf 'NPM=%s\n' "$(npm --version 2>&1)"
+          printf 'TSHARK=%s\n' "$(tshark --version | head -n1)"
+          test -f "$OFFLINE_GOLDEN_PCAP"
+          printf '%s  %s\n' "$OFFLINE_GOLDEN_SHA256" "$OFFLINE_GOLDEN_PCAP" | sha256sum -c -
+
+      - name: Frozen PRD/SPEC contracts
+        run: bash tools/preliminary_evidence_v1_gate.sh
+
+      - name: Full VOIP AI software release gate
+        run: bash tools/voip_ai_release_gate.sh
+
+      - name: Prepared-PCAP Real Offline Golden 001
+        run: |
+          set -euo pipefail
+          source .venv-release-gate/bin/activate
+          rm -rf offline-golden-artifacts offline-golden-result.json
+          python tools/offline_analysis_golden_replay.py \
+            --pcap "$OFFLINE_GOLDEN_PCAP" \
+            --require-fixture \
+            --artifacts offline-golden-artifacts \
+            --result offline-golden-result.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p = json.loads(Path('offline-golden-result.json').read_text(encoding='utf-8'))
+          assert p['status'] == 'PASS', p
+          assert p['passed'] is True, p
+          assert p['checks_passed'] == 142, p
+          assert p['checks_total'] == 142, p
+          print('REAL_OFFLINE_GOLDEN_001=PASS 142/142')
+          PY
+
+      - name: Acceptance summary
+        run: |
+          set -euo pipefail
+          printf 'PRD_SPEC_V1_FROZEN_CONTRACTS=PASS\n'
+          printf 'VOIP_AI_SOFTWARE_RELEASE_GATE=PASS\n'
+          printf 'REAL_OFFLINE_GOLDEN_001=PASS 142/142\n'
+          printf 'ACCEPTANCE_COMMIT=%s\n' "$(git rev-parse HEAD)"
+
+      - name: Upload Golden evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prd-spec-v1-golden-001
+          path: |
+            offline-golden-result.json
+            offline-golden-artifacts
+          if-no-files-found: ignore
