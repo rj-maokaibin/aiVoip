@@ -1,12 +1,27 @@
 {
   "schema_version": "capture-v2-remote-action-v1",
-  "action_id": "RC15-SW-001",
-  "sequence": 68,
-  "created_at": "2026-08-22T00:57:00+00:00",
-  "expires_at": "2026-08-22T02:57:00+00:00",
-  "action_type": "SOFTWARE_REGRESSION",
+  "action_id": "R2-05B-APF1250-DUT-REBOOT-RC15-SALVAGE1",
+  "sequence": 69,
+  "created_at": "2026-08-22T00:58:00+00:00",
+  "expires_at": "2026-08-22T03:58:00+00:00",
+  "action_type": "GATE_OWNERSHIP",
   "parameters": {
-    "timeout_seconds": 1800
+    "device_id": "259f16e6-af9e-4dff-969b-2bb5eac43eb2",
+    "model": "APF1250",
+    "host": "10.48.8.74",
+    "port": 10001,
+    "username": "root",
+    "platform_id": "mt7621",
+    "password_env": "DB:G1V030E010214",
+    "profile_root": "../profiles",
+    "profile_id": "voip-standard",
+    "object_root": "/tmp/voip-reproduction-objects",
+    "output_root": "/tmp/capture-v2-gates",
+    "repo_root": "..",
+    "reproduction_session_id": "FROM_DEVICE_LEASE",
+    "worker_id": "r2-05b-apf1250-rc15-salvage1",
+    "gate_id": "R2-05B-APF1250-DUT-REBOOT-RC15",
+    "timeout_seconds": 600
   },
   "safety": {
     "require_clean_git": true,
@@ -17,5 +32,5 @@
     "expected_head": "81b440b28dbdcbfe0a77a7e0c6627b34ec68d82a"
   },
   "requested_by": "ChatGPT-remote-validation-controller",
-  "note": "RC15 validation-only reboot salvage regression. Stage B can now resolve the interrupted APF1250 reboot ReproductionSession from the device-scoped CaptureLease and rebuild a missing checkpoint from durable CaptureSession/CaptureEpoch/CaptureLease state, including old boot_id, producer identity and lease epoch. This salvages sequence 66 after the EWEB tunnel is restored without issuing another reboot. Capture Engine runtime paths remain unchanged; V1 authority and Production V2 disabled are mandatory."
+  "note": "Resume the already-executed APF1250 reboot from sequence 66 without rebooting again. Resolve the exact ReproductionSession from the device-scoped CaptureLease, rebuild the missing pre-reboot checkpoint from durable CaptureSession/CaptureEpoch/CaptureLease state, require current boot_id differs from the persisted pre-reboot boot_id, then establish the same logical reproduction session and run the existing R2-05 deterministic checks: DUT_REBOOT classification, new CaptureEpoch, higher lease_epoch, recovered DUT_REBOOT_GAP, DUT_REBOOT_DETECTED event, and exactly one final owned producer."
 }
