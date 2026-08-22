@@ -1,5 +1,5 @@
-# validation-only: grant reader + inventory media artifacts
-name: Offline E2E Feishu permission and media materialization
+# validation-only: materialize offline evidence media into existing Feishu Docx
+name: Offline E2E Feishu media materialization
 
 on:
   workflow_dispatch:
@@ -23,18 +23,20 @@ jobs:
       FEISHU_BASE_URL: https://open.feishu.cn/open-apis
       TARGET_DOCX_TOKEN: A4ZqdW9wsoWA17x5yjFcR3TUnyb
       TARGET_OPEN_ID: ou_67bee3c2e462a7f8939093bd8e697a96
+
     steps:
       - name: Checkout exact PR7 base
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.base.sha }}
 
-      - name: Stage prepared PCAP
+      - name: Verify exact PR7 and stage prepared PCAP
         shell: bash
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "48a3855e31a7019640671e422956212b540dd08d"
           source_fixture="$VOIP_OFFLINE_GOLDEN_001_PCAP"
+          test -f "$source_fixture"
           fixture="$source_fixture"
           if [ ! -r "$source_fixture" ]; then
             staged="$RUNNER_TEMP/offline-e2e-prepared.pcap"
@@ -54,6 +56,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          if command -v tshark >/dev/null 2>&1 && tshark -v | head -n1 | grep -q '4.2.2'; then
+            echo "TSHARK_BINARY=$(command -v tshark)" >> "$GITHUB_ENV"
+            exit 0
+          fi
           root="$RUNNER_TEMP/tshark-root"; debs="$RUNNER_TEMP/tshark-debs"
           rm -rf "$root" "$debs"; mkdir -p "$root" "$debs"
           mapfile -t packages < <(apt-cache depends --recurse --no-recommends --no-suggests --no-conflicts --no-breaks --no-replaces --no-enhances tshark | awk '/^[^ <][^:]*$/ {print $1}' | sort -u)
@@ -95,76 +101,93 @@ jobs:
             echo "FEISHU_APP_SECRET_FILE=$FEISHU_APP_SECRET_FILE"
             echo "FEISHU_LIVE_ENABLED=true"
           } >> "$GITHUB_ENV"
-          echo "Feishu config: PRESENT"
 
-      - name: Grant requested open_id view permission
+      - name: Verify requested reader permission
         shell: bash
         run: |
           set -euo pipefail
           PYTHONPATH=backend .venv-offline-e2e/bin/python - <<'PY'
-          import asyncio, json, os
+          import asyncio, os
           from app.integrations.feishu.transport import FeishuLiveTransport
-
           async def main():
-              t = FeishuLiveTransport()
-              token = os.environ['TARGET_DOCX_TOKEN']
-              member_id = os.environ['TARGET_OPEN_ID']
-              try:
-                  data = await t._request(
-                      'POST', f'/drive/v1/permissions/{token}/members',
-                      params={'type':'docx','need_notification':'false'},
-                      json_body={'member_type':'openid','member_id':member_id,'perm':'view'},
-                  )
-                  result = {'status':'PASS','operation':'create','member_id':member_id,'perm':'view','response_code':data.get('code',0)}
-              except Exception as exc:
-                  # Idempotent verification: if already a collaborator, list and verify view-or-higher.
-                  data = await t._request('GET', f'/drive/v1/permissions/{token}/members', params={'type':'docx'})
-                  items = ((data.get('data') or {}).get('items') or [])
-                  row = next((x for x in items if x.get('member_id') == member_id), None)
-                  if not row or row.get('perm') not in {'view','edit','full_access'}:
-                      raise
-                  result = {'status':'PASS','operation':'already_present','member_id':member_id,'perm':row.get('perm')}
-              print(json.dumps(result, ensure_ascii=False))
+              t=FeishuLiveTransport(); token=os.environ['TARGET_DOCX_TOKEN']; member=os.environ['TARGET_OPEN_ID']
+              data=await t._request('GET',f'/drive/v1/permissions/{token}/members',params={'type':'docx'})
+              items=((data.get('data') or {}).get('items') or [])
+              row=next((x for x in items if x.get('member_id')==member),None)
+              assert row and row.get('perm') in {'view','edit','full_access'}, (member,row)
+              print(f"READER_PERMISSION=PASS member={member} perm={row.get('perm')}")
           asyncio.run(main())
           PY
 
-      - name: Build bundle and inventory local media artifacts
+      - name: Build offline bundle and materialize images and audio into Feishu
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p validation/offline_e2e_feishu_001
           PYTHONPATH=backend .venv-offline-e2e/bin/python - <<'PY'
-          import json, os
+          import asyncio, json, os
           from pathlib import Path
           from app.golden.offline_analysis_e2e import build_offline_analysis_bundle
+          from app.integrations.feishu.evidence_document import FeishuEvidenceDocumentService
+          from app.reports.evidence_visuals import render_waveform_png, render_spectrogram_png
 
-          out=Path('validation/offline_e2e_feishu_001')
-          media_dir=out/'report_artifacts'
+          out=Path('validation/offline_e2e_feishu_001'); media_dir=out/'report_artifacts'
           bundle=build_offline_analysis_bundle(
               pcap_path=Path(os.environ['VOIP_OFFLINE_GOLDEN_001_PCAP']),
               pcm_profile_path=Path('profiles/pcm/ruijie_aim_diag_v1.yaml'),
               output_dir=media_dir,
               tshark_binary=os.environ['TSHARK_BINARY'])
-          artifacts=bundle.get('artifacts') or []
-          files=[]
-          for p in sorted(media_dir.rglob('*')):
-              if p.is_file():
-                  files.append({'path':str(p),'name':p.name,'size':p.stat().st_size,'suffix':p.suffix.lower()})
-          inventory={'artifact_count':len(artifacts),'artifacts':artifacts,'file_count':len(files),'files':files}
-          (out/'artifact_inventory.json').write_text(json.dumps(inventory,ensure_ascii=False,indent=2,default=str)+'\n',encoding='utf-8')
-          print('ARTIFACT_COUNT=',len(artifacts))
-          for a in artifacts:
-              print('ARTIFACT_META=',json.dumps(a,ensure_ascii=False,default=str))
-          print('LOCAL_MEDIA_FILES=',len(files))
-          for f in files:
-              print('MEDIA_FILE=',json.dumps(f,ensure_ascii=False))
+
+          waveform=json.loads((media_dir/'pcm_pcm_rx_00_waveform.json').read_text(encoding='utf-8'))
+          spectrogram=json.loads((media_dir/'pcm_pcm_rx_00_spectrogram.json').read_text(encoding='utf-8'))
+          waveform_png=render_waveform_png(waveform,title='PCM RX WAVEFORM - PERIODIC INTERFERENCE',subtitle='OFFLINE GOLDEN 001 | DUT-FACING CALL')
+          spectrogram_png=render_spectrogram_png(spectrogram,title='PCM RX SPECTROGRAM - PERIODIC INTERFERENCE',subtitle='OFFLINE GOLDEN 001 | DUT-FACING CALL')
+          (out/'pcm_rx_waveform.png').write_bytes(waveform_png)
+          (out/'pcm_rx_spectrogram.png').write_bytes(spectrogram_png)
+
+          audio_files=[
+              ('periodic_00_pcm_rx.wav','周期干扰对比音频：PCM RX'),
+              ('periodic_00_rtp_up.wav','周期干扰对比音频：RTP Upstream'),
+              ('periodic_00_rtp_down.wav','周期干扰对比音频：RTP Downstream Control'),
+          ]
+          for name,_ in audio_files:
+              assert (media_dir/name).is_file() and (media_dir/name).stat().st_size>1000, name
+
+          svc=FeishuEvidenceDocumentService(); doc=os.environ['TARGET_DOCX_TOKEN']
+          blocks=[]; plan=[]
+          blocks.append(svc._text('补充：图表 / 音频 Evidence Artifact（Offline E2E #001）',3))
+          blocks.append(svc._text('以下内容由同一份真实 PCAP 经过生产 Analyzer 与 Evidence Renderer 生成，并通过飞书 media upload/replace 流程写入。'))
+          blocks.append(svc._text('PCM RX 波形图',4)); idx=len(blocks); blocks.append(svc._media_placeholder(image=True)); plan.append((idx,'pcm_rx_waveform.png',waveform_png,True))
+          blocks.append(svc._text('PCM RX 时频图',4)); idx=len(blocks); blocks.append(svc._media_placeholder(image=True)); plan.append((idx,'pcm_rx_spectrogram.png',spectrogram_png,True))
+          blocks.append(svc._text('周期干扰三路对比音频',4))
+          for name,label in audio_files:
+              blocks.append(svc._text(label,12)); idx=len(blocks); blocks.append(svc._media_placeholder(image=False)); plan.append((idx,name,(media_dir/name).read_bytes(),False))
+
+          async def main():
+              created=await svc._insert_blocks(doc,blocks,index=0)
+              assert len(created)==len(blocks),(len(created),len(blocks))
+              verified=[]
+              for idx,name,data,is_image in plan:
+                  block_id=(created[idx] or {}).get('block_id'); assert block_id,(idx,name)
+                  token=await svc._upload_media(block_id=block_id,filename=name,data=data,parent_type='docx_image' if is_image else 'docx_file')
+                  await svc._replace_media(doc,block_id,token,image=is_image)
+                  got=await svc.transport._request('GET',f'/docx/v1/documents/{doc}/blocks/{block_id}')
+                  block=(got.get('data') or {}).get('block') or {}
+                  media_token=((block.get('image') or {}).get('token') if is_image else (block.get('file') or {}).get('token'))
+                  assert media_token, {'name':name,'block_id':block_id,'block':block}
+                  verified.append({'name':name,'block_id':block_id,'kind':'image' if is_image else 'audio_file','token_present':True})
+              result={'status':'PASS','document_url':f'https://feishu.cn/docx/{doc}','images':sum(1 for x in verified if x['kind']=='image'),'audio_files':sum(1 for x in verified if x['kind']=='audio_file'),'verified':verified,'finding_count':len((bundle.get('report') or {}).get('findings') or [])}
+              assert result['images']>=2 and result['audio_files']>=3,result
+              (out/'feishu_media_materialization.json').write_text(json.dumps(result,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+              print(json.dumps(result,ensure_ascii=False))
+          asyncio.run(main())
           PY
 
       - name: Upload validation artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: offline-e2e-feishu-permission-media-inventory
+          name: offline-e2e-feishu-media-materialization
           path: validation/offline_e2e_feishu_001/**
           if-no-files-found: warn
           retention-days: 14
