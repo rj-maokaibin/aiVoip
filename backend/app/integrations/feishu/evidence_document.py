@@ -17,9 +17,10 @@ from app.services.evidence_report_artifacts import report_artifacts
 
 
 class FeishuEvidenceDocumentService:
-    """One Case -> one Feishu Docx projection of the canonical Evidence Report."""
+    """One Case -> one Feishu Docx living projection of the canonical Evidence Report."""
     DOC_EDIT_INTERVAL_SECONDS=0.38
     INLINE_MEDIA_LIMIT=12
+    LIVING_PROJECTION_CONTRACT="feishu-evidence-living-document-v1"
 
     def __init__(self,transport:FeishuLiveTransport|None=None,storage=None):
         self.transport=transport or FeishuLiveTransport();self.storage=storage or ObjectStorage()
@@ -65,6 +66,22 @@ class FeishuEvidenceDocumentService:
                                                    json_body={"index":current,"children":chunk})
             rows=(response.get("data") or {}).get("children") or [];created.extend(rows);current+=len(chunk);time.sleep(self.DOC_EDIT_INTERVAL_SECONDS)
         return created
+
+    async def _delete_tracked_projection(self,document_id:str,block_count:int)->None:
+        """Replace only the root range created by the previous system projection.
+
+        Feishu's batch-delete API is index based. We therefore never guess a range:
+        deletion happens only when the binding persisted an exact prior root block
+        count. Legacy untracked content is preserved on the migration sync.
+        """
+        count=max(0,int(block_count or 0))
+        if not count:return
+        await self.transport._request(
+            "DELETE",
+            f"/docx/v1/documents/{quote(document_id,safe='')}/blocks/{quote(document_id,safe='')}/children/batch_delete",
+            json_body={"start_index":0,"end_index":count},
+        )
+        time.sleep(self.DOC_EDIT_INTERVAL_SECONDS)
 
     async def _upload_media(self,*,block_id:str,filename:str,data:bytes,parent_type:str)->str:
         token=await self.transport._tenant_token();url=settings.feishu_base_url.rstrip("/")+"/drive/v1/medias/upload_all"
@@ -116,8 +133,9 @@ class FeishuEvidenceDocumentService:
     def _core_blocks(self,report:PreliminaryEvidenceReport,payload:dict)->tuple[list[dict],int,list[dict]]:
         findings=payload.get("findings") or [];comp=payload.get("completeness") or {};case=payload.get("case") or {};blocks=[];inline_plan=[];media_budget=self.INLINE_MEDIA_LIMIT
         context=payload.get("analysis_context") or {};offline=context.get("analysis_mode")=="OFFLINE_IMPORTED"
+        frozen_comp=comp.get("frozen_v1") or payload.get("capture_quality") or {}
         blocks.extend([self._text(f"V{report.version}｜{payload.get('generated_at')}｜{report.status}",3),self._text("0. 当前状态 / 快速导航",4),
-                       self._text(f"Case：{case.get('case_no')}｜范围：{report.scope_type}｜证据完整度：{comp.get('state')}｜可复核性：{comp.get('reviewability')}｜问题点：{len(findings)}｜最高等级：{payload.get('highest_severity')}")])
+                       self._text(f"Case：{case.get('case_no')}｜范围：{report.scope_type}｜证据完整度：{frozen_comp.get('state') or comp.get('state')}｜可复核性：{comp.get('reviewability')}｜问题点：{len(findings)}｜最高等级：{payload.get('highest_severity')}")])
         card_summary=payload.get("evidence_card_summary") or {}
         if card_summary:blocks.append(self._text(f"Evidence Card：{card_summary.get('finding_count')}｜需音频：{card_summary.get('audio_expected_count')}｜已匹配：{card_summary.get('audio_available_count')}｜缺失：{card_summary.get('audio_unavailable_count')}"))
         blocks.extend([self._text("1. 当前初步结论",4),self._text(payload.get("headline") or ""),self._text((payload.get("evidence_boundary") or {}).get("statement") or "")])
@@ -139,7 +157,12 @@ class FeishuEvidenceDocumentService:
             blocks.extend([self._text(f"当前不能确认什么：{card.get('root_cause_boundary') or f.get('root_cause_boundary')}"),
                            self._text(f"下一步建议：{card.get('next_action')}")])
         blocks.append(self._text("3. 证据完整度",4))
-        for name,present in (comp.get("capture") or {}).items():blocks.append(self._text(f"{'✅' if present else '⚠️'} {name}：{'可用' if present else '缺失/不可用'}",12))
+        dimensions=frozen_comp.get("dimensions") or {}
+        if dimensions:
+            for name,item in dimensions.items():
+                present=bool((item or {}).get("available"));blocks.append(self._text(f"{'✅' if present else '⚠️'} {name}：{'可用' if present else '缺失/不可用'}",12))
+        else:
+            for name,present in (comp.get("capture") or {}).items():blocks.append(self._text(f"{'✅' if present else '⚠️'} {name}：{'可用' if present else '缺失/不可用'}",12))
         call=payload.get("display_call") or payload.get("call") or {}
         if offline:
             blocks.append(self._text("4. 当前离线 Call 重建结果",4));blocks.append(self._text(f"分析方式：离线证据导入｜复现 Session：不适用｜重建 Call：{context.get('reconstructed_call_count')}"))
@@ -159,15 +182,32 @@ class FeishuEvidenceDocumentService:
                 blocks.append(self._text(f"环境 A {str(comp_item.get('environment_a'))[:12]}… vs 环境 B {str(comp_item.get('environment_b'))[:12]}…",5))
                 for diff in (comp_item.get("differences") or [])[:20]:
                     if diff.get("significant_by_v1_rule"):blocks.append(self._text(f"{diff.get('title')}：A {round((diff.get('environment_a_rate') or 0)*100,2)}% → B {round((diff.get('environment_b_rate') or 0)*100,2)}%，差异 {round((diff.get('absolute_rate_delta') or 0)*100,2)}%；仅表示环境关联，不独立确认因果。",12))
+                for metric in (comp_item.get("metric_differences") or [])[:6]:
+                    if metric.get("status")=="COMPARABLE":blocks.append(self._text(f"{metric.get('label')}：A {metric.get('environment_a_value')} → B {metric.get('environment_b_value')}｜Δ {metric.get('delta')}",12))
         else:blocks.append(self._text("当前没有满足分组条件的 A/B 环境对比。"))
-        blocks.append(self._text("7. 历次 Reproduction Session（复现会话）",4));blocks.append(self._text("当前为离线证据导入；系统不会为了填充报告创建 ReproductionSession/ReproductionCall。历史真实 Reproduction 报告仍按 Case 维度保留。" if offline else "历史报告版本保留在本文档下方；版本之间按最新优先，同一 Call 内事件按时间正序。"))
+        baseline=payload.get("normal_baseline_comparison") or {}
+        if baseline:
+            if baseline.get("status")=="MATCHED":blocks.append(self._text(f"正常基线：已匹配同环境正常 Call {baseline.get('baseline_count')} 条；差异仅作为对照证据，不独立确认根因。",12))
+            else:blocks.append(self._text(f"正常基线：未使用｜{baseline.get('reason')}｜不强行匹配。",12))
+        blocks.append(self._text("7. 历次 Reproduction Session（复现会话）",4));blocks.append(self._text("当前为离线证据导入；系统不会为了填充报告创建 ReproductionSession/ReproductionCall。历史真实 Reproduction 报告仍按 Case 维度保留。" if offline else "Session/Call 按最新优先；单个 Call 内 Evidence 按时间正序。"))
         blocks.append(self._text("8. 正常项 / 排除性证据",4))
-        for item in payload.get("normal_and_exclusion_evidence") or []:blocks.append(self._text(f"✅ {item.get('text')}",12))
+        for item in payload.get("normal_evidence") or payload.get("normal_and_exclusion_evidence") or []:blocks.append(self._text(f"✅ {item.get('text')}",12))
         blocks.extend([self._text("9. 完整技术证据",4),self._text("RTP（Real-time Transport Protocol，实时传输协议）、PCM（Pulse Code Modulation，脉冲编码调制）、dBFS（Decibels relative to Full Scale，相对于数字满量程的分贝）等指标可从 Web/Artifact 下钻复核。")])
         blocks.extend([self._text("10. Evidence Bundle / 附件",4),self._text("关键证据已优先放到对应 Evidence Card 下；此处仅追加未内联的图、音频和 Evidence Bundle。")])
         attachment_index=len(blocks)
-        blocks.extend([self._text("11. 报告版本与审计记录",4),self._text(f"Schema：{payload.get('schema_version')}｜Composer：{payload.get('composer_version')}｜Evidence Card：{card_summary.get('version')}｜Report ID：{report.id}")])
+        blocks.extend([self._text("11. 报告版本与审计记录",4),self._text(f"Schema：{payload.get('schema') or payload.get('schema_version')}｜Composer：{payload.get('composer_version')}｜Evidence Card：{card_summary.get('version')}｜Report ID：{report.id}")])
         return blocks,attachment_index,inline_plan
+
+    def _history_blocks(self,db:Session,*,case_id:str,current_report_id:str)->list[dict]:
+        rows=list(db.scalars(select(PreliminaryEvidenceReport).where(
+            PreliminaryEvidenceReport.case_id==case_id,
+            PreliminaryEvidenceReport.id!=current_report_id,
+        ).order_by(PreliminaryEvidenceReport.created_at.desc()).limit(20)))
+        blocks=[]
+        for row in rows:
+            created=row.created_at.isoformat() if row.created_at else "UNKNOWN_TIME"
+            blocks.append(self._text(f"历史 V{row.version}｜{row.scope_type}:{row.scope_id}｜{row.status}｜{created}｜Report {row.id}",12))
+        return blocks
 
     async def _materialize_plan(self,document_id:str,created_blocks:list[dict],plan:list[dict],artifact_by_id:dict)->set[str]:
         used=set()
@@ -190,8 +230,13 @@ class FeishuEvidenceDocumentService:
             document_id,url=await self._create_document(f"{case.case_no} VOIP 初步证据分析报告")
             binding=FeishuEvidenceDocumentBinding(case_id=case_id,document_id=document_id,document_url=url,title=f"{case.case_no} VOIP 初步证据分析报告",status="CREATED");db.add(binding);db.flush()
         if not binding.document_id:raise RuntimeError("FEISHU_DOCUMENT_ID_MISSING")
+        previous_metadata=binding.metadata_json or {};previous_count=int(previous_metadata.get("projection_root_block_count") or 0)
+        migration_mode="TRACKED_REPLACE" if previous_count>0 else ("LEGACY_UNTRACKED_PRESERVED" if binding.projection_version else "INITIAL")
+        await self._delete_tracked_projection(binding.document_id,previous_count)
+
         artifacts=report_artifacts(db,report.id);artifact_by_id={a.id:a for a in artifacts}
-        core,attachment_index,inline_plan=self._core_blocks(report,payload);created_core=await self._insert_blocks(binding.document_id,core,index=0)
+        core,attachment_index,inline_plan=self._core_blocks(report,payload);core.extend(self._history_blocks(db,case_id=case_id,current_report_id=report.id))
+        created_core=await self._insert_blocks(binding.document_id,core,index=0)
         inline_ids=await self._materialize_plan(binding.document_id,created_core,inline_plan,artifact_by_id)
 
         candidates=[]
@@ -201,19 +246,24 @@ class FeishuEvidenceDocumentService:
             is_clip=artifact.type in {"AUDIO_CLIP","PERIODIC_AUDIO_CLIP"};is_bundle=artifact.type=="EVIDENCE_BUNDLE"
             if (is_image or is_clip or is_bundle) and artifact.size_bytes<=20*1024*1024:candidates.append((artifact,is_image))
         candidates.sort(key=lambda pair:(0 if pair[1] else 1 if pair[0].type in {"AUDIO_CLIP","PERIODIC_AUDIO_CLIP"} else 2,pair[0].created_at));candidates=candidates[:8]
+        created_attachments=[]
         if candidates:
-            placeholders=[self._media_placeholder(image=is_image) for _,is_image in candidates];created=await self._insert_blocks(binding.document_id,placeholders,index=attachment_index)
-            for (artifact,is_image),block in zip(candidates,created):
+            placeholders=[self._media_placeholder(image=is_image) for _,is_image in candidates];created_attachments=await self._insert_blocks(binding.document_id,placeholders,index=attachment_index)
+            for (artifact,is_image),block in zip(candidates,created_attachments):
                 block_id=self._media_block_id(block,image=is_image)
                 if not block_id:continue
                 data=self.storage.get_bytes(artifact.object_key)
                 token=await self._upload_media(block_id=block_id,filename=artifact.filename,data=data,parent_type="docx_image" if is_image else "docx_file")
                 await self._replace_media(binding.document_id,block_id,token,image=is_image)
+        projection_root_block_count=len(created_core)+len(created_attachments)
         binding.projected_report_id=report.id;binding.projection_version+=1;binding.status="SYNCED";binding.last_error=None
         binding.metadata_json={"report_version":report.version,"report_status":report.status,"finding_count":payload.get("finding_count"),"ordering_contract":"D112",
+                               "living_document_contract":self.LIVING_PROJECTION_CONTRACT,"projection_mode":"REPLACE_TRACKED_ROOT_RANGE_V1",
+                               "projection_root_block_count":projection_root_block_count,"migration_mode":migration_mode,
                                "inline_evidence_count":len(inline_ids),"attachment_count":len(candidates),"analysis_mode":(payload.get("analysis_context") or {}).get("analysis_mode"),
                                "call_origin":(payload.get("analysis_context") or {}).get("call_origin")}
         audit(db,case_id=case_id,actor="feishu-evidence-document",event_type="FEISHU_EVIDENCE_DOCUMENT_SYNCED",target_type="feishu_evidence_document",target_id=binding.id,
               detail={"document_id":binding.document_id,"report_id":report.id,"report_version":report.version,"inline_evidence_count":len(inline_ids),"attachment_count":len(candidates),
+                      "living_document_contract":self.LIVING_PROJECTION_CONTRACT,"projection_root_block_count":projection_root_block_count,"migration_mode":migration_mode,
                       "analysis_mode":(payload.get("analysis_context") or {}).get("analysis_mode")})
         db.flush();return binding

@@ -162,10 +162,23 @@ def _y_ticks(canvas: Canvas,left:int,top:int,bottom:int,lo:float,hi:float,label:
     canvas.text(8,top-24,label,scale=1,max_width=100)
 
 
+def _right_y_ticks(canvas: Canvas,right:int,top:int,bottom:int,lo:float,hi:float,label:str) -> None:
+    span=max(1e-12,hi-lo)
+    for frac in (0.0,0.5,1.0):
+        y=bottom-int((bottom-top)*frac); value=lo+span*frac
+        canvas.line(right,y,right+7,y,(115,75,45),1)
+        canvas.text(right+10,max(2,y-4),_fmt(value),scale=1,color=(115,75,45),max_width=max(20,canvas.width-right-12))
+    canvas.text(max(right-8,canvas.width-112),top-24,label,scale=1,color=(115,75,45),max_width=104)
+
+
 def render_waveform_png(waveform: dict, *, anomaly_start: float | None = None,
                         anomaly_end: float | None = None, width: int = 1400, height: int = 620,
                         title: str = "WAVEFORM", subtitle: str | None = None) -> bytes:
-    canvas=Canvas(width,height); _header(canvas,title,subtitle); left,top,right,bottom=_plot_box(canvas)
+    canvas=Canvas(width,height); _header(canvas,title,subtitle)
+    # Reserve deterministic right-axis room for RMS dBFS as required by SPEC §14.
+    left,top,right,bottom=112,92,canvas.width-118,canvas.height-92
+    canvas.rect(left,top,right,bottom,(255,255,255),True)
+    canvas.line(left,bottom,right,bottom,(80,80,80),2);canvas.line(left,top,left,bottom,(80,80,80),2);canvas.line(right,top,right,bottom,(115,75,45),1)
     bins=waveform.get('bins') or []
     duration=float(waveform.get('duration_seconds') or (bins[-1].get('t') if bins else 1.0) or 1.0)
     if anomaly_start is not None:
@@ -176,11 +189,18 @@ def render_waveform_png(waveform: dict, *, anomaly_start: float | None = None,
         canvas.text(min(right-90,xa+4),top+8,"ANOMALY",color=(160,45,35),scale=1)
     mid=(top+bottom)//2; canvas.line(left,mid,right,mid,(185,185,185))
     max_abs=max(1.0,max((abs(float(x.get('min',0))) for x in bins),default=0.0),max((abs(float(x.get('max',0))) for x in bins),default=0.0))
+    rms_points=[]
     for item in bins:
         t=float(item.get('t') or 0.0); x=int(left+(right-left)*t/max(duration,1e-9))
         ymin=int(mid-float(item.get('max',0))/max_abs*(bottom-top)*0.46); ymax=int(mid-float(item.get('min',0))/max_abs*(bottom-top)*0.46)
         canvas.line(x,ymin,x,ymax,(45,85,120))
+        if item.get('rms_dbfs') is not None:
+            rms=max(-120.0,min(0.0,float(item.get('rms_dbfs')))); y=int(bottom-(bottom-top)*(rms+120.0)/120.0);rms_points.append((x,y))
+    for (x0,y0),(x1,y1) in zip(rms_points,rms_points[1:]):canvas.line(x0,y0,x1,y1,(155,95,45),2)
+    canvas.text(left+8,top+8,"AMPLITUDE",color=(45,85,120),scale=1)
+    canvas.text(left+90,top+8,"RMS DBFS",color=(155,95,45),scale=1)
     _x_ticks(canvas,left,right,bottom,0.0,duration,"TIME (S)"); _y_ticks(canvas,left,top,bottom,-max_abs,max_abs,"AMPLITUDE (PCM)")
+    _right_y_ticks(canvas,right,top,bottom,-120.0,0.0,"RMS DBFS")
     return canvas.png_bytes()
 
 
@@ -188,6 +208,18 @@ def _heat_color(value: float, lo: float, hi: float) -> tuple[int,int,int]:
     if not math.isfinite(value): value=lo
     t=0.0 if hi<=lo else max(0.0,min(1.0,(value-lo)/(hi-lo)))
     return (int(245-180*t), int(245-120*t), int(245-40*t))
+
+
+def _draw_relative_db_scale(canvas:Canvas,left:int,right:int,top:int,lo:float,hi:float)->None:
+    bar_left=max(left,right-270);bar_right=right;bar_top=max(64,top-26);bar_bottom=bar_top+10
+    width=max(1,bar_right-bar_left)
+    for px in range(width+1):
+        value=lo+(hi-lo)*px/width
+        canvas.line(bar_left+px,bar_top,bar_left+px,bar_bottom,_heat_color(value,lo,hi),1)
+    canvas.rect(bar_left,bar_top,bar_right,bar_bottom,(90,90,90),False)
+    canvas.text(bar_left,bar_bottom+4,_fmt(lo),scale=1,color=(90,90,90),max_width=54)
+    canvas.text(max(bar_left,bar_right-48),bar_bottom+4,_fmt(hi),scale=1,color=(90,90,90),max_width=48)
+    canvas.text(max(bar_left,bar_left+80),bar_bottom+4,"REL DB",scale=1,color=(90,90,90),max_width=70)
 
 
 def render_spectrogram_png(spec: dict, *, anomaly_start: float | None = None,
@@ -215,7 +247,7 @@ def render_spectrogram_png(spec: dict, *, anomaly_start: float | None = None,
             if maxf and f<=maxf:
                 y=bottom-int((bottom-top)*f/maxf); canvas.line(left,y,right,y,(155,155,155),1)
         _x_ticks(canvas,left,right,bottom,0.0,duration,"TIME (S)"); _y_ticks(canvas,left,top,bottom,0.0,maxf or 1.0,"FREQUENCY (HZ)")
-        canvas.text(right-190,top-23,f"REL DB {_fmt(lo)}..{_fmt(hi)}",scale=1,color=(90,90,90),max_width=185)
+        _draw_relative_db_scale(canvas,left,right,top,lo,hi)
     else:
         canvas.text(left+20,top+20,"NO SPECTROGRAM DATA",scale=2,color=(130,130,130))
     return canvas.png_bytes()
@@ -248,23 +280,47 @@ def render_spectrum_png(spectral: dict, *, width: int = 1400, height: int = 620,
     return canvas.png_bytes()
 
 
+def _rtp_event_label(event:dict,base_time:float)->str:
+    details=event.get('details') or {}
+    parts=[str(event.get('type') or 'EVENT')]
+    try:parts.append(f"T+{float(event.get('start_time') or base_time)-base_time:.3f}S")
+    except (TypeError,ValueError):pass
+    prev_frame=details.get('previous_frame_number') or details.get('previous_frame')
+    curr_frame=details.get('current_frame_number') or details.get('next_frame_number') or details.get('current_frame')
+    if prev_frame is not None or curr_frame is not None:parts.append(f"F{prev_frame or '?'}>{curr_frame or '?'}")
+    prev_seq=details.get('previous_sequence') or details.get('previous_sequence_ext')
+    curr_seq=details.get('current_sequence') or details.get('next_sequence_ext')
+    if prev_seq is not None or curr_seq is not None:parts.append(f"SEQ {prev_seq if prev_seq is not None else '?'}>{curr_seq if curr_seq is not None else '?'}")
+    lost=details.get('lost_packets')
+    if lost is not None:parts.append(f"LOST {lost}")
+    jitter=details.get('jitter_ms') or details.get('p95_jitter_ms')
+    if jitter is not None:parts.append(f"JIT {_fmt(float(jitter))}MS")
+    delta=details.get('delta_ms')
+    if delta is not None:parts.append(f"DELTA {_fmt(float(delta))}MS")
+    if str(event.get('type') or '')=='PAYLOAD_CHANGE':
+        pts=details.get('payload_types') or []
+        if pts:parts.append("PT "+">".join(str(x) for x in pts[:4]))
+    return " | ".join(parts)
+
+
 def render_rtp_timeline_png(streams: list[dict], *, width: int = 1400, height: int = 720,
                             title: str = "RTP TIMELINE", subtitle: str | None = None) -> bytes:
     canvas=Canvas(width,height); _header(canvas,title,subtitle); left,top,right,bottom=_plot_box(canvas)
     if not streams:
         canvas.text(left+20,top+20,"NO RTP STREAM DATA",scale=2,color=(130,130,130)); return canvas.png_bytes()
     starts=[float(s.get('start_time') or 0) for s in streams]; ends=[float(s.get('end_time') or s.get('start_time') or 0) for s in streams]
-    lo=min(starts); hi=max(ends); span=max(1e-9,hi-lo); lane=max(28,(bottom-top)//max(1,len(streams)+1))
+    lo=min(starts); hi=max(ends); span=max(1e-9,hi-lo); lane=max(38,(bottom-top)//max(1,len(streams)+1))
     for idx,s in enumerate(streams):
         y=top+(idx+1)*lane
         x0=left+int((right-left)*(float(s.get('start_time') or lo)-lo)/span); x1=left+int((right-left)*(float(s.get('end_time') or hi)-lo)/span)
         canvas.line(x0,y,x1,y,(35,85,115),5)
         label=f"RTP{idx+1} {s.get('src_ip')}:{s.get('src_port')}>{s.get('dst_ip')}:{s.get('dst_port')}"
         canvas.text(left+6,max(top,y-20),label,scale=1,color=(45,70,95),max_width=right-left-12)
-        for ev in s.get('events',[]) or []:
+        for ev_index,ev in enumerate((s.get('events') or [])[:12]):
             t=float(ev.get('start_time') or lo); x=left+int((right-left)*(t-lo)/span)
             canvas.line(x,y-10,x,y+10,(180,45,45),3)
-            etype=str(ev.get('type') or 'EVENT'); canvas.text(max(left,min(right-100,x+4)),max(top,y+12),etype,scale=1,color=(150,45,45),max_width=96)
+            label_y=max(top,min(bottom-12,y+12+(ev_index%2)*12))
+            canvas.text(max(left,min(right-330,x+4)),label_y,_rtp_event_label(ev,lo),scale=1,color=(150,45,45),max_width=326)
     _x_ticks(canvas,left,right,bottom,0.0,span,"TIME FROM FIRST RTP (S)"); canvas.text(8,top-24,"RTP STREAM / EVENT",scale=1,max_width=100)
     return canvas.png_bytes()
 
@@ -274,35 +330,57 @@ def _sip_message_label(msg: dict) -> str:
     method=msg.get('method') or msg.get('request_method')
     status=msg.get('status_code') or msg.get('response_code') or msg.get('status')
     phrase=msg.get('reason') or msg.get('reason_phrase')
-    core=str(method or (f"{status} {phrase or ''}".strip() if status else msg.get('message') or 'SIP'))
+    cseq=msg.get('cseq') or msg.get('cseq_number')
+    cseq_method=msg.get('cseq_method')
+    core=str(method or (f"{status} {phrase or ''}".strip() if status else msg.get('label') or msg.get('message') or 'SIP'))
+    if cseq is not None:core+=f" | CSEQ {cseq}{' '+str(cseq_method) if cseq_method else ''}"
     return f"F{frame} {core}" if frame is not None else core
+
+
+def _sip_messages(calls:list[dict])->list[dict]:
+    messages=[]
+    for call in calls:
+        rows=call.get('ladder') or call.get('messages') or call.get('sip_messages') or []
+        messages.extend(rows)
+    return messages[:24]
+
+
+def _sip_endpoint(msg:dict,key:str)->str|None:
+    if key=='src':return msg.get('src') or msg.get('src_ip')
+    return msg.get('dst') or msg.get('dst_ip')
 
 
 def render_sip_call_flow_png(calls: list[dict], *, width: int = 1400, height: int = 720,
                              title: str = "SIP CALL FLOW", subtitle: str | None = None) -> bytes:
     canvas=Canvas(width,height); _header(canvas,title,subtitle); left,top,right,bottom=_plot_box(canvas)
-    messages=[]
-    for call in calls:
-        for msg in call.get('messages',[]) or call.get('sip_messages',[]) or []: messages.append(msg)
-    messages=messages[:24]
+    messages=_sip_messages(calls)
+    invite=next((m for m in messages if str(m.get('method') or '').upper()=='INVITE'),None)
     endpoints=[]
     for msg in messages:
-        for key in ('src_ip','dst_ip'):
-            value=msg.get(key)
-            if value and value not in endpoints: endpoints.append(value)
-    endpoint_a=endpoints[0] if endpoints else 'ENDPOINT A'; endpoint_b=endpoints[1] if len(endpoints)>1 else 'ENDPOINT B'
-    x_a=left+185; x_b=right-185
-    canvas.text(max(left,x_a-60),top+5,str(endpoint_a),scale=1,max_width=150); canvas.text(max(left,x_b-60),top+5,str(endpoint_b),scale=1,max_width=150)
-    canvas.line(x_a,top+30,x_a,bottom-20,(80,80,80),2); canvas.line(x_b,top+30,x_b,bottom-20,(80,80,80),2)
+        for key in ('src','dst'):
+            value=_sip_endpoint(msg,key)
+            if value and value not in endpoints:endpoints.append(value)
+    if invite:
+        caller_endpoint=_sip_endpoint(invite,'src');callee_endpoint=_sip_endpoint(invite,'dst')
+    else:
+        caller_endpoint=endpoints[0] if endpoints else None;callee_endpoint=endpoints[1] if len(endpoints)>1 else None
+    endpoint_a=caller_endpoint or 'ENDPOINT A';endpoint_b=callee_endpoint or 'ENDPOINT B'
+    x_a=left+210; x_b=right-210
+    canvas.text(max(left,x_a-95),top+5,f"CALLER {endpoint_a}",scale=1,max_width=190)
+    canvas.text(max(left,x_b-95),top+5,f"CALLEE {endpoint_b}",scale=1,max_width=190)
+    first_call=calls[0] if calls else {}
+    call_id=first_call.get('call_id') or first_call.get('sip_call_id')
+    if call_id:canvas.text(max(left,right-390),top+22,f"CALL-ID {call_id}",scale=1,color=(90,90,90),max_width=380)
+    canvas.line(x_a,top+38,x_a,bottom-20,(80,80,80),2); canvas.line(x_b,top+38,x_b,bottom-20,(80,80,80),2)
     if not messages:
-        canvas.text(left+20,top+55,"NO SIP MESSAGE LIST IN CALL RESULT",scale=2,color=(130,130,130),max_width=right-left-40)
-    step=max(20,(bottom-top-80)//max(1,len(messages)))
+        canvas.text(left+20,top+55,"NO SIP LADDER IN CALL RESULT",scale=2,color=(130,130,130),max_width=right-left-40)
+    step=max(20,(bottom-top-90)//max(1,len(messages)))
     for i,msg in enumerate(messages):
-        y=top+55+i*step; src=msg.get('src_ip'); outgoing=True if not src else src==endpoint_a
+        y=top+60+i*step; src=_sip_endpoint(msg,'src'); outgoing=True if not src else src==endpoint_a
         xa,xb=(x_a,x_b) if outgoing else (x_b,x_a); canvas.line(xa,y,xb,y,(45,70,95),2)
         canvas.line(xb,y,xb+(-8 if outgoing else 8),y-5,(45,70,95),2); canvas.line(xb,y,xb+(-8 if outgoing else 8),y+5,(45,70,95),2)
         canvas.text(min(xa,xb)+12,max(top,y-11),_sip_message_label(msg),scale=1,color=(45,60,80),max_width=abs(xb-xa)-24)
-    canvas.text(8,top-24,"MESSAGE ORDER",scale=1,max_width=100); canvas.text((left+right)//2-45,bottom+43,"SIP ENDPOINT",scale=1)
+    canvas.text(8,top-24,"MESSAGE ORDER",scale=1,max_width=100); canvas.text((left+right)//2-45,bottom+43,"SIP ROLE / ENDPOINT",scale=1)
     return canvas.png_bytes()
 
 
