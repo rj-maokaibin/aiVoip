@@ -51,12 +51,6 @@ class ControlPolicy:
 
     @classmethod
     def _porcelain_path(cls, line: str) -> str:
-        """Extract a path from porcelain output across 1- and 2-column status forms.
-
-        Some Git builds/wrappers expose lines as `M path`, while stock porcelain v1
-        commonly uses ` M path`/`M  path`.  Generated control files must be ignored
-        in either representation without weakening the product-source clean check.
-        """
         return cls._PORCELAIN_PREFIX_RE.sub("", line, count=1).strip().strip('"')
 
     def _git(self, *args: str) -> str:
@@ -209,6 +203,29 @@ class ControlPolicy:
                 self._required(p, "capture_session_id", "gate_id")
                 self._add(argv, "--capture-session-id", p.get("capture_session_id"))
                 self._add(argv, "--gate-id", p.get("gate_id"))
+            return PreparedCommand(argv, self.backend_root, timeout, env)
+
+        if action.action_type == ControlActionType.GATE_READINESS_FXS:
+            self._required(p, *common_device, "reproduction_session_id", "worker_id")
+            transport = str(p.get("transport", "scp"))
+            if transport not in {"sftp", "scp"}:
+                raise ControlPolicyError("TRANSPORT_NOT_ALLOWED")
+            duration = float(p.get("duration", 90.0))
+            if duration <= 0 or duration > 300:
+                raise ControlPolicyError("R4_FXS_DURATION_OUT_OF_RANGE")
+            argv = [sys.executable, "-m", "app.capture_v2.gate.r4_cli"]
+            for key, flag in [
+                ("device_id", "--device-id"), ("model", "--model"), ("host", "--host"),
+                ("port", "--port"), ("username", "--username"), ("platform_id", "--platform-id"),
+                ("password_env", "--password-env"), ("profile_root", "--profile-root"),
+                ("profile_id", "--profile-id"), ("object_root", "--object-root"),
+                ("output_root", "--output-root"), ("repo_root", "--repo-root"),
+                ("reproduction_session_id", "--reproduction-session-id"),
+                ("worker_id", "--worker-id"), ("gate_id", "--gate-id"),
+            ]:
+                self._add(argv, flag, p.get(key))
+            self._add(argv, "--duration", duration)
+            self._add(argv, "--transport", transport)
             return PreparedCommand(argv, self.backend_root, timeout, env)
 
         if action.action_type == ControlActionType.GATE_EVALUATE:
