@@ -9,9 +9,10 @@ jobs:
     runs-on: [self-hosted, linux, x64, voip-controlled-linux]
     timeout-minutes: 10
     env:
-      DOCUMENT_TOKEN: RFtmdjLNRo1SaBxXBugcpLgdnvb
+      DOCUMENT_TOKENS: A4ZqdW9wsoWA17x5yjFcR3TUnyb,RFvYduQkPonvmqxfOQGcTApfnBc,RFtmdjLNRo1SaBxXBugcpLgdnvb
+      TARGET_OPENID_SHA256: 5a8d6e0ba24701f0dedc169a74279ab12bb4da8d8f87a7929dbaf6d1a060260c
     steps:
-      - name: Resolve user from p2p chat, grant view, verify
+      - name: Resolve exact reader, grant all docs view, verify
         shell: bash
         run: |
           set -euo pipefail
@@ -21,43 +22,85 @@ jobs:
           export FEISHU_APP_SECRET_FILE=/home/github-runner/.config/voip-ai/feishu_app_secret
           test "${FEISHU_RECEIVE_ID_TYPE:-}" = "chat_id" || { echo EXPECTED_CHAT_ID_CONFIG; exit 2; }
           python3 - <<'PY'
-          import json, os, urllib.parse, urllib.request, urllib.error
+          import hashlib, json, os, urllib.parse, urllib.request, urllib.error
+
           base=os.environ.get('FEISHU_BASE_URL','https://open.feishu.cn/open-apis').rstrip('/')
-          with open(os.environ['FEISHU_APP_SECRET_FILE'],'r',encoding='utf-8') as f: secret=f.read().strip()
+          docs=[x.strip() for x in os.environ['DOCUMENT_TOKENS'].split(',') if x.strip()]
+          target_hash=os.environ['TARGET_OPENID_SHA256'].strip().lower()
+          with open(os.environ['FEISHU_APP_SECRET_FILE'],'r',encoding='utf-8') as f:
+              secret=f.read().strip()
+
           def call(method,url,payload=None,token=None):
               data=None if payload is None else json.dumps(payload).encode()
               headers={'Content-Type':'application/json'}
-              if token: headers['Authorization']='Bearer '+token
+              if token:
+                  headers['Authorization']='Bearer '+token
               req=urllib.request.Request(url,data=data,headers=headers,method=method)
               try:
-                  with urllib.request.urlopen(req,timeout=30) as r: raw=r.read()
+                  with urllib.request.urlopen(req,timeout=30) as r:
+                      raw=r.read()
               except urllib.error.HTTPError as e:
-                  raw=e.read(); out=json.loads(raw.decode()) if raw else {'code':e.code}
+                  raw=e.read()
+                  out=json.loads(raw.decode()) if raw else {'code':e.code}
                   raise RuntimeError(f'FEISHU_HTTP_{e.code}:{out.get("code")}:{out.get("msg")}')
               return json.loads(raw.decode()) if raw else {}
-          auth=call('POST',base+'/auth/v3/tenant_access_token/internal',{'app_id':os.environ['FEISHU_APP_ID'],'app_secret':secret})
-          token=auth['tenant_access_token']; chat=os.environ['FEISHU_DEFAULT_RECEIVE_ID']; doc=os.environ['DOCUMENT_TOKEN']
-          bot=call('GET',base+'/bot/v3/info',token=token)
-          bot_data=bot.get('bot') or bot.get('data') or {}
-          bot_id=str(bot_data.get('open_id') or bot_data.get('bot_open_id') or '').strip()
-          assert bot_id.startswith('ou_'), 'BOT_OPEN_ID_NOT_RESOLVED'
-          members=call('GET',base+'/im/v1/chats/'+urllib.parse.quote(chat,safe='')+'/members?member_id_type=open_id&page_size=100',token=token)
+
+          auth=call('POST',base+'/auth/v3/tenant_access_token/internal',{
+              'app_id':os.environ['FEISHU_APP_ID'],
+              'app_secret':secret,
+          })
+          token=auth['tenant_access_token']
+          chat=os.environ['FEISHU_DEFAULT_RECEIVE_ID']
+          members=call(
+              'GET',
+              base+'/im/v1/chats/'+urllib.parse.quote(chat,safe='')+'/members?member_id_type=open_id&page_size=100',
+              token=token,
+          )
           items=(members.get('data') or {}).get('items') or []
           ids=[]
           for item in items:
               mid=str(item.get('member_id') or item.get('open_id') or '').strip()
-              if mid.startswith('ou_') and mid not in ids: ids.append(mid)
-          human=[x for x in ids if x!=bot_id]
+              if mid.startswith('ou_') and mid not in ids:
+                  ids.append(mid)
+          matched=[x for x in ids if hashlib.sha256(x.encode()).hexdigest()==target_hash]
           print('CHAT_OPENID_COUNT='+str(len(ids)))
-          print('NON_BOT_USER_COUNT='+str(len(human)))
-          assert len(human)==1, 'P2P_USER_NOT_UNIQUE'
-          reader=human[0]
-          endpoint=base+'/drive/v1/permissions/'+urllib.parse.quote(doc,safe='')+'/members?type=docx&need_notification=false'
-          result=call('POST',endpoint,{'member_type':'openid','member_id':reader,'perm':'view'},token)
-          assert result.get('code',0)==0, f'GRANT_FAILED:{result.get("code")}:{result.get("msg")}'
-          verify=call('GET',base+'/drive/v1/permissions/'+urllib.parse.quote(doc,safe='')+'/members?type=docx',token=token)
-          entries=(verify.get('data') or {}).get('items') or []
-          assert any(str(x.get('member_id') or '')==reader and str(x.get('perm') or '').lower() in {'view','edit','full_access'} for x in entries), 'READER_PERMISSION_VERIFY_FAILED'
-          print('DOCUMENT_READER_ACCESS=PASS')
-          print('READER_PERMISSION=VIEW_OR_HIGHER')
+          print('TARGET_READER_MATCH_COUNT='+str(len(matched)))
+          assert len(matched)==1, 'TARGET_READER_NOT_UNIQUELY_RESOLVED'
+          reader=matched[0]
+
+          def permission_entries(doc):
+              result=call(
+                  'GET',
+                  base+'/drive/v1/permissions/'+urllib.parse.quote(doc,safe='')+'/members?type=docx&page_size=100',
+                  token=token,
+              )
+              data=result.get('data') or {}
+              return data.get('items') or data.get('members') or []
+
+          def has_view_or_higher(doc):
+              return any(
+                  str(x.get('member_id') or '')==reader
+                  and str(x.get('perm') or '').lower() in {'view','edit','full_access'}
+                  for x in permission_entries(doc)
+              )
+
+          passed=[]
+          for doc in docs:
+              if not has_view_or_higher(doc):
+                  endpoint=(
+                      base+'/drive/v1/permissions/'+urllib.parse.quote(doc,safe='')
+                      +'/members?type=docx&need_notification=false'
+                  )
+                  result=call('POST',endpoint,{
+                      'member_type':'openid',
+                      'member_id':reader,
+                      'perm':'view',
+                  },token)
+                  assert result.get('code',0)==0, f'GRANT_FAILED:{doc}:{result.get("code")}:{result.get("msg")}'
+              assert has_view_or_higher(doc), 'READER_PERMISSION_VERIFY_FAILED:'+doc
+              passed.append(doc)
+              print('DOCUMENT_READER_ACCESS=PASS:'+doc)
+          assert len(passed)==len(docs)==3
+          print('ALL_DOCUMENT_READER_ACCESS=PASS')
+          print('DOCUMENT_COUNT=3')
           PY
