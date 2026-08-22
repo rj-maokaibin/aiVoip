@@ -109,14 +109,17 @@ def build_call_formation_quality(report: Any, payload: dict) -> dict:
     """FR-028 canonical Session outcome when no valid Call was formed.
 
     A terminal reproduction Session is still reportable when it contains only
-    pre-Call evidence.  The contract is deliberately evidence-first: it records
+    pre-Call evidence. The contract is deliberately evidence-first: it records
     that no valid Call was formed without converting absent SIP/RTP/media facts
     into a "normal call" statement.
     """
     scope_type = str(getattr(report, "scope_type", None) or payload.get("scope_type") or (payload.get("scope") or {}).get("type") or "").upper()
     context = payload.get("analysis_context") or {}
     display_call = payload.get("display_call") or payload.get("call")
+    summary = payload.get("multi_call_summary") or {}
     runtime_count = context.get("session_runtime_call_count")
+    if runtime_count is None:
+        runtime_count = summary.get("call_count")
     diagnostic_count = int(context.get("diagnostic_call_count") or 0)
     no_valid_call = (
         scope_type == "SESSION"
