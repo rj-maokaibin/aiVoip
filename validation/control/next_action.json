@@ -1,10 +1,10 @@
 {
   "schema_version": "capture-v2-remote-action-v1",
-  "action_id": "R2-01A-APF3260M-CONTROLLER-LOSS-RC17",
-  "sequence": 85,
-  "created_at": "2026-08-22T01:35:35+00:00",
-  "expires_at": "2026-08-22T03:35:35+00:00",
-  "action_type": "GATE_OWNERSHIP",
+  "action_id": "R2-01B-APF3260M-CONTROLLER-LOSS-ADOPT-RC17",
+  "sequence": 86,
+  "created_at": "2026-08-22T01:36:55+00:00",
+  "expires_at": "2026-08-22T03:36:55+00:00",
+  "action_type": "GATE_OWNERSHIP_ADOPT",
   "parameters": {
     "device_id": "c132f336-df1b-4285-b175-01d848f23b5d",
     "model": "APF3260-M",
@@ -18,12 +18,11 @@
     "object_root": "/tmp/voip-reproduction-objects",
     "output_root": "/tmp/capture-v2-gates",
     "repo_root": "..",
-    "reproduction_session_id": "AUTO_NEW",
-    "worker_id": "r2-01-apf3260m-before-rc17",
-    "gate_id": "R2-SETUP-APF3260M-CONTROLLER-LOSS-RC17",
-    "state_file": "/tmp/capture-v2-control/r2-01-apf3260m-rc17-before.json",
-    "hold_seconds": 31.5,
-    "timeout_seconds": 180
+    "reproduction_session_id": "FROM_STATE",
+    "worker_id": "r2-01-apf3260m-after-rc17",
+    "before_state": "/tmp/capture-v2-control/r2-01-apf3260m-rc17-before.json",
+    "gate_id": "R2-01-APF3260M-CONTROLLER-LOSS-ADOPT-RC17",
+    "timeout_seconds": 600
   },
   "safety": {
     "require_clean_git": true,
@@ -34,5 +33,5 @@
     "expected_head": "3636ee32045cfc9c7acfcdfa47e5e27f0ce15849"
   },
   "requested_by": "ChatGPT-remote-validation-controller",
-  "note": "R2-01 Stage A on APF3260-M: establish real ownership, persist exact producer/starttime/CaptureEpoch/lease state outside repo, then intentionally stop controller renewal and hold beyond TTL without stopping producer. This models controller loss, not an OS-crash claim. No physical handset action."
+  "note": "R2-01 Stage B on APF3260-M: after controller-loss TTL expiry, resume from exact Stage-A state and require adoption of the same producer PID/starttime and CaptureEpoch with a higher lease_epoch. No OS-crash claim and no physical handset action."
 }
