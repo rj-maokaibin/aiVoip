@@ -1,4 +1,4 @@
-name: Persist clean Feishu report result
+name: PR7 exact-head post-Feishu-fix gate
 on:
   workflow_dispatch:
   pull_request:
@@ -6,33 +6,52 @@ on:
 permissions:
   contents: read
 jobs:
-  persist:
+  validate:
     runs-on: [self-hosted, linux, x64, voip-controlled-linux]
-    timeout-minutes: 5
+    timeout-minutes: 45
+    env:
+      VOIP_OFFLINE_GOLDEN_001_PCAP: /tmp/tcpdump-2026-08-14.pcap
     steps:
-      - name: Verify previous clean report result remains on controlled runner
+      - name: Checkout exact PR7 head
+        uses: actions/checkout@v4
+        with:
+          ref: b39986cf898a573b58dd3fedbca666b26dbf5acf
+          fetch-depth: 1
+      - name: Verify exact head and stage real fixture
         shell: bash
         run: |
           set -euo pipefail
-          cd "$GITHUB_WORKSPACE"
-          test -s validation/offline_e2e_feishu_001/clean_final_report.json
-          test -s validation/offline_e2e_feishu_001/clean_report_golden.json
-          python3 - <<'PY'
-          import json
-          from pathlib import Path
-          result=json.loads(Path('validation/offline_e2e_feishu_001/clean_final_report.json').read_text())
-          golden=json.loads(Path('validation/offline_e2e_feishu_001/clean_report_golden.json').read_text())
-          assert result['status']=='PASS'
-          assert len(result['media'])==5
-          assert golden['status']=='PASS'
-          print(json.dumps(result,ensure_ascii=False))
-          print('GOLDEN_STATUS',golden['status'],golden.get('checks_passed'),golden.get('checks_total'))
-          PY
-      - name: Upload clean report validation record
-        uses: actions/upload-artifact@v4
-        with:
-          name: clean-feishu-report-validation
-          path: |
-            validation/offline_e2e_feishu_001/clean_final_report.json
-            validation/offline_e2e_feishu_001/clean_report_golden.json
-          retention-days: 30
+          test "$(git rev-parse HEAD)" = "b39986cf898a573b58dd3fedbca666b26dbf5acf"
+          fixture="$VOIP_OFFLINE_GOLDEN_001_PCAP"
+          if [ ! -r "$fixture" ]; then
+            staged="$RUNNER_TEMP/offline-e2e-prepared.pcap"
+            docker run --rm -v /tmp:/source:ro -v "$RUNNER_TEMP":/output --entrypoint sh postgres:16 -c "cp /source/tcpdump-2026-08-14.pcap /output/offline-e2e-prepared.pcap && chmod 0644 /output/offline-e2e-prepared.pcap"
+            fixture="$staged"
+          fi
+          test "$(sha256sum "$fixture"|awk '{print $1}')" = b038aa7c9a0644581f2815f654fcdee4620860796382265b178823fccba2e3f0
+          echo "VOIP_OFFLINE_GOLDEN_001_PCAP=$fixture" >> "$GITHUB_ENV"
+      - name: Prepare TShark 4.2.2 and Python
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/tshark-root"; debs="$RUNNER_TEMP/tshark-debs"; rm -rf "$root" "$debs"; mkdir -p "$root" "$debs"; cd "$debs"
+          mapfile -t pkgs < <(apt-cache depends --recurse --no-recommends --no-suggests --no-conflicts --no-breaks --no-replaces --no-enhances tshark|awk '/^[^ <][^:]*$/ {print $1}'|sort -u)
+          miss=(); for p in "${pkgs[@]}"; do dpkg-query -W -f='${Status}' "$p" 2>/dev/null|grep -q 'install ok installed'||miss+=("$p"); done
+          [ ${#miss[@]} -eq 0 ] || apt-get download "${miss[@]}"; shopt -s nullglob; for d in ./*.deb; do dpkg-deb -x "$d" "$root"; done
+          w="$RUNNER_TEMP/tshark-userspace"; printf '#!/bin/bash\nexport LD_LIBRARY_PATH="%s/usr/lib/x86_64-linux-gnu:%s/lib/x86_64-linux-gnu:${LD_LIBRARY_PATH:-}"\nexport WIRESHARK_DATA_DIR="%s/usr/share/wireshark"\nexec "%s/usr/bin/tshark" "$@"\n' "$root" "$root" "$root" "$root" > "$w"; chmod +x "$w"; "$w" -v|head -n1; echo "TSHARK_BINARY=$w" >> "$GITHUB_ENV"
+          cd "$GITHUB_WORKSPACE"; python3 -m venv .venv-pr7-final; .venv-pr7-final/bin/python -m pip install -r backend/requirements.txt >/dev/null
+      - name: Run Feishu targeted regression
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONPATH=backend .venv-pr7-final/bin/python -m pytest -q backend/tests/test_feishu_evidence_media_materialization_v1.py
+      - name: Run Real Offline Golden 001
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONPATH=backend TSHARK_BINARY="$TSHARK_BINARY" .venv-pr7-final/bin/python tools/offline_analysis_golden_replay.py --pcap "$VOIP_OFFLINE_GOLDEN_001_PCAP" --require-fixture --result validation/pr7_post_feishu_fix_golden.json --artifacts validation/pr7_post_feishu_fix_golden_artifacts
+      - name: Run full VOIP AI software release gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash tools/voip_ai_release_gate.sh
