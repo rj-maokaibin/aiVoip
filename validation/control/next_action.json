@@ -1,12 +1,20 @@
 {
   "schema_version": "capture-v2-remote-action-v1",
-  "action_id": "RC21-SW-001",
-  "sequence": 97,
-  "created_at": "2026-08-22T02:39:00+00:00",
-  "expires_at": "2026-08-22T14:39:00+00:00",
-  "action_type": "SOFTWARE_REGRESSION",
+  "action_id": "GOLDEN-FALLBACK-APF1250-20260820-RC21",
+  "sequence": 98,
+  "created_at": "2026-08-22T02:40:00+00:00",
+  "expires_at": "2026-08-22T14:40:00+00:00",
+  "action_type": "GOLDEN_ARCHIVE_RECOVER",
   "parameters": {
-    "timeout_seconds": 1800
+    "device_id": "259f16e6-af9e-4dff-969b-2bb5eac43eb2",
+    "model": "APF1250",
+    "host": "10.48.8.74",
+    "port": 10001,
+    "username": "root",
+    "platform_id": "mt7621",
+    "password_env": "DB:G1V030E010214",
+    "archive_date": "20260820",
+    "timeout_seconds": 900
   },
   "safety": {
     "require_clean_git": true,
@@ -17,5 +25,5 @@
     "expected_head": "752a850b48928ea335963d9bba960c26bb53bca2"
   },
   "requested_by": "ChatGPT-remote-validation-controller",
-  "note": "RC21 validation/tooling software regression after adding pure-Python SIP/RTP Golden fallback analysis. Production V2 remains disabled and V1 authority is mandatory."
+  "note": "Read-only historical APF1250 Golden recovery with primary analyzer plus pure-Python SIP/RTP fallback. Evidence-only; never upgrades R5 without FXS reconciliation."
 }
