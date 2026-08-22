@@ -1,27 +1,33 @@
 {
   "schema_version": "capture-v2-remote-status-v1",
-  "action_id": "RC10-SW-001",
-  "sequence": 56,
-  "action_type": "SOFTWARE_REGRESSION",
-  "state": "SUCCEEDED",
+  "action_id": "R3-09-APF3260M-SILENT24B-RC10",
+  "sequence": 57,
+  "action_type": "GATE_SEGMENT",
+  "state": "FAILED",
   "runner_id": "srv:3382405",
-  "action_sha256": "ce4b77de1108d6cc960ba7cd58adbde73e2e0d5decd24e7f3067f37ef1f2cec0",
-  "updated_at": "2026-08-22T00:23:35.516174+00:00",
+  "action_sha256": "0641eff671f811bccd1def20bfe4b7b0d5f6d5293d2d5c1f85ae359182df86ba",
+  "updated_at": "2026-08-22T00:24:09.626586+00:00",
   "started_at": null,
-  "finished_at": "2026-08-22T00:23:35.516174+00:00",
-  "return_code": 0,
+  "finished_at": "2026-08-22T00:24:09.626586+00:00",
+  "return_code": 2,
   "verdict": null,
-  "result_path": "validation/control/results/RC10-SW-001/result.json",
-  "stdout_sha256": "7e83b0ad76db330e54a47b1160cc324620c5f842df0c171660806c1879a16989",
-  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "result_path": "validation/control/results/R3-09-APF3260M-SILENT24B-RC10/result.json",
+  "stdout_sha256": "bdfbb774a161d846a38a13ef7be698c5e1e15d7ecd9dc43e276680c719e86c32",
+  "stderr_sha256": "b8258e86248ce6f15dfea1a12afcd2ad3fde62ba6d3cd24536ffc8cb3bb61c48",
   "error": null,
   "detail": {
     "safety": {
       "capture_engine_version": "V1",
       "capture_v2_production_enabled": "false",
-      "git_head": "afcf65657be8b2574de949bbed16fda6e1d93fde",
+      "git_head": "e08a0d6b1a85b0df8eaa3a5c1de2b239d8a870a0",
       "expected_product_head": "efb4e67bc76a750b40bf6bb093d35e5014ac7b56"
     },
-    "parsed_output": null
+    "parsed_output": {
+      "details": {
+        "message": "(psycopg.errors.ForeignKeyViolation) insert or update on table \"capture_sessions\" violates foreign key constraint \"capture_sessions_reproduction_session_id_fkey\"\nDETAIL:  Key (reproduction_session_id)=(622df10e-ae61-4d68-a554-163364499dc1) is not present in table \"reproduction_sessions\".\n[SQL: INSERT INTO capture_sessions (id, reproduction_session_id, device_id, state, health_status, capture_profile_id, capture_profile_version, platform_profile_id, platform_profile_version, effective_profile, cr"
+      },
+      "error": "GATE_COMMAND_EXCEPTION:IntegrityError",
+      "ok": false
+    }
   }
 }

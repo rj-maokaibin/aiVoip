@@ -1,0 +1,68 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "R3-09-APF3260M-SILENT24B-RC10",
+    "sequence": 57,
+    "created_at": "2026-08-22T00:24:30+00:00",
+    "expires_at": "2026-08-22T02:24:30+00:00",
+    "action_type": "GATE_SEGMENT",
+    "parameters": {
+      "device_id": "c132f336-df1b-4285-b175-01d848f23b5d",
+      "model": "APF3260-M",
+      "host": "10.48.8.74",
+      "port": 10002,
+      "username": "root",
+      "platform_id": "mt7981",
+      "password_env": "DB:G1U060H000384",
+      "profile_root": "../profiles",
+      "profile_id": "voip-standard",
+      "object_root": "/tmp/voip-reproduction-objects",
+      "output_root": "/tmp/capture-v2-gates",
+      "repo_root": "..",
+      "reproduction_session_id": "622df10e-ae61-4d68-a554-163364499dc1",
+      "worker_id": "r3-09-apf3260m-rc10",
+      "gate_id": "R3-09-APF3260M-SILENT24B-RC10",
+      "duration": 20,
+      "interval": 0.5,
+      "transport": "scp",
+      "timeout_seconds": 600
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "efb4e67bc76a750b40bf6bb093d35e5014ac7b56"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "RC10 R3-09 on APF3260-M. Under the active fenced CaptureEpoch, inject exactly one 24-byte classic-PCAP global-header-only closed file on the DUT, then require the real sealer + SCP + validation + durable store + DB + ACK + exact remote delete chain to preserve size=24, pcap_valid=true, packet_count=0, and no server/DUT double loss."
+  },
+  "action_sha256": "0641eff671f811bccd1def20bfe4b7b0d5f6d5293d2d5c1f85ae359182df86ba",
+  "runner_id": "srv:3382405",
+  "state": "FAILED",
+  "return_code": 2,
+  "verdict": null,
+  "error": null,
+  "finished_at": "2026-08-22T00:24:09.626586+00:00",
+  "stdout_sha256": "bdfbb774a161d846a38a13ef7be698c5e1e15d7ecd9dc43e276680c719e86c32",
+  "stderr_sha256": "b8258e86248ce6f15dfea1a12afcd2ad3fde62ba6d3cd24536ffc8cb3bb61c48",
+  "local_stdout": ".capture-v2-control/logs/R3-09-APF3260M-SILENT24B-RC10/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/R3-09-APF3260M-SILENT24B-RC10/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "e08a0d6b1a85b0df8eaa3a5c1de2b239d8a870a0",
+      "expected_product_head": "efb4e67bc76a750b40bf6bb093d35e5014ac7b56"
+    },
+    "parsed_output": {
+      "details": {
+        "message": "(psycopg.errors.ForeignKeyViolation) insert or update on table \"capture_sessions\" violates foreign key constraint \"capture_sessions_reproduction_session_id_fkey\"\nDETAIL:  Key (reproduction_session_id)=(622df10e-ae61-4d68-a554-163364499dc1) is not present in table \"reproduction_sessions\".\n[SQL: INSERT INTO capture_sessions (id, reproduction_session_id, device_id, state, health_status, capture_profile_id, capture_profile_version, platform_profile_id, platform_profile_version, effective_profile, cr"
+      },
+      "error": "GATE_COMMAND_EXCEPTION:IntegrityError",
+      "ok": false
+    }
+  }
+}
