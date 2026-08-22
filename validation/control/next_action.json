@@ -1,29 +1,26 @@
 {
   "schema_version": "capture-v2-remote-action-v1",
-  "action_id": "R3-10-APF3260M-SPOOL-PRESSURE-RC9",
-  "sequence": 54,
-  "created_at": "2026-08-22T00:11:10+00:00",
-  "expires_at": "2026-08-22T02:11:10+00:00",
-  "action_type": "GATE_SEGMENT",
+  "action_id": "R2-05-APF1250-DUT-REBOOT-RC9-RETRY1",
+  "sequence": 55,
+  "created_at": "2026-08-22T00:16:00+00:00",
+  "expires_at": "2026-08-22T02:16:00+00:00",
+  "action_type": "GATE_OWNERSHIP",
   "parameters": {
-    "device_id": "c132f336-df1b-4285-b175-01d848f23b5d",
-    "model": "APF3260-M",
+    "device_id": "259f16e6-af9e-4dff-969b-2bb5eac43eb2",
+    "model": "APF1250",
     "host": "10.48.8.74",
-    "port": 10002,
+    "port": 10001,
     "username": "root",
-    "platform_id": "mt7981",
-    "password_env": "DB:G1U060H000384",
+    "platform_id": "mt7621",
+    "password_env": "DB:G1V030E010214",
     "profile_root": "../profiles",
     "profile_id": "voip-standard",
     "object_root": "/tmp/voip-reproduction-objects",
     "output_root": "/tmp/capture-v2-gates",
     "repo_root": "..",
-    "reproduction_session_id": "0364f449-e0e2-4b7d-b77b-4ad2fd5dc301",
-    "worker_id": "r3-10-apf3260m-rc9",
-    "gate_id": "R3-10-APF3260M-SPOOL-PRESSURE-RC9",
-    "duration": 40,
-    "interval": 0.5,
-    "transport": "scp",
+    "reproduction_session_id": "AUTO_NEW",
+    "worker_id": "r2-05-apf1250-rc9-retry1",
+    "gate_id": "R2-05-APF1250-DUT-REBOOT-RC9",
     "timeout_seconds": 900
   },
   "safety": {
@@ -35,5 +32,5 @@
     "expected_head": "958dc06d2bb1f29df44a4166f463739b6534f68a"
   },
   "requested_by": "ChatGPT-remote-validation-controller",
-  "note": "RC9 real spool/backlog pressure Gate on APF3260-M. Intentionally make the durable server store unavailable long enough to accumulate unacked DUT segments, require CRITICAL/UNACKED_BYTES_LIMIT pressure while sampled unacked segments remain on the DUT, then restore the durable path and prove the exact backlog drains through ACK and remote deletion without double loss."
+  "note": "Retry RC9 real DUT reboot/recovery Gate on APF1250 after the EWEB tunnel was restored. The prior sequence 52 failed before SSH establishment with tunnel/device unreachable and is infrastructure-blocked, not a product Gate failure. Establish ownership, reboot the DUT, require changed boot_id, recover with a new CaptureEpoch and higher lease_epoch, close DUT_REBOOT_GAP, emit DUT_REBOOT_DETECTED, and finish with exactly one owned producer."
 }
