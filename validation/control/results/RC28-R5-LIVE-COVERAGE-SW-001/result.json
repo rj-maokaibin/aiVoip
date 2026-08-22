@@ -1,0 +1,44 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "RC28-R5-LIVE-COVERAGE-SW-001",
+    "sequence": 120,
+    "created_at": "2026-08-22T09:39:00+00:00",
+    "expires_at": "2026-08-22T21:39:00+00:00",
+    "action_type": "SOFTWARE_REGRESSION",
+    "parameters": {
+      "timeout_seconds": 1800
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "30dc0f8573e43a71bd4d0188dadeb77f61cf7af3"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "Regression after adding validation-only R5 real-call live Coverage Ledger gate. Production Capture runtime is not activated; V1 remains authoritative and Production V2 remains disabled."
+  },
+  "action_sha256": "e9543225273cfce10deea624fd1036b7f44138cb2b64043f66c39fb83787659e",
+  "runner_id": "srv:3456908",
+  "state": "SUCCEEDED",
+  "return_code": 0,
+  "verdict": null,
+  "error": null,
+  "finished_at": "2026-08-22T09:39:28.326211+00:00",
+  "stdout_sha256": "4745851a3a666d24a2b42380a333e6c23993ab865444ac940e7e1ebbb3abc960",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "local_stdout": ".capture-v2-control/logs/RC28-R5-LIVE-COVERAGE-SW-001/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/RC28-R5-LIVE-COVERAGE-SW-001/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "e6c49401fd801cc4ff7fd78fab6fe9e9927ed398",
+      "expected_product_head": "30dc0f8573e43a71bd4d0188dadeb77f61cf7af3"
+    },
+    "parsed_output": null
+  }
+}
