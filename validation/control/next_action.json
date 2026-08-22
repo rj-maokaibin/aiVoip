@@ -1,20 +1,12 @@
 {
   "schema_version": "capture-v2-remote-action-v1",
-  "action_id": "GOLDEN-RECOVER-APF1250-20260820-RC18",
-  "sequence": 90,
-  "created_at": "2026-08-22T01:46:20+00:00",
-  "expires_at": "2026-08-22T03:46:20+00:00",
-  "action_type": "GOLDEN_ARCHIVE_RECOVER",
+  "action_id": "RC19-SW-001",
+  "sequence": 91,
+  "created_at": "2026-08-22T02:24:00+00:00",
+  "expires_at": "2026-08-22T04:24:00+00:00",
+  "action_type": "SOFTWARE_REGRESSION",
   "parameters": {
-    "device_id": "259f16e6-af9e-4dff-969b-2bb5eac43eb2",
-    "model": "APF1250",
-    "host": "10.48.8.74",
-    "port": 10001,
-    "username": "root",
-    "platform_id": "mt7621",
-    "password_env": "DB:G1V030E010214",
-    "archive_date": "20260820",
-    "timeout_seconds": 240
+    "timeout_seconds": 1800
   },
   "safety": {
     "require_clean_git": true,
@@ -22,8 +14,8 @@
     "require_v2_disabled": true,
     "allow_worker_kill": false,
     "allow_server_quarantine": false,
-    "expected_head": "735446237cdfafad8d3d70847b07c781b7b3de6c"
+    "expected_head": "14a9219598d1634600ea5ca1492c94146b0b4d99"
   },
   "requested_by": "ChatGPT-remote-validation-controller",
-  "note": "Read-only recovery of the historical 2026-08-20 APF1250 V2.1 Golden archive from fixed /www then /tmp. No arbitrary path, no extraction on DUT, no handset/PCM/FXS action."
+  "note": "RC19 validation/tooling software regression after stale-runner remediation, historical real-FXS replay fixtures, and fail-closed R7 rollback evidence validator. Production Capture runtime is not enabled; V1 authority and Production V2 OFF are mandatory."
 }
