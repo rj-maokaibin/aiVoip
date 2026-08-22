@@ -31,8 +31,7 @@ jobs:
               data=None if payload is None else json.dumps(payload).encode()
               headers={'Content-Type':'application/json'}
               if token: headers['Authorization']='Bearer '+token
-              with urllib.request.urlopen(urllib.request.Request(url,data=data,headers=headers,method=method),timeout=30) as r:
-                  raw=r.read()
+              with urllib.request.urlopen(urllib.request.Request(url,data=data,headers=headers,method=method),timeout=30) as r: raw=r.read()
               return json.loads(raw.decode()) if raw else {}
           auth=call('POST',base+'/auth/v3/tenant_access_token/internal',{'app_id':os.environ['FEISHU_APP_ID'],'app_secret':secret})
           token=auth['tenant_access_token']; reader=os.environ['FEISHU_PERMISSION_READER']; doc=os.environ['DOCUMENT_TOKEN']
