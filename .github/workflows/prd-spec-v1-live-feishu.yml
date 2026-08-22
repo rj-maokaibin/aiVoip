@@ -55,7 +55,6 @@ jobs:
                   raw=e.read()
                   try: data=json.loads(raw.decode('utf-8'))
                   except Exception: data={'raw':raw.decode('utf-8','replace')[:300]}
-                  # Duplicate member is acceptable; verification below is authoritative.
                   if e.code not in (400,409):
                       raise RuntimeError(f'FEISHU_HTTP_{e.code}:{data.get("code")}:{data.get("msg")}')
                   return data
@@ -69,7 +68,6 @@ jobs:
           result=req('POST',endpoint,{'member_type':'openid','member_id':reader,'perm':'view'},token)
           code=result.get('code',0)
           if code not in (0,99991672,99991668):
-              # Do not expose member id in logs.
               print(f'GRANT_RESPONSE_CODE={code} MSG={result.get("msg","")}')
 
           verify_url=base+'/drive/v1/permissions/'+urllib.parse.quote(doc,safe='')+'/members?type=docx'
