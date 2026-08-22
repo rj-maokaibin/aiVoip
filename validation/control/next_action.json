@@ -1,12 +1,20 @@
 {
   "schema_version": "capture-v2-remote-action-v1",
-  "action_id": "RC20-SW-001",
-  "sequence": 94,
-  "created_at": "2026-08-22T02:34:00+00:00",
-  "expires_at": "2026-08-22T14:34:00+00:00",
-  "action_type": "SOFTWARE_REGRESSION",
+  "action_id": "GOLDEN-ANALYZE-APF1250-20260820-RC20",
+  "sequence": 95,
+  "created_at": "2026-08-22T02:36:00+00:00",
+  "expires_at": "2026-08-22T14:36:00+00:00",
+  "action_type": "GOLDEN_ARCHIVE_RECOVER",
   "parameters": {
-    "timeout_seconds": 1800
+    "device_id": "259f16e6-af9e-4dff-969b-2bb5eac43eb2",
+    "model": "APF1250",
+    "host": "10.48.8.74",
+    "port": 10001,
+    "username": "root",
+    "platform_id": "mt7621",
+    "password_env": "DB:G1V030E010214",
+    "archive_date": "20260820",
+    "timeout_seconds": 900
   },
   "safety": {
     "require_clean_git": true,
@@ -17,5 +25,5 @@
     "expected_head": "97b34edc052097b4b7ac5345c4fcd041f39eebce"
   },
   "requested_by": "ChatGPT-remote-validation-controller",
-  "note": "RC20 validation/tooling software regression after adding read-only historical Golden archive analysis. V1 authority mandatory; Production V2 remains disabled."
+  "note": "Read-only RC20 re-recovery plus nested offline analysis of the historical 2026-08-20 APF1250 Golden archive. Analyze tcpdump drops, SIP/SDP/RTP continuity and PCM diag UDP 40000/50000. This is evidence-only and cannot by itself mark R5 PASS."
 }
