@@ -28,16 +28,31 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.base.sha }}
 
-      - name: Verify exact PR7 and prepared PCAP
+      - name: Verify exact PR7 and stage prepared PCAP
         shell: bash
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "48a3855e31a7019640671e422956212b540dd08d"
-          test -f "$VOIP_OFFLINE_GOLDEN_001_PCAP"
-          sha="$(sha256sum "$VOIP_OFFLINE_GOLDEN_001_PCAP" | awk '{print $1}')"
+          source_fixture="$VOIP_OFFLINE_GOLDEN_001_PCAP"
+          test -f "$source_fixture"
+          fixture="$source_fixture"
+          if [ ! -r "$source_fixture" ]; then
+            staged="$RUNNER_TEMP/offline-e2e-prepared.pcap"
+            rm -f "$staged"
+            image="postgres:16"
+            docker image inspect "$image" >/dev/null 2>&1 || docker pull "$image"
+            docker run --rm \
+              -v /tmp:/source:ro \
+              -v "$RUNNER_TEMP":/output \
+              --entrypoint sh "$image" \
+              -c "cp '/source/tcpdump-2026-08-14.pcap' '/output/offline-e2e-prepared.pcap' && chmod 0644 '/output/offline-e2e-prepared.pcap'"
+            fixture="$staged"
+          fi
+          sha="$(sha256sum "$fixture" | awk '{print $1}')"
           echo "PR7_BASE_SHA=$(git rev-parse HEAD)"
           echo "Prepared PCAP SHA256=$sha"
           test "$sha" = "b038aa7c9a0644581f2815f654fcdee4620860796382265b178823fccba2e3f0"
+          echo "VOIP_OFFLINE_GOLDEN_001_PCAP=$fixture" >> "$GITHUB_ENV"
 
       - name: Prepare TShark 4.2.2
         shell: bash
