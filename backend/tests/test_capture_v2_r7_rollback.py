@@ -6,6 +6,7 @@ from app.capture_v2.gate.r7_rollback import (
     RollbackEvidenceKind,
     RollbackObservation,
     RollbackPhase,
+    main,
 )
 
 
@@ -43,6 +44,13 @@ def _valid_real_rehearsal():
     )
 
 
+def _artifact_from(observations):
+    return {
+        "schema_version": R7RollbackRehearsalGate.EVIDENCE_SCHEMA,
+        "observations": [obs.as_dict() for obs in observations],
+    }
+
+
 def test_missing_real_v2_phase_is_deferred_not_pass():
     observations = _valid_real_rehearsal()
     result = R7RollbackRehearsalGate.evaluate((observations[0], observations[2]))
@@ -51,7 +59,7 @@ def test_missing_real_v2_phase_is_deferred_not_pass():
 
 
 def test_simulated_rehearsal_can_never_pass_release_gate():
-    pre, v2, rolled = _valid_real_rehearsal()
+    pre, _, rolled = _valid_real_rehearsal()
     v2 = _obs(
         RollbackPhase.V2_ACTIVE,
         10,
@@ -114,14 +122,14 @@ def test_real_observation_with_v2_producer_left_after_rollback_fails():
 
 
 def test_structurally_valid_real_dut_fixture_exercises_validator_pass_path_only():
-    # This is a unit test of the validator. It is not evidence that a real
+    # Unit-test coverage only. This fixture is not evidence that a real
     # rollback rehearsal occurred and must never be used as a release artifact.
     result = R7RollbackRehearsalGate.evaluate(_valid_real_rehearsal())
     assert result.verdict == GateVerdict.PASS
     assert result.facts["reason"] == "ROLLBACK_REHEARSAL_PROVEN"
 
 
-def test_dict_schema_requires_timezone_and_nonnegative_producer_count():
+def test_dict_schema_requires_timezone():
     result = R7RollbackRehearsalGate.evaluate_dicts(({
         "phase": "PRE_V1",
         "observed_at": "2026-08-22T10:00:00",
@@ -134,3 +142,30 @@ def test_dict_schema_requires_timezone_and_nonnegative_producer_count():
     },))
     assert result.verdict == GateVerdict.INCONCLUSIVE
     assert result.facts["reason"] == "ROLLBACK_OBSERVED_AT_TZ_REQUIRED"
+
+
+def test_dict_schema_rejects_string_booleans_fail_closed():
+    raw = _artifact_from(_valid_real_rehearsal())
+    raw["observations"][2]["v1_healthy"] = "false"
+    result = R7RollbackRehearsalGate.evaluate_artifact(raw)
+    assert result.verdict == GateVerdict.INCONCLUSIVE
+    assert result.facts["reason"] == "ROLLBACK_V1_HEALTHY_BOOLEAN_REQUIRED"
+
+
+def test_artifact_schema_must_match_exactly():
+    result = R7RollbackRehearsalGate.evaluate_artifact({
+        "schema_version": "future-or-wrong",
+        "observations": [],
+    })
+    assert result.verdict == GateVerdict.INCONCLUSIVE
+    assert result.facts["reason"] == "ROLLBACK_EVIDENCE_ARTIFACT_SCHEMA_INVALID"
+
+
+def test_cli_returns_two_for_incomplete_real_evidence(tmp_path, capsys):
+    pre, _, rolled = _valid_real_rehearsal()
+    path = tmp_path / "rollback.json"
+    import json
+    path.write_text(json.dumps(_artifact_from((pre, rolled))), encoding="utf-8")
+    assert main(["--evidence", str(path)]) == 2
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["verdict"] == "DEFERRED_REAL_GATE"
