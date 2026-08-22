@@ -17,7 +17,7 @@ def _high_delta_finding(*, with_audio: bool = True) -> dict:
             "metadata":{"event_type":"HIGH_DELTA","event_time":110.146,"stream_id":"rtp-up"},
         })
     return {
-        "finding_id":"finding-1","stable_key":"stable-1","type":"HIGH_DELTA","severity":"MEDIUM","evidence_level":"L2",
+        "finding_id":"finding-1","stable_key":"stable-1","finding_signature":"high_delta|rtp|up","type":"HIGH_DELTA","severity":"MEDIUM","evidence_level":"L2",
         "title":"RTP 包间隔异常增大（HIGH_DELTA）","observation":"DUT 上行 RTP 共观测到 2 次包间隔异常。",
         "interpretation":"Sequence 连续，因此属于 Delay/Stall，不应写成 Packet Loss。",
         "root_cause_boundary":"不能单凭 HIGH_DELTA 区分 DUT 调度、网络排队或抓包观察点。",
@@ -27,12 +27,17 @@ def _high_delta_finding(*, with_audio: bool = True) -> dict:
             "event_count":2,"max_delta_ms":175.043,"ptime_ms":20.0,"max_excess_delay_ms":155.043,
             "stream_lost_packets":0,"all_sequence_continuous":True,
             "events":[
-                {"time":110.146,"previous_frame_number":20272,"current_frame_number":20285,"previous_sequence":46511,"current_sequence":46512,"delta_ms":146.083,"classification":"INTERARRIVAL_STALL_WITHOUT_RTP_GAP"},
-                {"time":110.175,"previous_frame_number":20329,"current_frame_number":20344,"previous_sequence":46519,"current_sequence":46520,"delta_ms":175.043,"classification":"INTERARRIVAL_STALL_WITHOUT_RTP_GAP"},
+                {"time":110.146,"previous_frame_number":20272,"current_frame_number":20285,"previous_sequence":46511,"current_sequence":46512,"delta_ms":146.083,"sequence_continuous":True,"classification":"INTERARRIVAL_STALL_WITHOUT_RTP_GAP"},
+                {"time":110.175,"previous_frame_number":20329,"current_frame_number":20344,"previous_sequence":46519,"current_sequence":46520,"delta_ms":175.043,"sequence_continuous":True,"classification":"INTERARRIVAL_STALL_WITHOUT_RTP_GAP"},
             ],
         },
+        "semantic_summary":{"loss_interpretation":"DELAY_NOT_PACKET_LOSS","all_sequence_continuous":True},
         "artifact_refs":refs,"evidence_refs":[{"type":"PCAP","id":"pcap-1"}],"event_refs":[{"source":"packet.anomalies","index":1}],"source_analyzer_run_ids":["run-packet"],
     }
+
+
+def _artifact_inventory(finding:dict)->list[dict]:
+    return [{"artifact_id":x["artifact_id"],"type":x["type"],"filename":x["filename"]} for x in finding.get("artifact_refs",[]) if x.get("artifact_id")]
 
 
 def test_high_delta_evidence_card_has_time_scope_measurements_frame_seq_visual_audio_and_next_action():
@@ -108,12 +113,13 @@ def test_local_periodic_card_exposes_cross_layer_measurements_instead_of_nested_
 def test_html_renders_key_visual_audio_tplus_and_packet_drilldown_inside_finding_card():
     finding=_high_delta_finding()
     payload={
-        "schema_version":"preliminary-evidence-report-v1","composer_version":"evidence-brief-composer-v2","report_version":1,"generated_at":"2026-08-20T00:00:00Z",
+        "schema_version":"preliminary-evidence-report-v1","composer_version":"evidence-brief-composer-v3","report_version":1,"generated_at":"2026-08-20T00:00:00Z",
         "case":{"case_no":"CASE-1","summary":"noise"},"scope":{"type":"CASE","id":"CASE-1"},"headline":"发现 HIGH_DELTA",
         "finding_count":1,"highest_severity":"MEDIUM","findings":[finding],"completeness":{"state":"COMPLETE","reviewability":"FULLY_REVIEWABLE","capture":{"pcap":True,"pcm_rx":True,"pcm_tx":True},"boundary":"complete"},
-        "evidence_boundary":{"statement":"不确认最终根因。"},"preliminary_assessment":{"summary":"发现 HIGH_DELTA"},"packet_summary":{"streams":[]},"pcm_summary":{"streams":[]},
-        "display_call":{"id":"CALL-001","started_at":100.0,"status":"TERMINATED"},"analysis_context":{"analysis_mode":"OFFLINE_IMPORTED","reconstructed_call_count":1,"call_scope":"BOUND","call_origin":"RECONSTRUCTED_FROM_PCAP"},
-        "multi_call_summary":{"call_count":0,"finding_groups":[]},"ab_comparison":[],"normal_and_exclusion_evidence":[],"artifacts":[],
+        "evidence_boundary":{"statement":"不确认最终根因。"},"preliminary_assessment":{"summary":"发现 HIGH_DELTA"},"packet_summary":{"call_count":1,"streams":[]},"pcm_summary":{"streams":[]},
+        "display_call":{"id":"CALL-001","started_at":100.0,"status":"TERMINATED"},"session":None,
+        "analysis_context":{"analysis_mode":"OFFLINE_IMPORTED","reconstructed_call_count":1,"call_scope":"BOUND","call_selection_status":"SELECTED","call_origin":"RECONSTRUCTED_FROM_PCAP"},
+        "multi_call_summary":{"call_count":0,"finding_groups":[]},"ab_comparison":[],"normal_and_exclusion_evidence":[],"artifacts":_artifact_inventory(finding),
     }
 
     rendered=render_report_html(payload)
@@ -126,12 +132,22 @@ def test_html_renders_key_visual_audio_tplus_and_packet_drilldown_inside_finding
     assert "当前不能确认什么" in rendered
     assert payload["findings"][0]["evidence_card"]["audio_evidence"]["status"]=="AVAILABLE"
     assert payload["evidence_card_summary"]["audio_available_count"]==1
+    assert payload["grounding_validation"]["status"]=="PASS"
+    assert payload["claim_manifest"]["claim_count"]==1
 
 
 def test_attach_evidence_cards_keeps_one_card_per_finding_and_reports_missing_audio_count():
-    payload={"display_call":{"started_at":100.0},"findings":[_high_delta_finding(with_audio=False)]}
+    finding=_high_delta_finding(with_audio=False)
+    payload={
+        "display_call":{"started_at":100.0},"session":None,
+        "analysis_context":{"analysis_mode":"REPRODUCTION","reconstructed_call_count":0,"call_scope":"BOUND"},
+        "packet_summary":{"call_count":0},"completeness":{"state":"COMPLETE","reviewability":"FULLY_REVIEWABLE"},
+        "findings":[finding],"artifacts":_artifact_inventory(finding),"ab_comparison":[],
+    }
     attach_evidence_cards(payload)
     assert len(payload["evidence_cards"])==1
     assert payload["evidence_card_summary"]["finding_count"]==1
     assert payload["evidence_card_summary"]["audio_expected_count"]==1
     assert payload["evidence_card_summary"]["audio_unavailable_count"]==1
+    assert payload["grounding_validation"]["status"]=="PASS_WITH_WARNINGS"
+    assert payload["reviewability_status"]=="PARTIALLY_REVIEWABLE"
