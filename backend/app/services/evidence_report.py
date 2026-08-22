@@ -11,6 +11,7 @@ from app.db.evidence_report_models import EvidenceFinding, PreliminaryEvidenceRe
 from app.db.models import ReproductionCall, ReproductionSession
 from app.integrations.storage import ObjectStorage
 from app.reports.evidence_brief import build_report_payload, canonical_hash, render_report_html
+from app.reports.prd_spec_v1_alignment import finalize_report_contract
 from app.services.audit import audit
 from app.services.evidence_boundary import apply_first_observable_boundaries
 from app.services.evidence_report_aggregation import enrich_aggregate_payload
@@ -225,11 +226,17 @@ def generate_evidence_report(db: Session, *, scope_type, scope_id: str, actor: s
     analysis_artifacts=materialize_analyzer_json_artifacts(db,storage,report=report,runs=runs)
     visuals=generate_visual_artifacts(db,storage,report=report,results=results,runs=runs)
     report_artifacts=source_artifacts+analysis_artifacts+visuals
-    payload["artifacts"]=[{"artifact_id":a.id,"type":a.type,"filename":a.filename,"content_type":a.content_type,"sha256":a.sha256,"metadata":a.metadata_json or {}} for a in report_artifacts]
+    payload["artifacts"]=[{
+        "artifact_id":a.id,"type":a.type,"filename":a.filename,"content_type":a.content_type,"sha256":a.sha256,
+        "size_bytes":a.size_bytes,"object_key":a.object_key,"created_at":a.created_at.isoformat() if a.created_at else None,
+        "metadata":a.metadata_json or {},
+    } for a in report_artifacts]
     for item in payload.get("findings",[]):
         refs=finding_artifact_refs(db,report_id=report.id,finding_id=item.get("finding_id")); item["artifact_refs"]=refs
         row=next((r for r in finding_rows if r.id==item.get("finding_id")),None)
         if row:row.artifact_refs_json=refs
+    report.status=EvidenceReportStatus.COMPLETE.value if payload.get("completeness",{}).get("state")=="COMPLETE" else EvidenceReportStatus.PARTIAL_COMPLETE.value
+    finalize_report_contract(report,payload)
     html_bytes=render_report_html(payload).encode("utf-8"); json_bytes=json.dumps(payload,ensure_ascii=False,indent=2).encode("utf-8")
     json_art=persist_artifact(db,storage,report=report,artifact_type=EvidenceReportArtifactType.PRELIMINARY_REPORT_JSON.value,filename="preliminary-evidence-report.json",data=json_bytes,content_type="application/json",metadata={"schema_version":REPORT_SCHEMA_VERSION},role="REPORT")
     html_art=persist_artifact(db,storage,report=report,artifact_type=EvidenceReportArtifactType.PRELIMINARY_REPORT_HTML.value,filename="preliminary-evidence-report.html",data=html_bytes,content_type="text/html; charset=utf-8",metadata={"schema_version":REPORT_SCHEMA_VERSION},role="REPORT")
@@ -237,7 +244,6 @@ def generate_evidence_report(db: Session, *, scope_type, scope_id: str, actor: s
     manifest=build_manifest(report,report_artifacts+[json_art,html_art]); manifest_bytes=json.dumps(manifest,ensure_ascii=False,indent=2).encode("utf-8")
     manifest_art=persist_artifact(db,storage,report=report,artifact_type=EvidenceReportArtifactType.MANIFEST_JSON.value,filename="manifest.json",data=manifest_bytes,content_type="application/json",metadata={"manifest_schema":"evidence-bundle-manifest-v1"},role="MANIFEST")
     report.manifest_object_key=manifest_art.object_key
-    report.status=EvidenceReportStatus.COMPLETE.value if payload.get("completeness",{}).get("state")=="COMPLETE" else EvidenceReportStatus.PARTIAL_COMPLETE.value
     report.snapshot_json=payload; report.completed_at=utcnow(); db.flush()
     audit(db,case_id=case.id,actor=actor,event_type="PRELIMINARY_EVIDENCE_REPORT_GENERATED",target_type="preliminary_evidence_report",target_id=report.id,
           detail={"scope_type":scope_type,"scope_id":scope_id,"version":version,"status":report.status,"finding_count":len(finding_rows),"artifact_count":len(report_artifacts)+3,
