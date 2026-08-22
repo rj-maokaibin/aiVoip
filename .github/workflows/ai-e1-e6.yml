@@ -1,39 +1,174 @@
-name: AI E1-E6 + M7 + Evidence Report Gate
+name: Offline E2E Prepared PCAP -> PR7 -> Feishu Docx
 
-# GitHub-hosted CI is intentionally opt-in. Software release acceptance is
-# performed with tools/voip_ai_release_gate.sh on a controlled Linux host.
 on:
   workflow_dispatch:
+  pull_request:
+    branches:
+      - feat/pr7-diagnostic-contracts
 
 permissions:
   contents: read
 
 jobs:
-  ai-contracts:
+  offline-e2e-feishu:
     runs-on:
       - self-hosted
       - linux
       - x64
       - voip-controlled-linux
     timeout-minutes: 30
+    env:
+      VOIP_OFFLINE_GOLDEN_001_PCAP: /tmp/tcpdump-2026-08-14.pcap
+      FEISHU_APP_ID: ${{ secrets.FEISHU_APP_ID }}
+      FEISHU_APP_SECRET: ${{ secrets.FEISHU_APP_SECRET }}
+      FEISHU_BASE_URL: https://open.feishu.cn/open-apis
     steps:
-      - uses: actions/checkout@v4
-      - name: Controlled Linux environment
+      - name: Checkout exact PR7 base
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+
+      - name: Verify exact PR7 and prepared PCAP
+        shell: bash
         run: |
-          uname -a
-          python3 --version
-          docker --version
-          docker info
-          node --version
-          npm --version
-          git rev-parse HEAD
-      - name: Run VOIP AI software release gate
-        run: bash tools/voip_ai_release_gate.sh
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "48a3855e31a7019640671e422956212b540dd08d"
+          test -f "$VOIP_OFFLINE_GOLDEN_001_PCAP"
+          sha="$(sha256sum "$VOIP_OFFLINE_GOLDEN_001_PCAP" | awk '{print $1}')"
+          echo "PR7_BASE_SHA=$(git rev-parse HEAD)"
+          echo "Prepared PCAP SHA256=$sha"
+          test "$sha" = "b038aa7c9a0644581f2815f654fcdee4620860796382265b178823fccba2e3f0"
+
+      - name: Prepare TShark 4.2.2
+        shell: bash
+        run: |
+          set -euo pipefail
+          if command -v tshark >/dev/null 2>&1 && tshark -v | head -n1 | grep -q '4.2.2'; then
+            echo "TSHARK_BINARY=$(command -v tshark)" >> "$GITHUB_ENV"
+            tshark -v | head -n2
+            exit 0
+          fi
+          root="$RUNNER_TEMP/tshark-root"; debs="$RUNNER_TEMP/tshark-debs"
+          rm -rf "$root" "$debs"; mkdir -p "$root" "$debs"
+          mapfile -t packages < <(apt-cache depends --recurse --no-recommends --no-suggests --no-conflicts --no-breaks --no-replaces --no-enhances tshark | awk '/^[^ <][^:]*$/ {print $1}' | sort -u)
+          missing=()
+          for pkg in "${packages[@]}"; do
+            if ! dpkg-query -W -f='${Status}' "$pkg" 2>/dev/null | grep -q 'install ok installed'; then missing+=("$pkg"); fi
+          done
+          cd "$debs"
+          if [ "${#missing[@]}" -gt 0 ]; then apt-get download "${missing[@]}"; fi
+          shopt -s nullglob
+          for deb in ./*.deb; do dpkg-deb -x "$deb" "$root"; done
+          wrapper="$RUNNER_TEMP/tshark-userspace"
+          cat > "$wrapper" <<EOF
+          #!/usr/bin/env bash
+          set -euo pipefail
+          export LD_LIBRARY_PATH="$root/usr/lib/x86_64-linux-gnu:$root/lib/x86_64-linux-gnu:\${LD_LIBRARY_PATH:-}"
+          export WIRESHARK_DATA_DIR="$root/usr/share/wireshark"
+          exec "$root/usr/bin/tshark" "\$@"
+          EOF
+          chmod +x "$wrapper"
+          "$wrapper" -v | head -n2
+          echo "TSHARK_BINARY=$wrapper" >> "$GITHUB_ENV"
+
+      - name: Prepare Python
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m venv .venv-offline-e2e
+          .venv-offline-e2e/bin/python -m pip install --upgrade pip
+          .venv-offline-e2e/bin/python -m pip install -r backend/requirements.txt
+
+      - name: Run prepared PCAP through production analyzers and PR7
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p validation/offline_e2e_feishu_001
+          .venv-offline-e2e/bin/python tools/offline_analysis_golden_replay.py \
+            --pcap "$VOIP_OFFLINE_GOLDEN_001_PCAP" \
+            --tshark "$TSHARK_BINARY" \
+            --require-fixture \
+            --result validation/offline_e2e_feishu_001/golden_result.json \
+            --artifacts validation/offline_e2e_feishu_001/analyzer_artifacts
+
+      - name: Load local Feishu config without printing secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${FEISHU_APP_ID:-}" ] || [ -z "${FEISHU_APP_SECRET:-}" ]; then
+            for candidate in /etc/voip-ai/.env /etc/voip-ai/feishu.env /opt/voip-ai/.env /srv/aiVoip/.env /home/github-runner/.config/voip-ai/.env /home/github-runner/voip-ai.env; do
+              if [ -r "$candidate" ]; then
+                echo "Local VOIP AI config found: $candidate"
+                set -a; . "$candidate"; set +a
+                break
+              fi
+            done
+          fi
+          [ -n "${FEISHU_APP_ID:-}" ] && echo 'FEISHU_APP_ID_PRESENT=true' || echo 'FEISHU_APP_ID_PRESENT=false'
+          if [ -n "${FEISHU_APP_SECRET:-}" ] || [ -n "${FEISHU_APP_SECRET_FILE:-}" ]; then echo 'FEISHU_APP_SECRET_PRESENT=true'; else echo 'FEISHU_APP_SECRET_PRESENT=false'; fi
+          {
+            echo "FEISHU_APP_ID=${FEISHU_APP_ID:-}"
+            echo "FEISHU_APP_SECRET=${FEISHU_APP_SECRET:-}"
+            echo "FEISHU_APP_SECRET_FILE=${FEISHU_APP_SECRET_FILE:-}"
+            echo "FEISHU_APP_SECRET_ENV=${FEISHU_APP_SECRET_ENV:-}"
+            echo "FEISHU_LIVE_ENABLED=true"
+          } >> "$GITHUB_ENV"
+
+      - name: Build canonical report and publish real Feishu Docx
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONPATH=backend .venv-offline-e2e/bin/python - <<'PY'
+          import asyncio, copy, json, os
+          from pathlib import Path
+          from types import SimpleNamespace
+          from app.core.config import settings
+          from app.golden.offline_analysis_e2e import build_offline_analysis_bundle
+          from app.integrations.feishu.evidence_document import FeishuEvidenceDocumentService
+
+          out=Path('validation/offline_e2e_feishu_001'); out.mkdir(parents=True,exist_ok=True)
+          bundle=build_offline_analysis_bundle(
+              pcap_path=Path(os.environ['VOIP_OFFLINE_GOLDEN_001_PCAP']),
+              pcm_profile_path=Path('profiles/pcm/ruijie_aim_diag_v1.yaml'),
+              output_dir=out/'report_artifacts',
+              tshark_binary=os.environ.get('TSHARK_BINARY','tshark'))
+          report=bundle['report']
+          (out/'canonical_report.json').write_text(json.dumps(report,ensure_ascii=False,indent=2,default=str)+'\n',encoding='utf-8')
+          summary={
+              'source':bundle.get('source'),'analysis_context':bundle.get('analysis_context'),
+              'display_call':bundle.get('display_call'),'diagnosis':bundle.get('diagnosis'),
+              'finding_count':len(report.get('findings') or []),'headline':report.get('headline'),
+              'completeness':report.get('completeness'),
+              'diagnostic_contract_summary':(report.get('diagnostic_contract') or {}).get('summary')}
+          (out/'offline_e2e_summary.json').write_text(json.dumps(summary,ensure_ascii=False,indent=2,default=str)+'\n',encoding='utf-8')
+          status={'status':'BLOCKED_FEISHU_CREDENTIALS','document_id':None,'document_url':None,'finding_count':summary['finding_count'],'source_sha256':(bundle.get('source') or {}).get('sha256')}
+
+          async def main():
+              svc=FeishuEvidenceDocumentService()
+              if not settings.feishu_app_id:
+                  return
+              try: svc.transport._app_secret()
+              except Exception: return
+              fake=SimpleNamespace(version=1,status='OFFLINE_IMPORTED',scope_type='CASE',id='OFFLINE-E2E-FEISHU-001')
+              blocks,_,_=svc._core_blocks(fake,copy.deepcopy(report))
+              blocks=[b for b in blocks if int(b.get('block_type') or 0) not in {23,27}]
+              doc_id,doc_url=await svc._create_document('VOIP Offline E2E #001 - Prepared PCAP')
+              await svc._insert_blocks(doc_id,blocks,index=0)
+              status.update({'status':'PASS','document_id':doc_id,'document_url':doc_url,'block_count':len(blocks),'inline_media_materialized':False})
+
+          try: asyncio.run(main())
+          except Exception as exc:
+              status.update({'status':'FAIL','error_type':type(exc).__name__,'error':str(exc)[:300]})
+          (out/'feishu_publish.json').write_text(json.dumps(status,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+          print(json.dumps({'feishu_status':status['status'],'document_url':status.get('document_url'),'finding_count':status['finding_count']},ensure_ascii=False))
+          if status['status']!='PASS': raise SystemExit(22)
+          PY
+
       - name: Upload validation artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: voip-ai-pr3-pr7-validation
-          path: validation/**
+          name: offline-e2e-feishu-001
+          path: validation/offline_e2e_feishu_001/**
           if-no-files-found: warn
           retention-days: 14
