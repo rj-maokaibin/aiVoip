@@ -1,0 +1,44 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "RC16-SW-001",
+    "sequence": 72,
+    "created_at": "2026-08-22T01:03:00+00:00",
+    "expires_at": "2026-08-22T03:03:00+00:00",
+    "action_type": "SOFTWARE_REGRESSION",
+    "parameters": {
+      "timeout_seconds": 1800
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "4ca96fdd70753b448534a0c9b723df66b3720897"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "RC16 validation-only split-control R3-12 regression. The harness consumes the previously audited R2-05 reboot checkpoint/evidence, re-verifies DUT_REBOOT facts from its immutable manifest, requires the device to remain on the proven post-reboot boot_id, then runs a deterministic real 24-byte Segment through production Sealer/SCP/durable/ACK/delete on that post-reboot boot. This avoids an extra APF1250 reboot while preserving auditable reboot + data-plane continuity proof. Capture Engine runtime remains unchanged; Production V2 stays disabled."
+  },
+  "action_sha256": "edf5dcb0851b3ae00b5efa7481a9a2c11f5dd3189d3c917d805c1314a5e9e454",
+  "runner_id": "srv:3382405",
+  "state": "SUCCEEDED",
+  "return_code": 0,
+  "verdict": null,
+  "error": null,
+  "finished_at": "2026-08-22T01:03:49.138283+00:00",
+  "stdout_sha256": "3055a0437be395fdf6383e89c7b1651999251964486fd3a3089f41e76ddc204b",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "local_stdout": ".capture-v2-control/logs/RC16-SW-001/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/RC16-SW-001/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "4296e5feb76eab2e71cd20edaba8f77705dda12d",
+      "expected_product_head": "4ca96fdd70753b448534a0c9b723df66b3720897"
+    },
+    "parsed_output": null
+  }
+}
