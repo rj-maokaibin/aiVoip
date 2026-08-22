@@ -12,17 +12,18 @@ from app.capture_v2.gate.evaluator import GateEvaluator
 from app.capture_v2.gate.evidence import GateEvidenceCollector
 from app.capture_v2.gate.faults import FaultInjectingStore, GateFaultPlan
 from app.capture_v2.gate.models import GateRunPaths
+from app.capture_v2.transport.readonly import ReadOnlyDeviceTransport
 
 
 _PCAP24_PRINTF = "\\324\\303\\262\\241\\002\\000\\004\\000\\000\\000\\000\\000\\000\\000\\000\\000\\377\\377\\000\\000\\001\\000\\000\\000"
 
 
 async def _collect(runner, *, gate_id: str, capture_session_id: str,
-                   device_id: str, facts: dict[str, Any]):
+                   device_id: str, facts: dict[str, Any], adapter=None):
     paths = GateRunPaths.create(runner.output_root, gate_id, device_id)
     collector = GateEvidenceCollector(
         session_factory=runner.session_factory,
-        adapter=runner.adapter,
+        adapter=adapter or runner.adapter,
         object_root=runner.object_root,
         repo_root=runner.repo_root,
     )
@@ -36,10 +37,10 @@ async def _collect(runner, *, gate_id: str, capture_session_id: str,
     return GateEvaluator(paths.case_dir).evaluate(gate_id)
 
 
-def _bridge(runner, *, transport: str) -> CaptureV2CBridge:
+def _bridge(runner, *, transport: str, adapter=None) -> CaptureV2CBridge:
     return CaptureV2CBridge(
         session_factory=runner.session_factory,
-        adapter=runner.adapter,
+        adapter=adapter or runner.adapter,
         profile_root=runner.profile_root,
         requested_profile_id=runner.requested_profile_id,
         transport=transport,
@@ -258,6 +259,82 @@ async def _r3_pending_spool_restart(runner, *, reproduction_session_id: str,
     )
 
 
+async def _r3_dut_reboot_deterministic(runner, *, reproduction_session_id: str,
+                                       device: Any, worker_id: str, gate_id: str,
+                                       transport: str, duration_seconds: float,
+                                       cycle_interval_seconds: float):
+    """Real DUT reboot Gate with a deterministic post-reboot Segment precondition."""
+    # Reuse the already-proven reboot/reconnect primitive without changing its
+    # implementation. Import locally so missing_r3 remains a validation overlay.
+    from app.capture_v2.gate.advanced import _reboot_and_reconnect
+
+    first = await _bridge(runner, transport=transport).establish(
+        reproduction_session_id=reproduction_session_id,
+        device=device,
+        worker_id=f"{worker_id}-before-reboot",
+    )
+    async with first:
+        await first.drain_for(
+            duration_seconds=max(6.0, min(10.0, duration_seconds / 3.0)),
+            cycle_interval_seconds=cycle_interval_seconds,
+        )
+    old_boot = await ReadOnlyDeviceTransport(runner.adapter).boot_id()
+    fresh = None
+    try:
+        fresh, new_boot = await _reboot_and_reconnect(runner.adapter, old_boot_id=old_boot)
+        await _wait_token_expiry(first.token)
+        second = await _bridge(runner, transport=transport, adapter=fresh).establish(
+            reproduction_session_id=reproduction_session_id,
+            device=device,
+            worker_id=f"{worker_id}-after-reboot",
+        )
+        marker = f"gate_post_reboot_{uuid4().hex[:10]}"
+        await _inject_closed_24b_pcaps(second, marker=marker, count=1)
+        async with second:
+            cycles = await second.drain_for(
+                duration_seconds=max(10.0, min(20.0, duration_seconds / 2.0)),
+                cycle_interval_seconds=cycle_interval_seconds,
+            )
+        with runner.session_factory() as db:
+            injected = list(db.query(CaptureSegment).filter(
+                CaptureSegment.capture_session_id == second.bootstrap.capture_session_id,
+                CaptureSegment.capture_epoch_id == second.bootstrap.ownership.capture_epoch_id,
+                CaptureSegment.remote_path.contains(marker),
+            ).all())
+        facts = {
+            "capture_session_id": second.bootstrap.capture_session_id,
+            "old_boot_id": old_boot,
+            "new_boot_id": new_boot,
+            "before_capture_epoch_id": first.bootstrap.ownership.capture_epoch_id,
+            "after_capture_epoch_id": second.bootstrap.ownership.capture_epoch_id,
+            "before_lease_epoch": first.token.lease_epoch,
+            "after_lease_epoch": second.token.lease_epoch,
+            "before_pid": first.bootstrap.ownership.producer.pid,
+            "after_pid": second.bootstrap.ownership.producer.pid,
+            "recovery_status": second.bootstrap.ownership.recovery.status.value,
+            "recovery_classification": second.bootstrap.ownership.recovery.classification.value,
+            "post_reboot_cycles": len(cycles),
+            "post_reboot_deleted": sum(x.pump.deleted for x in cycles),
+            "post_reboot_injected_marker": marker,
+            "post_reboot_injected_count": len(injected),
+            "post_reboot_injected_deleted_count": sum(1 for row in injected if row.state == "REMOTE_DELETED"),
+        }
+        return await _collect(
+            runner,
+            gate_id=gate_id,
+            capture_session_id=second.bootstrap.capture_session_id,
+            device_id=device.id,
+            facts=facts,
+            adapter=fresh,
+        )
+    finally:
+        if fresh is not None:
+            try:
+                await fresh.disconnect()
+            except Exception:
+                pass
+
+
 async def maybe_run_missing_r3_scenario(runner, *, reproduction_session_id: str,
                                         device: Any, worker_id: str, gate_id: str,
                                         plan: GateFaultPlan, transport: str,
@@ -283,6 +360,17 @@ async def maybe_run_missing_r3_scenario(runner, *, reproduction_session_id: str,
             worker_id=worker_id,
             gate_id=gate_id,
             plan=plan,
+            transport=transport,
+            duration_seconds=duration_seconds,
+            cycle_interval_seconds=cycle_interval_seconds,
+        )
+    if normal.startswith("R3-12"):
+        return await _r3_dut_reboot_deterministic(
+            runner,
+            reproduction_session_id=reproduction_session_id,
+            device=device,
+            worker_id=worker_id,
+            gate_id=gate_id,
             transport=transport,
             duration_seconds=duration_seconds,
             cycle_interval_seconds=cycle_interval_seconds,
