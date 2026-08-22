@@ -1,34 +1,27 @@
 {
   "schema_version": "capture-v2-remote-status-v1",
-  "action_id": "R2-05-APF1250-DUT-REBOOT-RC9-RETRY1",
-  "sequence": 55,
-  "action_type": "GATE_OWNERSHIP",
-  "state": "FAILED",
+  "action_id": "RC10-SW-001",
+  "sequence": 56,
+  "action_type": "SOFTWARE_REGRESSION",
+  "state": "SUCCEEDED",
   "runner_id": "srv:3382405",
-  "action_sha256": "fb9aade8c9276cd10b253740d6abc8f7b83cf3ea14883345a0d52856fbb8d389",
-  "updated_at": "2026-08-22T00:19:55.516166+00:00",
+  "action_sha256": "ce4b77de1108d6cc960ba7cd58adbde73e2e0d5decd24e7f3067f37ef1f2cec0",
+  "updated_at": "2026-08-22T00:23:35.516174+00:00",
   "started_at": null,
-  "finished_at": "2026-08-22T00:19:55.516166+00:00",
-  "return_code": 2,
+  "finished_at": "2026-08-22T00:23:35.516174+00:00",
+  "return_code": 0,
   "verdict": null,
-  "result_path": "validation/control/results/R2-05-APF1250-DUT-REBOOT-RC9-RETRY1/result.json",
-  "stdout_sha256": "cc75417d545c45af4855d3cde92f84b3f5914de734ba172cb64cf309c2ca9188",
-  "stderr_sha256": "b8258e86248ce6f15dfea1a12afcd2ad3fde62ba6d3cd24536ffc8cb3bb61c48",
+  "result_path": "validation/control/results/RC10-SW-001/result.json",
+  "stdout_sha256": "7e83b0ad76db330e54a47b1160cc324620c5f842df0c171660806c1879a16989",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "error": null,
   "detail": {
     "safety": {
       "capture_engine_version": "V1",
       "capture_v2_production_enabled": "false",
-      "git_head": "62dc681898c3ba2cb494aa2db11f671f9f26a6d9",
-      "expected_product_head": "958dc06d2bb1f29df44a4166f463739b6534f68a"
+      "git_head": "afcf65657be8b2574de949bbed16fda6e1d93fde",
+      "expected_product_head": "efb4e67bc76a750b40bf6bb093d35e5014ac7b56"
     },
-    "parsed_output": {
-      "details": {
-        "last_error": "DeviceConnectionError",
-        "old_boot_id": "9ccb9d68-3f7b-49c1-835c-dd52a5a1c345"
-      },
-      "error": "GATE_DUT_REBOOT_RECONNECT_TIMEOUT",
-      "ok": false
-    }
+    "parsed_output": null
   }
 }
