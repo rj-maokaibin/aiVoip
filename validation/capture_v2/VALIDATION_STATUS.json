@@ -136,6 +136,7 @@
       "PR ready/merge/cutover"
     ]
   },
+  "final_blocker_audit": "validation/capture_v2/FINAL_BLOCKER_AUDIT_RC25.json",
   "production_cutover": {
     "status": "BLOCKED",
     "capture_engine_version": "V1",
