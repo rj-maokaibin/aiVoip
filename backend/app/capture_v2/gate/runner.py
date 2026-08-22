@@ -27,6 +27,7 @@ from app.capture_v2.gate.faults import (
 from app.capture_v2.gate.missing_r3 import maybe_run_missing_r3_scenario
 from app.capture_v2.gate.models import GateCaseResult, GateRunPaths
 from app.capture_v2.gate.reboot_resume import maybe_run_reboot_resume_ownership_scenario
+from app.capture_v2.gate.reboot_segment_resume import maybe_run_reboot_segment_resume_scenario
 from app.capture_v2.lease.manager import CaptureLeaseManager
 
 
@@ -134,17 +135,28 @@ class GateRunner:
         adapter = self.adapter
         plan = fault_plan or GateFaultPlan()
 
-        special = await maybe_run_missing_r3_scenario(
+        special = await maybe_run_reboot_segment_resume_scenario(
             self,
             reproduction_session_id=reproduction_session_id,
             device=device,
             worker_id=worker_id,
             gate_id=gate_id,
-            plan=plan,
             transport=transport,
             duration_seconds=duration_seconds,
             cycle_interval_seconds=cycle_interval_seconds,
         )
+        if special is None:
+            special = await maybe_run_missing_r3_scenario(
+                self,
+                reproduction_session_id=reproduction_session_id,
+                device=device,
+                worker_id=worker_id,
+                gate_id=gate_id,
+                plan=plan,
+                transport=transport,
+                duration_seconds=duration_seconds,
+                cycle_interval_seconds=cycle_interval_seconds,
+            )
         if special is None:
             special = await maybe_run_segment_scenario(
                 self,
