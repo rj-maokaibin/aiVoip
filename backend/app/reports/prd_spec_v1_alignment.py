@@ -16,6 +16,7 @@ ARTIFACT_PROVENANCE_FIELDS = (
 PROVENANCE_NON_NULL_FIELDS = (
     "artifact_id", "type", "case_id", "sha256", "size", "mime_type", "storage_location", "created_at",
 )
+_INTERRUPTED_CALL_STATES = {"ABORTED", "INCOMPLETE", "CANCELLED"}
 
 
 def _bool(value: Any) -> bool:
@@ -78,6 +79,32 @@ def build_evidence_completeness(payload: dict) -> dict:
     }
 
 
+def build_call_completion_quality(report: Any, payload: dict) -> dict:
+    """FR-029 fail-closed boundary for ABORTED/INCOMPLETE Calls.
+
+    Available evidence remains valid for the observed time range, but an interrupted
+    Call must never be narrated as if the whole Call lifecycle had been observed.
+    """
+    scope_type = str(getattr(report, "scope_type", None) or payload.get("scope_type") or (payload.get("scope") or {}).get("type") or "").upper()
+    call = payload.get("call") or payload.get("display_call") or {}
+    source_status = str(call.get("status") or "UNKNOWN").upper()
+    explicit_incomplete = bool(call.get("incomplete"))
+    interrupted = scope_type == "CALL" and (explicit_incomplete or source_status in _INTERRUPTED_CALL_STATES)
+    return {
+        "contract_version": ALIGNMENT_CONTRACT_VERSION,
+        "status": "INCOMPLETE" if interrupted else "COMPLETE_OR_NOT_APPLICABLE",
+        "source_call_status": source_status,
+        "ended_at": call.get("ended_at"),
+        "boundary_downgraded": interrupted,
+        "statement": (
+            "该 Call 为 ABORTED/INCOMPLETE/CANCELLED 或结束证据不完整；仅对已观测时间段和已有 Evidence 作结论，"
+            "未采集/未完成时段不得被解释为正常，也不得据此断言整个 Call 或提升 Root Cause Authority。"
+            if interrupted else
+            "当前没有触发 FR-029 中断 Call 降级边界。"
+        ),
+    }
+
+
 def _artifact_provenance(item: dict, *, report: Any) -> dict:
     metadata = item.get("metadata") or {}
     source = metadata.get("source") or {}
@@ -131,10 +158,23 @@ def finalize_report_contract(report: Any, payload: dict) -> dict:
     canonical fields rather than deleting the legacy fields in this release.
     """
     frozen_completeness = build_evidence_completeness(payload)
+    call_quality = build_call_completion_quality(report, payload)
     legacy_completeness = payload.setdefault("completeness", {})
     legacy_completeness["frozen_v1"] = frozen_completeness
-    if frozen_completeness["state"] != "COMPLETE":
+    if frozen_completeness["state"] != "COMPLETE" or call_quality["boundary_downgraded"]:
         legacy_completeness["state"] = "PARTIAL"
+    if call_quality["boundary_downgraded"]:
+        prior = str(legacy_completeness.get("boundary") or "").strip()
+        legacy_completeness["boundary"] = (call_quality["statement"] + (" " + prior if prior else "")).strip()
+        context = payload.setdefault("analysis_context", {})
+        context["reviewability"] = "NOT_FULLY_REVIEWABLE"
+        issues = list(context.get("semantic_issues") or [])
+        if "CALL_LIFECYCLE_INCOMPLETE" not in issues:
+            issues.append("CALL_LIFECYCLE_INCOMPLETE")
+        context["semantic_issues"] = issues
+        boundary = payload.setdefault("evidence_boundary", {})
+        statement = str(boundary.get("statement") or "").strip()
+        boundary["statement"] = (call_quality["statement"] + (" " + statement if statement else "")).strip()
 
     final_status = "COMPLETE" if legacy_completeness.get("state") == "COMPLETE" else "PARTIAL_COMPLETE"
     if hasattr(report, "status"):
@@ -147,6 +187,7 @@ def finalize_report_contract(report: Any, payload: dict) -> dict:
     payload["version"] = getattr(report, "version", None) or payload.get("report_version")
     payload["status"] = final_status
     payload["capture_quality"] = frozen_completeness
+    payload["call_completion_quality"] = call_quality
     payload["signaling_summary"] = {
         "available": _bool((payload.get("packet_summary") or {}).get("available")),
         "sip_message_count": (payload.get("packet_summary") or {}).get("sip_message_count"),
@@ -177,6 +218,7 @@ def finalize_report_contract(report: Any, payload: dict) -> dict:
         "analyzers": payload.get("analyzers") or {},
         "environment_fingerprint": payload.get("environment_fingerprint"),
         "artifact_provenance_complete": not missing_by_artifact,
+        "call_completion_boundary": call_quality["status"],
     }
     return payload
 
