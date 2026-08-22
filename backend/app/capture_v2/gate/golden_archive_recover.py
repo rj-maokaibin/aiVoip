@@ -117,13 +117,14 @@ async def recover(args) -> int:
         }, ensure_ascii=False, indent=2))
         return 2
 
+    archive_sha = sha256_file(local_path)
     payload = {
         "verdict": "PASS",
         "archive_name": archive_name,
         "source_root": found_root,
         "local_path": str(local_path),
         "size_bytes": local_path.stat().st_size,
-        "sha256": sha256_file(local_path),
+        "sha256": archive_sha,
         "inventory": inventory,
         "attempts": attempts,
     }
@@ -162,6 +163,26 @@ async def recover(args) -> int:
             "reason": f"GOLDEN_ARCHIVE_FALLBACK_ERROR:{type(exc).__name__}:{exc}",
             "release_gate_effect": "EVIDENCE_ONLY_NOT_R5_PASS",
             "parser": "PURE_PYTHON_CLASSIC_PCAP",
+        }
+
+    # Non-physical R5 closure aid: exercise the real PostgreSQL CoverageLedger
+    # service using a validation-only window. The latest real CaptureSession is
+    # used only as an FK anchor; the validator creates, snapshots and deletes its
+    # own rows. This proves DB runtime/idempotency/finalize/fail-closed behavior,
+    # but explicitly does not claim that this historical call was finalized by
+    # the live online V2 pipeline.
+    try:
+        from app.capture_v2.gate.coverage_db_validation import validate_real_postgres_coverage_ledger
+
+        payload["coverage_db_validation"] = validate_real_postgres_coverage_ledger(
+            device_id=spec.device_id,
+            marker=f"{spec.model}:{args.archive_date}:{archive_sha[:16]}",
+        )
+    except Exception as exc:
+        payload["coverage_db_validation"] = {
+            "verdict": "INCONCLUSIVE",
+            "reason": f"REAL_POSTGRES_COVERAGE_LEDGER_SELF_TEST_ERROR:{type(exc).__name__}:{exc}",
+            "release_gate_effect": "VALIDATES_LEDGER_RUNTIME_ONLY_NOT_ONLINE_R5_PASS",
         }
 
     print(json.dumps(payload, ensure_ascii=False, indent=2))
