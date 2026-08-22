@@ -1,0 +1,66 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "R2-05-APF1250-DUT-REBOOT-RC13-RETRY2",
+    "sequence": 66,
+    "created_at": "2026-08-22T00:48:00+00:00",
+    "expires_at": "2026-08-22T03:48:00+00:00",
+    "action_type": "GATE_OWNERSHIP",
+    "parameters": {
+      "device_id": "259f16e6-af9e-4dff-969b-2bb5eac43eb2",
+      "model": "APF1250",
+      "host": "10.48.8.74",
+      "port": 10001,
+      "username": "root",
+      "platform_id": "mt7621",
+      "password_env": "DB:G1V030E010214",
+      "profile_root": "../profiles",
+      "profile_id": "voip-standard",
+      "object_root": "/tmp/voip-reproduction-objects",
+      "output_root": "/tmp/capture-v2-gates",
+      "repo_root": "..",
+      "reproduction_session_id": "AUTO_NEW",
+      "worker_id": "r2-05-apf1250-rc13-retry2",
+      "gate_id": "R2-05-APF1250-DUT-REBOOT-RC13",
+      "timeout_seconds": 900
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "5e743ccde61648cfb1998d4343f22da0a268cecd"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "RC13 APF1250 real DUT reboot/recovery retry after the user confirmed reboot is now allowed and the tunnel has been restored. Establish ownership, record old boot_id, reboot the DUT, reconnect through the restored control path, wait old lease expiry, recover the same logical reproduction session with DUT_REBOOT classification, require a new CaptureEpoch and higher lease_epoch, close DUT_REBOOT_GAP, record DUT_REBOOT_DETECTED, and finish with exactly one owned producer. Previous retries that failed on tunnel reachability/reconnect are infrastructure-blocked evidence and are not overwritten."
+  },
+  "action_sha256": "fd85b96d86c8bbae637e1ffa6430b2ad180c0394a5273257b5ade828feb7d219",
+  "runner_id": "srv:3382405",
+  "state": "FAILED",
+  "return_code": 2,
+  "verdict": null,
+  "error": null,
+  "finished_at": "2026-08-22T00:52:16.142180+00:00",
+  "stdout_sha256": "baace59f0c6d9cd85cb7e99433097eb6354c8470b7fbc69e76874a2bb64516d0",
+  "stderr_sha256": "b8258e86248ce6f15dfea1a12afcd2ad3fde62ba6d3cd24536ffc8cb3bb61c48",
+  "local_stdout": ".capture-v2-control/logs/R2-05-APF1250-DUT-REBOOT-RC13-RETRY2/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/R2-05-APF1250-DUT-REBOOT-RC13-RETRY2/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "5082afed9bbdd268db8028801c8c95e3f9595670",
+      "expected_product_head": "5e743ccde61648cfb1998d4343f22da0a268cecd"
+    },
+    "parsed_output": {
+      "details": {
+        "last_error": "DeviceConnectionError",
+        "old_boot_id": "88052410-6dda-4f1b-9b27-1cb2e28c7239"
+      },
+      "error": "GATE_DUT_REBOOT_RECONNECT_TIMEOUT",
+      "ok": false
+    }
+  }
+}
