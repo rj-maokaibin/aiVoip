@@ -1,30 +1,12 @@
 {
   "schema_version": "capture-v2-remote-action-v1",
-  "action_id": "R3-11-APF1250-PENDING-SPOOL-RESTART-RC15",
-  "sequence": 71,
-  "created_at": "2026-08-22T01:00:00+00:00",
-  "expires_at": "2026-08-22T03:00:00+00:00",
-  "action_type": "GATE_SEGMENT",
+  "action_id": "RC16-SW-001",
+  "sequence": 72,
+  "created_at": "2026-08-22T01:03:00+00:00",
+  "expires_at": "2026-08-22T03:03:00+00:00",
+  "action_type": "SOFTWARE_REGRESSION",
   "parameters": {
-    "device_id": "259f16e6-af9e-4dff-969b-2bb5eac43eb2",
-    "model": "APF1250",
-    "host": "10.48.8.74",
-    "port": 10001,
-    "username": "root",
-    "platform_id": "mt7621",
-    "password_env": "DB:G1V030E010214",
-    "profile_root": "../profiles",
-    "profile_id": "voip-standard",
-    "object_root": "/tmp/voip-reproduction-objects",
-    "output_root": "/tmp/capture-v2-gates",
-    "repo_root": "..",
-    "reproduction_session_id": "AUTO_NEW",
-    "worker_id": "r3-11-apf1250-rc15",
-    "gate_id": "R3-11-APF1250-PENDING-SPOOL-RESTART-RC15",
-    "duration": 40,
-    "interval": 0.5,
-    "transport": "scp",
-    "timeout_seconds": 900
+    "timeout_seconds": 1800
   },
   "safety": {
     "require_clean_git": true,
@@ -32,8 +14,8 @@
     "require_v2_disabled": true,
     "allow_worker_kill": false,
     "allow_server_quarantine": false,
-    "expected_head": "81b440b28dbdcbfe0a77a7e0c6627b34ec68d82a"
+    "expected_head": "4ca96fdd70753b448534a0c9b723df66b3720897"
   },
   "requested_by": "ChatGPT-remote-validation-controller",
-  "note": "RC15 APF1250 deterministic R3-11. Under first fenced authority with durable-store failure, inject four valid closed 24-byte PCAPs so production Sealer/Pump creates real immutable unacked DUT spool. Require CRITICAL UNACKED_BYTES_LIMIT pressure and all sampled backlog present on DUT, stop only worker lease renewal, wait TTL, then second authority must SAME_SESSION_ALIVE/ADOPT exact PID/starttime and CaptureEpoch with a higher lease, and recover every pre-restart backlog segment through durable ACK and exact remote delete without double loss."
+  "note": "RC16 validation-only split-control R3-12 regression. The harness consumes the previously audited R2-05 reboot checkpoint/evidence, re-verifies DUT_REBOOT facts from its immutable manifest, requires the device to remain on the proven post-reboot boot_id, then runs a deterministic real 24-byte Segment through production Sealer/SCP/durable/ACK/delete on that post-reboot boot. This avoids an extra APF1250 reboot while preserving auditable reboot + data-plane continuity proof. Capture Engine runtime remains unchanged; Production V2 stays disabled."
 }
