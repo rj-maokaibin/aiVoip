@@ -33,62 +33,31 @@ jobs:
 
           python3 - <<'PY'
           import json, os, urllib.parse, urllib.request, urllib.error
-
           base=os.environ.get('FEISHU_BASE_URL','https://open.feishu.cn/open-apis').rstrip('/')
-          app_id=os.environ.get('FEISHU_APP_ID','')
-          secret_file=os.environ['FEISHU_APP_SECRET_FILE']
-          reader=os.environ['FEISHU_PERMISSION_READER']
-          doc=os.environ['DOCUMENT_TOKEN']
-          assert app_id and reader and doc
-          with open(secret_file,'r',encoding='utf-8') as f:
-              app_secret=f.read().strip()
-
+          app_id=os.environ.get('FEISHU_APP_ID',''); reader=os.environ['FEISHU_PERMISSION_READER']; doc=os.environ['DOCUMENT_TOKEN']
+          with open(os.environ['FEISHU_APP_SECRET_FILE'],'r',encoding='utf-8') as f: app_secret=f.read().strip()
           def req(method,url,payload=None,token=None):
-              body=None if payload is None else json.dumps(payload).encode('utf-8')
-              headers={'Content-Type':'application/json'}
+              body=None if payload is None else json.dumps(payload).encode('utf-8'); headers={'Content-Type':'application/json'}
               if token: headers['Authorization']=f'Bearer {token}'
               r=urllib.request.Request(url,data=body,headers=headers,method=method)
               try:
-                  with urllib.request.urlopen(r,timeout=30) as resp:
-                      raw=resp.read()
+                  with urllib.request.urlopen(r,timeout=30) as resp: raw=resp.read()
               except urllib.error.HTTPError as e:
-                  raw=e.read()
-                  try: data=json.loads(raw.decode('utf-8'))
-                  except Exception: data={'raw':raw.decode('utf-8','replace')[:300]}
-                  if e.code not in (400,409):
-                      raise RuntimeError(f'FEISHU_HTTP_{e.code}:{data.get("code")}:{data.get("msg")}')
+                  raw=e.read(); data=json.loads(raw.decode('utf-8')) if raw else {}
+                  if e.code not in (400,409): raise RuntimeError(f'FEISHU_HTTP_{e.code}:{data.get("code")}:{data.get("msg")}')
                   return data
               return json.loads(raw.decode('utf-8')) if raw else {}
-
-          auth=req('POST',base+'/auth/v3/tenant_access_token/internal',{'app_id':app_id,'app_secret':app_secret})
-          token=auth.get('tenant_access_token')
-          assert token, f'TENANT_TOKEN_FAILED:{auth.get("code")}:{auth.get("msg")}'
-
+          auth=req('POST',base+'/auth/v3/tenant_access_token/internal',{'app_id':app_id,'app_secret':app_secret}); token=auth.get('tenant_access_token'); assert token
           endpoint=base+'/drive/v1/permissions/'+urllib.parse.quote(doc,safe='')+'/members?type=docx&need_notification=false'
-          result=req('POST',endpoint,{'member_type':'openid','member_id':reader,'perm':'view'},token)
-          code=result.get('code',0)
-          if code not in (0,99991672,99991668):
-              print(f'GRANT_RESPONSE_CODE={code} MSG={result.get("msg","")}')
-
-          verify_url=base+'/drive/v1/permissions/'+urllib.parse.quote(doc,safe='')+'/members?type=docx'
-          verified=False
-          page=''
+          req('POST',endpoint,{'member_type':'openid','member_id':reader,'perm':'view'},token)
+          verify_url=base+'/drive/v1/permissions/'+urllib.parse.quote(doc,safe='')+'/members?type=docx'; verified=False; page=''
           for _ in range(10):
-              url=verify_url + (('&page_token='+urllib.parse.quote(page,safe='')) if page else '')
-              data=req('GET',url,token=token)
-              items=((data.get('data') or {}).get('items') or (data.get('data') or {}).get('members') or [])
+              url=verify_url + (('&page_token='+urllib.parse.quote(page,safe='')) if page else ''); data=req('GET',url,token=token); d=data.get('data') or {}; items=d.get('items') or d.get('members') or []
               for item in items:
-                  mid=str(item.get('member_id') or item.get('member_open_id') or '')
-                  perm=str(item.get('perm') or item.get('permission') or '').lower()
-                  if mid==reader and perm in {'view','edit','full_access'}:
-                      verified=True
-                      print('READER_PERMISSION=VIEW_PASS')
-                      break
-              if verified: break
-              d=data.get('data') or {}
-              if not d.get('has_more'): break
+                  mid=str(item.get('member_id') or item.get('member_open_id') or ''); perm=str(item.get('perm') or item.get('permission') or '').lower()
+                  if mid==reader and perm in {'view','edit','full_access'}: verified=True; break
+              if verified or not d.get('has_more'): break
               page=str(d.get('page_token') or '')
-              if not page: break
           assert verified, 'READER_PERMISSION_VERIFY_FAILED'
-          print('DOCUMENT_READER_ACCESS=PASS')
+          print('READER_PERMISSION=VIEW_PASS'); print('DOCUMENT_READER_ACCESS=PASS')
           PY
