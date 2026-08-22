@@ -1,9 +1,9 @@
 {
   "schema_version": "capture-v2-remote-action-v1",
-  "action_id": "R3-09-APF3260M-SILENT24B-RC11",
-  "sequence": 59,
-  "created_at": "2026-08-22T00:27:00+00:00",
-  "expires_at": "2026-08-22T02:27:00+00:00",
+  "action_id": "R3-11-APF3260M-PENDING-SPOOL-RESTART-RC11",
+  "sequence": 60,
+  "created_at": "2026-08-22T00:28:00+00:00",
+  "expires_at": "2026-08-22T02:28:00+00:00",
   "action_type": "GATE_SEGMENT",
   "parameters": {
     "device_id": "c132f336-df1b-4285-b175-01d848f23b5d",
@@ -19,12 +19,12 @@
     "output_root": "/tmp/capture-v2-gates",
     "repo_root": "..",
     "reproduction_session_id": "AUTO_NEW",
-    "worker_id": "r3-09-apf3260m-rc11",
-    "gate_id": "R3-09-APF3260M-SILENT24B-RC11",
-    "duration": 20,
+    "worker_id": "r3-11-apf3260m-rc11",
+    "gate_id": "R3-11-APF3260M-PENDING-SPOOL-RESTART-RC11",
+    "duration": 40,
     "interval": 0.5,
     "transport": "scp",
-    "timeout_seconds": 600
+    "timeout_seconds": 900
   },
   "safety": {
     "require_clean_git": true,
@@ -35,5 +35,5 @@
     "expected_head": "37d131d291cf6efe44fb170f72450e1a83d0907c"
   },
   "requested_by": "ChatGPT-remote-validation-controller",
-  "note": "RC11 R3-09 retry on APF3260-M using AUTO_NEW clean validation session. Under the active fenced CaptureEpoch inject exactly one 24-byte classic-PCAP global-header-only file, then require real seal + SCP + validation + durable store + DB + ACK + exact DUT delete, preserving size=24, pcap_valid=true, packet_count=0 and no server/DUT double loss."
+  "note": "RC11 R3-11 APF3260-M pending-spool restart/adoption. Create real unacked backlog by failing the durable store, prove sampled immutable segments remain on DUT and pressure reaches CRITICAL, stop only first worker lease renewal while leaving tcpdump alive, wait TTL, establish second authority, require SAME_SESSION_ALIVE/ADOPTED with exact same PID/starttime and CaptureEpoch, higher lease_epoch, then recover every pre-restart backlog segment through durable ACK and exact remote delete with no double loss."
 }
