@@ -105,6 +105,51 @@ def build_call_completion_quality(report: Any, payload: dict) -> dict:
     }
 
 
+def build_call_formation_quality(report: Any, payload: dict) -> dict:
+    """FR-028 canonical Session outcome when no valid Call was formed.
+
+    A terminal reproduction Session is still reportable when it contains only
+    pre-Call evidence.  The contract is deliberately evidence-first: it records
+    that no valid Call was formed without converting absent SIP/RTP/media facts
+    into a "normal call" statement.
+    """
+    scope_type = str(getattr(report, "scope_type", None) or payload.get("scope_type") or (payload.get("scope") or {}).get("type") or "").upper()
+    context = payload.get("analysis_context") or {}
+    display_call = payload.get("display_call") or payload.get("call")
+    runtime_count = context.get("session_runtime_call_count")
+    diagnostic_count = int(context.get("diagnostic_call_count") or 0)
+    no_valid_call = (
+        scope_type == "SESSION"
+        and runtime_count == 0
+        and diagnostic_count == 0
+        and not display_call
+    )
+    capture = (payload.get("completeness") or {}).get("capture") or {}
+    preserved = []
+    if capture.get("pcap"):
+        preserved.append("PCAP_PREROLL")
+    if capture.get("debug"):
+        preserved.append("DEBUG")
+    if capture.get("pcm_rx"):
+        preserved.append("PCM_RX")
+    if capture.get("pcm_tx"):
+        preserved.append("PCM_TX")
+    return {
+        "contract_version": ALIGNMENT_CONTRACT_VERSION,
+        "status": "NO_VALID_CALL" if no_valid_call else "VALID_CALL_OR_NOT_APPLICABLE",
+        "no_valid_call": no_valid_call,
+        "session_runtime_call_count": runtime_count,
+        "diagnostic_call_count": diagnostic_count,
+        "preserved_pre_call_evidence": preserved,
+        "statement": (
+            "该 Reproduction Session 未形成有效 Call；本报告仅汇总实际已采集的 Off-hook/预录 PCAP/Debug/PCM 等前置证据。"
+            "未出现的 SIP/RTP/Call 生命周期不得解释为正常通话，也不得据此提升 Root Cause Authority。"
+            if no_valid_call else
+            "当前没有触发 FR-028 无有效 Call 边界。"
+        ),
+    }
+
+
 def _artifact_provenance(item: dict, *, report: Any) -> dict:
     metadata = item.get("metadata") or {}
     source = metadata.get("source") or {}
@@ -159,6 +204,7 @@ def finalize_report_contract(report: Any, payload: dict) -> dict:
     """
     frozen_completeness = build_evidence_completeness(payload)
     call_quality = build_call_completion_quality(report, payload)
+    formation_quality = build_call_formation_quality(report, payload)
     legacy_completeness = payload.setdefault("completeness", {})
     legacy_completeness["frozen_v1"] = frozen_completeness
     if frozen_completeness["state"] != "COMPLETE" or call_quality["boundary_downgraded"]:
@@ -175,6 +221,18 @@ def finalize_report_contract(report: Any, payload: dict) -> dict:
         boundary = payload.setdefault("evidence_boundary", {})
         statement = str(boundary.get("statement") or "").strip()
         boundary["statement"] = (call_quality["statement"] + (" " + statement if statement else "")).strip()
+    if formation_quality["no_valid_call"]:
+        context = payload.setdefault("analysis_context", {})
+        context["session_call_status"] = "NO_VALID_CALL"
+        boundary = payload.setdefault("evidence_boundary", {})
+        statement = str(boundary.get("statement") or "").strip()
+        boundary["statement"] = (formation_quality["statement"] + (" " + statement if statement else "")).strip()
+        headline = "本次 Reproduction Session 未形成有效 Call；以下内容仅覆盖实际已采集的前置 Evidence。"
+        payload["headline"] = headline
+        assessment = payload.setdefault("preliminary_assessment", {})
+        assessment["summary"] = headline
+        assessment["evidence_boundary"] = formation_quality["statement"]
+        assessment["recommended_next_action"] = "优先复核 Off-hook/预录 PCAP/Debug 等已存在前置证据，确认 Call 未形成的位置；缺失的 Call/RTP 阶段不得按正常解释。"
 
     final_status = "COMPLETE" if legacy_completeness.get("state") == "COMPLETE" else "PARTIAL_COMPLETE"
     if hasattr(report, "status"):
@@ -188,6 +246,7 @@ def finalize_report_contract(report: Any, payload: dict) -> dict:
     payload["status"] = final_status
     payload["capture_quality"] = frozen_completeness
     payload["call_completion_quality"] = call_quality
+    payload["call_formation_quality"] = formation_quality
     payload["signaling_summary"] = {
         "available": _bool((payload.get("packet_summary") or {}).get("available")),
         "sip_message_count": (payload.get("packet_summary") or {}).get("sip_message_count"),
@@ -219,6 +278,7 @@ def finalize_report_contract(report: Any, payload: dict) -> dict:
         "environment_fingerprint": payload.get("environment_fingerprint"),
         "artifact_provenance_complete": not missing_by_artifact,
         "call_completion_boundary": call_quality["status"],
+        "call_formation_boundary": formation_quality["status"],
     }
     return payload
 
