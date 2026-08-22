@@ -14,6 +14,9 @@ from app.capture_v2.gate.faults import FaultInjectingStore, GateFaultPlan
 from app.capture_v2.gate.models import GateRunPaths
 
 
+_PCAP24_PRINTF = "\\324\\303\\262\\241\\002\\000\\004\\000\\000\\000\\000\\000\\000\\000\\000\\000\\377\\377\\000\\000\\001\\000\\000\\000"
+
+
 async def _collect(runner, *, gate_id: str, capture_session_id: str,
                    device_id: str, facts: dict[str, Any]):
     paths = GateRunPaths.create(runner.output_root, gate_id, device_id)
@@ -51,6 +54,32 @@ async def _wait_token_expiry(token) -> None:
     await asyncio.sleep(delay)
 
 
+async def _inject_closed_24b_pcaps(session, *, marker: str, count: int) -> None:
+    """Create deterministic closed valid PCAPs under the current fenced epoch.
+
+    The files are Gate-only preconditions. They are never opened by tcpdump, so
+    production SegmentSealer sees them as immutable closed files and must move
+    them into spool through the normal fenced path.
+    """
+    epoch_token = session.bootstrap.ownership.capture_epoch_token
+    writes = []
+    checks = []
+    for idx in range(1, int(count) + 1):
+        name = f"{marker}_{idx:02d}.pcap"
+        path = f'$ROOT/active/{name}'
+        writes.append(f"printf '{_PCAP24_PRINTF}' > \"{path}\"")
+        checks.append(f"[ \"$(stat -c %s \"{path}\" 2>/dev/null || echo 0)\" -eq 24 ] || exit 83")
+    body = (
+        f"ROOT=/tmp/aivoip_capture/epochs/{shlex.quote(epoch_token)}\n"
+        "mkdir -p \"$ROOT/active\"\n"
+        + "\n".join(writes)
+        + "\n"
+        + "\n".join(checks)
+        + "\n"
+    )
+    await session.components["mutator"].execute_fenced(session.token, body=body)
+
+
 async def _r3_silent_24b(runner, *, reproduction_session_id: str, device: Any,
                          worker_id: str, gate_id: str, transport: str,
                          duration_seconds: float, cycle_interval_seconds: float):
@@ -66,16 +95,7 @@ async def _r3_silent_24b(runner, *, reproduction_session_id: str, device: Any,
         worker_id=worker_id,
     )
     marker = f"gate_silent_24b_{uuid4().hex[:10]}"
-    epoch_token = session.bootstrap.ownership.capture_epoch_token
-    body = f'''ROOT=/tmp/aivoip_capture/epochs/{shlex.quote(epoch_token)}
-FILE="$ROOT/active/{marker}.pcap"
-mkdir -p "$ROOT/active"
-printf '\\324\\303\\262\\241\\002\\000\\004\\000\\000\\000\\000\\000\\000\\000\\000\\000\\377\\377\\000\\000\\001\\000\\000\\000' > "$FILE"
-size=$(stat -c %s "$FILE" 2>/dev/null || echo 0)
-[ "$size" -eq 24 ] || exit 83
-printf '%s\\n' "$FILE"
-'''
-    await session.components["mutator"].execute_fenced(session.token, body=body)
+    await _inject_closed_24b_pcaps(session, marker=marker, count=1)
 
     async with session:
         cycles = await session.drain_for(
@@ -121,12 +141,14 @@ async def _r3_pending_spool_restart(runner, *, reproduction_session_id: str,
                                     plan: GateFaultPlan, transport: str,
                                     duration_seconds: float,
                                     cycle_interval_seconds: float):
-    """Combine real spool backlog with a worker authority restart/adoption.
+    """Combine deterministic real spool backlog with worker restart/adoption.
 
-    First authority keeps the durable store failing until multiple immutable DUT
-    segments are known but unacked. It then exits without stopping tcpdump. After
-    lease expiry a new authority must ADOPT the exact producer/CaptureEpoch and
-    drain the exact pre-restart backlog through durable ACK and remote deletion.
+    First authority keeps the durable store failing while four valid closed PCAPs
+    are injected under the current fenced CaptureEpoch. The production sealer must
+    turn those files into immutable DUT spool segments that remain unacked. The
+    authority then exits without stopping tcpdump. After lease expiry a new
+    authority must ADOPT the exact producer/CaptureEpoch and drain the exact
+    pre-restart backlog through durable ACK and remote deletion.
     """
     bridge = _bridge(runner, transport=transport)
     first = await bridge.establish(
@@ -147,8 +169,11 @@ async def _r3_pending_spool_restart(runner, *, reproduction_session_id: str,
     before_starttime = first.bootstrap.ownership.producer.process_starttime
     before_epoch = first.bootstrap.ownership.capture_epoch_id
     before_lease = first.token.lease_epoch
+    injected_count = 4
+    marker = f"gate_restart_backlog_{uuid4().hex[:10]}"
 
     async with first:
+        await _inject_closed_24b_pcaps(first, marker=marker, count=injected_count)
         before_cycles = await first.drain_for(
             duration_seconds=phase,
             cycle_interval_seconds=cycle_interval_seconds,
@@ -161,6 +186,7 @@ async def _r3_pending_spool_restart(runner, *, reproduction_session_id: str,
             backlog_ids = [row.id for row in backlog]
             backlog_bytes = sum(int(row.remote_size or 0) for row in backlog)
             sample_paths = [row.remote_path for row in backlog[:20]]
+            injected_backlog_count = sum(1 for row in backlog if marker in str(row.remote_path or ""))
         remote_sample_exists = 0
         for path in sample_paths:
             text = await first.components["reader"].run(
@@ -199,6 +225,8 @@ async def _r3_pending_spool_restart(runner, *, reproduction_session_id: str,
 
     facts = {
         "capture_session_id": second.bootstrap.capture_session_id,
+        "injected_closed_segment_count": injected_count,
+        "injected_backlog_count": injected_backlog_count,
         "backlog_unacked_count": len(backlog_ids),
         "backlog_unacked_bytes": backlog_bytes,
         "backlog_segment_ids": backlog_ids,
