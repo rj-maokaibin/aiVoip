@@ -131,12 +131,9 @@ async def recover(args) -> int:
 
     # The recovery Gate stays about archive retrieval. Offline analysis is
     # intentionally nested evidence: its result can strengthen R5/R6 evidence,
-    # but it never upgrades this recovery PASS into an R5 release PASS. Keeping
-    # imports local avoids module cycles because both analyzers reuse the
-    # deterministic archive naming/root helpers above.
+    # but it never upgrades this recovery PASS into an R5/R6 release PASS.
     try:
         from app.capture_v2.gate.golden_archive_analyze import analyze_archive
-
         payload["analysis"] = analyze_archive(
             device_id=spec.device_id,
             model=spec.model,
@@ -151,7 +148,6 @@ async def recover(args) -> int:
 
     try:
         from app.capture_v2.gate.golden_archive_fallback import analyze_archive_fallback
-
         payload["fallback_analysis"] = analyze_archive_fallback(
             device_id=spec.device_id,
             model=spec.model,
@@ -165,15 +161,9 @@ async def recover(args) -> int:
             "parser": "PURE_PYTHON_CLASSIC_PCAP",
         }
 
-    # Non-physical R5 closure aid: exercise the real PostgreSQL CoverageLedger
-    # service using a validation-only window. The latest real CaptureSession is
-    # used only as an FK anchor; the validator creates, snapshots and deletes its
-    # own rows. This proves DB runtime/idempotency/finalize/fail-closed behavior,
-    # but explicitly does not claim that this historical call was finalized by
-    # the live online V2 pipeline.
+    # Non-physical R5 closure aid: real PostgreSQL CoverageLedger runtime test.
     try:
         from app.capture_v2.gate.coverage_db_validation import validate_real_postgres_coverage_ledger
-
         payload["coverage_db_validation"] = validate_real_postgres_coverage_ledger(
             device_id=spec.device_id,
             marker=f"{spec.model}:{args.archive_date}:{archive_sha[:16]}",
@@ -183,6 +173,22 @@ async def recover(args) -> int:
             "verdict": "INCONCLUSIVE",
             "reason": f"REAL_POSTGRES_COVERAGE_LEDGER_SELF_TEST_ERROR:{type(exc).__name__}:{exc}",
             "release_gate_effect": "VALIDATES_LEDGER_RUNTIME_ONLY_NOT_ONLINE_R5_PASS",
+        }
+
+    # Non-physical R6 closure aid: real PostgreSQL evidence-first asset/report
+    # semantics. Missing required evidence must erase the requested root-cause
+    # conclusion, while complete selected evidence may retain a bounded finding.
+    try:
+        from app.capture_v2.gate.report_db_validation import validate_real_postgres_evidence_first_report
+        payload["report_db_validation"] = validate_real_postgres_evidence_first_report(
+            device_id=spec.device_id,
+            marker=f"{spec.model}:{args.archive_date}:{archive_sha[:16]}",
+        )
+    except Exception as exc:
+        payload["report_db_validation"] = {
+            "verdict": "INCONCLUSIVE",
+            "reason": f"REAL_POSTGRES_EVIDENCE_FIRST_SELF_TEST_ERROR:{type(exc).__name__}:{exc}",
+            "release_gate_effect": "VALIDATES_EVIDENCE_FIRST_DB_RUNTIME_ONLY_NOT_ABNORMAL_E2E_PASS",
         }
 
     print(json.dumps(payload, ensure_ascii=False, indent=2))
