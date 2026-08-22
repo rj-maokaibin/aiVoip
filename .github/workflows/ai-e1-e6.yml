@@ -1,4 +1,4 @@
-name: Feishu known-good media insertion probe
+name: Feishu reference image and file media probe
 on:
   workflow_dispatch:
   pull_request:
@@ -12,52 +12,47 @@ jobs:
     env:
       TARGET_DOCX_TOKEN: A4ZqdW9wsoWA17x5yjFcR3TUnyb
     steps:
-      - name: Prepare environment
+      - name: Prepare
         shell: bash
         run: |
           set -euo pipefail
-          cd "$GITHUB_WORKSPACE"
-          git reset --hard 48a3855e31a7019640671e422956212b540dd08d
-          git clean -ffdx
+          cd "$GITHUB_WORKSPACE"; git reset --hard 48a3855e31a7019640671e422956212b540dd08d; git clean -ffdx
           python3 -m venv .venv-feishu-probe
-          .venv-feishu-probe/bin/python -m pip install --upgrade pip >/dev/null
           .venv-feishu-probe/bin/python -m pip install feishukit==0.0.6 >/dev/null
-          set -a
-          . /home/github-runner/.config/voip-ai/.env
-          set +a
-          test -n "${FEISHU_APP_ID:-}"
-          test -r "$FEISHU_APP_SECRET_FILE"
+          set -a; . /home/github-runner/.config/voip-ai/.env; set +a
           echo "FEISHU_APP_ID=$FEISHU_APP_ID" >> "$GITHUB_ENV"
           echo "FEISHU_APP_SECRET_FILE=$FEISHU_APP_SECRET_FILE" >> "$GITHUB_ENV"
-      - name: Inspect and execute reference file insertion
+      - name: Inspect and execute image and file reference flows
         shell: bash
         run: |
           set -euo pipefail
           cd "$GITHUB_WORKSPACE"
           .venv-feishu-probe/bin/python - <<'PY'
-          import inspect, os, wave, math, struct, tempfile
+          import inspect, os, wave, math, struct, tempfile, zlib
           from pathlib import Path
           from feishukit import FeishuDoc
-          print('REFERENCE_INSERT_MEDIA_BLOCK_SOURCE_START')
-          print(inspect.getsource(FeishuDoc.insert_media_block))
-          print('REFERENCE_INSERT_MEDIA_BLOCK_SOURCE_END')
+          print('UPLOAD_MEDIA_SOURCE_START'); print(inspect.getsource(FeishuDoc.upload_media)); print('UPLOAD_MEDIA_SOURCE_END')
+          print('UPDATE_BLOCK_SOURCE_START'); print(inspect.getsource(FeishuDoc.update_block)); print('UPDATE_BLOCK_SOURCE_END')
           secret=Path(os.environ['FEISHU_APP_SECRET_FILE']).read_text().strip()
-          wav=Path(tempfile.gettempdir())/'feishu_reference_probe.wav'
-          sr=8000
-          samples=[int(10000*math.sin(2*math.pi*440*i/sr)) for i in range(sr)]
-          with wave.open(str(wav),'wb') as w:
-              w.setnchannels(1); w.setsampwidth(2); w.setframerate(sr)
-              w.writeframes(b''.join(struct.pack('<h',x) for x in samples))
-          print('LOCAL_WAV_BYTES',wav.stat().st_size)
           doc=FeishuDoc(app_id=os.environ['FEISHU_APP_ID'],app_secret=secret,doc_url=f"https://feishu.cn/docx/{os.environ['TARGET_DOCX_TOKEN']}")
-          token=doc.insert_media_block(str(wav))
-          print('REFERENCE_FILE_TOKEN_PRESENT',bool(token))
-          blocks=doc.get_doc_blocks()
-          files=[b for b in blocks if b.get('block_type')==23]
-          print('FILE_BLOCK_COUNT',len(files))
-          for b in files[-5:]:
-              print('FILE_BLOCK',b.get('block_id'),b.get('file'))
-          assert token
-          assert any(((b.get('file') or {}).get('token')==token and (b.get('file') or {}).get('name')) for b in files), files[-5:]
-          print('REFERENCE_FILE_INSERTION=PASS')
+          tmp=Path(tempfile.gettempdir())
+          wav=tmp/'feishu_reference_probe_2.wav'; sr=8000
+          with wave.open(str(wav),'wb') as w:
+              w.setnchannels(1); w.setsampwidth(2); w.setframerate(sr); w.writeframes(b''.join(struct.pack('<h',int(10000*math.sin(2*math.pi*440*i/sr))) for i in range(sr)))
+          def chunk(t,d):
+              import binascii
+              return struct.pack('>I',len(d))+t+d+struct.pack('>I',binascii.crc32(t+d)&0xffffffff)
+          raw=b'\x00'+bytes([255,0,0,255])
+          png=b'\x89PNG\r\n\x1a\n'+chunk(b'IHDR',struct.pack('>IIBBBBB',1,1,8,6,0,0,0))+chunk(b'IDAT',zlib.compress(raw))+chunk(b'IEND',b'')
+          pngp=tmp/'feishu_reference_probe.png'; pngp.write_bytes(png)
+          print('LOCAL_WAV_BYTES',wav.stat().st_size,'LOCAL_PNG_BYTES',pngp.stat().st_size)
+          wav_token=doc.insert_media_block(str(wav)); png_token=doc.insert_media_block(str(pngp))
+          blocks=doc.get_doc_blocks(); files=[b for b in blocks if b.get('block_type')==23]; images=[b for b in blocks if b.get('block_type')==27]
+          assert any((b.get('file') or {}).get('token')==wav_token for b in files)
+          assert any((b.get('image') or {}).get('token')==png_token for b in images)
+          print('REFERENCE_WAV_TOKEN',wav_token)
+          print('REFERENCE_PNG_TOKEN',png_token)
+          print('REFERENCE_FILE_BLOCK',next((b for b in reversed(files) if (b.get('file') or {}).get('token')==wav_token),None))
+          print('REFERENCE_IMAGE_BLOCK',next((b for b in reversed(images) if (b.get('image') or {}).get('token')==png_token),None))
+          print('REFERENCE_IMAGE_FILE_MEDIA=PASS')
           PY
