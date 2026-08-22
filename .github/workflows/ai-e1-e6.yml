@@ -1,15 +1,15 @@
-name: AI E1-E6 + M7 + Evidence Report Gate
+name: PRD SPEC V1 Alignment Software Gate
 
-# GitHub-hosted CI is intentionally opt-in. Software release acceptance is
-# performed with tools/voip_ai_release_gate.sh on a controlled Linux host.
 on:
-  workflow_dispatch:
+  pull_request:
+    branches:
+      - feat/prd-spec-v1-alignment
 
 permissions:
   contents: read
 
 jobs:
-  ai-contracts:
+  prd-spec-v1-alignment:
     runs-on:
       - self-hosted
       - linux
@@ -17,23 +17,31 @@ jobs:
       - voip-controlled-linux
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
-      - name: Controlled Linux environment
+      - name: Checkout exact product base
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+      - name: Verify controlled Linux and exact product SHA
         run: |
           uname -a
           python3 --version
           docker --version
-          docker info
           node --version
-          npm --version
-          git rev-parse HEAD
+          echo "expected=${{ github.event.pull_request.base.sha }}"
+          echo "actual=$(git rev-parse HEAD)"
+          test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.base.sha }}"
       - name: Run VOIP AI software release gate
         run: bash tools/voip_ai_release_gate.sh
+      - name: Run frozen PRD SPEC alignment tests explicitly
+        run: |
+          python3 -m pytest -q \
+            backend/tests/test_prd_spec_v1_alignment.py \
+            backend/tests/test_feishu_living_document_v1.py
       - name: Upload validation artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: voip-ai-pr3-pr7-validation
+          name: prd-spec-v1-alignment-validation
           path: validation/**
           if-no-files-found: warn
           retention-days: 14
