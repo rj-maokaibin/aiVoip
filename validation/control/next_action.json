@@ -1,12 +1,29 @@
 {
   "schema_version": "capture-v2-remote-action-v1",
-  "action_id": "RC26-FROZEN-CHECKPOINT-SW-001",
-  "sequence": 114,
-  "created_at": "2026-08-22T03:58:00+00:00",
-  "expires_at": "2026-08-22T15:58:00+00:00",
-  "action_type": "SOFTWARE_REGRESSION",
+  "action_id": "R4-01-APF1250-FRESH-FXS-RC26",
+  "sequence": 115,
+  "created_at": "2026-08-22T09:15:00+00:00",
+  "expires_at": "2026-08-22T21:15:00+00:00",
+  "action_type": "GATE_READINESS_FXS",
   "parameters": {
-    "timeout_seconds": 1800
+    "device_id": "259f16e6-af9e-4dff-969b-2bb5eac43eb2",
+    "model": "APF1250",
+    "host": "10.48.8.74",
+    "port": 10001,
+    "username": "root",
+    "platform_id": "mt7621",
+    "password_env": "DB:G1V030E010214",
+    "profile_root": "../profiles",
+    "profile_id": "voip-standard",
+    "object_root": "/tmp/voip-reproduction-objects",
+    "output_root": "/tmp/capture-v2-gates",
+    "repo_root": "..",
+    "reproduction_session_id": "AUTO_NEW",
+    "worker_id": "r4-01-apf1250-fresh-fxs-rc26",
+    "gate_id": "R4-01-APF1250-FRESH-FXS-RC26",
+    "duration": 300,
+    "transport": "scp",
+    "timeout_seconds": 900
   },
   "safety": {
     "require_clean_git": true,
@@ -17,5 +34,5 @@
     "expected_head": "e49441e5efd1cd9e8171143dcacb8286a85fc614"
   },
   "requested_by": "ChatGPT-remote-validation-controller",
-  "note": "Freeze the post-RC25 status/documentation checkpoint as the next reusable validation expected_head. Final regression only; no product activation, no handset action, V1 authoritative and Production V2 disabled. After this action, do not add non-validation/control branch commits before the next real Gate."
+  "note": "Fresh APF1250 physical FXS Gate. Arm real Capture V2 validation session and AIM FXS reader; consume only real OFFHOOK/DTMF/ONHOOK events. No simulated handset activity. V1 remains authoritative and Production V2 remains disabled. If the physical sequence is not observed within the window, return INCONCLUSIVE rather than product FAIL."
 }
