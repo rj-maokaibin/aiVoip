@@ -68,7 +68,13 @@ class RemoteValidationRunner:
         )
 
     def _reexec_current_process(self) -> None:
-        os.execv(sys.executable, [sys.executable, *sys.argv])
+        # The service is documented and deployed through ``python -m``.  Do not
+        # reuse sys.argv[0] here: under ``-m`` it is a resolved .py path and
+        # re-executing that path directly can change import/package semantics.
+        os.execv(
+            sys.executable,
+            [sys.executable, "-m", "app.capture_v2.control_cli", *sys.argv[1:]],
+        )
 
     def _maybe_reexec_after_sync(self, new_head: str) -> None:
         old_head = self._loaded_head
