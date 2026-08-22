@@ -1,4 +1,4 @@
-name: Offline E2E Feishu revision-aware media probe
+name: Feishu known-good media insertion probe
 on:
   workflow_dispatch:
   pull_request:
@@ -8,58 +8,56 @@ permissions:
 jobs:
   probe:
     runs-on: [self-hosted, linux, x64, voip-controlled-linux]
-    timeout-minutes: 30
+    timeout-minutes: 15
     env:
-      VOIP_OFFLINE_GOLDEN_001_PCAP: /tmp/tcpdump-2026-08-14.pcap
-      FEISHU_BASE_URL: https://open.feishu.cn/open-apis
       TARGET_DOCX_TOKEN: A4ZqdW9wsoWA17x5yjFcR3TUnyb
-      TARGET_OPEN_ID: ou_67bee3c2e462a7f8939093bd8e697a96
     steps:
-      - name: Prepare cached PR7 base and revision-aware replace implementation
+      - name: Prepare environment
         shell: bash
         run: |
           set -euo pipefail
-          cd "$GITHUB_WORKSPACE"; git reset --hard 48a3855e31a7019640671e422956212b540dd08d; git clean -ffdx
-          python3 - <<'PY'
+          cd "$GITHUB_WORKSPACE"
+          git reset --hard 48a3855e31a7019640671e422956212b540dd08d
+          git clean -ffdx
+          python3 -m venv .venv-feishu-probe
+          .venv-feishu-probe/bin/python -m pip install --upgrade pip >/dev/null
+          .venv-feishu-probe/bin/python -m pip install feishukit==0.0.6 >/dev/null
+          set -a
+          . /home/github-runner/.config/voip-ai/.env
+          set +a
+          test -n "${FEISHU_APP_ID:-}"
+          test -r "$FEISHU_APP_SECRET_FILE"
+          echo "FEISHU_APP_ID=$FEISHU_APP_ID" >> "$GITHUB_ENV"
+          echo "FEISHU_APP_SECRET_FILE=$FEISHU_APP_SECRET_FILE" >> "$GITHUB_ENV"
+      - name: Inspect and execute reference file insertion
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE"
+          .venv-feishu-probe/bin/python - <<'PY'
+          import inspect, os, wave, math, struct, tempfile
           from pathlib import Path
-          p=Path('backend/app/integrations/feishu/evidence_document.py'); s=p.read_text()
-          old='''    async def _replace_media(self,document_id:str,block_id:str,token:str,*,image:bool)->None:\n        body={"replace_image":{"token":token}} if image else {"replace_file":{"token":token}}\n        await self.transport._request("PATCH",f"/docx/v1/documents/{quote(document_id,safe='')}/blocks/{quote(block_id,safe='')}",json_body=body)\n        time.sleep(self.DOC_EDIT_INTERVAL_SECONDS)'''
-          new='''    async def _replace_media(self,document_id:str,block_id:str,token:str,*,image:bool)->None:\n        body={"replace_image":{"token":token}} if image else {"replace_file":{"token":token}}\n        await self.transport._request("PATCH",f"/docx/v1/documents/{quote(document_id,safe='')}/blocks/{quote(block_id,safe='')}",params={"document_revision_id":"-1"},json_body=body)\n        time.sleep(self.DOC_EDIT_INTERVAL_SECONDS)'''
-          assert old in s; s=s.replace(old,new,1)
-          s=s.replace('            index=int(item.get("block_index") or -1)','            raw_index=item.get("block_index");index=int(raw_index) if raw_index is not None else -1',1)
-          p.write_text(s)
-          PY
-          git diff --check
-
-      - name: Prepare PCAP TShark Python and Feishu
-        shell: bash
-        run: |
-          set -euo pipefail
-          fixture="$VOIP_OFFLINE_GOLDEN_001_PCAP"; if [ ! -r "$fixture" ]; then staged="$RUNNER_TEMP/offline-e2e-prepared.pcap"; docker run --rm -v /tmp:/source:ro -v "$RUNNER_TEMP":/output --entrypoint sh postgres:16 -c "cp /source/tcpdump-2026-08-14.pcap /output/offline-e2e-prepared.pcap && chmod 0644 /output/offline-e2e-prepared.pcap"; fixture="$staged"; fi
-          test "$(sha256sum "$fixture"|awk '{print $1}')" = b038aa7c9a0644581f2815f654fcdee4620860796382265b178823fccba2e3f0; echo "VOIP_OFFLINE_GOLDEN_001_PCAP=$fixture" >> "$GITHUB_ENV"
-          root="$RUNNER_TEMP/tshark-root"; debs="$RUNNER_TEMP/tshark-debs"; rm -rf "$root" "$debs"; mkdir -p "$root" "$debs"; cd "$debs"; mapfile -t pkgs < <(apt-cache depends --recurse --no-recommends --no-suggests --no-conflicts --no-breaks --no-replaces --no-enhances tshark|awk '/^[^ <][^:]*$/ {print $1}'|sort -u); miss=(); for p in "${pkgs[@]}"; do dpkg-query -W -f='${Status}' "$p" 2>/dev/null|grep -q 'install ok installed'||miss+=("$p"); done; [ ${#miss[@]} -eq 0 ] || apt-get download "${miss[@]}"; shopt -s nullglob; for d in ./*.deb; do dpkg-deb -x "$d" "$root"; done; w="$RUNNER_TEMP/tshark-userspace"; printf '#!/bin/bash\nexport LD_LIBRARY_PATH="%s/usr/lib/x86_64-linux-gnu:%s/lib/x86_64-linux-gnu:${LD_LIBRARY_PATH:-}"\nexport WIRESHARK_DATA_DIR="%s/usr/share/wireshark"\nexec "%s/usr/bin/tshark" "$@"\n' "$root" "$root" "$root" "$root" > "$w"; chmod +x "$w"; echo "TSHARK_BINARY=$w" >> "$GITHUB_ENV"
-          cd "$GITHUB_WORKSPACE"; python3 -m venv .venv-offline-e2e; .venv-offline-e2e/bin/python -m pip install -r backend/requirements.txt >/dev/null; set -a; . /home/github-runner/.config/voip-ai/.env; set +a; echo "FEISHU_APP_ID=$FEISHU_APP_ID" >> "$GITHUB_ENV"; echo "FEISHU_APP_SECRET_FILE=$FEISHU_APP_SECRET_FILE" >> "$GITHUB_ENV"; echo "FEISHU_LIVE_ENABLED=true" >> "$GITHUB_ENV"
-
-      - name: Live revision-aware media probe
-        shell: bash
-        run: |
-          set -euo pipefail
-          PYTHONPATH=backend .venv-offline-e2e/bin/python - <<'PY'
-          import asyncio,json,os,time
-          from pathlib import Path
-          from app.golden.offline_analysis_e2e import build_offline_analysis_bundle
-          from app.integrations.feishu.evidence_document import FeishuEvidenceDocumentService
-          from app.reports.evidence_visuals import render_waveform_png,render_spectrogram_png
-          out=Path('validation/offline_e2e_feishu_001'); md=out/'report_artifacts'; out.mkdir(parents=True,exist_ok=True)
-          b=build_offline_analysis_bundle(pcap_path=Path(os.environ['VOIP_OFFLINE_GOLDEN_001_PCAP']),pcm_profile_path=Path('profiles/pcm/ruijie_aim_diag_v1.yaml'),output_dir=md,tshark_binary=os.environ['TSHARK_BINARY'])
-          wp=render_waveform_png(json.loads((md/'pcm_pcm_rx_00_waveform.json').read_text()),title='PCM RX WAVEFORM - PERIODIC INTERFERENCE'); sp=render_spectrogram_png(json.loads((md/'pcm_pcm_rx_00_spectrogram.json').read_text()),title='PCM RX SPECTROGRAM - PERIODIC INTERFERENCE')
-          items=[('pcm_rx_waveform.png',wp,True),('pcm_rx_spectrogram.png',sp,True),('periodic_00_pcm_rx.wav',(md/'periodic_00_pcm_rx.wav').read_bytes(),False),('periodic_00_rtp_up.wav',(md/'periodic_00_rtp_up.wav').read_bytes(),False),('periodic_00_rtp_down.wav',(md/'periodic_00_rtp_down.wav').read_bytes(),False)]
-          svc=FeishuEvidenceDocumentService(); doc=os.environ['TARGET_DOCX_TOKEN']; blocks=[svc._text('Evidence Media Revision-Aware Probe',3)]; plan=[]
-          for name,data,img in items: blocks.append(svc._text(name,12)); i=len(blocks); blocks.append(svc._media_placeholder(image=img)); plan.append((i,name,data,img))
-          async def main():
-              created=await svc._insert_blocks(doc,blocks,index=0); verified=[]
-              for i,name,data,img in plan:
-                  bid=created[i]['block_id']; tok=await svc._upload_media(block_id=bid,filename=name,data=data,parent_type='docx_image' if img else 'docx_file'); await svc._replace_media(doc,bid,tok,image=img); time.sleep(.5); got=await svc.transport._request('GET',f'/docx/v1/documents/{doc}/blocks/{bid}',params={'document_revision_id':'-1'}); block=(got.get('data') or {}).get('block') or {}; media=(block.get('image') or {}).get('token') if img else (block.get('file') or {}).get('token'); assert media,(name,block); verified.append({'name':name,'image':img,'block_id':bid})
-              result={'status':'PASS','images':sum(x['image'] for x in verified),'audio_files':sum(not x['image'] for x in verified),'finding_count':len(b['report'].get('findings') or []),'document_url':f'https://feishu.cn/docx/{doc}'}; assert result['images']==2 and result['audio_files']==3; print(json.dumps(result,ensure_ascii=False)); (out/'revision_probe.json').write_text(json.dumps(result,ensure_ascii=False,indent=2))
-          asyncio.run(main())
+          from feishukit import FeishuDoc
+          print('REFERENCE_INSERT_MEDIA_BLOCK_SOURCE_START')
+          print(inspect.getsource(FeishuDoc.insert_media_block))
+          print('REFERENCE_INSERT_MEDIA_BLOCK_SOURCE_END')
+          secret=Path(os.environ['FEISHU_APP_SECRET_FILE']).read_text().strip()
+          wav=Path(tempfile.gettempdir())/'feishu_reference_probe.wav'
+          sr=8000
+          samples=[int(10000*math.sin(2*math.pi*440*i/sr)) for i in range(sr)]
+          with wave.open(str(wav),'wb') as w:
+              w.setnchannels(1); w.setsampwidth(2); w.setframerate(sr)
+              w.writeframes(b''.join(struct.pack('<h',x) for x in samples))
+          print('LOCAL_WAV_BYTES',wav.stat().st_size)
+          doc=FeishuDoc(app_id=os.environ['FEISHU_APP_ID'],app_secret=secret,doc_url=f"https://feishu.cn/docx/{os.environ['TARGET_DOCX_TOKEN']}")
+          token=doc.insert_media_block(str(wav))
+          print('REFERENCE_FILE_TOKEN_PRESENT',bool(token))
+          blocks=doc.get_doc_blocks()
+          files=[b for b in blocks if b.get('block_type')==23]
+          print('FILE_BLOCK_COUNT',len(files))
+          for b in files[-5:]:
+              print('FILE_BLOCK',b.get('block_id'),b.get('file'))
+          assert token
+          assert any(((b.get('file') or {}).get('token')==token and (b.get('file') or {}).get('name')) for b in files), files[-5:]
+          print('REFERENCE_FILE_INSERTION=PASS')
           PY
