@@ -9,6 +9,7 @@ from app.capture_v2.gate.cli import _device, _resolve_reproduction_session_id
 from app.capture_v2.gate.context import build_asyncssh_adapter
 from app.capture_v2.gate.r4_preflight import run_r4_no_handset_preflight
 from app.capture_v2.gate.r4_real import run_r4_real_fxs_basic
+from app.capture_v2.gate.r7_soak import run_r7_validation_soak
 from app.capture_v2.gate.runner import GateRunner
 from app.core.config import settings
 from app.db.session import SessionLocal
@@ -43,7 +44,18 @@ async def _run(args) -> int:
     try:
         runner = _runner(adapter, args)
         normal_gate = str(args.gate_id).upper().replace("_", "-")
-        if normal_gate.startswith("R4-00"):
+        if normal_gate.startswith("R7-00"):
+            result = await run_r7_validation_soak(
+                runner,
+                reproduction_session_id=reproduction_session_id,
+                device=spec.as_profile_device(),
+                worker_id=args.worker_id,
+                gate_id=args.gate_id,
+                duration_seconds=args.duration,
+                cycle_interval_seconds=0.5,
+                transport=args.transport,
+            )
+        elif normal_gate.startswith("R4-00"):
             result = await run_r4_no_handset_preflight(
                 runner,
                 reproduction_session_id=reproduction_session_id,
