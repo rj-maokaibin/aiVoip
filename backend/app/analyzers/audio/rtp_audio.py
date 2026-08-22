@@ -2,10 +2,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass, asdict
 from collections import defaultdict
+import math
 import numpy as np
 
 from .codec import get_codec
 from ..packet.types import NormalizedPacket
+from app.analyzers.profile import get_default_analyzer_profile
 
 
 @dataclass(slots=True)
@@ -32,7 +34,56 @@ class RenderedRtpTrack:
         data = asdict(self)
         data.pop('samples')
         data['duration_seconds'] = round(self.samples.size / self.sample_rate / self.channels, 6)
+        data['energy_timeline'] = _energy_timeline(self.samples, self.sample_rate)
         return data
+
+
+def _dbfs_rms(samples: np.ndarray) -> float:
+    if samples.size == 0:
+        return -120.0
+    x = samples.astype(np.float64, copy=False)
+    rms = float(np.sqrt(np.mean(x * x)))
+    return -120.0 if rms <= 0 else 20.0 * math.log10(rms / 32768.0)
+
+
+def _energy_timeline(samples: np.ndarray, sample_rate: int, frame_ms: int = 100) -> dict:
+    """Return compact deterministic RTP window energy for cross-layer gating.
+
+    This is evidence metadata, not a VAD classifier. CandidateDecision uses the
+    adaptive threshold only to prove that the corresponding RTP window contains
+    positive media energy before promoting a PCM silence mismatch.
+    """
+    frame = max(1, int(round(sample_rate * frame_ms / 1000.0)))
+    windows = []
+    levels = []
+    for start in range(0, samples.size, frame):
+        end = min(samples.size, start + frame)
+        level = _dbfs_rms(samples[start:end])
+        levels.append(level)
+        windows.append({
+            'start_seconds': round(start / sample_rate, 6),
+            'end_seconds': round(end / sample_rate, 6),
+            'rms_dbfs': round(level, 3),
+        })
+    if not levels:
+        threshold = -42.0
+    else:
+        cfg = get_default_analyzer_profile().section('silence')
+        finite = np.asarray(levels, dtype=float)
+        floor = float(np.percentile(finite, float(cfg['noise_floor_percentile'])))
+        speech = float(np.percentile(finite, float(cfg['speech_percentile'])))
+        threshold = min(
+            float(cfg['threshold_max_dbfs']),
+            max(
+                float(cfg['threshold_min_dbfs']),
+                min(floor + float(cfg['noise_floor_margin_db']), speech - float(cfg['speech_margin_db'])),
+            ),
+        )
+    return {
+        'frame_ms': frame_ms,
+        'threshold_dbfs': round(float(threshold), 3),
+        'windows': windows,
+    }
 
 
 def render_rtp_tracks(packets: list[NormalizedPacket], stream_results: list[dict]) -> list[RenderedRtpTrack]:

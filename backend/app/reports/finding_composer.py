@@ -13,6 +13,14 @@ from app.contracts.evidence_report import (
     SEVERITY_ORDER,
     EvidenceFindingStatus,
 )
+from app.reports.rtp_high_delta import (
+    HIGH_DELTA_ROOT_CAUSE_BOUNDARY,
+    aggregate_high_delta_findings,
+    high_delta_interpretation,
+    high_delta_metrics,
+    high_delta_observation,
+    stream_direction,
+)
 
 
 def _canonical(value: Any) -> str:
@@ -96,7 +104,7 @@ PACKET_TITLE = {
     "CODEC_NEGOTIATION_MISMATCH": "编解码协商与实际 RTP 不一致",
     "PACKET_LOSS": "RTP 丢包",
     "BURST_LOSS": "RTP 突发丢包",
-    "HIGH_DELTA": "RTP 包间隔异常增大",
+    "HIGH_DELTA": "RTP 包间隔异常增大（HIGH_DELTA）",
     "PAYLOAD_CHANGE": "RTP Payload Type 发生变化",
 }
 
@@ -110,32 +118,45 @@ def _packet_findings(packet: dict | None, source_run_id: str | None) -> list[dic
         ftype = str(anomaly.get("type") or "PACKET_ANOMALY")
         evidence = anomaly.get("evidence") or {}
         stream = streams.get(evidence.get("stream_id")) or {}
+        is_rtp = ftype in {"PACKET_LOSS", "BURST_LOSS", "HIGH_DELTA", "PAYLOAD_CHANGE", "ONE_WAY_RTP_MEDIA"}
+        direction = stream_direction(stream) if stream else None
         scope = {
-            "layer": "RTP" if ftype in {"PACKET_LOSS", "BURST_LOSS", "HIGH_DELTA", "PAYLOAD_CHANGE", "ONE_WAY_RTP_MEDIA"} else "SIP_SDP",
+            "layer": "RTP" if is_rtp else "SIP_SDP",
             "call_id": evidence.get("call_id"),
             "rtp_stream_id": evidence.get("stream_id"),
-            "direction": (
-                f"{stream.get('src_ip')}:{stream.get('src_port')}->{stream.get('dst_ip')}:{stream.get('dst_port')}"
-                if stream else None
-            ),
+            "stream_role": evidence.get("stream_id") if is_rtp and evidence.get("stream_id") else None,
+            "call_direction_role": evidence.get("call_direction_role") or stream.get("call_direction_role"),
+            "direction": direction,
+            "ssrc": evidence.get("ssrc") or stream.get("ssrc"),
         }
         metrics = dict(evidence)
-        if stream:
-            metrics.update({
-                "packet_count": stream.get("packet_count"),
-                "lost_packets": stream.get("lost_packets", stream.get("lost")),
-                "loss_rate": stream.get("loss_rate"),
-                "p95_jitter_ms": stream.get("p95_rfc3550_jitter_ms", stream.get("p95_jitter_ms")),
-                "max_delta_ms": stream.get("max_delta_ms"),
-                "codec": stream.get("codec"),
-                "ptime_ms": stream.get("ptime_ms"),
-            })
+        if ftype == "HIGH_DELTA" and stream:
+            metrics = high_delta_metrics(evidence, stream)
+            observation = high_delta_observation(evidence, stream)
+            interpretation = high_delta_interpretation(evidence)
+            root_cause_boundary = HIGH_DELTA_ROOT_CAUSE_BOUNDARY
+        else:
+            if stream:
+                metrics.update({
+                    "packet_count": stream.get("packet_count"),
+                    "lost_packets": stream.get("lost_packets", stream.get("lost")),
+                    "loss_rate": stream.get("loss_rate"),
+                    "p95_jitter_ms": stream.get("p95_rfc3550_jitter_ms", stream.get("p95_jitter_ms")),
+                    "max_delta_ms": stream.get("max_delta_ms"),
+                    "codec": stream.get("codec"),
+                    "ptime_ms": stream.get("ptime_ms"),
+                })
+            observation = f"Packet Analyzer 在当前抓包中观测到 {ftype}。"
+            interpretation = None
+            root_cause_boundary = None
         out.append(_base_finding(
             finding_type=ftype,
             severity=anomaly.get("severity", "INFO"),
             evidence_level="L2",
             title=PACKET_TITLE.get(ftype, f"网络媒体异常：{ftype}"),
-            observation=f"Packet Analyzer 在当前抓包中观测到 {ftype}。",
+            observation=observation,
+            interpretation=interpretation,
+            root_cause_boundary=root_cause_boundary,
             scope=scope,
             metrics=metrics,
             time_range=_time_range(anomaly),
@@ -320,7 +341,9 @@ def _merge_same_signature(findings: list[dict]) -> list[dict]:
         ends = [x["time_range"].get("end") for x in items if x["time_range"].get("end") is not None]
         if starts:
             head["time_range"] = {"start": min(starts), "end": max(ends or starts), "representative": starts[0]}
-        if len(items) > 1:
+        if head.get("type") == "HIGH_DELTA":
+            head = aggregate_high_delta_findings(items, head)
+        elif len(items) > 1:
             head["observation"] = f"{head['observation']} 同类事件共 {len(items)} 次。"
         out.append(head)
     return out
@@ -358,7 +381,7 @@ def build_normal_evidence(packet: dict | None, pcm: dict | None, media: dict | N
             normal.append({"type": "SIP_CALL_ESTABLISHED", "text": "SIP 呼叫建立流程完整，未发现建链失败。"})
         streams = packet.get("rtp_streams", []) or []
         if streams and all(float(s.get("loss_rate") or 0) == 0 for s in streams):
-            normal.append({"type": "RTP_NO_LOSS", "text": "当前 RTP Stream 未检测到丢包。"})
+            normal.append({"type": "RTP_NO_LOSS", "text": "当前 RTP Stream 未检测到丢包；HIGH_DELTA 如存在，应解释为间隔/节奏异常而不是自动等同丢包。"})
         if calls and all((c.get("media_direction_health") or {}).get("status") == "BIDIRECTIONAL" for c in calls if (c.get("media_direction_health") or {}).get("eligible")):
             normal.append({"type": "RTP_BIDIRECTIONAL", "text": "已建立 Call 的 RTP 媒体方向为双向。"})
     if pcm:

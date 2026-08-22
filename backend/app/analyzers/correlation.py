@@ -2,15 +2,66 @@ from __future__ import annotations
 
 import re
 
+from app.analyzers.media.subject_identity import SUBJECT_IDENTITY_UNIQUE, infer_pcm_source_device_identity
+
 _URI_DIGITS = re.compile(r"(?:sip:|tel:)?([0-9*#]+)")
 
 
+def _call_connection_ips(call: dict, packet_result: dict) -> set[str]:
+    ips: set[str] = set()
+    sdp = call.get("sdp") or {}
+    for side in ("offer", "answer"):
+        payload = sdp.get(side) or {}
+        if payload.get("connection_address"):
+            ips.add(str(payload["connection_address"]))
+        for media in payload.get("media", []) or []:
+            if media.get("connection_address"):
+                ips.add(str(media["connection_address"]))
+    stream_ids = set(call.get("rtp_stream_ids") or [])
+    for stream in packet_result.get("rtp_streams", []) or []:
+        if stream.get("stream_id") not in stream_ids:
+            continue
+        if stream.get("src_ip"):
+            ips.add(str(stream["src_ip"]))
+        if stream.get("dst_ip"):
+            ips.add(str(stream["dst_ip"]))
+    return ips
+
+
+def _subject_calls(packet_result: dict, pcm_result: dict) -> tuple[list[dict], dict]:
+    calls = [c for c in packet_result.get("calls", []) or [] if c.get("call_id")]
+    identity = infer_pcm_source_device_identity(pcm_result, source="pcm_intelligence")
+    if len(calls) <= 1:
+        return calls, {"status": "SINGLE_CALL", "subject_identity": identity}
+
+    if identity.get("status") != SUBJECT_IDENTITY_UNIQUE or not identity.get("selected_ip"):
+        # Multi-leg Call correlation without one deterministic subject-device IP is
+        # unsafe: emitting the same PCM digits against every B2BUA leg creates false
+        # duplicate evidence. Fail closed until provenance is sufficient.
+        return [], {"status": "AMBIGUOUS_SUBJECT", "subject_identity": identity}
+
+    subject_ip = str(identity["selected_ip"])
+    matched = [call for call in calls if subject_ip in _call_connection_ips(call, packet_result)]
+    if len(matched) == 1:
+        return matched, {
+            "status": "SUBJECT_CALL_SELECTED",
+            "subject_identity": identity,
+            "selected_call_id": matched[0].get("call_id"),
+        }
+    return [], {
+        "status": "AMBIGUOUS_SUBJECT_CALL",
+        "subject_identity": identity,
+        "matched_call_ids": [c.get("call_id") for c in matched],
+    }
+
+
 def correlate_pcm_dtmf_with_sip(packet_result: dict, pcm_result: dict, lookback_seconds: float = 15.0) -> list[dict]:
-    """Create cross-layer evidence between in-band PCM DTMF and SIP dial target.
+    """Create cross-layer evidence between in-band PCM DTMF and the subject SIP Call.
 
     A match is evidence that the digits were already present at the PCM RX tap
-    before INVITE generation. It does not by itself prove downstream DTMF
-    handling is correct.
+    before INVITE generation. In multi-leg B2BUA captures, PCM diagnostic UDP
+    source provenance must identify exactly one subject Call; the same PCM sequence
+    is never copied onto every SIP leg.
     """
     events: list[dict] = []
     candidates = []
@@ -31,7 +82,9 @@ def correlate_pcm_dtmf_with_sip(packet_result: dict, pcm_result: dict, lookback_
                     "session_index": session.get("session_index"),
                     "min_confidence": seq.get("min_confidence"),
                 })
-    for call in packet_result.get("calls", []):
+
+    calls, subject_meta = _subject_calls(packet_result, pcm_result)
+    for call in calls:
         call_start = call.get("start_time")
         target = _digits_from_uri(call.get("callee"))
         if call_start is None or not target:
@@ -46,6 +99,7 @@ def correlate_pcm_dtmf_with_sip(packet_result: dict, pcm_result: dict, lookback_
             "severity": "INFO" if matches else "MEDIUM",
             "time": nearest["start_time"],
             "evidence_level": "L1" if matches else "L2",
+            "scope": {"call_id": call.get("call_id"), "pcm_tap": nearest["tap"], "pcm_session_index": nearest["session_index"]},
             "details": {
                 "call_id": call.get("call_id"),
                 "sip_target": target,
@@ -54,6 +108,7 @@ def correlate_pcm_dtmf_with_sip(packet_result: dict, pcm_result: dict, lookback_
                 "pcm_session_index": nearest["session_index"],
                 "pcm_min_confidence": nearest["min_confidence"],
                 "lead_time_ms": round((call_start - nearest["end_time"]) * 1000.0, 3),
+                "subject_call_selection": subject_meta,
                 "interpretation": (
                     "PCM RX在INVITE前已检测到与SIP目标一致的拨号序列"
                     if matches else

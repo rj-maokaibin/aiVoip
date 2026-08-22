@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from app.contracts.evidence_report import REPORT_COMPOSER_VERSION, REPORT_SCHEMA_VERSION
+from app.reports.evidence_card import attach_evidence_cards
 from app.reports.finding_composer import build_normal_evidence, compose_findings
 
 
@@ -26,11 +27,11 @@ def environment_fingerprint(environment:dict|None)->str|None:
 def build_completeness(*,evidences:list[dict],analyzer_states:dict[str,dict],scope_type:str,results:dict[str,dict|None]|None=None)->dict:
     results=results or {}
     def state(name:str)->dict:
-        item=analyzer_states.get(name) or {}; status=str(item.get("status") or "UNAVAILABLE")
+        item=analyzer_states.get(name) or {};status=str(item.get("status") or "UNAVAILABLE")
         return {"status":status,"available":status in {"SUCCESS","PARTIAL_SUCCESS"},"partial":status=="PARTIAL_SUCCESS",
                 "reason":item.get("error_code") or item.get("error_message") or item.get("degraded_reason")}
     evidence_types={str(x.get("type") or "").upper() for x in evidences}
-    packet=state("packet_intelligence"); pcm_state=state("pcm_intelligence"); media=state("media_intelligence")
+    packet=state("packet_intelligence");pcm_state=state("pcm_intelligence");media=state("media_intelligence")
     pcm_result=results.get("pcm_intelligence") or {}
     taps={str((x.get("tap") or {}).get("name") or "").lower() for x in pcm_result.get("streams",[]) or []}
     capture={
@@ -40,8 +41,7 @@ def build_completeness(*,evidences:list[dict],analyzer_states:dict[str,dict],sco
         "debug":any("DEBUG" in x or "LOG" in x for x in evidence_types),
     }
     missing=[name for name in ("pcap","pcm_rx","pcm_tx") if not capture[name]]
-    analyzers={"packet":packet,"pcm":pcm_state,"media":media}
-    unavailable=[name for name,item in analyzers.items() if not item["available"]]
+    analyzers={"packet":packet,"pcm":pcm_state,"media":media};unavailable=[name for name,item in analyzers.items() if not item["available"]]
     state_value="COMPLETE" if not missing and not unavailable else "PARTIAL"
     return {"state":state_value,"scope_type":scope_type,"capture":capture,"analyzers":analyzers,
             "missing_required_evidence":missing,"unavailable_analyzers":unavailable,
@@ -51,11 +51,16 @@ def build_completeness(*,evidences:list[dict],analyzer_states:dict[str,dict],sco
 
 def build_packet_summary(packet:dict|None)->dict:
     if not packet:return {"available":False}
-    summary=packet.get("summary") or {}; streams=[]
+    summary=packet.get("summary") or {};streams=[]
     for stream in packet.get("rtp_streams",[]) or []:
+        observed=int(stream.get("packet_count") or 0)
+        unique=int(stream.get("unique_packet_count",stream.get("packet_count",0)) or 0)
+        duplicates=int(stream.get("duplicate_packets") or 0)
         streams.append({"stream_id":stream.get("stream_id"),"source":f"{stream.get('src_ip')}:{stream.get('src_port')}",
                         "destination":f"{stream.get('dst_ip')}:{stream.get('dst_port')}","ssrc":stream.get("ssrc"),
-                        "packet_count":stream.get("packet_count"),"lost_packets":stream.get("lost_packets",stream.get("lost")),
+                        "packet_count_semantics":"UNIQUE_EFFECTIVE_RTP_PACKETS","packet_count":unique,
+                        "unique_packet_count":unique,"observed_packet_count":observed,"duplicate_packets":duplicates,
+                        "expected_packets":stream.get("expected_packets"),"lost_packets":stream.get("lost_packets",stream.get("lost")),
                         "loss_rate":stream.get("loss_rate"),"avg_jitter_ms":stream.get("avg_rfc3550_jitter_ms"),
                         "p95_jitter_ms":stream.get("p95_rfc3550_jitter_ms"),"max_jitter_ms":stream.get("max_rfc3550_jitter_ms"),
                         "max_delta_ms":stream.get("max_delta_ms"),"codec":stream.get("codec"),"ptime_ms":stream.get("ptime_ms")})
@@ -68,7 +73,7 @@ def build_pcm_summary(pcm:dict|None)->dict:
     if not pcm:return {"available":False}
     streams=[]
     for stream in pcm.get("streams",[]) or []:
-        tap=stream.get("tap") or {}; sessions=[]
+        tap=stream.get("tap") or {};sessions=[]
         for session in stream.get("sessions",[]) or []:
             signal=session.get("signal") or {}
             sessions.append({"session_index":session.get("session_index"),"start_time":session.get("start_time"),"end_time":session.get("end_time"),
@@ -86,30 +91,39 @@ def build_pcm_summary(pcm:dict|None)->dict:
 
 
 def build_report_payload(*,case:dict,scope_type:str,scope_id:str,session:dict|None,call:dict|None,environment:dict|None,evidences:list[dict],
-                         analyzer_states:dict[str,dict],results:dict[str,dict|None],report_version:int,generated_at:str|None=None)->dict:
-    packet=results.get("packet_intelligence"); pcm=results.get("pcm_intelligence"); media=results.get("media_intelligence")
+                         analyzer_states:dict[str,dict],results:dict[str,dict|None],report_version:int,generated_at:str|None=None,
+                         analysis_context:dict|None=None,display_call:dict|None=None)->dict:
+    packet=results.get("packet_intelligence");pcm=results.get("pcm_intelligence");media=results.get("media_intelligence")
     source_run_ids={name:s.get("run_id") for name,s in analyzer_states.items() if s.get("run_id")}
     findings=compose_findings(packet=packet,pcm=pcm,media=media,source_run_ids=source_run_ids)
     completeness=build_completeness(evidences=evidences,analyzer_states=analyzer_states,scope_type=scope_type,results=results)
-    normal=build_normal_evidence(packet,pcm,media); highest=findings[0]["severity"] if findings else "INFO"
+    resolved_call=display_call if display_call is not None else call;context=analysis_context or {};semantic_issues=list(context.get("semantic_issues") or [])
+    if semantic_issues:
+        completeness["semantic_status"]="INCOMPLETE";completeness["semantic_issues"]=semantic_issues;completeness["reviewability"]="NOT_FULLY_REVIEWABLE";completeness["state"]="PARTIAL"
+        prior=str(completeness.get("boundary") or "");completeness["boundary"]=("Call/媒体上下文存在语义绑定缺口；报告已降级为 PARTIAL_COMPLETE / NOT_FULLY_REVIEWABLE。 "+prior).strip()
+    else:
+        completeness["semantic_status"]="OK";completeness["semantic_issues"]=[];completeness["reviewability"]=context.get("reviewability") or "FULLY_REVIEWABLE"
+    normal=build_normal_evidence(packet,pcm,media);highest=findings[0]["severity"] if findings else "INFO"
     headline=f"发现 {len(findings)} 个初步证据问题点，最高等级 {highest}。" if findings else "当前已完成的 Analyzer 未发现明显异常；该结论仅覆盖已采集且可分析的证据范围。"
     boundary={"root_cause_authority":"PRELIMINARY_EVIDENCE_ONLY","statement":"本报告描述已观测事实、候选异常和证据边界，不确认最终 Root Cause（根因）。",
               "historical_case_authority":"历史 Case 和 AI 解释不能将当前 Finding 提升为 L1/L2 或独立确认根因。"}
     payload={"schema_version":REPORT_SCHEMA_VERSION,"composer_version":REPORT_COMPOSER_VERSION,"report_version":report_version,
-             "generated_at":generated_at or utcnow_iso(),"scope":{"type":scope_type,"id":scope_id},"case":case,"session":session,"call":call,
-             "environment":environment or {},"environment_fingerprint":environment_fingerprint(environment),"headline":headline,
+             "generated_at":generated_at or utcnow_iso(),"scope":{"type":scope_type,"id":scope_id},"case":case,"session":session,"call":resolved_call,
+             "display_call":resolved_call,"analysis_context":context,"environment":environment or {},"environment_fingerprint":environment_fingerprint(environment),"headline":headline,
              "finding_count":len(findings),"highest_severity":highest,"completeness":completeness,"packet_summary":build_packet_summary(packet),
              "pcm_summary":build_pcm_summary(pcm),"media_summary":(media or {}).get("summary") if media else None,"findings":findings,
              "normal_and_exclusion_evidence":normal,"analyzers":analyzer_states,"artifacts":[],
              "preliminary_assessment":{"summary":headline,"evidence_boundary":boundary["statement"],
                  "recommended_next_action":"优先复核 HIGH/CRITICAL Finding 对应的时间窗、图像和音频；如需确认物理根因，进入确定性 Diagnosis/A-B/Fix Verification 流程。"},
              "evidence_boundary":boundary}
-    payload["input_snapshot_hash"]=canonical_hash({"scope":payload["scope"],"case":case,"session":session,"call":call,"environment":environment,
-        "evidences":evidences,"analyzers":analyzer_states,"result_hashes":{k:canonical_hash(v) if v is not None else None for k,v in results.items()}})
+    payload["input_snapshot_hash"]=canonical_hash({"scope":payload["scope"],"case":case,"session":session,"display_call":resolved_call,
+        "analysis_context":context,"environment":environment,"evidences":evidences,"analyzers":analyzer_states,
+        "result_hashes":{k:canonical_hash(v) if v is not None else None for k,v in results.items()}})
     return payload
 
 
-def _esc(v:Any)->str:return html.escape(str(v if v is not None else ""))
+def _esc(v:Any)->str:
+    return html.escape(str(v if v is not None else ""))
 
 
 def _metric_table(metrics:dict)->str:
@@ -122,10 +136,13 @@ def _metric_table(metrics:dict)->str:
 
 
 def _multi_call_html(payload:dict)->str:
-    summary=payload.get("multi_call_summary") or {}; groups=summary.get("finding_groups") or []
-    if not summary:return "<p>当前为 Call 级报告，无跨 Call 聚合。</p>"
+    context=payload.get("analysis_context") or {};offline=context.get("analysis_mode")=="OFFLINE_IMPORTED"
+    summary=payload.get("multi_call_summary") or {};groups=summary.get("finding_groups") or []
+    offline_note=(f"<p>当前为离线证据分析；PCAP 重建 Call 数：{_esc(context.get('reconstructed_call_count'))}。"
+                  "此处的“有效 Call 报告数/复现率”仅用于 Reproduction Call，不把离线重建 Call 伪计为复现次数。</p>") if offline else ""
+    if not summary:return offline_note or "<p>当前为 Call 级报告，无跨 Call 聚合。</p>"
     rows="".join(f"<tr><td>{_esc(x.get('title'))}</td><td>{_esc(x.get('occurrence_calls'))}/{_esc(x.get('total_calls'))}</td><td>{_esc(round((x.get('reproduction_rate') or 0)*100,2))}%</td><td>{_esc(x.get('stability'))}</td></tr>" for x in groups)
-    return f"<p>有效 Call 报告数：{_esc(summary.get('call_count'))}</p><table><thead><tr><th>问题</th><th>出现</th><th>复现率</th><th>稳定性</th></tr></thead><tbody>{rows}</tbody></table>"
+    return offline_note+f"<p>有效 Reproduction Call 报告数：{_esc(summary.get('call_count'))}</p><table><thead><tr><th>问题</th><th>出现</th><th>复现率</th><th>稳定性</th></tr></thead><tbody>{rows}</tbody></table>"
 
 
 def _ab_html(payload:dict)->str:
@@ -138,42 +155,117 @@ def _ab_html(payload:dict)->str:
     return "".join(parts)
 
 
+def _scope_line(card:dict)->str:
+    scope=card.get("scope") or {};parts=[]
+    for label,key in (("层","layer"),("方向","direction"),("Tap","pcm_tap"),("Call","call_id"),("SSRC","ssrc")):
+        if scope.get(key) not in (None,""):parts.append(f"{label}：{_esc(scope.get(key))}")
+    return "｜".join(parts) or "范围：未绑定"
+
+
+def _time_line(card:dict)->str:
+    t=card.get("time") or {};abs_start=t.get("absolute_start_utc");abs_end=t.get("absolute_end_utc");rel=t.get("call_relative_representative") or t.get("call_relative_start")
+    absolute=f"{_esc(abs_start)} ～ {_esc(abs_end)}" if abs_start or abs_end else "UNKNOWN"
+    return f"绝对时间（UTC）：{absolute}"+(f"｜Call 相对时间：{_esc(rel)}" if rel else "")
+
+
+def _measurements_html(card:dict)->str:
+    rows=[]
+    for m in card.get("measurements") or []:
+        unit=f" {_esc(m.get('unit'))}" if m.get("unit") else ""
+        meaning=f"<div class='small'>{_esc(m.get('meaning'))}</div>" if m.get("meaning") else ""
+        rows.append(f"<div class='metric'><b>{_esc(m.get('label'))}</b><span>{_esc(m.get('value'))}{unit}</span>{meaning}</div>")
+    return "<div class='metrics'>"+"".join(rows)+"</div>" if rows else "<p class='small'>本 Finding 暂无标准化关键测量项。</p>"
+
+
+def _packet_refs_html(card:dict)->str:
+    refs=card.get("packet_refs") or []
+    if not refs:return ""
+    rows="".join(f"<tr><td>{_esc(x.get('event'))}</td><td>{_esc(x.get('previous_frame'))} → {_esc(x.get('current_frame'))}</td><td>{_esc(x.get('previous_seq'))} → {_esc(x.get('current_seq'))}</td><td>{_esc(x.get('delta_ms'))}</td><td>{_esc(x.get('classification'))}</td></tr>" for x in refs)
+    return f"<div class='evidence-sub'><b>Packet / Frame 下钻</b><table><thead><tr><th>#</th><th>Frame</th><th>RTP Seq</th><th>Delta(ms)</th><th>语义</th></tr></thead><tbody>{rows}</tbody></table></div>"
+
+
+def _visuals_html(card:dict)->str:
+    parts=[]
+    for artifact in card.get("visual_evidence") or []:
+        url=_esc(artifact.get("content_url"));caption=_esc(artifact.get("caption"));atype=_esc(artifact.get("type"))
+        parts.append(f"<figure><img loading='lazy' src='{url}' alt='{atype}｜{caption}'><figcaption>{atype}｜{caption}</figcaption></figure>")
+    return "<div class='visual-grid'>"+"".join(parts)+"</div>" if parts else "<div class='artifact-unavailable'>当前 Finding 尚无精确绑定的可视化 Artifact；不要用其他 Finding 的图片替代。</div>"
+
+
+def _audio_html(card:dict)->str:
+    audio=card.get("audio_evidence") or {};status=audio.get("status")
+    if status=="NOT_REQUIRED":return ""
+    if status!="AVAILABLE":return f"<div class='audio-unavailable'><b>异常音频：UNAVAILABLE</b><br>{_esc(audio.get('reason'))}</div>"
+    clips=[]
+    for artifact in audio.get("clips") or []:
+        clips.append(f"<div class='audio-clip'><div><b>{_esc(artifact.get('type'))}</b>｜{_esc(artifact.get('caption'))}</div><audio controls preload='none' src='{_esc(artifact.get('content_url'))}'>浏览器不支持音频播放。</audio></div>")
+    return "<div class='evidence-sub'><b>可试听异常音频</b>"+"".join(clips)+"</div>"
+
+
+def _evidence_card_html(finding:dict)->str:
+    card=finding.get("evidence_card") or {};first=((finding.get("correlation") or {}).get("first_observable_boundary") or {})
+    first_text=first.get("statement") or ("首次可观测层：UNKNOWN（未知）。" if first.get("status")=="UNKNOWN" else "")
+    return (
+        f"<section class='finding sev-{_esc(finding.get('severity','INFO')).lower()}' id='finding-{_esc(finding.get('finding_id') or finding.get('stable_key'))}'>"
+        f"<div class='finding-head'><h3>{_esc(finding.get('severity'))}｜{_esc(finding.get('title'))}</h3><span class='evidence-level'>{_esc(finding.get('evidence_level'))}</span></div>"
+        f"<p class='scope-line'>{_scope_line(card)}</p><p class='time-line'>{_time_line(card)}</p>"
+        f"<div class='statement'><b>发生了什么：</b>{_esc(card.get('what_happened'))}</div>"
+        f"<div class='statement'><b>初步解释：</b>{_esc(card.get('initial_interpretation'))}</div>"
+        + (f"<div class='observed-boundary'><b>{_esc(first_text)}</b></div>" if first_text else "")
+        + "<h4>关键测量</h4>"+_measurements_html(card)
+        + "<h4>关键可视化证据</h4>"+_visuals_html(card)
+        + _audio_html(card)+_packet_refs_html(card)
+        + f"<div class='boundary'><b>当前不能确认什么：</b>{_esc(card.get('root_cause_boundary'))}</div>"
+        + f"<div class='next-action'><b>下一步建议：</b>{_esc(card.get('next_action'))}</div>"
+        + f"<details><summary>研发下钻：原始指标 / Traceability</summary>{_metric_table(finding.get('metrics') or {})}<pre>{_esc(json.dumps(card.get('traceability') or {},ensure_ascii=False,indent=2))}</pre></details></section>"
+    )
+
+
 def render_report_html(payload:dict)->str:
-    findings=payload.get("findings",[]); cards=[]
-    for f in findings:
-        tr=f.get("time_range") or {}; first=((f.get("correlation") or {}).get("first_observable_boundary") or {})
-        first_text=first.get("statement") or ("首次可观测层：UNKNOWN（未知）。" if first.get("status")=="UNKNOWN" else "")
-        cards.append(f"<section class='finding sev-{_esc(f.get('severity','INFO')).lower()}'><h3>{_esc(f.get('severity'))}｜{_esc(f.get('title'))}</h3>"
-                     f"<p><b>时间：</b>{_esc(tr.get('start'))} ～ {_esc(tr.get('end'))}　<b>证据等级：</b>{_esc(f.get('evidence_level'))}</p>"
-                     f"<p><b>已观测事实：</b>{_esc(f.get('observation'))}</p><p><b>初步解释：</b>{_esc(f.get('interpretation'))}</p>"
-                     f"<p><b>{_esc(first_text)}</b></p><div class='boundary'><b>根因边界：</b>{_esc(f.get('root_cause_boundary'))}</div>"
-                     f"<details><summary>关键指标 / 研发下钻</summary>{_metric_table(f.get('metrics') or {})}</details></section>")
+    # Artifact refs are attached immediately before this renderer is called. Build
+    # Evidence Cards here so the same canonical JSON persisted after HTML render
+    # contains exactly the UI semantics shown to Web/Feishu.
+    attach_evidence_cards(payload)
+    findings=payload.get("findings",[]);cards=[_evidence_card_html(f) for f in findings]
     if not cards:cards=["<div class='ok'>当前可用证据中未发现明显异常 Finding。</div>"]
-    comp=payload.get("completeness") or {}; cap=comp.get("capture") or {}
+    comp=payload.get("completeness") or {};cap=comp.get("capture") or {}
     capture_rows="".join(f"<tr><td>{_esc(k)}</td><td>{'✅ 可用' if v else '⚠️ 缺失/不可用'}</td></tr>" for k,v in cap.items())
     normal="".join(f"<li>✅ {_esc(x.get('text'))}</li>" for x in payload.get("normal_and_exclusion_evidence",[])) or "<li>暂无可展示的排除性证据。</li>"
     packet=payload.get("packet_summary") or {}
-    stream_rows="".join(f"<tr><td>{_esc(s.get('source'))}</td><td>{_esc(s.get('destination'))}</td><td>{_esc(s.get('packet_count'))}</td><td>{_esc(s.get('lost_packets'))}</td><td>{_esc(s.get('loss_rate'))}</td><td>{_esc(s.get('p95_jitter_ms'))}</td><td>{_esc(s.get('codec'))}</td><td>{_esc(s.get('ptime_ms'))}</td></tr>" for s in packet.get("streams",[]))
+    stream_rows="".join(f"<tr><td>{_esc(s.get('source'))}</td><td>{_esc(s.get('destination'))}</td><td>{_esc(s.get('packet_count'))}</td><td>{_esc(s.get('observed_packet_count'))}</td><td>{_esc(s.get('duplicate_packets'))}</td><td>{_esc(s.get('lost_packets'))}</td><td>{_esc(s.get('loss_rate'))}</td><td>{_esc(s.get('p95_jitter_ms'))}</td><td>{_esc(s.get('codec'))}</td><td>{_esc(s.get('ptime_ms'))}</td></tr>" for s in packet.get("streams",[]))
     pcm_rows=[]
     for stream in (payload.get("pcm_summary") or {}).get("streams",[]) or []:
         tap=(stream.get("tap") or {}).get("name")
         for s in stream.get("sessions",[]) or []:
             pcm_rows.append(f"<tr><td>{_esc(tap)}</td><td>{_esc(s.get('session_index'))}</td><td>{_esc(s.get('packet_count'))}</td><td>{_esc(s.get('rms_dbfs'))}</td><td>{_esc(s.get('peak_dbfs'))}</td><td>{_esc((s.get('hum') or {}).get('dominant_family'))}</td><td>{_esc((s.get('hum') or {}).get('level'))}</td></tr>")
     artifact_list="".join(f"<li>{_esc(a.get('type'))}｜{_esc(a.get('filename'))}｜SHA256 {_esc(a.get('sha256'))[:12]}…</li>" for a in payload.get("artifacts",[]) or []) or "<li>暂无衍生 Artifact。</li>"
-    call=payload.get("call") or {}; session=payload.get("session") or {}
+    call=payload.get("display_call") or payload.get("call") or {};session=payload.get("session") or {};context=payload.get("analysis_context") or {};offline=context.get("analysis_mode")=="OFFLINE_IMPORTED"
+    if offline:
+        section4_title="4. 当前离线 Call 重建结果"
+        if call:
+            call_line=(f"<p>分析方式：离线证据导入｜复现 Session：不适用｜重建 Call：{_esc(context.get('reconstructed_call_count'))}。</p>"
+                       f"<p>Call：{_esc(call.get('id') or call.get('call_no'))}｜SIP Call-ID：{_esc(call.get('sip_call_id') or call.get('external_call_ref'))}｜状态：{_esc(call.get('status'))}｜开始：{_esc(call.get('started_at'))}｜结束：{_esc(call.get('ended_at'))}｜号码：{_esc(call.get('caller') or '?')} → {_esc(call.get('dialed_number') or '?')}</p>")
+        else:
+            call_line=(f"<p>分析方式：离线证据导入｜复现 Session：不适用｜重建 Call：{_esc(context.get('reconstructed_call_count'))}。</p>"
+                       f"<p>Call：未绑定｜Call Scope：{_esc(context.get('call_scope'))}｜Call Origin：{_esc(context.get('call_origin'))}</p>")
+        session_history="当前为离线证据导入，本项不适用；系统不会为了填充报告而创建 ReproductionSession/ReproductionCall。"
+    else:
+        section4_title="4. 最新一次复现结果";call_line=f"<p>Session：{_esc(session.get('id'))}｜Call：{_esc(call.get('call_no'))}｜状态：{_esc(call.get('status'))}｜开始：{_esc(call.get('started_at'))}｜结束：{_esc(call.get('ended_at'))}</p>"
+        session_history="本 Canonical JSON 保留 scope/environment/version，可由 Case 页面按最新优先展开历史 Session；不同 Environment Fingerprint 不直接混合统计。"
+    card_summary=payload.get("evidence_card_summary") or {}
     return f"""<!doctype html><html lang='zh-CN'><head><meta charset='utf-8'><title>{_esc((payload.get('case') or {}).get('case_no'))} VOIP 初步证据分析报告</title><style>
-body{{font-family:Arial,'Microsoft YaHei',sans-serif;max-width:1180px;margin:28px auto;color:#1f2937;line-height:1.65;padding:0 18px}}h1,h2,h3{{color:#111827}}.hero{{padding:18px;border:1px solid #d1d5db;border-radius:12px;background:#f8fafc}}.badge{{display:inline-block;padding:3px 9px;border-radius:10px;background:#e5e7eb;margin-right:6px}}table{{width:100%;border-collapse:collapse;margin:8px 0}}th,td{{border:1px solid #d1d5db;padding:7px;vertical-align:top}}th{{background:#f3f4f6}}.finding{{border:1px solid #d1d5db;border-left:5px solid #6b7280;padding:14px;margin:14px 0;border-radius:8px}}.sev-high,.sev-critical{{border-left-color:#b91c1c}}.sev-medium{{border-left-color:#d97706}}.boundary{{background:#fff7ed;padding:10px;border-radius:6px}}.ok{{background:#ecfdf5;padding:12px;border-radius:8px}}.small{{color:#6b7280;font-size:13px}}</style></head><body>
+body{{font-family:Arial,'Microsoft YaHei',sans-serif;max-width:1180px;margin:28px auto;color:#1f2937;line-height:1.65;padding:0 18px}}h1,h2,h3,h4{{color:#111827}}.hero{{padding:18px;border:1px solid #d1d5db;border-radius:12px;background:#f8fafc}}.badge{{display:inline-block;padding:3px 9px;border-radius:10px;background:#e5e7eb;margin-right:6px}}table{{width:100%;border-collapse:collapse;margin:8px 0}}th,td{{border:1px solid #d1d5db;padding:7px;vertical-align:top}}th{{background:#f3f4f6}}.finding{{border:1px solid #d1d5db;border-left:5px solid #6b7280;padding:16px;margin:18px 0;border-radius:10px;background:#fff}}.sev-high,.sev-critical{{border-left-color:#b91c1c}}.sev-medium{{border-left-color:#d97706}}.finding-head{{display:flex;justify-content:space-between;gap:10px;align-items:center}}.finding-head h3{{margin:0}}.evidence-level{{background:#eef2ff;padding:2px 8px;border-radius:10px;font-size:12px}}.scope-line,.time-line{{color:#475569;font-size:14px;margin:5px 0}}.statement{{padding:8px 0}}.boundary{{background:#fff7ed;padding:10px;border-radius:6px;margin-top:12px}}.next-action{{background:#eff6ff;padding:10px;border-radius:6px;margin-top:10px}}.observed-boundary{{background:#f0fdf4;padding:8px;border-radius:6px}}.ok{{background:#ecfdf5;padding:12px;border-radius:8px}}.small{{color:#6b7280;font-size:13px}}.metrics{{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px;margin:8px 0 12px}}.metric{{border:1px solid #e5e7eb;border-radius:8px;padding:8px;background:#f8fafc}}.metric b,.metric span{{display:block}}.metric span{{font-size:18px;margin-top:3px}}.visual-grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:12px}}figure{{margin:0;border:1px solid #e5e7eb;border-radius:8px;padding:8px;background:#fafafa}}figure img{{width:100%;height:auto;display:block}}figcaption{{font-size:13px;color:#475569;margin-top:6px}}.audio-clip{{border:1px solid #dbeafe;background:#eff6ff;padding:9px;border-radius:8px;margin:8px 0}}audio{{width:100%;margin-top:5px}}.audio-unavailable,.artifact-unavailable{{background:#fffbeb;border:1px solid #fde68a;padding:9px;border-radius:8px;margin:8px 0;color:#92400e}}.evidence-sub{{margin-top:12px}}details{{margin-top:12px}}pre{{white-space:pre-wrap;background:#f8fafc;padding:8px;border-radius:6px;overflow:auto}}@media(max-width:700px){{.visual-grid{{grid-template-columns:1fr}}.finding-head{{display:block}}}}</style></head><body>
 <h1>VOIP 初步证据分析报告</h1><div class='hero'><span class='badge'>{_esc((payload.get('case') or {}).get('case_no'))}</span><span class='badge'>{_esc(payload.get('scope',{}).get('type'))}</span><span class='badge'>Report V{_esc(payload.get('report_version'))}</span><h2>{_esc(payload.get('headline'))}</h2><p>{_esc((payload.get('case') or {}).get('summary'))}</p><p class='small'>RTP（Real-time Transport Protocol，实时传输协议）；PCM（Pulse Code Modulation，脉冲编码调制）；dBFS（Decibels relative to Full Scale，相对于数字满量程的分贝）。</p></div>
-<h2>0. 当前状态 / 快速导航</h2><p>范围：{_esc(payload.get('scope',{}).get('type'))}｜证据完整度：{_esc(comp.get('state'))}｜Finding：{_esc(payload.get('finding_count'))}｜最高等级：{_esc(payload.get('highest_severity'))}</p>
+<h2>0. 当前状态 / 快速导航</h2><p>范围：{_esc(payload.get('scope',{}).get('type'))}｜证据完整度：{_esc(comp.get('state'))}｜可复核性：{_esc(comp.get('reviewability'))}｜Finding：{_esc(payload.get('finding_count'))}｜最高等级：{_esc(payload.get('highest_severity'))}</p><p class='small'>Evidence Card：{_esc(card_summary.get('finding_count'))}；需音频：{_esc(card_summary.get('audio_expected_count'))}；已匹配音频：{_esc(card_summary.get('audio_available_count'))}；缺失：{_esc(card_summary.get('audio_unavailable_count'))}。</p>
 <h2>1. 当前初步结论</h2><p>{_esc((payload.get('preliminary_assessment') or {}).get('summary'))}</p><div class='boundary'>{_esc((payload.get('evidence_boundary') or {}).get('statement'))}</div>
 <h2>2. 当前重点问题</h2>{''.join(cards)}
 <h2>3. 证据完整度</h2><p><b>{_esc(comp.get('state'))}</b>：{_esc(comp.get('boundary'))}</p><table>{capture_rows}</table>
-<h2>4. 最新一次复现结果</h2><p>Session：{_esc(session.get('id'))}｜Call：{_esc(call.get('call_no'))}｜状态：{_esc(call.get('status'))}｜开始：{_esc(call.get('started_at'))}｜结束：{_esc(call.get('ended_at'))}</p>
+<h2>{section4_title}</h2>{call_line}
 <h2>5. 多次复现汇总</h2>{_multi_call_html(payload)}
 <h2>6. A/B 对比</h2>{_ab_html(payload)}
-<h2>7. 历次 Reproduction Session（复现会话）</h2><p>本 Canonical JSON 保留 scope/environment/version，可由 Case 页面按最新优先展开历史 Session；不同 Environment Fingerprint 不直接混合统计。</p>
+<h2>7. 历次 Reproduction Session（复现会话）</h2><p>{_esc(session_history)}</p>
 <h2>8. 正常项 / 排除性证据</h2><ul>{normal}</ul>
-<h2>9. 完整技术证据</h2><h3>9.1 SIP / RTP</h3><p>总帧/包数：{_esc(packet.get('packet_count'))}；SIP 消息：{_esc(packet.get('sip_message_count'))}；Call：{_esc(packet.get('call_count'))}；RTP Stream：{_esc(packet.get('rtp_stream_count'))}</p><table><thead><tr><th>源</th><th>目的</th><th>包数</th><th>丢包</th><th>丢包率</th><th>P95 抖动(ms)</th><th>Codec</th><th>ptime(ms)</th></tr></thead><tbody>{stream_rows}</tbody></table>
+<h2>9. 完整技术证据</h2><h3>9.1 SIP / RTP</h3><p>总帧/包数：{_esc(packet.get('packet_count'))}；SIP 消息：{_esc(packet.get('sip_message_count'))}；Call：{_esc(packet.get('call_count'))}；RTP Stream：{_esc(packet.get('rtp_stream_count'))}</p><p class='small'>RTP“有效包数”按唯一 Sequence 计数；“观察包数”是抓包中实际看到的 RTP Datagram 数，包含重复包。重复包不会被计为额外有效媒体，也不会被写成 Packet Loss。</p><table><thead><tr><th>源</th><th>目的</th><th>有效包数</th><th>观察包数</th><th>重复包</th><th>丢包</th><th>丢包率</th><th>P95 抖动(ms)</th><th>Codec</th><th>ptime(ms)</th></tr></thead><tbody>{stream_rows}</tbody></table>
 <h3>9.2 PCM / 音频</h3><table><thead><tr><th>Tap</th><th>Session</th><th>包数</th><th>RMS dBFS</th><th>Peak dBFS</th><th>工频族</th><th>等级</th></tr></thead><tbody>{''.join(pcm_rows)}</tbody></table><p>RMS/Peak dBFS 均为数字电平，不等价于真实声压级 dB SPL。</p>
-<h2>10. Evidence Bundle / 附件</h2><ul>{artifact_list}</ul><p>完整原始证据包由 Bundle API 生成，包含 Manifest 与 SHA256SUMS。</p>
-<h2>11. 报告版本与审计记录</h2><p>Schema：{_esc(payload.get('schema_version'))}｜Composer：{_esc(payload.get('composer_version'))}｜Generated：{_esc(payload.get('generated_at'))}</p></body></html>"""
+<h2>10. Evidence Bundle / 附件</h2><p>这里保留完整 Artifact 清单；用于理解 Finding 的关键图/音频已优先放在对应 Evidence Card 内。</p><ul>{artifact_list}</ul><p>完整原始证据包由 Bundle API 生成，包含 Manifest 与 SHA256SUMS。</p>
+<h2>11. 报告版本与审计记录</h2><p>Schema：{_esc(payload.get('schema_version'))}｜Composer：{_esc(payload.get('composer_version'))}｜Evidence Card：{_esc(card_summary.get('version'))}｜Generated：{_esc(payload.get('generated_at'))}</p></body></html>"""
