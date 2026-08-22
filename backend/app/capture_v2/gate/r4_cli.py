@@ -10,6 +10,7 @@ from app.capture_v2.gate.context import build_asyncssh_adapter
 from app.capture_v2.gate.r4_hook_boundary import run_r4_real_hook_flash, run_r4_real_post_onhook_rebound
 from app.capture_v2.gate.r4_preflight import run_r4_no_handset_preflight
 from app.capture_v2.gate.r4_real import run_r4_real_fxs_basic
+from app.capture_v2.gate.r5_live_coverage import run_r5_real_live_coverage
 from app.capture_v2.gate.r7_soak import run_r7_validation_soak
 from app.capture_v2.gate.runner import GateRunner
 from app.core.config import settings
@@ -53,6 +54,8 @@ async def _run(args):
         )
         if gate.startswith("R7-00"):
             result = await run_r7_validation_soak(cycle_interval_seconds=0.5, **common)
+        elif gate.startswith("R5-01") or "LIVE-COVERAGE" in gate:
+            result = await run_r5_real_live_coverage(**common)
         elif gate.startswith("R4-00"):
             result = await run_r4_no_handset_preflight(**common)
         elif gate.startswith("R4-02") or "HOOK-FLASH" in gate:
