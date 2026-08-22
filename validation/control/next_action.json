@@ -1,9 +1,9 @@
 {
   "schema_version": "capture-v2-remote-action-v1",
-  "action_id": "RC25-FINAL-SW-001",
-  "sequence": 113,
-  "created_at": "2026-08-22T03:52:00+00:00",
-  "expires_at": "2026-08-22T15:52:00+00:00",
+  "action_id": "RC26-FROZEN-CHECKPOINT-SW-001",
+  "sequence": 114,
+  "created_at": "2026-08-22T03:58:00+00:00",
+  "expires_at": "2026-08-22T15:58:00+00:00",
   "action_type": "SOFTWARE_REGRESSION",
   "parameters": {
     "timeout_seconds": 1800
@@ -14,8 +14,8 @@
     "require_v2_disabled": true,
     "allow_worker_kill": false,
     "allow_server_quarantine": false,
-    "expected_head": "9395bb97ebd8cdaafc700c0701482a960a514bf5"
+    "expected_head": "e49441e5efd1cd9e8171143dcacb8286a85fc614"
   },
   "requested_by": "ChatGPT-remote-validation-controller",
-  "note": "Final RC25 software regression after dual-platform R4 no-handset readiness, R5 real PostgreSQL Coverage Ledger self-test, R6 real PostgreSQL evidence-first self-test, and dual-platform 300-second R7 validation-state soak. V1 remains authoritative; Production V2 remains disabled; no cutover authorization implied."
+  "note": "Freeze the post-RC25 status/documentation checkpoint as the next reusable validation expected_head. Final regression only; no product activation, no handset action, V1 authoritative and Production V2 disabled. After this action, do not add non-validation/control branch commits before the next real Gate."
 }
