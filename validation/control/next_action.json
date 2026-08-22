@@ -1,29 +1,12 @@
 {
   "schema_version": "capture-v2-remote-action-v1",
-  "action_id": "R4-00-APF3260M-NO-HANDSET-RC23",
-  "sequence": 105,
-  "created_at": "2026-08-22T03:17:00+00:00",
-  "expires_at": "2026-08-22T15:17:00+00:00",
-  "action_type": "GATE_READINESS_FXS",
+  "action_id": "RC24-SW-001",
+  "sequence": 106,
+  "created_at": "2026-08-22T03:22:00+00:00",
+  "expires_at": "2026-08-22T15:22:00+00:00",
+  "action_type": "SOFTWARE_REGRESSION",
   "parameters": {
-    "device_id": "c132f336-df1b-4285-b175-01d848f23b5d",
-    "model": "APF3260-M",
-    "host": "10.48.8.74",
-    "port": 10002,
-    "username": "root",
-    "platform_id": "mt7981",
-    "password_env": "DB:G1U060H000384",
-    "profile_root": "../profiles",
-    "profile_id": "voip-standard",
-    "object_root": "/tmp/voip-reproduction-objects",
-    "output_root": "/tmp/capture-v2-gates",
-    "repo_root": "..",
-    "reproduction_session_id": "AUTO_NEW",
-    "worker_id": "r4-00-apf3260m-rc23",
-    "gate_id": "R4-00-APF3260M-NO-HANDSET-RC23",
-    "duration": 12,
-    "transport": "scp",
-    "timeout_seconds": 600
+    "timeout_seconds": 1800
   },
   "safety": {
     "require_clean_git": true,
@@ -31,8 +14,8 @@
     "require_v2_disabled": true,
     "allow_worker_kill": false,
     "allow_server_quarantine": false,
-    "expected_head": "7e91e68e3664ba3b3100b7f33bff17498216fd55"
+    "expected_head": "9395bb97ebd8cdaafc700c0701482a960a514bf5"
   },
   "requested_by": "ChatGPT-remote-validation-controller",
-  "note": "No-handset real-DUT R4-00 preflight on APF3260-M: ownership/readiness/AIM debug/PCM control/durable segment/watchdog revoke-recover/cleanup only. No OFFHOOK/DTMF/ONHOOK required. Never substitutes for physical R4-01."
+  "note": "RC24 unified regression after correcting pre-OFFHOOK R4 readiness semantics, adding real PostgreSQL evidence-first report self-test, and adding bounded R7 validation-state soak. V1 authoritative; Production V2 disabled."
 }
