@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import argparse
+import json
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from enum import StrEnum
+from pathlib import Path
 from typing import Any, Iterable
 
 from .models import GateCaseResult, GateCheck, GateVerdict
@@ -18,6 +21,13 @@ class RollbackEvidenceKind(StrEnum):
     REAL_DUT = "REAL_DUT"
     SIMULATED = "SIMULATED"
     SYNTHETIC = "SYNTHETIC"
+
+
+def _strict_bool(raw: dict[str, Any], key: str) -> bool:
+    value = raw.get(key)
+    if not isinstance(value, bool):
+        raise ValueError(f"ROLLBACK_{key.upper()}_BOOLEAN_REQUIRED")
+    return value
 
 
 @dataclass(frozen=True)
@@ -52,8 +62,8 @@ class RollbackObservation:
             phase=RollbackPhase(str(raw["phase"])),
             observed_at=observed_at,
             capture_engine_version=str(raw["capture_engine_version"]),
-            capture_v2_production_enabled=bool(raw["capture_v2_production_enabled"]),
-            v1_healthy=bool(raw["v1_healthy"]),
+            capture_v2_production_enabled=_strict_bool(raw, "capture_v2_production_enabled"),
+            v1_healthy=_strict_bool(raw, "v1_healthy"),
             v2_producer_count=count,
             evidence_kind=RollbackEvidenceKind(str(raw["evidence_kind"])),
             evidence_refs=refs_tuple,
@@ -71,18 +81,45 @@ class RollbackObservation:
 class R7RollbackRehearsalGate:
     """Validate evidence from a real V2 -> V1 rollback rehearsal.
 
-    This class is intentionally observation-only.  It never edits product
+    This class is intentionally observation-only. It never edits product
     configuration, never enables Capture V2, and never performs a rollback.
     Release PASS is possible only when externally collected REAL_DUT evidence
     proves all three chronological phases.
     """
 
     GATE_ID = "R7-ROLLBACK-REHEARSAL"
+    EVIDENCE_SCHEMA = "capture-v2-r7-rollback-evidence-v1"
     REQUIRED_PHASES = (
         RollbackPhase.PRE_V1,
         RollbackPhase.V2_ACTIVE,
         RollbackPhase.ROLLED_BACK_V1,
     )
+
+    @classmethod
+    def evaluate_artifact(cls, raw: dict[str, Any]) -> GateCaseResult:
+        if not isinstance(raw, dict) or raw.get("schema_version") != cls.EVIDENCE_SCHEMA:
+            return GateCaseResult(
+                gate_id=cls.GATE_ID,
+                verdict=GateVerdict.INCONCLUSIVE,
+                checks=(GateCheck(
+                    "evidence_artifact_schema",
+                    None,
+                    cls.EVIDENCE_SCHEMA,
+                    raw.get("schema_version") if isinstance(raw, dict) else type(raw).__name__,
+                ),),
+                summary="Rollback evidence artifact schema is invalid.",
+                facts={"reason": "ROLLBACK_EVIDENCE_ARTIFACT_SCHEMA_INVALID"},
+            )
+        rows = raw.get("observations")
+        if not isinstance(rows, list):
+            return GateCaseResult(
+                gate_id=cls.GATE_ID,
+                verdict=GateVerdict.INCONCLUSIVE,
+                checks=(GateCheck("observations_array", None, "list", type(rows).__name__),),
+                summary="Rollback evidence observations are missing or invalid.",
+                facts={"reason": "ROLLBACK_OBSERVATIONS_ARRAY_INVALID"},
+            )
+        return cls.evaluate_dicts(rows)
 
     @classmethod
     def evaluate_dicts(cls, rows: Iterable[dict[str, Any]]) -> GateCaseResult:
@@ -230,3 +267,31 @@ class R7RollbackRehearsalGate:
                 "observations": [obs.as_dict() for obs in ordered],
             },
         )
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Validate Capture V2 R7 rollback rehearsal evidence")
+    parser.add_argument("--evidence", required=True, type=Path)
+    args = parser.parse_args(argv)
+    try:
+        raw = json.loads(args.evidence.read_text(encoding="utf-8"))
+    except Exception as exc:
+        result = GateCaseResult(
+            gate_id=R7RollbackRehearsalGate.GATE_ID,
+            verdict=GateVerdict.INCONCLUSIVE,
+            checks=(GateCheck("evidence_file_readable", None, True, str(exc)),),
+            summary="Rollback evidence file cannot be read as JSON.",
+            facts={"reason": "ROLLBACK_EVIDENCE_FILE_INVALID"},
+        )
+    else:
+        result = R7RollbackRehearsalGate.evaluate_artifact(raw)
+    print(json.dumps(result.as_dict(), ensure_ascii=False, indent=2))
+    if result.verdict == GateVerdict.PASS:
+        return 0
+    if result.verdict in {GateVerdict.INCONCLUSIVE, GateVerdict.DEFERRED_REAL_GATE}:
+        return 2
+    return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
