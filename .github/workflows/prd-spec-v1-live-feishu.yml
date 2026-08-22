@@ -11,7 +11,7 @@ jobs:
     env:
       DOCUMENT_TOKEN: RFtmdjLNRo1SaBxXBugcpLgdnvb
     steps:
-      - name: Grant default Feishu recipient view access and verify
+      - name: Resolve direct-chat user, grant view, verify
         shell: bash
         run: |
           set -euo pipefail
@@ -19,18 +19,13 @@ jobs:
           test -f /home/github-runner/.config/voip-ai/feishu_app_secret
           set -a; source /home/github-runner/.config/voip-ai/.env; set +a
           export FEISHU_APP_SECRET_FILE=/home/github-runner/.config/voip-ai/feishu_app_secret
+          test "${FEISHU_RECEIVE_ID_TYPE:-}" = "chat_id" || { echo EXPECTED_CHAT_ID_CONFIG; exit 2; }
           test -n "${FEISHU_DEFAULT_RECEIVE_ID:-}" || { echo FEISHU_DEFAULT_RECEIVE_ID_NOT_CONFIGURED; exit 2; }
-          test -n "${FEISHU_RECEIVE_ID_TYPE:-}" || { echo FEISHU_RECEIVE_ID_TYPE_NOT_CONFIGURED; exit 2; }
           python3 - <<'PY'
           import json, os, urllib.parse, urllib.request, urllib.error
           base=os.environ.get('FEISHU_BASE_URL','https://open.feishu.cn/open-apis').rstrip('/')
           with open(os.environ['FEISHU_APP_SECRET_FILE'],'r',encoding='utf-8') as f: secret=f.read().strip()
-          identity=os.environ['FEISHU_DEFAULT_RECEIVE_ID']
-          receive_type=os.environ['FEISHU_RECEIVE_ID_TYPE'].strip().lower()
-          type_map={'open_id':'openid','openid':'openid','user_id':'userid','userid':'userid','email':'email','union_id':'unionid','unionid':'unionid'}
-          member_type=type_map.get(receive_type)
-          assert member_type, f'UNSUPPORTED_RECEIVE_ID_TYPE:{receive_type}'
-          def call(method,url,payload=None,token=None,allow_error=False):
+          def call(method,url,payload=None,token=None):
               data=None if payload is None else json.dumps(payload).encode()
               headers={'Content-Type':'application/json'}
               if token: headers['Authorization']='Bearer '+token
@@ -39,25 +34,25 @@ jobs:
                   with urllib.request.urlopen(req,timeout=30) as r: raw=r.read()
               except urllib.error.HTTPError as e:
                   raw=e.read(); out=json.loads(raw.decode()) if raw else {'code':e.code}
-                  if allow_error and e.code in (400,409): return out
                   raise RuntimeError(f'FEISHU_HTTP_{e.code}:{out.get("code")}:{out.get("msg")}')
               return json.loads(raw.decode()) if raw else {}
           auth=call('POST',base+'/auth/v3/tenant_access_token/internal',{'app_id':os.environ['FEISHU_APP_ID'],'app_secret':secret})
-          token=auth['tenant_access_token']; doc=os.environ['DOCUMENT_TOKEN']
+          token=auth['tenant_access_token']; chat=os.environ['FEISHU_DEFAULT_RECEIVE_ID']; doc=os.environ['DOCUMENT_TOKEN']
+          members_url=base+'/im/v1/chats/'+urllib.parse.quote(chat,safe='')+'/members?member_id_type=open_id&page_size=100'
+          data=call('GET',members_url,token=token); items=(data.get('data') or {}).get('items') or []
+          ids=[]
+          for item in items:
+              mid=str(item.get('member_id') or item.get('open_id') or '').strip()
+              if mid.startswith('ou_') and mid not in ids: ids.append(mid)
+          print('DIRECT_CHAT_MEMBER_COUNT='+str(len(ids)))
+          assert len(ids)==1, 'DIRECT_CHAT_USER_NOT_UNIQUE'
+          reader=ids[0]
           endpoint=base+'/drive/v1/permissions/'+urllib.parse.quote(doc,safe='')+'/members?type=docx&need_notification=false'
-          call('POST',endpoint,{'member_type':member_type,'member_id':identity,'perm':'view'},token,allow_error=True)
-          verify=base+'/drive/v1/permissions/'+urllib.parse.quote(doc,safe='')+'/members?type=docx'
-          verified=False; page=''
-          for _ in range(20):
-              url=verify + (('&page_token='+urllib.parse.quote(page,safe='')) if page else '')
-              data=call('GET',url,token=token); d=data.get('data') or {}; items=d.get('items') or d.get('members') or []
-              for item in items:
-                  mid=str(item.get('member_id') or item.get('member_open_id') or item.get('member_user_id') or '')
-                  perm=str(item.get('perm') or item.get('permission') or '').lower()
-                  if mid==identity and perm in {'view','edit','full_access'}: verified=True; break
-              if verified or not d.get('has_more'): break
-              page=str(d.get('page_token') or '')
-          assert verified, 'READER_PERMISSION_VERIFY_FAILED'
+          result=call('POST',endpoint,{'member_type':'openid','member_id':reader,'perm':'view'},token)
+          assert result.get('code',0)==0, f'GRANT_FAILED:{result.get("code")}:{result.get("msg")}'
+          verify=call('GET',base+'/drive/v1/permissions/'+urllib.parse.quote(doc,safe='')+'/members?type=docx',token=token)
+          entries=(verify.get('data') or {}).get('items') or []
+          assert any(str(x.get('member_id') or '')==reader and str(x.get('perm') or '').lower() in {'view','edit','full_access'} for x in entries), 'READER_PERMISSION_VERIFY_FAILED'
           print('DOCUMENT_READER_ACCESS=PASS')
           print('READER_PERMISSION=VIEW_OR_HIGHER')
           PY
