@@ -1,26 +1,26 @@
 {
   "schema_version": "capture-v2-remote-status-v1",
-  "action_id": "RC18-SW-001",
-  "sequence": 89,
+  "action_id": "RC19-SW-001",
+  "sequence": 91,
   "action_type": "SOFTWARE_REGRESSION",
   "state": "SUCCEEDED",
   "runner_id": "srv:3382405",
-  "action_sha256": "cde99a4a71dac118a446f3e164b064ae6a7a5ad7622e61aba911aeeda1194bb7",
-  "updated_at": "2026-08-22T01:46:07.952040+00:00",
+  "action_sha256": "f3db5794dfd64cac8869b73d79a2133a9ce11d78c05abd15802ad7ae007becf8",
+  "updated_at": "2026-08-22T02:21:49.630074+00:00",
   "started_at": null,
-  "finished_at": "2026-08-22T01:46:07.952040+00:00",
+  "finished_at": "2026-08-22T02:21:49.630074+00:00",
   "return_code": 0,
   "verdict": null,
-  "result_path": "validation/control/results/RC18-SW-001/result.json",
-  "stdout_sha256": "586a4d7be569a59bf185a2db47ecd2d9363a0f6624449574e5e12781c969b8e3",
+  "result_path": "validation/control/results/RC19-SW-001/result.json",
+  "stdout_sha256": "b6d98686056b6c67ae37e001707a4dd5f24e3f41b303f6ce34acd0e4c90e1b48",
   "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "error": null,
   "detail": {
     "safety": {
       "capture_engine_version": "V1",
       "capture_v2_production_enabled": "false",
-      "git_head": "37bc4a8263adcdb9b2e5766e8a4d73d8f30a7100",
-      "expected_product_head": "735446237cdfafad8d3d70847b07c781b7b3de6c"
+      "git_head": "b4060d11b59dbf5e068721eabe654b7da8e20e4f",
+      "expected_product_head": "14a9219598d1634600ea5ca1492c94146b0b4d99"
     },
     "parsed_output": null
   }
