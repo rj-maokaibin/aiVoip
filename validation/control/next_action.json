@@ -1,9 +1,9 @@
 {
   "schema_version": "capture-v2-remote-action-v1",
-  "action_id": "R3-11-APF3260M-PENDING-SPOOL-RESTART-RC12",
-  "sequence": 62,
-  "created_at": "2026-08-22T00:31:00+00:00",
-  "expires_at": "2026-08-22T02:31:00+00:00",
+  "action_id": "R3-12-APF3260M-DUT-REBOOT-RC12",
+  "sequence": 63,
+  "created_at": "2026-08-22T00:33:00+00:00",
+  "expires_at": "2026-08-22T03:33:00+00:00",
   "action_type": "GATE_SEGMENT",
   "parameters": {
     "device_id": "c132f336-df1b-4285-b175-01d848f23b5d",
@@ -19,8 +19,8 @@
     "output_root": "/tmp/capture-v2-gates",
     "repo_root": "..",
     "reproduction_session_id": "AUTO_NEW",
-    "worker_id": "r3-11-apf3260m-rc12",
-    "gate_id": "R3-11-APF3260M-PENDING-SPOOL-RESTART-RC12",
+    "worker_id": "r3-12-apf3260m-rc12",
+    "gate_id": "R3-12-APF3260M-DUT-REBOOT-RC12",
     "duration": 40,
     "interval": 0.5,
     "transport": "scp",
@@ -35,5 +35,5 @@
     "expected_head": "a2c95832fce5e776a21a0518773363306efefe7f"
   },
   "requested_by": "ChatGPT-remote-validation-controller",
-  "note": "RC12 R3-11 APF3260-M deterministic pending-spool restart/adoption. Under first fenced authority and failed durable store, inject four valid closed 24-byte PCAPs so the production Sealer/Pump creates real immutable unacked DUT spool. Require CRITICAL pressure and all sampled backlog present on DUT, stop only worker lease renewal, wait TTL, then second authority must SAME_SESSION_ALIVE/ADOPT exact PID/starttime and CaptureEpoch with higher lease and recover every pre-restart backlog segment through durable ACK and exact remote delete without double loss."
+  "note": "RC12 R3-12 APF3260-M real DUT reboot Segment Gate. Establish and drain pre-reboot CaptureEpoch, record boot_id, reboot DUT, reconnect, wait old lease expiry, require DUT_REBOOT recovery with a new CaptureEpoch and higher lease_epoch, close DUT_REBOOT_GAP/record reboot event, and prove at least one post-reboot segment completes durable store + ACK + exact remote delete with no Server/DUT double loss."
 }
