@@ -79,5 +79,5 @@
     "PR ready / merge / cutover"
   ],
   "release_decision": "BLOCKED",
-  "next_step": "NO_MORE_AUTONOMOUS_NON_PHYSICAL_UNPRIVILEGED_GATES_REMAIN"
+  "next_step": "NO_MORE_AUTONOMOUS_NON_PHYSICAL_GATES_REMAIN_WITHOUT_CHANGING_V1_V2_ACTIVATION_STATE"
 }
