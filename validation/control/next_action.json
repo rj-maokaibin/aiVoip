@@ -1,29 +1,12 @@
 {
   "schema_version": "capture-v2-remote-action-v1",
-  "action_id": "R7-00-APF3260M-SOAK300-RC24",
-  "sequence": 112,
-  "created_at": "2026-08-22T03:45:00+00:00",
-  "expires_at": "2026-08-22T15:45:00+00:00",
-  "action_type": "GATE_READINESS_FXS",
+  "action_id": "RC25-FINAL-SW-001",
+  "sequence": 113,
+  "created_at": "2026-08-22T03:52:00+00:00",
+  "expires_at": "2026-08-22T15:52:00+00:00",
+  "action_type": "SOFTWARE_REGRESSION",
   "parameters": {
-    "device_id": "c132f336-df1b-4285-b175-01d848f23b5d",
-    "model": "APF3260-M",
-    "host": "10.48.8.74",
-    "port": 10002,
-    "username": "root",
-    "platform_id": "mt7981",
-    "password_env": "DB:G1U060H000384",
-    "profile_root": "../profiles",
-    "profile_id": "voip-standard",
-    "object_root": "/tmp/voip-reproduction-objects",
-    "output_root": "/tmp/capture-v2-gates",
-    "repo_root": "..",
-    "reproduction_session_id": "AUTO_NEW",
-    "worker_id": "r7-00-apf3260m-soak300-rc24",
-    "gate_id": "R7-00-APF3260M-SOAK300-RC24",
-    "duration": 300,
-    "transport": "scp",
-    "timeout_seconds": 900
+    "timeout_seconds": 1800
   },
   "safety": {
     "require_clean_git": true,
@@ -34,5 +17,5 @@
     "expected_head": "9395bb97ebd8cdaafc700c0701482a960a514bf5"
   },
   "requested_by": "ChatGPT-remote-validation-controller",
-  "note": "300-second APF3260-M validation-state supporting soak. Production V2 remains disabled. Periodically prove active lease/exact single producer/no critical pressure/pump stability, require any observed ACKED evidence to be server durable, no unresolved capture gap, then exact producer+lease cleanup. Supporting R7 evidence only; not production shadow or rollback."
+  "note": "Final RC25 software regression after dual-platform R4 no-handset readiness, R5 real PostgreSQL Coverage Ledger self-test, R6 real PostgreSQL evidence-first self-test, and dual-platform 300-second R7 validation-state soak. V1 remains authoritative; Production V2 remains disabled; no cutover authorization implied."
 }
