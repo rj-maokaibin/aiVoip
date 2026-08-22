@@ -1,12 +1,29 @@
 {
   "schema_version": "capture-v2-remote-action-v1",
-  "action_id": "RC24-SW-001",
-  "sequence": 106,
-  "created_at": "2026-08-22T03:22:00+00:00",
-  "expires_at": "2026-08-22T15:22:00+00:00",
-  "action_type": "SOFTWARE_REGRESSION",
+  "action_id": "R4-00-APF1250-IDLE-READY-RC24",
+  "sequence": 107,
+  "created_at": "2026-08-22T03:24:00+00:00",
+  "expires_at": "2026-08-22T15:24:00+00:00",
+  "action_type": "GATE_READINESS_FXS",
   "parameters": {
-    "timeout_seconds": 1800
+    "device_id": "259f16e6-af9e-4dff-969b-2bb5eac43eb2",
+    "model": "APF1250",
+    "host": "10.48.8.74",
+    "port": 10001,
+    "username": "root",
+    "platform_id": "mt7621",
+    "password_env": "DB:G1V030E010214",
+    "profile_root": "../profiles",
+    "profile_id": "voip-standard",
+    "object_root": "/tmp/voip-reproduction-objects",
+    "output_root": "/tmp/capture-v2-gates",
+    "repo_root": "..",
+    "reproduction_session_id": "AUTO_NEW",
+    "worker_id": "r4-00-apf1250-idle-rc24",
+    "gate_id": "R4-00-APF1250-IDLE-READY-RC24",
+    "duration": 12,
+    "transport": "scp",
+    "timeout_seconds": 600
   },
   "safety": {
     "require_clean_git": true,
@@ -17,5 +34,5 @@
     "expected_head": "9395bb97ebd8cdaafc700c0701482a960a514bf5"
   },
   "requested_by": "ChatGPT-remote-validation-controller",
-  "note": "RC24 unified regression after correcting pre-OFFHOOK R4 readiness semantics, adding real PostgreSQL evidence-first report self-test, and adding bounded R7 validation-state soak. V1 authoritative; Production V2 disabled."
+  "note": "Corrected pre-OFFHOOK R4-00 on APF1250. Readiness uses armed producer/epoch, independent durable-store fsync probe and real SCP probe; idle business segment presence is supporting only. No handset action."
 }
