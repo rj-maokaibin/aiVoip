@@ -1,0 +1,44 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "RC13-SW-001",
+    "sequence": 64,
+    "created_at": "2026-08-22T00:37:00+00:00",
+    "expires_at": "2026-08-22T02:37:00+00:00",
+    "action_type": "SOFTWARE_REGRESSION",
+    "parameters": {
+      "timeout_seconds": 1800
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "5e743ccde61648cfb1998d4343f22da0a268cecd"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "RC13 software regression after validation-only R3-12 deterministic post-reboot Segment fix. The real reboot/reconnect/recovery primitive is unchanged; after the repaired new CaptureEpoch is established, the Gate injects one valid closed 24-byte PCAP so the production Sealer/Pump must prove post-reboot durable store + ACK + exact DUT delete without relying on ambient traffic. Production V2 remains disabled."
+  },
+  "action_sha256": "fd0165bc93da27b7b441c3fbd8c60bb0c8098afae7a83284767960fe9aadb671",
+  "runner_id": "srv:3382405",
+  "state": "SUCCEEDED",
+  "return_code": 0,
+  "verdict": null,
+  "error": null,
+  "finished_at": "2026-08-22T00:38:03.010289+00:00",
+  "stdout_sha256": "f1a5ec7fd2d6fd2513091699033875b17626ff22c99a967479db5d087cce99af",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "local_stdout": ".capture-v2-control/logs/RC13-SW-001/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/RC13-SW-001/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "7bc66f72ebc9c579fd3022a41d091c5c666153f4",
+      "expected_product_head": "5e743ccde61648cfb1998d4343f22da0a268cecd"
+    },
+    "parsed_output": null
+  }
+}
