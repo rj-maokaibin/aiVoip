@@ -1,13 +1,9 @@
 name: Grant Feishu Reader Access
-
 on:
   pull_request:
-    branches:
-      - feat/prd-spec-v1-alignment
-
+    branches: [feat/prd-spec-v1-alignment]
 permissions:
   contents: read
-
 jobs:
   grant-reader:
     runs-on: [self-hosted, linux, x64, voip-controlled-linux]
@@ -25,35 +21,24 @@ jobs:
           export FEISHU_APP_SECRET_FILE=/home/github-runner/.config/voip-ai/feishu_app_secret
           reader="${FEISHU_READER_OPEN_ID:-${FEISHU_TEST_READER_OPEN_ID:-${FEISHU_VIEWER_OPEN_ID:-}}}"
           if [ -z "$reader" ] && [ -f /home/github-runner/.config/voip-ai/feishu_reader_open_id ]; then reader="$(tr -d '\r\n ' < /home/github-runner/.config/voip-ai/feishu_reader_open_id)"; fi
-          test -n "$reader" || { echo 'FEISHU_READER_ID_NOT_CONFIGURED'; exit 2; }
+          test -n "$reader" || { echo FEISHU_READER_ID_NOT_CONFIGURED; exit 2; }
           export FEISHU_PERMISSION_READER="$reader"
           python3 - <<'PY'
-          import json, os, urllib.parse, urllib.request, urllib.error
+          import json, os, urllib.parse, urllib.request
           base=os.environ.get('FEISHU_BASE_URL','https://open.feishu.cn/open-apis').rstrip('/')
-          app_id=os.environ.get('FEISHU_APP_ID',''); reader=os.environ['FEISHU_PERMISSION_READER']; doc=os.environ['DOCUMENT_TOKEN']
-          with open(os.environ['FEISHU_APP_SECRET_FILE'],'r',encoding='utf-8') as f: app_secret=f.read().strip()
-          def req(method,url,payload=None,token=None):
-              body=None if payload is None else json.dumps(payload).encode('utf-8'); headers={'Content-Type':'application/json'}
-              if token: headers['Authorization']=f'Bearer {token}'
-              r=urllib.request.Request(url,data=body,headers=headers,method=method)
-              try:
-                  with urllib.request.urlopen(r,timeout=30) as resp: raw=resp.read()
-              except urllib.error.HTTPError as e:
-                  raw=e.read(); data=json.loads(raw.decode('utf-8')) if raw else {}
-                  if e.code not in (400,409): raise RuntimeError(f'FEISHU_HTTP_{e.code}:{data.get("code")}:{data.get("msg")}')
-                  return data
-              return json.loads(raw.decode('utf-8')) if raw else {}
-          auth=req('POST',base+'/auth/v3/tenant_access_token/internal',{'app_id':app_id,'app_secret':app_secret}); token=auth.get('tenant_access_token'); assert token
-          endpoint=base+'/drive/v1/permissions/'+urllib.parse.quote(doc,safe='')+'/members?type=docx&need_notification=false'
-          req('POST',endpoint,{'member_type':'openid','member_id':reader,'perm':'view'},token)
-          verify_url=base+'/drive/v1/permissions/'+urllib.parse.quote(doc,safe='')+'/members?type=docx'; verified=False; page=''
-          for _ in range(10):
-              url=verify_url + (('&page_token='+urllib.parse.quote(page,safe='')) if page else ''); data=req('GET',url,token=token); d=data.get('data') or {}; items=d.get('items') or d.get('members') or []
-              for item in items:
-                  mid=str(item.get('member_id') or item.get('member_open_id') or ''); perm=str(item.get('perm') or item.get('permission') or '').lower()
-                  if mid==reader and perm in {'view','edit','full_access'}: verified=True; break
-              if verified or not d.get('has_more'): break
-              page=str(d.get('page_token') or '')
-          assert verified, 'READER_PERMISSION_VERIFY_FAILED'
-          print('READER_PERMISSION=VIEW_PASS'); print('DOCUMENT_READER_ACCESS=PASS')
+          with open(os.environ['FEISHU_APP_SECRET_FILE'],'r',encoding='utf-8') as f: secret=f.read().strip()
+          def call(method,url,payload=None,token=None):
+              data=None if payload is None else json.dumps(payload).encode()
+              headers={'Content-Type':'application/json'}
+              if token: headers['Authorization']='Bearer '+token
+              with urllib.request.urlopen(urllib.request.Request(url,data=data,headers=headers,method=method),timeout=30) as r:
+                  raw=r.read()
+              return json.loads(raw.decode()) if raw else {}
+          auth=call('POST',base+'/auth/v3/tenant_access_token/internal',{'app_id':os.environ['FEISHU_APP_ID'],'app_secret':secret})
+          token=auth['tenant_access_token']; reader=os.environ['FEISHU_PERMISSION_READER']; doc=os.environ['DOCUMENT_TOKEN']
+          call('POST',base+'/drive/v1/permissions/'+urllib.parse.quote(doc,safe='')+'/members?type=docx&need_notification=false',{'member_type':'openid','member_id':reader,'perm':'view'},token)
+          data=call('GET',base+'/drive/v1/permissions/'+urllib.parse.quote(doc,safe='')+'/members?type=docx',token=token)
+          items=(data.get('data') or {}).get('items') or []
+          assert any(str(x.get('member_id') or '')==reader and str(x.get('perm') or '').lower() in {'view','edit','full_access'} for x in items), 'READER_PERMISSION_VERIFY_FAILED'
+          print('DOCUMENT_READER_ACCESS=PASS')
           PY
