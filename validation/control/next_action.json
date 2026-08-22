@@ -1,12 +1,29 @@
 {
   "schema_version": "capture-v2-remote-action-v1",
-  "action_id": "RC23-SW-001",
-  "sequence": 103,
-  "created_at": "2026-08-22T03:15:00+00:00",
-  "expires_at": "2026-08-22T15:15:00+00:00",
-  "action_type": "SOFTWARE_REGRESSION",
+  "action_id": "R4-00-APF1250-NO-HANDSET-RC23",
+  "sequence": 104,
+  "created_at": "2026-08-22T03:16:00+00:00",
+  "expires_at": "2026-08-22T15:16:00+00:00",
+  "action_type": "GATE_READINESS_FXS",
   "parameters": {
-    "timeout_seconds": 1800
+    "device_id": "259f16e6-af9e-4dff-969b-2bb5eac43eb2",
+    "model": "APF1250",
+    "host": "10.48.8.74",
+    "port": 10001,
+    "username": "root",
+    "platform_id": "mt7621",
+    "password_env": "DB:G1V030E010214",
+    "profile_root": "../profiles",
+    "profile_id": "voip-standard",
+    "object_root": "/tmp/voip-reproduction-objects",
+    "output_root": "/tmp/capture-v2-gates",
+    "repo_root": "..",
+    "reproduction_session_id": "AUTO_NEW",
+    "worker_id": "r4-00-apf1250-rc23",
+    "gate_id": "R4-00-APF1250-NO-HANDSET-RC23",
+    "duration": 12,
+    "transport": "scp",
+    "timeout_seconds": 600
   },
   "safety": {
     "require_clean_git": true,
@@ -17,5 +34,5 @@
     "expected_head": "7e91e68e3664ba3b3100b7f33bff17498216fd55"
   },
   "requested_by": "ChatGPT-remote-validation-controller",
-  "note": "RC23 validation/tooling regression after adding R4-00 no-handset real-DUT readiness/watchdog preflight. V1 remains authoritative and Production V2 remains disabled."
+  "note": "No-handset real-DUT R4-00 preflight: ownership/readiness/AIM debug/PCM control/durable segment/watchdog revoke-recover/cleanup only. No OFFHOOK/DTMF/ONHOOK required. Never substitutes for physical R4-01."
 }
