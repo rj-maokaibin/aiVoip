@@ -67,16 +67,28 @@ class ProducerManager:
         epoch_root = f"/tmp/aivoip_capture/epochs/{spec.capture_epoch}"
         active = f"{epoch_root}/active"
         spool = f"{epoch_root}/spool"
+        output = f"{active}/capture_%Y%m%d_%H%M%S.pcap"
+        # BusyBox start-stop-daemon -b may detach/replace its own stdio. Redirecting
+        # start-stop-daemon itself therefore does not reliably preserve tcpdump's
+        # terminal statistics. Start a tiny shell in the background, open the
+        # epoch-owned stdout/stderr files there, then exec tcpdump. The exec keeps
+        # the same PID/starttime and the final /proc cmdline remains tcpdump, so
+        # ownership/adoption/fencing semantics are unchanged while exit statistics
+        # become durable evidence.
+        tcpdump_exec = (
+            f"exec /usr/bin/tcpdump -ni {shlex.quote(spec.interface)} -s 0 -U -G 5 "
+            f"-w {shlex.quote(output)} "
+            f"> {shlex.quote(f'{epoch_root}/tcpdump.stdout')} "
+            f"2> {shlex.quote(f'{epoch_root}/tcpdump.stderr')}"
+        )
         body = f'''
 EPOCH_ROOT={shlex.quote(epoch_root)}
 mkdir -p {shlex.quote(active)} {shlex.quote(spool)}
 printf '%s' {shlex.quote(spec.session_id)} > "$EPOCH_ROOT/session_id"
 printf '%s' {shlex.quote(spec.interface)} > "$EPOCH_ROOT/interface"
 printf '%s' {shlex.quote(spec.capture_epoch)} > "$EPOCH_ROOT/capture_epoch"
-/sbin/start-stop-daemon -S -b -m -p "$EPOCH_ROOT/producer.pid" -x /usr/bin/tcpdump -- \
-  -ni {shlex.quote(spec.interface)} -s 0 -U -G 5 \
-  -w "$EPOCH_ROOT/active/capture_%Y%m%d_%H%M%S.pcap" \
-  >"$EPOCH_ROOT/tcpdump.stdout" 2>"$EPOCH_ROOT/tcpdump.stderr"
+/sbin/start-stop-daemon -S -b -m -p "$EPOCH_ROOT/producer.pid" -x /bin/sh -- \
+  -c {shlex.quote(tcpdump_exec)}
 rc=$?
 [ "$rc" -eq 0 ] || exit "$rc"
 echo AIVOIP_PRODUCER_START_REQUESTED
@@ -121,10 +133,8 @@ echo AIVOIP_PRODUCER_START_REQUESTED
             raise CaptureV2Error("PRODUCER_IDENTITY_MISMATCH", details={"pid": expected.pid})
         return current[0]
 
-    async def read_exit_stats(self, capture_epoch: str) -> ProducerExitStats:
-        text = await self.reader.read_text(
-            f"/tmp/aivoip_capture/epochs/{capture_epoch}/tcpdump.stderr", missing_ok=True
-        ) or ""
+    @staticmethod
+    def _parse_exit_stats(text: str) -> ProducerExitStats:
         def count(pattern: str) -> int | None:
             match = re.search(pattern, text, re.MULTILINE)
             return int(match.group(1)) if match else None
@@ -133,6 +143,26 @@ echo AIVOIP_PRODUCER_START_REQUESTED
             packets_received=count(r"(?m)^\s*(\d+)\s+packets received by filter\s*$"),
             packets_dropped_kernel=count(r"(?m)^\s*(\d+)\s+packets dropped by kernel\s*$"),
         )
+
+    async def read_exit_stats(self, capture_epoch: str) -> ProducerExitStats:
+        # The producer is already gone when callers reach this method, but the
+        # redirected stderr file can become visible a few scheduling ticks later
+        # on embedded filesystems. Never reinterpret missing statistics as zero.
+        last = ProducerExitStats(None, None, None)
+        for attempt in range(10):
+            text = await self.reader.read_text(
+                f"/tmp/aivoip_capture/epochs/{capture_epoch}/tcpdump.stderr", missing_ok=True
+            ) or ""
+            last = self._parse_exit_stats(text)
+            if (
+                last.packets_captured is not None
+                and last.packets_received is not None
+                and last.packets_dropped_kernel is not None
+            ):
+                return last
+            if attempt < 9:
+                await asyncio.sleep(0.1)
+        return last
 
     async def _wait_identity_gone(
         self,
