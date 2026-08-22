@@ -1,4 +1,4 @@
-name: Offline E2E Feishu media batch-update probe
+name: Offline E2E Feishu revision-aware media probe
 on:
   workflow_dispatch:
   pull_request:
@@ -15,7 +15,7 @@ jobs:
       TARGET_DOCX_TOKEN: A4ZqdW9wsoWA17x5yjFcR3TUnyb
       TARGET_OPEN_ID: ou_67bee3c2e462a7f8939093bd8e697a96
     steps:
-      - name: Prepare cached PR7 base and batch-update implementation
+      - name: Prepare cached PR7 base and revision-aware replace implementation
         shell: bash
         run: |
           set -euo pipefail
@@ -24,7 +24,7 @@ jobs:
           from pathlib import Path
           p=Path('backend/app/integrations/feishu/evidence_document.py'); s=p.read_text()
           old='''    async def _replace_media(self,document_id:str,block_id:str,token:str,*,image:bool)->None:\n        body={"replace_image":{"token":token}} if image else {"replace_file":{"token":token}}\n        await self.transport._request("PATCH",f"/docx/v1/documents/{quote(document_id,safe='')}/blocks/{quote(block_id,safe='')}",json_body=body)\n        time.sleep(self.DOC_EDIT_INTERVAL_SECONDS)'''
-          new='''    async def _replace_media(self,document_id:str,block_id:str,token:str,*,image:bool)->None:\n        operation={"block_id":block_id,"replace_image":{"token":token}} if image else {"block_id":block_id,"replace_file":{"token":token}}\n        await self.transport._request("PATCH",f"/docx/v1/documents/{quote(document_id,safe='')}/blocks/batch_update",json_body={"requests":[operation]})\n        time.sleep(self.DOC_EDIT_INTERVAL_SECONDS)'''
+          new='''    async def _replace_media(self,document_id:str,block_id:str,token:str,*,image:bool)->None:\n        body={"replace_image":{"token":token}} if image else {"replace_file":{"token":token}}\n        await self.transport._request("PATCH",f"/docx/v1/documents/{quote(document_id,safe='')}/blocks/{quote(block_id,safe='')}",params={"document_revision_id":"-1"},json_body=body)\n        time.sleep(self.DOC_EDIT_INTERVAL_SECONDS)'''
           assert old in s; s=s.replace(old,new,1)
           s=s.replace('            index=int(item.get("block_index") or -1)','            raw_index=item.get("block_index");index=int(raw_index) if raw_index is not None else -1',1)
           p.write_text(s)
@@ -40,7 +40,7 @@ jobs:
           root="$RUNNER_TEMP/tshark-root"; debs="$RUNNER_TEMP/tshark-debs"; rm -rf "$root" "$debs"; mkdir -p "$root" "$debs"; cd "$debs"; mapfile -t pkgs < <(apt-cache depends --recurse --no-recommends --no-suggests --no-conflicts --no-breaks --no-replaces --no-enhances tshark|awk '/^[^ <][^:]*$/ {print $1}'|sort -u); miss=(); for p in "${pkgs[@]}"; do dpkg-query -W -f='${Status}' "$p" 2>/dev/null|grep -q 'install ok installed'||miss+=("$p"); done; [ ${#miss[@]} -eq 0 ] || apt-get download "${miss[@]}"; shopt -s nullglob; for d in ./*.deb; do dpkg-deb -x "$d" "$root"; done; w="$RUNNER_TEMP/tshark-userspace"; printf '#!/bin/bash\nexport LD_LIBRARY_PATH="%s/usr/lib/x86_64-linux-gnu:%s/lib/x86_64-linux-gnu:${LD_LIBRARY_PATH:-}"\nexport WIRESHARK_DATA_DIR="%s/usr/share/wireshark"\nexec "%s/usr/bin/tshark" "$@"\n' "$root" "$root" "$root" "$root" > "$w"; chmod +x "$w"; echo "TSHARK_BINARY=$w" >> "$GITHUB_ENV"
           cd "$GITHUB_WORKSPACE"; python3 -m venv .venv-offline-e2e; .venv-offline-e2e/bin/python -m pip install -r backend/requirements.txt >/dev/null; set -a; . /home/github-runner/.config/voip-ai/.env; set +a; echo "FEISHU_APP_ID=$FEISHU_APP_ID" >> "$GITHUB_ENV"; echo "FEISHU_APP_SECRET_FILE=$FEISHU_APP_SECRET_FILE" >> "$GITHUB_ENV"; echo "FEISHU_LIVE_ENABLED=true" >> "$GITHUB_ENV"
 
-      - name: Live batch-update media probe
+      - name: Live revision-aware media probe
         shell: bash
         run: |
           set -euo pipefail
@@ -54,12 +54,12 @@ jobs:
           b=build_offline_analysis_bundle(pcap_path=Path(os.environ['VOIP_OFFLINE_GOLDEN_001_PCAP']),pcm_profile_path=Path('profiles/pcm/ruijie_aim_diag_v1.yaml'),output_dir=md,tshark_binary=os.environ['TSHARK_BINARY'])
           wp=render_waveform_png(json.loads((md/'pcm_pcm_rx_00_waveform.json').read_text()),title='PCM RX WAVEFORM - PERIODIC INTERFERENCE'); sp=render_spectrogram_png(json.loads((md/'pcm_pcm_rx_00_spectrogram.json').read_text()),title='PCM RX SPECTROGRAM - PERIODIC INTERFERENCE')
           items=[('pcm_rx_waveform.png',wp,True),('pcm_rx_spectrogram.png',sp,True),('periodic_00_pcm_rx.wav',(md/'periodic_00_pcm_rx.wav').read_bytes(),False),('periodic_00_rtp_up.wav',(md/'periodic_00_rtp_up.wav').read_bytes(),False),('periodic_00_rtp_down.wav',(md/'periodic_00_rtp_down.wav').read_bytes(),False)]
-          svc=FeishuEvidenceDocumentService(); doc=os.environ['TARGET_DOCX_TOKEN']; blocks=[svc._text('Evidence Media Batch-Update Probe',3)]; plan=[]
+          svc=FeishuEvidenceDocumentService(); doc=os.environ['TARGET_DOCX_TOKEN']; blocks=[svc._text('Evidence Media Revision-Aware Probe',3)]; plan=[]
           for name,data,img in items: blocks.append(svc._text(name,12)); i=len(blocks); blocks.append(svc._media_placeholder(image=img)); plan.append((i,name,data,img))
           async def main():
               created=await svc._insert_blocks(doc,blocks,index=0); verified=[]
               for i,name,data,img in plan:
-                  bid=created[i]['block_id']; tok=await svc._upload_media(block_id=bid,filename=name,data=data,parent_type='docx_image' if img else 'docx_file'); await svc._replace_media(doc,bid,tok,image=img); time.sleep(.5); got=await svc.transport._request('GET',f'/docx/v1/documents/{doc}/blocks/{bid}'); block=(got.get('data') or {}).get('block') or {}; media=(block.get('image') or {}).get('token') if img else (block.get('file') or {}).get('token'); assert media,(name,block); verified.append({'name':name,'image':img,'block_id':bid})
-              result={'status':'PASS','images':sum(x['image'] for x in verified),'audio_files':sum(not x['image'] for x in verified),'finding_count':len(b['report'].get('findings') or []),'document_url':f'https://feishu.cn/docx/{doc}'}; assert result['images']==2 and result['audio_files']==3; print(json.dumps(result,ensure_ascii=False)); (out/'batch_update_probe.json').write_text(json.dumps(result,ensure_ascii=False,indent=2))
+                  bid=created[i]['block_id']; tok=await svc._upload_media(block_id=bid,filename=name,data=data,parent_type='docx_image' if img else 'docx_file'); await svc._replace_media(doc,bid,tok,image=img); time.sleep(.5); got=await svc.transport._request('GET',f'/docx/v1/documents/{doc}/blocks/{bid}',params={'document_revision_id':'-1'}); block=(got.get('data') or {}).get('block') or {}; media=(block.get('image') or {}).get('token') if img else (block.get('file') or {}).get('token'); assert media,(name,block); verified.append({'name':name,'image':img,'block_id':bid})
+              result={'status':'PASS','images':sum(x['image'] for x in verified),'audio_files':sum(not x['image'] for x in verified),'finding_count':len(b['report'].get('findings') or []),'document_url':f'https://feishu.cn/docx/{doc}'}; assert result['images']==2 and result['audio_files']==3; print(json.dumps(result,ensure_ascii=False)); (out/'revision_probe.json').write_text(json.dumps(result,ensure_ascii=False,indent=2))
           asyncio.run(main())
           PY
