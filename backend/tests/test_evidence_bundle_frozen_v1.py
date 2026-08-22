@@ -152,7 +152,12 @@ def test_fr027_share_safe_excludes_raw_evidence_and_full_wav(monkeypatch):
     db = _BundleDB(report, evidences)
     captured = {}
     monkeypatch.setattr(svc, "report_artifacts", lambda _db, _rid: artifacts)
-    monkeypatch.setattr(svc, "persist_artifact", lambda _db, _storage, **kwargs: captured.setdefault("row", SimpleNamespace(id="b", object_key="bundle/share.zip", case_id=report.case_id)) if not captured.setdefault("zip", kwargs["data"]) else captured["row"])
+
+    def fake_persist(_db, _storage, **kwargs):
+        captured["zip"] = kwargs["data"]
+        return SimpleNamespace(id="bundle-share", object_key="bundle/share.zip", case_id=report.case_id)
+
+    monkeypatch.setattr(svc, "persist_artifact", fake_persist)
     monkeypatch.setattr(svc, "audit", lambda *args, **kwargs: None)
 
     svc.build_evidence_bundle(db, report_id=report.id, profile="SHARE_SAFE", storage=storage)
