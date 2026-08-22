@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.contracts.evidence_report import AnalysisMode, REPORT_COMPOSER_VERSION, REPORT_SCHEMA_VERSION, EvidenceFindingStatus, EvidenceReportArtifactType, EvidenceReportStatus
 from app.db.evidence_report_models import EvidenceFinding, PreliminaryEvidenceReport
-from app.db.models import ReproductionCall, ReproductionSession
+from app.db.models import ReproductionCall, ReproductionEventRecord, ReproductionSession
 from app.integrations.storage import ObjectStorage
 from app.reports.evidence_brief import build_report_payload, canonical_hash, render_report_html
 from app.reports.prd_spec_v1_alignment import finalize_report_contract
@@ -131,6 +131,38 @@ def _runtime_binding_ids(analysis_context: dict, session, call) -> tuple[str | N
     return (session.id if session else None, call.id if call else None)
 
 
+def _session_runtime_call_count(db: Session, session: ReproductionSession | None) -> int | None:
+    if session is None:
+        return None
+    return len(list(db.scalars(select(ReproductionCall.id).where(ReproductionCall.session_id==session.id))))
+
+
+def _session_events(db: Session, session: ReproductionSession | None) -> list[dict]:
+    """Persist report-facing reproduction events without re-parsing Debug text.
+
+    FR-028 requires pre-Call facts such as OFFHOOK to survive even when no valid
+    Call is formed. ReproductionEventRecord is the authoritative structured source;
+    the report must not infer OFFHOOK merely from the presence of a Debug artifact.
+    """
+    if session is None:
+        return []
+    rows=list(db.scalars(select(ReproductionEventRecord).where(
+        ReproductionEventRecord.session_id==session.id,
+    ).order_by(ReproductionEventRecord.session_relative_ms.asc(),ReproductionEventRecord.created_at.asc())))
+    return [{
+        "event_id":row.id,
+        "event_type":row.event_type,
+        "source":row.source,
+        "anchor_type":row.anchor_type,
+        "session_relative_ms":row.session_relative_ms,
+        "source_timestamp":row.source_timestamp,
+        "timestamp_source":row.timestamp_source,
+        "uncertainty_ms":row.uncertainty_ms,
+        "payload":row.payload_json or {},
+        "created_at":row.created_at.isoformat() if row.created_at else None,
+    } for row in rows]
+
+
 def _persist_findings(db: Session, *, report: PreliminaryEvidenceReport, payload: dict) -> list[EvidenceFinding]:
     existing={x.stable_key:x for x in db.scalars(select(EvidenceFinding).where(EvidenceFinding.scope_type==report.scope_type,EvidenceFinding.scope_id==report.scope_id))}
     observed=set(); rows=[]
@@ -187,6 +219,8 @@ def generate_evidence_report(db: Session, *, scope_type, scope_id: str, actor: s
         analysis_context["reviewability"]="NOT_FULLY_REVIEWABLE"
     display_call=resolved_context["display_call"]
     runtime_bound=analysis_context.get("analysis_mode")==AnalysisMode.REPRODUCTION.value
+    analysis_context["session_runtime_call_count"]=_session_runtime_call_count(db,session) if runtime_bound else None
+    analysis_context["session_events"]=_session_events(db,session) if runtime_bound else []
     report_session_id,report_call_id=_runtime_binding_ids(analysis_context,session,call)
     payload_session=runtime_session if runtime_bound else None
     payload_runtime_call=runtime_call if runtime_bound else None
