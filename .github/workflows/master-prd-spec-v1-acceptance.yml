@@ -1,0 +1,144 @@
+name: Master PRD SPEC V1 Acceptance
+
+on:
+  pull_request:
+    branches:
+      - master
+
+permissions:
+  contents: read
+
+jobs:
+  frozen-contracts:
+    runs-on: [self-hosted, linux, x64, voip-controlled-linux]
+    timeout-minutes: 30
+    env:
+      MASTER_HEAD: 03fa37ec0035204cf6b4711e2a1f824fc948227e
+      VALIDATION_REF: feat/prd-spec-v1-alignment
+    steps:
+      - name: Checkout validation branch based on exact master
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - name: Assert product tree is exact master plus validation workflow only
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin "$MASTER_HEAD" --depth=1
+          changed="$(git diff --name-only "$MASTER_HEAD"..HEAD)"
+          printf 'MASTER_HEAD=%s\nVALIDATION_HEAD=%s\nCHANGED_FROM_MASTER=%s\n' "$MASTER_HEAD" "$(git rev-parse HEAD)" "$changed"
+          test "$changed" = '.github/workflows/master-prd-spec-v1-acceptance.yml'
+      - name: Overlay latest frozen tests only; no production code
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin "$VALIDATION_REF" --depth=1
+          vsha="$(git rev-parse FETCH_HEAD)"
+          git checkout "$vsha" -- \
+            tools/preliminary_evidence_v1_gate.sh \
+            backend/tests/test_prd_spec_v1_alignment.py \
+            backend/tests/test_evidence_visuals_spec_v1.py \
+            backend/tests/test_evidence_report_interrupted_call_v1.py \
+            backend/tests/test_evidence_report_no_valid_call_v1.py \
+            backend/tests/test_evidence_bundle_frozen_v1.py \
+            backend/tests/test_evidence_report_web_drilldown_v1.py \
+            backend/tests/test_evidence_retention_download_v1.py \
+            backend/tests/test_evidence_audit_contract_v1.py \
+            backend/tests/test_feishu_case_card_update_contract_v1.py \
+            backend/tests/test_feishu_living_document_v1.py
+          bad="$(git diff --name-only "$MASTER_HEAD" -- backend/app frontend profiles || true)"
+          test -z "$bad" || { echo "PRODUCT_CODE_DRIFT=$bad"; exit 1; }
+          printf 'FROZEN_TEST_SOURCE=%s\n' "$vsha"
+      - name: Latest frozen PRD/SPEC contract gate against master product code
+        run: bash tools/preliminary_evidence_v1_gate.sh
+
+  master-native-release:
+    runs-on: [self-hosted, linux, x64, voip-controlled-linux]
+    timeout-minutes: 75
+    env:
+      MASTER_HEAD: 03fa37ec0035204cf6b4711e2a1f824fc948227e
+      OFFLINE_GOLDEN_PCAP: /tmp/tcpdump-2026-08-14.pcap
+      OFFLINE_GOLDEN_SHA256: b038aa7c9a0644581f2815f654fcdee4620860796382265b178823fccba2e3f0
+    steps:
+      - name: Checkout validation branch based on exact master
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - name: Assert exact master product and stage prepared PCAP
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin "$MASTER_HEAD" --depth=1
+          changed="$(git diff --name-only "$MASTER_HEAD"..HEAD)"
+          test "$changed" = '.github/workflows/master-prd-spec-v1-acceptance.yml'
+          fixture="$OFFLINE_GOLDEN_PCAP"
+          if [ ! -r "$fixture" ]; then
+            fixture="$RUNNER_TEMP/master-offline-golden.pcap"
+            rm -f "$fixture"
+            docker run --rm -v /tmp:/source:ro -v "$RUNNER_TEMP":/output --entrypoint sh postgres:16 \
+              -c "cp /source/tcpdump-2026-08-14.pcap /output/master-offline-golden.pcap && chmod 0644 /output/master-offline-golden.pcap"
+          fi
+          test -r "$fixture"
+          actual_sha="$(sha256sum "$fixture" | awk '{print $1}')"
+          test "$actual_sha" = "$OFFLINE_GOLDEN_SHA256"
+          echo "OFFLINE_GOLDEN_PCAP=$fixture" >> "$GITHUB_ENV"
+          echo "VOIP_AI_GATE_VENV=$RUNNER_TEMP/voip-ai-master-release-gate" >> "$GITHUB_ENV"
+          printf 'MASTER_PRODUCT_HEAD=%s\nPREPARED_PCAP_SHA256=%s\n' "$MASTER_HEAD" "$actual_sha"
+      - name: Prepare exact userspace TShark 4.2.2 runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          tshark_bin=""
+          if command -v tshark >/dev/null 2>&1; then
+            candidate="$(command -v tshark)"
+            candidate_version="$($candidate -v | head -n1)"
+            [[ "$candidate_version" == *'4.2.2'* ]] && tshark_bin="$candidate"
+          fi
+          if [ -z "$tshark_bin" ]; then
+            root="$RUNNER_TEMP/tshark-root"; debs="$RUNNER_TEMP/tshark-debs"
+            rm -rf "$root" "$debs"; mkdir -p "$root" "$debs"; cd "$debs"
+            mapfile -t pkgs < <(apt-cache depends --recurse --no-recommends --no-suggests --no-conflicts --no-breaks --no-replaces --no-enhances tshark | awk '/^[^ <][^:]*$/ {print $1}' | sort -u)
+            miss=(); for p in "${pkgs[@]}"; do dpkg-query -W -f='${Status}' "$p" 2>/dev/null | grep -q 'install ok installed' || miss+=("$p"); done
+            [ ${#miss[@]} -eq 0 ] || apt-get download "${miss[@]}"
+            shopt -s nullglob; for d in ./*.deb; do dpkg-deb -x "$d" "$root"; done
+            tshark_bin="$RUNNER_TEMP/tshark-userspace"
+            printf '#!/bin/bash\nexport LD_LIBRARY_PATH="%s/usr/lib/x86_64-linux-gnu:%s/lib/x86_64-linux-gnu:${LD_LIBRARY_PATH:-}"\nexport WIRESHARK_DATA_DIR="%s/usr/share/wireshark"\nexec "%s/usr/bin/tshark" "$@"\n' "$root" "$root" "$root" "$root" > "$tshark_bin"
+            chmod +x "$tshark_bin"
+          fi
+          version="$($tshark_bin -v | head -n1)"
+          printf 'TSHARK=%s\n' "$version"
+          [[ "$version" == *'4.2.2'* ]]
+          echo "TSHARK_BINARY=$tshark_bin" >> "$GITHUB_ENV"
+      - name: Master native VOIP AI software release gate
+        run: bash tools/voip_ai_release_gate.sh
+      - name: Master prepared-PCAP Real Offline Golden 001
+        shell: bash
+        run: |
+          set -euo pipefail
+          source "$VOIP_AI_GATE_VENV/bin/activate"
+          rm -rf master-offline-golden-artifacts master-offline-golden-result.json
+          TSHARK_BINARY="$TSHARK_BINARY" python tools/offline_analysis_golden_replay.py \
+            --pcap "$OFFLINE_GOLDEN_PCAP" \
+            --require-fixture \
+            --artifacts master-offline-golden-artifacts \
+            --result master-offline-golden-result.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=json.loads(Path('master-offline-golden-result.json').read_text(encoding='utf-8'))
+          print(json.dumps(p,ensure_ascii=False,indent=2))
+          assert p['status']=='PASS',p
+          assert p['passed'] is True,p
+          assert p['checks_passed']==142,p
+          assert p['checks_total']==142,p
+          print('MASTER_REAL_OFFLINE_GOLDEN_001=PASS 142/142')
+          PY
+      - name: Upload master Golden evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: master-prd-spec-v1-golden-001
+          path: |
+            master-offline-golden-result.json
+            master-offline-golden-artifacts
+          if-no-files-found: ignore
