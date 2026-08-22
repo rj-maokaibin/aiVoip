@@ -1,26 +1,26 @@
 {
   "schema_version": "capture-v2-remote-status-v1",
-  "action_id": "RC25-FINAL-SW-001",
-  "sequence": 113,
+  "action_id": "RC26-FROZEN-CHECKPOINT-SW-001",
+  "sequence": 114,
   "action_type": "SOFTWARE_REGRESSION",
   "state": "SUCCEEDED",
   "runner_id": "srv:3456908",
-  "action_sha256": "b7c360a019f5a53158dc3bcbc7438fac3f4af972d7d426367f9e34b5e8c56b9f",
-  "updated_at": "2026-08-22T03:52:45.103294+00:00",
+  "action_sha256": "b60ccddc6baacf2b29362e14c1db71e54f2c80cea0ed8a8e1a4681afb17aac46",
+  "updated_at": "2026-08-22T03:58:46.612944+00:00",
   "started_at": null,
-  "finished_at": "2026-08-22T03:52:45.103294+00:00",
+  "finished_at": "2026-08-22T03:58:46.612944+00:00",
   "return_code": 0,
   "verdict": null,
-  "result_path": "validation/control/results/RC25-FINAL-SW-001/result.json",
-  "stdout_sha256": "90e365d4fc213d5950368f1ed30864ba6b16ba9db0bafc7234d8607b40ba15f5",
+  "result_path": "validation/control/results/RC26-FROZEN-CHECKPOINT-SW-001/result.json",
+  "stdout_sha256": "a30f0080794bf9c92e9af21dc77686f6d27fdf95985d84ba310dc64d93db8391",
   "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "error": null,
   "detail": {
     "safety": {
       "capture_engine_version": "V1",
       "capture_v2_production_enabled": "false",
-      "git_head": "09272a48b7b37465ef6d3b372aa5e7171667e3ad",
-      "expected_product_head": "9395bb97ebd8cdaafc700c0701482a960a514bf5"
+      "git_head": "b105c5ac092e821e67114fc75956568ab213c0e2",
+      "expected_product_head": "e49441e5efd1cd9e8171143dcacb8286a85fc614"
     },
     "parsed_output": null
   }
