@@ -10,9 +10,30 @@ permissions:
 
 jobs:
   ai-contracts:
-    runs-on: ubuntu-latest
+    runs-on:
+      - self-hosted
+      - linux
+      - x64
+      - voip-controlled-linux
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+      - name: Controlled Linux environment
+        run: |
+          uname -a
+          python3 --version
+          docker --version
+          docker info
+          node --version
+          npm --version
+          git rev-parse HEAD
       - name: Run VOIP AI software release gate
         run: bash tools/voip_ai_release_gate.sh
+      - name: Upload validation artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: voip-ai-pr3-pr7-validation
+          path: validation/**
+          if-no-files-found: warn
+          retention-days: 14

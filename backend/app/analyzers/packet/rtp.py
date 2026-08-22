@@ -60,6 +60,7 @@ class RtpStreamAnalyzer:
         reference: int | None = None
         timestamp_reference: int | None = None
         duplicates = 0
+        duplicate_events: list[dict] = []
         reordered = 0
         payload_changes = 0
         payload_change_events: list[dict] = []
@@ -75,6 +76,20 @@ class RtpStreamAnalyzer:
             reference = ext if reference is None else max(reference, ext)
             if ext in seen:
                 duplicates += 1
+                first_packet = unique_packets.get(ext)
+                duplicate_events.append({
+                    "sequence": seq,
+                    "sequence_ext": ext,
+                    "first_frame_number": first_packet.frame_number if first_packet else None,
+                    "duplicate_frame_number": packet.frame_number,
+                    "first_timestamp": first_packet.timestamp if first_packet else None,
+                    "duplicate_timestamp": packet.timestamp,
+                    "arrival_delta_ms": round((packet.timestamp - first_packet.timestamp) * 1000.0, 6) if first_packet else None,
+                    "rtp_timestamp": packet.rtp.timestamp,
+                    "first_rtp_timestamp": first_packet.rtp.timestamp if first_packet and first_packet.rtp else None,
+                    "payload_type": packet.rtp.payload_type,
+                    "first_payload_type": first_packet.rtp.payload_type if first_packet and first_packet.rtp else None,
+                })
             else:
                 if max_seen is not None and ext < max_seen:
                     reordered += 1
@@ -211,6 +226,7 @@ class RtpStreamAnalyzer:
             "loss_rate_percent": loss_rate_value,
             "loss_rate": loss_rate_value,
             "duplicate_packets": duplicates,
+            "duplicate_events": duplicate_events,
             "out_of_order_packets": reordered,
             "max_consecutive_loss": max((e.details["lost_packets"] for e in burst_events), default=0),
             "burst_loss_count": len(burst_events),
