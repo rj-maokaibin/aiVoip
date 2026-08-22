@@ -33,6 +33,7 @@ class ControlPolicy:
     )
     CONTROL_COMMIT_PREFIXES = ("validation/control/",)
     _PORCELAIN_PREFIX_RE = re.compile(r"^[ MADRCU?!]{1,2}\s+")
+    _GOLDEN_DATE_RE = re.compile(r"^20\d{6}$")
 
     def __init__(self, repo_root: Path):
         self.repo_root = repo_root.resolve()
@@ -226,6 +227,23 @@ class ControlPolicy:
                 self._add(argv, flag, p.get(key))
             self._add(argv, "--duration", duration)
             self._add(argv, "--transport", transport)
+            return PreparedCommand(argv, self.backend_root, timeout, env)
+
+        if action.action_type == ControlActionType.GOLDEN_ARCHIVE_RECOVER:
+            self._required(p, *common_device, "platform_id", "password_env", "archive_date")
+            model = str(p.get("model"))
+            if model not in {"APF1250", "APF3260-M"}:
+                raise ControlPolicyError("GOLDEN_ARCHIVE_MODEL_NOT_ALLOWED")
+            archive_date = str(p.get("archive_date"))
+            if not self._GOLDEN_DATE_RE.fullmatch(archive_date):
+                raise ControlPolicyError("GOLDEN_ARCHIVE_DATE_INVALID")
+            argv = [sys.executable, "-m", "app.capture_v2.gate.golden_archive_recover"]
+            for key, flag in [
+                ("device_id", "--device-id"), ("model", "--model"), ("host", "--host"),
+                ("port", "--port"), ("username", "--username"), ("platform_id", "--platform-id"),
+                ("password_env", "--password-env"), ("archive_date", "--archive-date"),
+            ]:
+                self._add(argv, flag, p.get(key))
             return PreparedCommand(argv, self.backend_root, timeout, env)
 
         if action.action_type == ControlActionType.GATE_EVALUATE:
