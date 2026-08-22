@@ -23,14 +23,10 @@ jobs:
           test -f /home/github-runner/.config/voip-ai/feishu_app_secret
           set -a; source /home/github-runner/.config/voip-ai/.env; set +a
           export FEISHU_APP_SECRET_FILE=/home/github-runner/.config/voip-ai/feishu_app_secret
-
           reader="${FEISHU_READER_OPEN_ID:-${FEISHU_TEST_READER_OPEN_ID:-${FEISHU_VIEWER_OPEN_ID:-}}}"
-          if [ -z "$reader" ] && [ -f /home/github-runner/.config/voip-ai/feishu_reader_open_id ]; then
-            reader="$(tr -d '\r\n ' < /home/github-runner/.config/voip-ai/feishu_reader_open_id)"
-          fi
+          if [ -z "$reader" ] && [ -f /home/github-runner/.config/voip-ai/feishu_reader_open_id ]; then reader="$(tr -d '\r\n ' < /home/github-runner/.config/voip-ai/feishu_reader_open_id)"; fi
           test -n "$reader" || { echo 'FEISHU_READER_ID_NOT_CONFIGURED'; exit 2; }
           export FEISHU_PERMISSION_READER="$reader"
-
           python3 - <<'PY'
           import json, os, urllib.parse, urllib.request, urllib.error
           base=os.environ.get('FEISHU_BASE_URL','https://open.feishu.cn/open-apis').rstrip('/')
