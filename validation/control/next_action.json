@@ -1,9 +1,9 @@
 {
   "schema_version": "capture-v2-remote-action-v1",
-  "action_id": "R3-09-APF1250-SILENT24B-RC15",
-  "sequence": 70,
-  "created_at": "2026-08-22T00:59:00+00:00",
-  "expires_at": "2026-08-22T02:59:00+00:00",
+  "action_id": "R3-11-APF1250-PENDING-SPOOL-RESTART-RC15",
+  "sequence": 71,
+  "created_at": "2026-08-22T01:00:00+00:00",
+  "expires_at": "2026-08-22T03:00:00+00:00",
   "action_type": "GATE_SEGMENT",
   "parameters": {
     "device_id": "259f16e6-af9e-4dff-969b-2bb5eac43eb2",
@@ -19,12 +19,12 @@
     "output_root": "/tmp/capture-v2-gates",
     "repo_root": "..",
     "reproduction_session_id": "AUTO_NEW",
-    "worker_id": "r3-09-apf1250-rc15",
-    "gate_id": "R3-09-APF1250-SILENT24B-RC15",
-    "duration": 20,
+    "worker_id": "r3-11-apf1250-rc15",
+    "gate_id": "R3-11-APF1250-PENDING-SPOOL-RESTART-RC15",
+    "duration": 40,
     "interval": 0.5,
     "transport": "scp",
-    "timeout_seconds": 600
+    "timeout_seconds": 900
   },
   "safety": {
     "require_clean_git": true,
@@ -35,5 +35,5 @@
     "expected_head": "81b440b28dbdcbfe0a77a7e0c6627b34ec68d82a"
   },
   "requested_by": "ChatGPT-remote-validation-controller",
-  "note": "RC15 APF1250 R3-09 real 24-byte silent PCAP Gate. Under the active fenced CaptureEpoch, inject exactly one valid classic-PCAP global-header-only closed file, then require production Sealer + SCP + validation + durable store + DB + ACK + exact DUT delete. Preserve remote/server size=24, pcap_valid=true, packet_count=0, and prove no Server/DUT double loss."
+  "note": "RC15 APF1250 deterministic R3-11. Under first fenced authority with durable-store failure, inject four valid closed 24-byte PCAPs so production Sealer/Pump creates real immutable unacked DUT spool. Require CRITICAL UNACKED_BYTES_LIMIT pressure and all sampled backlog present on DUT, stop only worker lease renewal, wait TTL, then second authority must SAME_SESSION_ALIVE/ADOPT exact PID/starttime and CaptureEpoch with a higher lease, and recover every pre-restart backlog segment through durable ACK and exact remote delete without double loss."
 }
