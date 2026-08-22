@@ -19,7 +19,7 @@ Final software regression: `RC25-FINAL-SW-001` / sequence 113 / `SUCCEEDED` / re
 - R7 Shadow/Long-run/Rollback: **dual-platform validation-state 300-second soak PASS; actual V2_ACTIVE/shadow/rollback requires explicit activation authorization**
 - Production V2: **OFF / RELEASE BLOCKED**
 
-There are no remaining non-physical, non-privileged validation tasks known at RC25.
+There are no remaining autonomous non-physical validation tasks that can be executed without changing V1/V2 activation state.
 
 ## R4 no-handset preflight
 
@@ -90,5 +90,6 @@ After head `9395bb97ebd8cdaafc700c0701482a960a514bf5`, the final RC25 compare fo
 See:
 
 - `validation/capture_v2/VALIDATION_STATUS.json`
+- `validation/capture_v2/FINAL_BLOCKER_AUDIT_RC25.json`
 - `validation/control/README.md`
 - `docs/03_Implementation_Trace/CAPTURE_V2_REMOTE_VALIDATION_CONTROL_LOOP.md`
