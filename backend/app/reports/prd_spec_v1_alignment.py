@@ -122,12 +122,18 @@ def finalize_report_contract(report: Any, payload: dict) -> dict:
     if frozen_completeness["state"] != "COMPLETE":
         legacy_completeness["state"] = "PARTIAL"
 
+    # Report state must follow the final, seven-dimension completeness contract.
+    # This prevents a contradictory COMPLETE row with PARTIAL capture_quality.
+    final_status = "COMPLETE" if legacy_completeness.get("state") == "COMPLETE" else "PARTIAL_COMPLETE"
+    if hasattr(report, "status"):
+        report.status = final_status
+
     payload["schema"] = REPORT_SCHEMA_VERSION
     payload["report_id"] = getattr(report, "id", None)
     payload["scope_type"] = getattr(report, "scope_type", None) or (payload.get("scope") or {}).get("type")
     payload["scope_id"] = getattr(report, "scope_id", None) or (payload.get("scope") or {}).get("id")
     payload["version"] = getattr(report, "version", None) or payload.get("report_version")
-    payload["status"] = getattr(report, "status", None)
+    payload["status"] = final_status
     payload["capture_quality"] = frozen_completeness
     payload["signaling_summary"] = {
         "available": _bool((payload.get("packet_summary") or {}).get("available")),
