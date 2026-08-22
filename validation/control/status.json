@@ -1,205 +1,27 @@
 {
   "schema_version": "capture-v2-remote-status-v1",
-  "action_id": "GOLDEN-ANALYZE-APF3260M-20260820-RC20",
-  "sequence": 96,
-  "action_type": "GOLDEN_ARCHIVE_RECOVER",
+  "action_id": "RC21-SW-001",
+  "sequence": 97,
+  "action_type": "SOFTWARE_REGRESSION",
   "state": "SUCCEEDED",
   "runner_id": "srv:3456908",
-  "action_sha256": "87baccb3c7791e75181f0746376453329343cbf31193d3991bcffaab285ac6f0",
-  "updated_at": "2026-08-22T02:37:03.285751+00:00",
+  "action_sha256": "84b38627e5569c947e980c366426b5e040fc4ff3ea51424746f988a9968723cd",
+  "updated_at": "2026-08-22T02:39:34.304862+00:00",
   "started_at": null,
-  "finished_at": "2026-08-22T02:37:03.285751+00:00",
+  "finished_at": "2026-08-22T02:39:34.304862+00:00",
   "return_code": 0,
-  "verdict": "PASS",
-  "result_path": "validation/control/results/GOLDEN-ANALYZE-APF3260M-20260820-RC20/result.json",
-  "stdout_sha256": "e25827d236bcfef7e0caa70044e865b58fc0c8b59aedf9385b9dd9c1c993e066",
-  "stderr_sha256": "b8258e86248ce6f15dfea1a12afcd2ad3fde62ba6d3cd24536ffc8cb3bb61c48",
+  "verdict": null,
+  "result_path": "validation/control/results/RC21-SW-001/result.json",
+  "stdout_sha256": "6365c902bd07bc473d7dc9fa519e681ec6c1eb149e23d15d988a9dd84b1bcc41",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "error": null,
   "detail": {
     "safety": {
       "capture_engine_version": "V1",
       "capture_v2_production_enabled": "false",
-      "git_head": "4f4476844c0d2495204715a25ab9f3c1b689a53a",
-      "expected_product_head": "97b34edc052097b4b7ac5345c4fcd041f39eebce"
+      "git_head": "70d7040becbe53b421a6bd1da9ee6153996568ad",
+      "expected_product_head": "752a850b48928ea335963d9bba960c26bb53bca2"
     },
-    "parsed_output": {
-      "verdict": "PASS",
-      "archive_name": "v21_golden_APF3260_20260820.tar.gz",
-      "source_root": "/www",
-      "local_path": "/tmp/capture-v2-golden-recovery/c132f336-df1b-4285-b175-01d848f23b5d/20260820/v21_golden_APF3260_20260820.tar.gz",
-      "size_bytes": 1760116,
-      "sha256": "fedcb67763eb7bf65fb00aed68b4e03073fae6e779e71de318d65f7ab7a6489a",
-      "inventory": {
-        "member_count": 20,
-        "pcap_count": 16,
-        "regular_file_bytes": 4162017,
-        "pcap_names": [
-          "v21_golden/capture_20260820_194859.pcap",
-          "v21_golden/capture_20260820_194854.pcap",
-          "v21_golden/capture_20260820_194849.pcap",
-          "v21_golden/capture_20260820_194844.pcap",
-          "v21_golden/capture_20260820_194839.pcap",
-          "v21_golden/capture_20260820_194834.pcap",
-          "v21_golden/capture_20260820_194829.pcap",
-          "v21_golden/capture_20260820_194824.pcap",
-          "v21_golden/capture_20260820_194819.pcap",
-          "v21_golden/capture_20260820_194814.pcap",
-          "v21_golden/capture_20260820_194809.pcap",
-          "v21_golden/capture_20260820_194804.pcap",
-          "v21_golden/capture_20260820_194759.pcap",
-          "v21_golden/capture_20260820_194754.pcap",
-          "v21_golden/capture_20260820_194718.pcap",
-          "v21_golden/capture_20260820_194638.pcap"
-        ],
-        "members": [
-          "v21_golden",
-          "v21_golden/capture_20260820_194859.pcap",
-          "v21_golden/capture_20260820_194854.pcap",
-          "v21_golden/capture_20260820_194849.pcap",
-          "v21_golden/capture_20260820_194844.pcap",
-          "v21_golden/capture_20260820_194839.pcap",
-          "v21_golden/capture_20260820_194834.pcap",
-          "v21_golden/capture_20260820_194829.pcap",
-          "v21_golden/capture_20260820_194824.pcap",
-          "v21_golden/capture_20260820_194819.pcap",
-          "v21_golden/capture_20260820_194814.pcap",
-          "v21_golden/capture_20260820_194809.pcap",
-          "v21_golden/capture_20260820_194804.pcap",
-          "v21_golden/capture_20260820_194759.pcap",
-          "v21_golden/capture_20260820_194754.pcap",
-          "v21_golden/capture_20260820_194718.pcap",
-          "v21_golden/tcpdump.pid",
-          "v21_golden/capture_20260820_194638.pcap",
-          "v21_golden/tcpdump.stderr",
-          "v21_golden/tcpdump.stdout"
-        ],
-        "members_truncated": false
-      },
-      "attempts": [],
-      "analysis": {
-        "verdict": "PASS",
-        "reason": "GOLDEN_ARCHIVE_ANALYSIS_COMPLETED",
-        "release_gate_effect": "EVIDENCE_ONLY_NOT_R5_PASS",
-        "archive": {
-          "name": "v21_golden_APF3260_20260820.tar.gz",
-          "local_path": "/tmp/capture-v2-golden-recovery/c132f336-df1b-4285-b175-01d848f23b5d/20260820/v21_golden_APF3260_20260820.tar.gz",
-          "size_bytes": 1760116,
-          "sha256": "fedcb67763eb7bf65fb00aed68b4e03073fae6e779e71de318d65f7ab7a6489a",
-          "inventory": {
-            "member_count": 20,
-            "pcap_count": 16,
-            "regular_file_bytes": 4162017,
-            "pcap_names": [
-              "v21_golden/capture_20260820_194859.pcap",
-              "v21_golden/capture_20260820_194854.pcap",
-              "v21_golden/capture_20260820_194849.pcap",
-              "v21_golden/capture_20260820_194844.pcap",
-              "v21_golden/capture_20260820_194839.pcap",
-              "v21_golden/capture_20260820_194834.pcap",
-              "v21_golden/capture_20260820_194829.pcap",
-              "v21_golden/capture_20260820_194824.pcap",
-              "v21_golden/capture_20260820_194819.pcap",
-              "v21_golden/capture_20260820_194814.pcap",
-              "v21_golden/capture_20260820_194809.pcap",
-              "v21_golden/capture_20260820_194804.pcap",
-              "v21_golden/capture_20260820_194759.pcap",
-              "v21_golden/capture_20260820_194754.pcap",
-              "v21_golden/capture_20260820_194718.pcap",
-              "v21_golden/capture_20260820_194638.pcap"
-            ],
-            "members": [
-              "v21_golden",
-              "v21_golden/capture_20260820_194859.pcap",
-              "v21_golden/capture_20260820_194854.pcap",
-              "v21_golden/capture_20260820_194849.pcap",
-              "v21_golden/capture_20260820_194844.pcap",
-              "v21_golden/capture_20260820_194839.pcap",
-              "v21_golden/capture_20260820_194834.pcap",
-              "v21_golden/capture_20260820_194829.pcap",
-              "v21_golden/capture_20260820_194824.pcap",
-              "v21_golden/capture_20260820_194819.pcap",
-              "v21_golden/capture_20260820_194814.pcap",
-              "v21_golden/capture_20260820_194809.pcap",
-              "v21_golden/capture_20260820_194804.pcap",
-              "v21_golden/capture_20260820_194759.pcap",
-              "v21_golden/capture_20260820_194754.pcap",
-              "v21_golden/capture_20260820_194718.pcap",
-              "v21_golden/tcpdump.pid",
-              "v21_golden/capture_20260820_194638.pcap",
-              "v21_golden/tcpdump.stderr",
-              "v21_golden/tcpdump.stdout"
-            ],
-            "members_truncated": false
-          }
-        },
-        "analysis_dir": "/tmp/capture-v2-golden-analysis/c132f336-df1b-4285-b175-01d848f23b5d/20260820/fedcb67763eb7bf6",
-        "tcpdump": {
-          "packets_captured": 18766,
-          "packets_received_by_filter": 18766,
-          "packets_dropped_by_kernel": 0
-        },
-        "pcm": {
-          "40000": {
-            "packet_count": 6535,
-            "payload_bytes": 1045600,
-            "first_source_time": 1787226474.279713,
-            "last_source_time": 1787226539.700544,
-            "flows": {
-              "192.168.150.12:53331->192.168.3.200:40000": 6535
-            }
-          },
-          "50000": {
-            "packet_count": 6535,
-            "payload_bytes": 1045600,
-            "first_source_time": 1787226474.27922,
-            "last_source_time": 1787226539.700468,
-            "flows": {
-              "192.168.150.12:50265->192.168.3.200:50000": 6535
-            }
-          }
-        },
-        "voip": {
-          "tshark_version": null,
-          "packet_count": 0,
-          "sip_packet_count": 0,
-          "sip_methods": {},
-          "sip_status_codes": {},
-          "call_ids": {},
-          "sdp_media_ports": {},
-          "rtp_packet_count": 0,
-          "rtp_stream_count": 0,
-          "rtp_estimated_missing_packets": 0,
-          "rtp_cross_segment_missing_packets": 0,
-          "rtp_backward_or_reordered_events": 0,
-          "rtp_streams": [],
-          "first_source_time": null,
-          "last_source_time": null
-        },
-        "analysis_errors": {
-          "tshark": [
-            {
-              "segment": "<environment>",
-              "error": "TShark binary not found: tshark"
-            }
-          ],
-          "udp_reader": []
-        },
-        "evidence_checks": {
-          "tcpdump_kernel_drop_known": true,
-          "tcpdump_kernel_drop_zero": true,
-          "sip_present": false,
-          "sip_call_id_present": false,
-          "rtp_present": false,
-          "rtp_estimated_missing_zero": null,
-          "rtp_cross_segment_missing_zero": null,
-          "pcm_40000_present": true,
-          "pcm_50000_present": true,
-          "tshark_complete": false,
-          "classic_pcap_udp_reader_complete": true
-        },
-        "archive_evidence_complete": false,
-        "remaining_release_gap": "FXS_GROUND_TRUTH_RECONCILIATION_REQUIRED"
-      }
-    }
+    "parsed_output": null
   }
 }
