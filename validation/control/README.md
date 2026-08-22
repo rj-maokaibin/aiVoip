@@ -20,6 +20,27 @@ Additional guards:
 - Server-copy loss uses quarantine/restore only and requires `allow_server_quarantine=true`
 - no action can flip Production V2 switches
 
+## Registered action types
+
+Current `ControlActionType` values are:
+
+- `SOFTWARE_REGRESSION`
+- `GATE_LEASE_RACE`
+- `GATE_LEASE_FENCING`
+- `GATE_OWNERSHIP`
+- `GATE_OWNERSHIP_ADOPT`
+- `GATE_SEGMENT`
+- `GATE_READINESS_FXS`
+- `GATE_COLLECT`
+- `GATE_EVALUATE`
+- `GOLDEN_ARCHIVE_RECOVER`
+- `FAULT_WORKER_SIGNAL`
+- `FAULT_QUARANTINE_COPY`
+- `FAULT_RESTORE_COPY`
+- `HUMAN_STEP`
+
+All commands are constructed internally and executed with `shell=False`. Action JSON never carries executable shell text.
+
 ## Start the runner
 
 ```bash
@@ -47,6 +68,19 @@ PYTHONPATH=. python -m app.capture_v2.control_cli ack \
   --repo-root .. --action-id <ACTION_ID> --token <ACK_TOKEN>
 ```
 
-## Release prerequisite
+## Current RC25 provenance state
 
-Historical Real Gate evidence was captured from a dirty worktree. Before release-grade revalidation, materialize all A-F source and validation-time fixes into one clean immutable release-candidate commit and use that SHA as `safety.expected_head`.
+The immutable software-regressed product/validation-tooling head is:
+
+`9395bb97ebd8cdaafc700c0701482a960a514bf5`
+
+`RC25-FINAL-SW-001` completed successfully with return code 0 while V1 remained authoritative and Production V2 remained disabled.
+
+A final compare from that product head to the RC25 control-evidence head before status synchronization found only `validation/control/` action/status/result changes and no Production Capture runtime changes. The earlier dirty-worktree provenance issue is therefore no longer the current release blocker.
+
+Current remaining blockers are documented in:
+
+- `validation/capture_v2/VALIDATION_STATUS.json`
+- `validation/capture_v2/FINAL_BLOCKER_AUDIT_RC25.json`
+
+They are limited to physical handset Gates and operations requiring explicit V2 activation/rollback/cutover authorization.
