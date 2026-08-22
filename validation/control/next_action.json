@@ -1,29 +1,12 @@
 {
   "schema_version": "capture-v2-remote-action-v1",
-  "action_id": "R4-00-APF1250-EXIT-STATS-RC29",
-  "sequence": 123,
-  "created_at": "2026-08-22T09:48:00+00:00",
-  "expires_at": "2026-08-22T21:48:00+00:00",
-  "action_type": "GATE_READINESS_FXS",
+  "action_id": "RC30-PCM-COVERAGE-SEMANTICS-SW-001",
+  "sequence": 124,
+  "created_at": "2026-08-22T09:49:00+00:00",
+  "expires_at": "2026-08-22T21:49:00+00:00",
+  "action_type": "SOFTWARE_REGRESSION",
   "parameters": {
-    "device_id": "259f16e6-af9e-4dff-969b-2bb5eac43eb2",
-    "model": "APF1250",
-    "host": "10.48.8.74",
-    "port": 10001,
-    "username": "root",
-    "platform_id": "mt7621",
-    "password_env": "DB:G1V030E010214",
-    "profile_root": "../profiles",
-    "profile_id": "voip-standard",
-    "object_root": "/tmp/voip-reproduction-objects",
-    "output_root": "/tmp/capture-v2-gates",
-    "repo_root": "..",
-    "reproduction_session_id": "AUTO_NEW",
-    "worker_id": "r4-00-apf1250-exit-stats-rc29",
-    "gate_id": "R4-00-APF1250-EXIT-STATS-RC29",
-    "duration": 12,
-    "transport": "scp",
-    "timeout_seconds": 600
+    "timeout_seconds": 1800
   },
   "safety": {
     "require_clean_git": true,
@@ -31,8 +14,8 @@
     "require_v2_disabled": true,
     "allow_worker_kill": false,
     "allow_server_quarantine": false,
-    "expected_head": "c0a13d048763cc51e7b8128c31a1bcfc9c5ccc50"
+    "expected_head": "b156075c485c42709bd0a1e98ed3a34f700f7836"
   },
   "requested_by": "ChatGPT-remote-validation-controller",
-  "note": "No-handset APF1250 verification after tcpdump stdio persistence fix. Inspect exit_stats for real packets captured/received/dropped-by-kernel evidence; do not infer null as zero."
+  "note": "Regression after R5 validation PCM coverage semantics fix: control-ready interval proves capture availability while actual UDP 40000/50000 packets prove the PCM data path; silence alone is not a gap. Production V2 remains disabled."
 }
