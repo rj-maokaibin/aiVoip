@@ -224,6 +224,17 @@ class GateEvaluator:
             repaired_ids = {e.get("entity_id") for e in events if e.get("event_type") == "SEGMENT_SERVER_COPY_REPAIRED"}
             recovered = [s.get("id") for s in segments if s.get("id") in repaired_ids and s.get("state") == "REMOTE_DELETED"]
             checks.append(GateCheck("server_copy_loss_repaired_before_dut_delete", len(recovered) > 0, ">0 repaired then deleted segment", recovered))
+        elif gate_id.startswith("R3-09"):
+            silent_id = facts.get("silent_segment_id")
+            target = next((s for s in segments if s.get("id") == silent_id), None)
+            store_obj = store_by_id.get(silent_id, {}) if silent_id else {}
+            checks.extend([
+                GateCheck("silent_24b_exactly_one_segment", int(facts.get("silent_match_count", 0)) == 1 and bool(silent_id), 1, facts.get("silent_match_count")),
+                GateCheck("silent_24b_size_preserved", bool(target) and int(target.get("remote_size") or -1) == 24 and int(target.get("server_size") or -1) == 24, {"remote_size": 24, "server_size": 24}, {"remote_size": target.get("remote_size") if target else None, "server_size": target.get("server_size") if target else None}),
+                GateCheck("silent_24b_valid_zero_packet_pcap", bool(target) and target.get("pcap_valid") is True and int(target.get("packet_count") if target.get("packet_count") is not None else -1) == 0, {"pcap_valid": True, "packet_count": 0}, {"pcap_valid": target.get("pcap_valid") if target else None, "packet_count": target.get("packet_count") if target else None}),
+                GateCheck("silent_24b_full_ack_delete_chain", bool(target) and target.get("state") == "REMOTE_DELETED" and bool(target.get("persisted_at")) and bool(target.get("acked_at")) and bool(target.get("remote_deleted_at")), "PERSISTED->ACKED->REMOTE_DELETED", target),
+                GateCheck("silent_24b_server_copy_durable", store_obj.get("exists") is True, True, store_obj.get("exists")),
+            ])
         elif gate_id.startswith("R3-10"):
             backlog_ids = [str(x) for x in (facts.get("backlog_segment_ids") or [])]
             recovered_ids = {str(x) for x in (facts.get("recovered_backlog_ids") or [])}
@@ -234,6 +245,25 @@ class GateEvaluator:
                 GateCheck("spool_pressure_critical", facts.get("pressure_state") == "CRITICAL" and "UNACKED_BYTES_LIMIT" in (facts.get("pressure_reasons") or []), "CRITICAL/UNACKED_BYTES_LIMIT", {"state": facts.get("pressure_state"), "reasons": facts.get("pressure_reasons")}),
                 GateCheck("unacked_segments_remained_on_dut", int(facts.get("backlog_sample_count", 0)) > 0 and int(facts.get("backlog_remote_sample_exists", -1)) == int(facts.get("backlog_sample_count", 0)), "all sampled backlog segments remain on DUT", {"sample": facts.get("backlog_sample_count"), "exists": facts.get("backlog_remote_sample_exists")}),
                 GateCheck("spool_backlog_recovered", all_recovered, backlog_ids, sorted(recovered_ids)),
+            ])
+        elif gate_id.startswith("R3-11"):
+            backlog_ids = [str(x) for x in (facts.get("backlog_segment_ids") or [])]
+            recovered_ids = {str(x) for x in (facts.get("recovered_backlog_ids") or [])}
+            all_recovered = bool(backlog_ids) and all(x in recovered_ids for x in backlog_ids)
+            same_producer = (
+                facts.get("before_pid") == facts.get("after_pid")
+                and facts.get("before_starttime") == facts.get("after_starttime")
+            )
+            checks.extend([
+                GateCheck("restart_backlog_created", int(facts.get("backlog_unacked_count", 0)) > 0 and int(facts.get("backlog_unacked_bytes", 0)) > 0, ">0 pending spool", {"count": facts.get("backlog_unacked_count"), "bytes": facts.get("backlog_unacked_bytes")}),
+                GateCheck("restart_backlog_remained_on_dut", int(facts.get("backlog_sample_count", 0)) > 0 and int(facts.get("backlog_remote_sample_exists", -1)) == int(facts.get("backlog_sample_count", 0)), "all sampled pending segments remain on DUT", {"sample": facts.get("backlog_sample_count"), "exists": facts.get("backlog_remote_sample_exists")}),
+                GateCheck("restart_backlog_pressure_critical", facts.get("pressure_state") == "CRITICAL" and "UNACKED_BYTES_LIMIT" in (facts.get("pressure_reasons") or []), "CRITICAL/UNACKED_BYTES_LIMIT", {"state": facts.get("pressure_state"), "reasons": facts.get("pressure_reasons")}),
+                GateCheck("restart_same_producer_adopted", same_producer, {"pid": facts.get("before_pid"), "starttime": facts.get("before_starttime")}, {"pid": facts.get("after_pid"), "starttime": facts.get("after_starttime")}),
+                GateCheck("restart_same_capture_epoch", facts.get("before_capture_epoch_id") == facts.get("after_capture_epoch_id"), facts.get("before_capture_epoch_id"), facts.get("after_capture_epoch_id")),
+                GateCheck("restart_lease_epoch_increased", int(facts.get("after_lease_epoch", 0)) > int(facts.get("before_lease_epoch", 0)), "> before", facts.get("after_lease_epoch")),
+                GateCheck("restart_recovery_classified_same_session_alive", facts.get("recovery_classification") == "SAME_SESSION_ALIVE", "SAME_SESSION_ALIVE", facts.get("recovery_classification")),
+                GateCheck("restart_recovery_status_adopted", facts.get("recovery_status") == "ADOPTED", "ADOPTED", facts.get("recovery_status")),
+                GateCheck("restart_exact_backlog_recovered", all_recovered, backlog_ids, sorted(recovered_ids)),
             ])
         elif gate_id.startswith("R3-12"):
             reboot_events = [e for e in events if e.get("event_type") == "DUT_REBOOT_DETECTED"]
