@@ -1,9 +1,9 @@
 {
   "schema_version": "capture-v2-remote-action-v1",
-  "action_id": "RC14-SW-001",
-  "sequence": 67,
-  "created_at": "2026-08-22T00:55:00+00:00",
-  "expires_at": "2026-08-22T02:55:00+00:00",
+  "action_id": "RC15-SW-001",
+  "sequence": 68,
+  "created_at": "2026-08-22T00:57:00+00:00",
+  "expires_at": "2026-08-22T02:57:00+00:00",
   "action_type": "SOFTWARE_REGRESSION",
   "parameters": {
     "timeout_seconds": 1800
@@ -14,8 +14,8 @@
     "require_v2_disabled": true,
     "allow_worker_kill": false,
     "allow_server_quarantine": false,
-    "expected_head": "35d69ea7a5c2fe4770cf8264904e12b50e0c7eae"
+    "expected_head": "81b440b28dbdcbfe0a77a7e0c6627b34ec68d82a"
   },
   "requested_by": "ChatGPT-remote-validation-controller",
-  "note": "RC14 validation-tooling software regression. Adds resumable two-phase APF1250 reboot Gate: stage A persists pre-reboot ownership/boot/lease/epoch evidence on the validation server and requests reboot without waiting for the EWEB tunnel; stage B resumes the same ReproductionSession after the tunnel is restored and performs the existing deterministic R2-05 evaluator. Capture Engine runtime paths are unchanged; V1 remains authoritative and Production V2 remains disabled."
+  "note": "RC15 validation-only reboot salvage regression. Stage B can now resolve the interrupted APF1250 reboot ReproductionSession from the device-scoped CaptureLease and rebuild a missing checkpoint from durable CaptureSession/CaptureEpoch/CaptureLease state, including old boot_id, producer identity and lease epoch. This salvages sequence 66 after the EWEB tunnel is restored without issuing another reboot. Capture Engine runtime paths remain unchanged; V1 authority and Production V2 disabled are mandatory."
 }
