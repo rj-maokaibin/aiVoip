@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from dataclasses import asdict
 from typing import Iterable
 
 from .sdp import negotiate_codecs, parse_sdp
@@ -95,6 +94,11 @@ def reconstruct_sip(packets: Iterable[NormalizedPacket]) -> dict:
 
 
 def _ladder(group: list[NormalizedPacket]) -> list[dict]:
+    """Stable SIP ladder with the frozen FR-008 drill-down headers.
+
+    Values come only from normalized packet facts. Missing headers remain None;
+    the report/renderer never reconstructs or guesses a SIP header.
+    """
     out = []
     for idx, packet in enumerate(group):
         sip = packet.sip
@@ -108,8 +112,17 @@ def _ladder(group: list[NormalizedPacket]) -> list[dict]:
             "label": label,
             "method": sip.method,
             "status_code": sip.status_code,
+            "reason_phrase": sip.reason_phrase,
+            "call_id": sip.call_id,
             "cseq": sip.cseq,
             "cseq_method": sip.cseq_method,
+            "from_uri": sip.from_uri,
+            "to_uri": sip.to_uri,
+            "from_tag": sip.from_tag,
+            "to_tag": sip.to_tag,
+            "via_branch": sip.via_branch,
+            "contact": sip.contact,
+            "request_uri": sip.request_uri,
             "semantic": semantic_for(packet, nxt),
         })
     return out
