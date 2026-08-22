@@ -1,6 +1,6 @@
 """Replay small immutable slices from the 2026-08-20 real-DUT Golden AIM logs.
 
-These are regression fixtures for parsing/source-time semantics only.  They do
+These are regression fixtures for parsing/source-time semantics only. They do
 NOT promote R4/R5 to a release-grade real Gate: Hook Flash calibration and the
 finalized PCAP/PCM/Coverage bundle remain separate evidence requirements.
 
@@ -9,7 +9,7 @@ Sources (operator-collected real DUT transcripts):
 - APF3260-B.log, Golden call 101 -> 301, 2026-08-20
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta
 
 from app.capture_v2.fxs.sanitizer import FxsEventSanitizer, RawFxsEvent, SemanticActionType
 from app.reproduction.fxs_event_monitor import FxsEventMonitor
@@ -40,7 +40,7 @@ def _parse(raw: str):
 
 
 def _source_ts(text: str) -> datetime:
-    # The Aug-20 DUTs used the local +0800 clock.  Keep Source Time explicit in
+    # The Aug-20 DUTs used the local +0800 clock. Keep Source Time explicit in
     # replay so ingestion order can never silently fall back to processing time.
     return datetime.strptime(text + " +0800", "%Y-%m-%d %H:%M:%S.%f %z")
 
@@ -74,14 +74,14 @@ def test_real_golden_slices_bind_dtmf_and_end_at_original_onhook_source_time():
             source_ts = _source_ts(event.timestamp)
             if event.event == "ONHOOK":
                 # Golden transcript proves the call is established before the
-                # in-call 123# sequence.  Model the real hangup as call-active;
-                # the semantic end must retain the physical ONHOOK Source Time.
+                # in-call 123# sequence. Model the real hangup as call-active;
+                # semantic end must retain the physical ONHOOK Source Time.
                 actions.extend(sanitizer.on_raw(
                     RawFxsEvent(source_ts, event.event, digit=event.digit, line=event.line),
                     call_active=True,
                 ))
                 actions.extend(sanitizer.flush_pending_onhook(
-                    source_ts.replace(microsecond=source_ts.microsecond) + __import__("datetime").timedelta(milliseconds=1001)
+                    source_ts + timedelta(milliseconds=1001)
                 ))
             else:
                 actions.extend(sanitizer.on_raw(
