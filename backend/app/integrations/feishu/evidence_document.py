@@ -154,7 +154,7 @@ class FeishuEvidenceDocumentService:
     async def _materialize_plan(self,document_id:str,created_blocks:list[dict],plan:list[dict],artifact_by_id:dict)->set[str]:
         used=set()
         for item in plan:
-            index=int(item.get("block_index") or -1)
+            raw_index=item.get("block_index");index=int(raw_index) if raw_index is not None else -1
             if not 0<=index<len(created_blocks):continue
             artifact=artifact_by_id.get(item.get("artifact_id"));block_id=(created_blocks[index] or {}).get("block_id")
             if not artifact or not block_id or artifact.size_bytes>20*1024*1024:continue
