@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import os
+import shlex
+import tempfile
+from pathlib import Path
 from typing import Any
 
 from sqlalchemy import select
@@ -23,6 +27,53 @@ def _all_pass(checks: tuple[GateCheck, ...]) -> GateVerdict:
     return GateVerdict.PASS
 
 
+def _probe_local_store(store) -> tuple[bool, str | None]:
+    """Prove the configured durable-store filesystem can create+fsync+unlink.
+
+    Readiness exists before the first call, so this probe must not depend on a
+    previously sealed business PCAP. It deliberately writes outside immutable
+    evidence keys and removes the validation byte immediately.
+    """
+    root = Path(getattr(store, "root", ""))
+    if not str(root):
+        return False, "STORE_ROOT_UNAVAILABLE"
+    try:
+        root.mkdir(parents=True, exist_ok=True)
+        fd, name = tempfile.mkstemp(prefix=".r4-readiness-probe.", dir=str(root))
+        path = Path(name)
+        try:
+            with os.fdopen(fd, "wb") as fh:
+                fh.write(b"capture-v2-r4-readiness\n")
+                fh.flush()
+                os.fsync(fh.fileno())
+            dfd = os.open(str(root), os.O_RDONLY)
+            try:
+                os.fsync(dfd)
+            finally:
+                os.close(dfd)
+            return path.is_file() and path.stat().st_size > 0, None
+        finally:
+            path.unlink(missing_ok=True)
+    except Exception as exc:
+        return False, f"{type(exc).__name__}:{exc}"
+
+
+async def _probe_scp_transfer(adapter) -> tuple[bool, int, str | None]:
+    """Prove one exact SCP download without waiting for call traffic."""
+    fd, name = tempfile.mkstemp(prefix="r4-transfer-probe-")
+    os.close(fd)
+    local = Path(name)
+    local.unlink(missing_ok=True)
+    try:
+        await adapter.scp_get("/etc/openwrt_release", str(local), timeout=30)
+        size = int(local.stat().st_size) if local.is_file() else 0
+        return bool(size > 0), size, None
+    except Exception as exc:
+        return False, 0, f"{type(exc).__name__}:{exc}"
+    finally:
+        local.unlink(missing_ok=True)
+
+
 async def run_r4_no_handset_preflight(
     runner,
     *,
@@ -35,13 +86,14 @@ async def run_r4_no_handset_preflight(
 ) -> GateCaseResult:
     """Real-DUT Stage-1 readiness preflight that requires no handset activity.
 
-    The preflight proves the infrastructure side of R4 using the real DUT and the
-    real PostgreSQL/store path: ownership, one producer, Voice Context, PCAP
-    segment transfer/durability, AIM PTY/debug control, reversible PCM diagnostic
-    control, watchdog healthy/revoke/recover semantics and deterministic cleanup.
+    Stage-1 readiness is a *pre-OFFHOOK* contract. Therefore PCAP/store/transfer
+    readiness is proven by producer identity/epoch health plus independent store
+    and SCP probes, not by requiring a business packet to have already produced a
+    sealed segment. Any business segment observed during the idle window remains
+    supporting evidence only.
 
-    It never waits for OFFHOOK/DTMF/ONHOOK and therefore can never replace the
-    physical R4-01 FXS semantic Gate.
+    This Gate never waits for OFFHOOK/DTMF/ONHOOK and can never replace the
+    physical R4-01 FXS semantic/timing Gate.
     """
     duration_seconds = max(7.0, min(float(duration_seconds), 60.0))
     session = await CaptureV2CBridge(
@@ -81,6 +133,12 @@ async def run_r4_no_handset_preflight(
     producer_gone = False
     lease_released = False
     exit_stats = None
+    active_dir_exists = False
+    store_probe_ok = False
+    store_probe_error = None
+    transfer_probe_ok = False
+    transfer_probe_bytes = 0
+    transfer_probe_error = None
 
     gateway = bootstrap.voice_context.gateway_ip
     pcm_on = (
@@ -102,6 +160,10 @@ async def run_r4_no_handset_preflight(
             await runner.adapter.execute_cli(command)
             pcm_enable_acked += 1
 
+        # Independent readiness probes must succeed before any call exists.
+        store_probe_ok, store_probe_error = _probe_local_store(session.components["store"])
+        transfer_probe_ok, transfer_probe_bytes, transfer_probe_error = await _probe_scp_transfer(runner.adapter)
+
         cycles = await session.drain_for(
             duration_seconds=duration_seconds,
             cycle_interval_seconds=0.5,
@@ -115,6 +177,13 @@ async def run_r4_no_handset_preflight(
             if int(p.pid) == int(bootstrap.ownership.producer.pid)
             and int(p.process_starttime) == int(bootstrap.ownership.producer.process_starttime)
         ]
+        epoch_token = bootstrap.ownership.capture_epoch_token
+        active_path = f"/tmp/aivoip_capture/epochs/{epoch_token}/active"
+        active_dir_exists = (
+            await session.components["reader"].run(
+                f"[ -d {shlex.quote(active_path)} ] && echo 1 || echo 0"
+            )
+        ).strip() == "1"
 
         with runner.session_factory() as db:
             segments = list(db.scalars(select(CaptureSegment).where(
@@ -138,7 +207,6 @@ async def run_r4_no_handset_preflight(
         total_transferred = sum(int(x.pump.transferred) for x in cycles)
         total_acked = sum(int(x.pump.acked) for x in cycles)
         total_deleted = sum(int(x.pump.deleted) for x in cycles)
-        durable = [x for x in segments if x.state in {"PERSISTED", "ACK_PENDING", "ACKED", "REMOTE_DELETED"}]
         full_chain = [x for x in segments if x.state == "REMOTE_DELETED" and x.acked_at and x.remote_deleted_at]
         unacked = [x for x in segments if x.state not in {"ACKED", "REMOTE_DELETED"}]
         pressure_critical = any(str(x.pressure.state).upper() == "CRITICAL" for x in cycles)
@@ -150,11 +218,13 @@ async def run_r4_no_handset_preflight(
             and bootstrap.voice_context.voice_vlan_id
             and bootstrap.voice_context.interface
         )
-        pcap_ready = bool(cycles and total_errors == 0 and durable)
+        # Correct pre-OFFHOOK semantics: producer/epoch health proves PCAP path is
+        # armed; zero idle business packets is valid and must not block READY.
+        pcap_ready = bool(cycles and total_errors == 0 and exactly_one and active_dir_exists)
         fxs_ready = debug_enable_acked == len(FULL_DEBUG_ENABLE)
         pcm_ready = pcm_enable_acked == len(pcm_on)
-        store_ready = bool(store_verified_ids)
-        transfer_ready = bool(full_chain and total_transferred > 0 and total_acked > 0 and total_deleted > 0)
+        store_ready = store_probe_ok
+        transfer_ready = transfer_probe_ok
         storage_guard_ready = not pressure_critical and not unacked
 
         healthy_watchdog = d_session.evaluate_watchdog(WatchdogInputs(
@@ -245,6 +315,7 @@ async def run_r4_no_handset_preflight(
     total_transferred = sum(int(x.pump.transferred) for x in cycles) if cycles else 0
     total_acked = sum(int(x.pump.acked) for x in cycles) if cycles else 0
     total_deleted = sum(int(x.pump.deleted) for x in cycles) if cycles else 0
+    full_chain_count = sum(1 for x in segments if x.state == "REMOTE_DELETED" and x.acked_at and x.remote_deleted_at)
     checks = (
         GateCheck("preflight_runtime_no_exception", not runtime_errors, [], runtime_errors),
         GateCheck("stage1_all_real_checks_ready", bool(actual_checks and all(actual_checks.as_dict().values())), True,
@@ -259,10 +330,12 @@ async def run_r4_no_handset_preflight(
                   ReadinessStatus.READY.value, recovered_decision.status.value if recovered_decision else None),
         GateCheck("readiness_db_contains_revoke_and_ready", "REVOKED" in readiness_statuses and readiness_statuses[-1:] == ["READY"],
                   "...REVOKED...READY", readiness_statuses),
+        GateCheck("pcap_armed_before_offhook", bool(active_dir_exists and actual_checks and actual_checks.pcap_ready), True,
+                  {"active_dir_exists": active_dir_exists, "pcap_ready": actual_checks.pcap_ready if actual_checks else None}),
+        GateCheck("server_store_preflight_probe", store_probe_ok, True, {"ok": store_probe_ok, "error": store_probe_error}),
+        GateCheck("scp_transfer_preflight_probe", transfer_probe_ok, True,
+                  {"ok": transfer_probe_ok, "bytes": transfer_probe_bytes, "error": transfer_probe_error}),
         GateCheck("segment_pipeline_zero_errors", total_errors == 0, 0, total_errors),
-        GateCheck("segment_pipeline_full_chain", total_transferred > 0 and total_acked > 0 and total_deleted > 0,
-                  ">0 transferred/acked/deleted", {"transferred": total_transferred, "acked": total_acked, "deleted": total_deleted}),
-        GateCheck("server_durable_objects_verified", bool(store_verified_ids), ">0", store_verified_ids),
         GateCheck("pcm_control_symmetric", pcm_enable_acked == len(pcm_on) and pcm_disable_acked == len(pcm_off),
                   {"on": len(pcm_on), "off": len(pcm_off)}, {"on": pcm_enable_acked, "off": pcm_disable_acked}),
         GateCheck("aim_debug_control_symmetric", debug_enable_acked == len(FULL_DEBUG_ENABLE) and debug_disable_acked == len(FULL_DEBUG_DISABLE),
@@ -284,13 +357,24 @@ async def run_r4_no_handset_preflight(
         "stage1_checks": actual_checks.as_dict() if actual_checks else None,
         "readiness_statuses": readiness_statuses,
         "cycles": len(cycles),
-        "pipeline": {
-            "errors": total_errors,
+        "pre_offhook_probes": {
+            "pcap_active_dir_exists": active_dir_exists,
+            "server_store_probe_ok": store_probe_ok,
+            "server_store_probe_error": store_probe_error,
+            "scp_transfer_probe_ok": transfer_probe_ok,
+            "scp_transfer_probe_bytes": transfer_probe_bytes,
+            "scp_transfer_probe_error": transfer_probe_error,
+        },
+        "supporting_idle_segment_evidence": {
+            "segment_count": len(segments),
+            "full_chain_count": full_chain_count,
             "transferred": total_transferred,
             "acked": total_acked,
             "deleted": total_deleted,
             "store_verified_ids": store_verified_ids,
+            "note": "supporting only; idle pre-OFFHOOK readiness does not require business packets",
         },
+        "pipeline": {"errors": total_errors},
         "controls": {
             "debug_enable_acked": debug_enable_acked,
             "debug_disable_acked": debug_disable_acked,
@@ -327,7 +411,7 @@ async def run_r4_no_handset_preflight(
         gate_id=gate_id,
         verdict=_all_pass(checks),
         checks=checks,
-        summary="R4-00 no-handset real-DUT capture/readiness/watchdog preflight",
+        summary="R4-00 no-handset real-DUT pre-OFFHOOK readiness/watchdog preflight",
         evidence_bundle=str(paths.case_dir),
         facts=facts,
     )
