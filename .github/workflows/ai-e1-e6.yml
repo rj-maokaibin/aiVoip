@@ -34,7 +34,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = "48a3855e31a7019640671e422956212b540dd08d"
+          test "$(git rev-parse HEAD)" = "107b06221b307200d85c865506ea82eafa958f1d"
           source_fixture="$VOIP_OFFLINE_GOLDEN_001_PCAP"
           test -f "$source_fixture"
           fixture="$source_fixture"
@@ -102,6 +102,12 @@ jobs:
             echo "FEISHU_LIVE_ENABLED=true"
           } >> "$GITHUB_ENV"
 
+      - name: Run targeted Feishu media regression
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONPATH=backend .venv-offline-e2e/bin/python -m pytest -q backend/tests/test_feishu_evidence_media_materialization_v1.py
+
       - name: Verify requested reader permission
         shell: bash
         run: |
@@ -125,7 +131,7 @@ jobs:
           set -euo pipefail
           mkdir -p validation/offline_e2e_feishu_001
           PYTHONPATH=backend .venv-offline-e2e/bin/python - <<'PY'
-          import asyncio, json, os
+          import asyncio, json, os, time
           from pathlib import Path
           from app.golden.offline_analysis_e2e import build_offline_analysis_bundle
           from app.integrations.feishu.evidence_document import FeishuEvidenceDocumentService
@@ -155,8 +161,8 @@ jobs:
 
           svc=FeishuEvidenceDocumentService(); doc=os.environ['TARGET_DOCX_TOKEN']
           blocks=[]; plan=[]
-          blocks.append(svc._text('补充：图表 / 音频 Evidence Artifact（Offline E2E #001）',3))
-          blocks.append(svc._text('以下内容由同一份真实 PCAP 经过生产 Analyzer 与 Evidence Renderer 生成，并通过飞书 media upload/replace 流程写入。'))
+          blocks.append(svc._text('图表 / 音频 Evidence Artifact（Offline E2E #001）',3))
+          blocks.append(svc._text('以下证据由同一份真实 PCAP 经生产 Analyzer 与 Evidence Renderer 生成。'))
           blocks.append(svc._text('PCM RX 波形图',4)); idx=len(blocks); blocks.append(svc._media_placeholder(image=True)); plan.append((idx,'pcm_rx_waveform.png',waveform_png,True))
           blocks.append(svc._text('PCM RX 时频图',4)); idx=len(blocks); blocks.append(svc._media_placeholder(image=True)); plan.append((idx,'pcm_rx_spectrogram.png',spectrogram_png,True))
           blocks.append(svc._text('周期干扰三路对比音频',4))
@@ -169,12 +175,13 @@ jobs:
               verified=[]
               for idx,name,data,is_image in plan:
                   block_id=(created[idx] or {}).get('block_id'); assert block_id,(idx,name)
-                  token=await svc._upload_media(block_id=block_id,filename=name,data=data,parent_type='docx_image' if is_image else 'docx_file')
-                  await svc._replace_media(doc,block_id,token,image=is_image)
+                  upload_token=await svc._upload_media(block_id=block_id,filename=name,data=data,parent_type='docx_image' if is_image else 'docx_file')
+                  assert upload_token
+                  time.sleep(0.5)
                   got=await svc.transport._request('GET',f'/docx/v1/documents/{doc}/blocks/{block_id}')
                   block=(got.get('data') or {}).get('block') or {}
                   media_token=((block.get('image') or {}).get('token') if is_image else (block.get('file') or {}).get('token'))
-                  assert media_token, {'name':name,'block_id':block_id,'block':block}
+                  assert media_token, {'name':name,'block_id':block_id,'block_type':block.get('block_type'),'block':block}
                   verified.append({'name':name,'block_id':block_id,'kind':'image' if is_image else 'audio_file','token_present':True})
               result={'status':'PASS','document_url':f'https://feishu.cn/docx/{doc}','images':sum(1 for x in verified if x['kind']=='image'),'audio_files':sum(1 for x in verified if x['kind']=='audio_file'),'verified':verified,'finding_count':len((bundle.get('report') or {}).get('findings') or [])}
               assert result['images']>=2 and result['audio_files']>=3,result
@@ -187,7 +194,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: offline-e2e-feishu-media-materialization
+          name: offline-e2e-feishu-media-materialization-fixed
           path: validation/offline_e2e_feishu_001/**
           if-no-files-found: warn
           retention-days: 14
