@@ -128,7 +128,14 @@ def build_call_formation_quality(report: Any, payload: dict) -> dict:
         and not display_call
     )
     capture = (payload.get("completeness") or {}).get("capture") or {}
+    session_events = list(context.get("session_events") or payload.get("session_events") or [])
+    has_offhook = any(
+        str(event.get("event_type") or "").upper().replace("_", "").replace("-", "") == "OFFHOOK"
+        for event in session_events if isinstance(event, dict)
+    )
     preserved = []
+    if has_offhook:
+        preserved.append("OFF_HOOK")
     if capture.get("pcap"):
         preserved.append("PCAP_PREROLL")
     if capture.get("debug"):
@@ -137,6 +144,14 @@ def build_call_formation_quality(report: Any, payload: dict) -> dict:
         preserved.append("PCM_RX")
     if capture.get("pcm_tx"):
         preserved.append("PCM_TX")
+    display_names = {
+        "OFF_HOOK": "Off-hook",
+        "PCAP_PREROLL": "PCAP 预录",
+        "DEBUG": "Debug",
+        "PCM_RX": "PCM RX",
+        "PCM_TX": "PCM TX",
+    }
+    preserved_text = "、".join(display_names[x] for x in preserved) if preserved else "当前没有可确认的前置 Evidence"
     return {
         "contract_version": ALIGNMENT_CONTRACT_VERSION,
         "status": "NO_VALID_CALL" if no_valid_call else "VALID_CALL_OR_NOT_APPLICABLE",
@@ -145,7 +160,7 @@ def build_call_formation_quality(report: Any, payload: dict) -> dict:
         "diagnostic_call_count": diagnostic_count,
         "preserved_pre_call_evidence": preserved,
         "statement": (
-            "该 Reproduction Session 未形成有效 Call；本报告仅汇总实际已采集的 Off-hook/预录 PCAP/Debug/PCM 等前置证据。"
+            f"该 Reproduction Session 未形成有效 Call；本报告仅汇总实际已采集的前置 Evidence：{preserved_text}。"
             "未出现的 SIP/RTP/Call 生命周期不得解释为正常通话，也不得据此提升 Root Cause Authority。"
             if no_valid_call else
             "当前没有触发 FR-028 无有效 Call 边界。"
@@ -235,7 +250,7 @@ def finalize_report_contract(report: Any, payload: dict) -> dict:
         assessment = payload.setdefault("preliminary_assessment", {})
         assessment["summary"] = headline
         assessment["evidence_boundary"] = formation_quality["statement"]
-        assessment["recommended_next_action"] = "优先复核 Off-hook/预录 PCAP/Debug 等已存在前置证据，确认 Call 未形成的位置；缺失的 Call/RTP 阶段不得按正常解释。"
+        assessment["recommended_next_action"] = "优先复核报告中 call_formation_quality.preserved_pre_call_evidence 所列的真实前置证据，确认 Call 未形成的位置；缺失的 Call/RTP 阶段不得按正常解释。"
 
     final_status = "COMPLETE" if legacy_completeness.get("state") == "COMPLETE" else "PARTIAL_COMPLETE"
     if hasattr(report, "status"):
@@ -250,6 +265,7 @@ def finalize_report_contract(report: Any, payload: dict) -> dict:
     payload["capture_quality"] = frozen_completeness
     payload["call_completion_quality"] = call_quality
     payload["call_formation_quality"] = formation_quality
+    payload["session_events"] = list((payload.get("analysis_context") or {}).get("session_events") or [])
     payload["signaling_summary"] = {
         "available": _bool((payload.get("packet_summary") or {}).get("available")),
         "sip_message_count": (payload.get("packet_summary") or {}).get("sip_message_count"),
