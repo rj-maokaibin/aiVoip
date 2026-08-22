@@ -1,12 +1,29 @@
 {
   "schema_version": "capture-v2-remote-action-v1",
-  "action_id": "RC28-R5-LIVE-COVERAGE-SW-001",
-  "sequence": 120,
-  "created_at": "2026-08-22T09:39:00+00:00",
-  "expires_at": "2026-08-22T21:39:00+00:00",
-  "action_type": "SOFTWARE_REGRESSION",
+  "action_id": "R5-01-APF3260M-LIVE-COVERAGE-RC28",
+  "sequence": 121,
+  "created_at": "2026-08-22T09:40:00+00:00",
+  "expires_at": "2026-08-22T21:40:00+00:00",
+  "action_type": "GATE_READINESS_FXS",
   "parameters": {
-    "timeout_seconds": 1800
+    "device_id": "c132f336-df1b-4285-b175-01d848f23b5d",
+    "model": "APF3260-M",
+    "host": "10.48.8.74",
+    "port": 10002,
+    "username": "root",
+    "platform_id": "mt7981",
+    "password_env": "DB:G1U060H000384",
+    "profile_root": "../profiles",
+    "profile_id": "voip-standard",
+    "object_root": "/tmp/voip-reproduction-objects",
+    "output_root": "/tmp/capture-v2-gates",
+    "repo_root": "..",
+    "reproduction_session_id": "AUTO_NEW",
+    "worker_id": "r5-01-apf3260m-live-coverage-rc28",
+    "gate_id": "R5-01-APF3260M-LIVE-COVERAGE-RC28",
+    "duration": 180,
+    "transport": "scp",
+    "timeout_seconds": 900
   },
   "safety": {
     "require_clean_git": true,
@@ -17,5 +34,5 @@
     "expected_head": "30dc0f8573e43a71bd4d0188dadeb77f61cf7af3"
   },
   "requested_by": "ChatGPT-remote-validation-controller",
-  "note": "Regression after adding validation-only R5 real-call live Coverage Ledger gate. Production Capture runtime is not activated; V1 remains authoritative and Production V2 remains disabled."
+  "note": "Real APF3260-M R5 validation-only call. Use real FXS + continuous PCAP + PCM RX/TX diag and the production D/E/F Coverage runtime; auto-persist/finalize CoverageWindow/Track/Interval. Production V2 remains disabled. A missing physical call is INCONCLUSIVE; incomplete real evidence after a valid call fails closed rather than being promoted to COMPLETE."
 }
