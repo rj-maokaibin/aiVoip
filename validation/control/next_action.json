@@ -1,12 +1,30 @@
 {
   "schema_version": "capture-v2-remote-action-v1",
-  "action_id": "RC16-SW-001",
-  "sequence": 72,
-  "created_at": "2026-08-22T01:03:00+00:00",
-  "expires_at": "2026-08-22T03:03:00+00:00",
-  "action_type": "SOFTWARE_REGRESSION",
+  "action_id": "R3-12B-APF1250-POST-REBOOT-CONTINUITY-RC16",
+  "sequence": 73,
+  "created_at": "2026-08-22T01:04:00+00:00",
+  "expires_at": "2026-08-22T03:04:00+00:00",
+  "action_type": "GATE_SEGMENT",
   "parameters": {
-    "timeout_seconds": 1800
+    "device_id": "259f16e6-af9e-4dff-969b-2bb5eac43eb2",
+    "model": "APF1250",
+    "host": "10.48.8.74",
+    "port": 10001,
+    "username": "root",
+    "platform_id": "mt7621",
+    "password_env": "DB:G1V030E010214",
+    "profile_root": "../profiles",
+    "profile_id": "voip-standard",
+    "object_root": "/tmp/voip-reproduction-objects",
+    "output_root": "/tmp/capture-v2-gates",
+    "repo_root": "..",
+    "reproduction_session_id": "d95dec51-66ef-4b25-8684-0591ecef979d",
+    "worker_id": "r3-12b-apf1250-rc16",
+    "gate_id": "R3-12B-APF1250-POST-REBOOT-CONTINUITY-RC16",
+    "duration": 20,
+    "interval": 0.5,
+    "transport": "scp",
+    "timeout_seconds": 600
   },
   "safety": {
     "require_clean_git": true,
@@ -17,5 +35,5 @@
     "expected_head": "4ca96fdd70753b448534a0c9b723df66b3720897"
   },
   "requested_by": "ChatGPT-remote-validation-controller",
-  "note": "RC16 validation-only split-control R3-12 regression. The harness consumes the previously audited R2-05 reboot checkpoint/evidence, re-verifies DUT_REBOOT facts from its immutable manifest, requires the device to remain on the proven post-reboot boot_id, then runs a deterministic real 24-byte Segment through production Sealer/SCP/durable/ACK/delete on that post-reboot boot. This avoids an extra APF1250 reboot while preserving auditable reboot + data-plane continuity proof. Capture Engine runtime remains unchanged; Production V2 stays disabled."
+  "note": "RC16 APF1250 split-control R3-12. Reuse the audited R2-05B reboot proof for reproduction session d95dec51-66ef-4b25-8684-0591ecef979d; re-read its immutable R2 evidence manifest to verify DUT_REBOOT, changed boot_id, new CaptureEpoch and higher lease. Require the device still runs the proven new boot_id, then establish a post-reboot C authority, inject one deterministic closed 24-byte PCAP, and prove production Sealer/SCP/durable/ACK/exact delete with no double loss. No additional reboot is issued."
 }
