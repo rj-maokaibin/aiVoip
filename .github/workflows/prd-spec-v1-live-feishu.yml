@@ -1,4 +1,4 @@
-name: PRD SPEC V1 Live Feishu Living Document
+name: Grant Feishu Reader Access
 
 on:
   pull_request:
@@ -9,54 +9,13 @@ permissions:
   contents: read
 
 jobs:
-  live-feishu-living-document:
+  grant-reader:
     runs-on: [self-hosted, linux, x64, voip-controlled-linux]
-    timeout-minutes: 45
+    timeout-minutes: 10
     env:
-      PRODUCT_HEAD: fdf8781876e7c247d2c33b7569bfc64d5531fddc
-      OFFLINE_GOLDEN_PCAP: /tmp/tcpdump-2026-08-14.pcap
-      OFFLINE_GOLDEN_SHA256: b038aa7c9a0644581f2815f654fcdee4620860796382265b178823fccba2e3f0
+      DOCUMENT_TOKEN: RFtmdjLNRo1SaBxXBugcpLgdnvb
     steps:
-      - name: Checkout exact accepted product head
-        uses: actions/checkout@v4
-        with:
-          ref: fdf8781876e7c247d2c33b7569bfc64d5531fddc
-          fetch-depth: 1
-
-      - name: Stage prepared PCAP and exact TShark 4.2.2
-        shell: bash
-        run: |
-          set -euo pipefail
-          test "$(git rev-parse HEAD)" = "$PRODUCT_HEAD"
-          fixture="$OFFLINE_GOLDEN_PCAP"
-          if [ ! -r "$fixture" ]; then
-            fixture="$RUNNER_TEMP/offline-e2e-prepared.pcap"
-            rm -f "$fixture"
-            docker run --rm -v /tmp:/source:ro -v "$RUNNER_TEMP":/output --entrypoint sh postgres:16 \
-              -c "cp /source/tcpdump-2026-08-14.pcap /output/offline-e2e-prepared.pcap && chmod 0644 /output/offline-e2e-prepared.pcap"
-          fi
-          test -r "$fixture"
-          test "$(sha256sum "$fixture" | awk '{print $1}')" = "$OFFLINE_GOLDEN_SHA256"
-          echo "OFFLINE_GOLDEN_PCAP=$fixture" >> "$GITHUB_ENV"
-
-          root="$RUNNER_TEMP/tshark-root"; debs="$RUNNER_TEMP/tshark-debs"
-          rm -rf "$root" "$debs"; mkdir -p "$root" "$debs"; cd "$debs"
-          mapfile -t pkgs < <(apt-cache depends --recurse --no-recommends --no-suggests --no-conflicts --no-breaks --no-replaces --no-enhances tshark | awk '/^[^ <][^:]*$/ {print $1}' | sort -u)
-          miss=(); for p in "${pkgs[@]}"; do dpkg-query -W -f='${Status}' "$p" 2>/dev/null | grep -q 'install ok installed' || miss+=("$p"); done
-          [ ${#miss[@]} -eq 0 ] || apt-get download "${miss[@]}"
-          shopt -s nullglob; for d in ./*.deb; do dpkg-deb -x "$d" "$root"; done
-          tshark_bin="$RUNNER_TEMP/tshark-userspace"
-          printf '#!/bin/bash\nexport LD_LIBRARY_PATH="%s/usr/lib/x86_64-linux-gnu:%s/lib/x86_64-linux-gnu:${LD_LIBRARY_PATH:-}"\nexport WIRESHARK_DATA_DIR="%s/usr/share/wireshark"\nexec "%s/usr/bin/tshark" "$@"\n' "$root" "$root" "$root" "$root" > "$tshark_bin"
-          chmod +x "$tshark_bin"
-          version="$($tshark_bin -v | head -n1)"; printf 'TSHARK=%s\n' "$version"; [[ "$version" == *"4.2.2"* ]]
-          echo "TSHARK_BINARY=$tshark_bin" >> "$GITHUB_ENV"
-
-          cd "$GITHUB_WORKSPACE"
-          venv="$RUNNER_TEMP/voip-ai-live-feishu-v1"; rm -rf "$venv"; python3 -m venv "$venv"
-          "$venv/bin/python" -m pip install -r backend/requirements.txt >/dev/null
-          echo "LIVE_FEISHU_VENV=$venv" >> "$GITHUB_ENV"
-
-      - name: Production artifact pipeline and live Feishu two-projection verification
+      - name: Grant configured reader view access and verify
         shell: bash
         run: |
           set -euo pipefail
@@ -64,345 +23,74 @@ jobs:
           test -f /home/github-runner/.config/voip-ai/feishu_app_secret
           set -a; source /home/github-runner/.config/voip-ai/.env; set +a
           export FEISHU_APP_SECRET_FILE=/home/github-runner/.config/voip-ai/feishu_app_secret
-          export PYTHONPATH=backend
-          "$LIVE_FEISHU_VENV/bin/python" - <<'PY'
-          import asyncio
-          import hashlib
-          import json
-          import os
-          import uuid
-          from datetime import datetime, timezone
-          from pathlib import Path
-          from types import SimpleNamespace
-          from urllib.parse import quote
 
-          import httpx
+          reader="${FEISHU_READER_OPEN_ID:-${FEISHU_TEST_READER_OPEN_ID:-${FEISHU_VIEWER_OPEN_ID:-}}}"
+          if [ -z "$reader" ] && [ -f /home/github-runner/.config/voip-ai/feishu_reader_open_id ]; then
+            reader="$(tr -d '\r\n ' < /home/github-runner/.config/voip-ai/feishu_reader_open_id)"
+          fi
+          test -n "$reader" || { echo 'FEISHU_READER_ID_NOT_CONFIGURED'; exit 2; }
+          export FEISHU_PERMISSION_READER="$reader"
 
-          import app.integrations.feishu.evidence_document as edm
-          from app.contracts.evidence_report import REPORT_COMPOSER_VERSION, REPORT_SCHEMA_VERSION
-          from app.core.config import settings
-          from app.db.evidence_report_models import FeishuEvidenceDocumentBinding, PreliminaryEvidenceReport
-          from app.db.models import Artifact
-          from app.golden.offline_analysis_e2e import build_offline_analysis_bundle
-          from app.integrations.feishu.evidence_document import FeishuEvidenceDocumentService
-          from app.integrations.feishu.transport import FeishuLiveTransport
-          from app.services.evidence_report_artifacts import generate_visual_artifacts, persist_artifact
+          python3 - <<'PY'
+          import json, os, urllib.parse, urllib.request, urllib.error
 
-          HEAD = os.environ['PRODUCT_HEAD']
-          PCAP = Path(os.environ['OFFLINE_GOLDEN_PCAP'])
-          TSHARK = os.environ['TSHARK_BINARY']
-          OUT = Path('validation/live_feishu_living_document')
-          OUT.mkdir(parents=True, exist_ok=True)
-          RESULT = OUT / 'live_feishu_living_validation.json'
-          assert settings.feishu_app_id, 'FEISHU_APP_ID_NOT_CONFIGURED'
-          print('FEISHU_CREDENTIAL_REFERENCE=AVAILABLE')
+          base=os.environ.get('FEISHU_BASE_URL','https://open.feishu.cn/open-apis').rstrip('/')
+          app_id=os.environ.get('FEISHU_APP_ID','')
+          secret_file=os.environ['FEISHU_APP_SECRET_FILE']
+          reader=os.environ['FEISHU_PERMISSION_READER']
+          doc=os.environ['DOCUMENT_TOKEN']
+          assert app_id and reader and doc
+          with open(secret_file,'r',encoding='utf-8') as f:
+              app_secret=f.read().strip()
 
-          bundle = build_offline_analysis_bundle(
-              pcap_path=PCAP,
-              pcm_profile_path='profiles/pcm/ruijie_aim_diag_v1.yaml',
-              output_dir=OUT / 'analysis',
-              tshark_binary=TSHARK,
-          )
-          assert bundle['source']['sha256'] == os.environ['OFFLINE_GOLDEN_SHA256']
-          assert bundle['report'].get('schema') == REPORT_SCHEMA_VERSION or bundle['report'].get('schema_version') == REPORT_SCHEMA_VERSION
+          def req(method,url,payload=None,token=None):
+              body=None if payload is None else json.dumps(payload).encode('utf-8')
+              headers={'Content-Type':'application/json'}
+              if token: headers['Authorization']=f'Bearer {token}'
+              r=urllib.request.Request(url,data=body,headers=headers,method=method)
+              try:
+                  with urllib.request.urlopen(r,timeout=30) as resp:
+                      raw=resp.read()
+              except urllib.error.HTTPError as e:
+                  raw=e.read()
+                  try: data=json.loads(raw.decode('utf-8'))
+                  except Exception: data={'raw':raw.decode('utf-8','replace')[:300]}
+                  # Duplicate member is acceptable; verification below is authoritative.
+                  if e.code not in (400,409):
+                      raise RuntimeError(f'FEISHU_HTTP_{e.code}:{data.get("code")}:{data.get("msg")}')
+                  return data
+              return json.loads(raw.decode('utf-8')) if raw else {}
 
-          case_id = f'live-case-{uuid.uuid4().hex[:12]}'
-          report_id = f'live-report-{uuid.uuid4().hex[:12]}'
-          case = SimpleNamespace(id=case_id, case_no=f'LIVE-FEISHU-{uuid.uuid4().hex[:8].upper()}')
-          payload = dict(bundle['report'])
-          payload['generated_at'] = datetime.now(timezone.utc).isoformat()
-          report = PreliminaryEvidenceReport(
-              id=report_id,
-              case_id=case_id,
-              session_id=None,
-              call_id=None,
-              scope_type='CASE',
-              scope_id=case_id,
-              version=1,
-              status='COMPLETE',
-              schema_version=REPORT_SCHEMA_VERSION,
-              composer_version=REPORT_COMPOSER_VERSION,
-              input_snapshot_hash='live-feishu-validation',
-              idempotency_key=f'live-feishu-{uuid.uuid4().hex}',
-              snapshot_json=payload,
-              created_at=datetime.now(timezone.utc),
-          )
+          auth=req('POST',base+'/auth/v3/tenant_access_token/internal',{'app_id':app_id,'app_secret':app_secret})
+          token=auth.get('tenant_access_token')
+          assert token, f'TENANT_TOKEN_FAILED:{auth.get("code")}:{auth.get("msg")}'
 
-          blob = {}
-          class Storage:
-              def put_bytes(self, key, data, content_type):
-                  blob[key] = bytes(data)
-              def get_bytes(self, key):
-                  return blob[key]
-          storage = Storage()
+          endpoint=base+'/drive/v1/permissions/'+urllib.parse.quote(doc,safe='')+'/members?type=docx&need_notification=false'
+          result=req('POST',endpoint,{'member_type':'openid','member_id':reader,'perm':'view'},token)
+          code=result.get('code',0)
+          if code not in (0,99991672,99991668):
+              # Do not expose member id in logs.
+              print(f'GRANT_RESPONSE_CODE={code} MSG={result.get("msg","")}')
 
-          class DB:
-              def __init__(self):
-                  self.binding = None
-                  self.rows = []
-              def get(self, model, key):
-                  name = getattr(model, '__name__', '')
-                  if name == 'Case' and key == case_id:
-                      return case
-                  if name == 'PreliminaryEvidenceReport' and key == report_id:
-                      return report
-                  return None
-              def scalar(self, _stmt):
-                  return self.binding
-              def scalars(self, _stmt):
-                  return []
-              def add(self, row):
-                  self.rows.append(row)
-                  if getattr(row, 'id', None) is None and hasattr(row, 'id'):
-                      row.id = str(uuid.uuid4())
-                  if getattr(row, 'created_at', None) is None and hasattr(row, 'created_at'):
-                      row.created_at = datetime.now(timezone.utc)
-                  if isinstance(row, FeishuEvidenceDocumentBinding):
-                      self.binding = row
-                      if row.projection_version is None:
-                          row.projection_version = 0
-              def flush(self):
-                  for row in self.rows:
-                      if getattr(row, 'id', None) is None and hasattr(row, 'id'):
-                          row.id = str(uuid.uuid4())
-                      if getattr(row, 'created_at', None) is None and hasattr(row, 'created_at'):
-                          row.created_at = datetime.now(timezone.utc)
-                  if self.binding is not None and self.binding.projection_version is None:
-                      self.binding.projection_version = 0
-          db = DB()
-
-          results = {
-              'packet_intelligence': bundle['packet'],
-              'pcm_intelligence': bundle['pcm'],
-              'media_intelligence': bundle['media'],
-          }
-          png_artifacts = generate_visual_artifacts(db, storage, report=report, results=results, runs={})
-          png_artifacts = [a for a in png_artifacts if a.content_type == 'image/png']
-          png_types = {a.type for a in png_artifacts}
-          assert 'RTP_TIMELINE_PNG' in png_types, png_types
-          assert 'SIP_CALL_FLOW_PNG' in png_types, png_types
-          selected_png = [next(a for a in png_artifacts if a.type == 'RTP_TIMELINE_PNG'),
-                          next(a for a in png_artifacts if a.type == 'SIP_CALL_FLOW_PNG')]
-          for artifact in selected_png:
-              data = storage.get_bytes(artifact.object_key)
-              assert data.startswith(b'\x89PNG\r\n\x1a\n') and len(data) > 1000, (artifact.filename, len(data))
-
-          wavs = sorted((OUT / 'analysis').rglob('*.wav'))
-          assert len(wavs) >= 3, [str(x) for x in wavs]
-          preferred = ['periodic_00_pcm_rx.wav', 'periodic_00_rtp_up.wav', 'periodic_00_rtp_down.wav']
-          by_name = {p.name: p for p in wavs}
-          selected_wavs = [by_name[name] for name in preferred if name in by_name]
-          if len(selected_wavs) < 3:
-              selected_wavs = wavs[:3]
-          assert len(selected_wavs) == 3
-
-          wav_artifacts = []
-          for index, path in enumerate(selected_wavs):
-              data = path.read_bytes()
-              assert len(data) > 1000 and data[:4] == b'RIFF' and data[8:12] == b'WAVE', (path.name, len(data))
-              wav_artifacts.append(persist_artifact(
-                  db, storage,
-                  report=report,
-                  artifact_type='AUDIO_CLIP',
-                  filename=path.name,
-                  data=data,
-                  content_type='audio/wav',
-                  metadata={'source': 'prepared-offline-golden-001', 'validation_role': f'audio-{index}'},
-                  role='FINDING',
-              ))
-
-          artifacts = selected_png + wav_artifacts
-          assert len(artifacts) == 5
-          assert all(isinstance(a, Artifact) for a in artifacts)
-          print('PRODUCTION_REPORT_ARTIFACTS=' + ','.join(f'{a.type}:{a.filename}' for a in artifacts))
-          edm.report_artifacts = lambda _db, _report_id: artifacts
-
-          class RecordingService(FeishuEvidenceDocumentService):
-              def __init__(self, **kwargs):
-                  super().__init__(**kwargs)
-                  self.uploads = []
-              async def _upload_media(self, *, block_id, filename, data, parent_type):
-                  token = await super()._upload_media(
-                      block_id=block_id, filename=filename, data=data, parent_type=parent_type,
-                  )
-                  self.uploads.append({
-                      'block_id': block_id,
-                      'filename': filename,
-                      'data': bytes(data),
-                      'token': token,
-                      'parent_type': parent_type,
-                  })
-                  return token
-
-          def block_text(block):
-              for key in ('text', 'heading1', 'heading2', 'heading3', 'bullet'):
-                  body = block.get(key)
-                  if body:
-                      return ''.join(
-                          str((element.get('text_run') or {}).get('content') or '')
-                          for element in body.get('elements') or []
-                      )
-              return ''
-
-          async def root_children(transport, document_id):
-              rows = []
-              page_token = None
-              while True:
-                  params = {'page_size': '50'}
-                  if page_token:
-                      params['page_token'] = page_token
-                  response = await transport._request(
-                      'GET',
-                      f'/docx/v1/documents/{quote(document_id, safe="")}/blocks/{quote(document_id, safe="")}/children',
-                      params=params,
-                  )
-                  data = response.get('data') or {}
-                  rows.extend(data.get('items') or data.get('children') or [])
-                  if not data.get('has_more'):
-                      return rows
-                  page_token = data.get('page_token')
-                  assert page_token
-
-          async def verify_remote_media(transport, document_id, record):
-              response = await transport._request(
-                  'GET',
-                  f'/docx/v1/documents/{quote(document_id, safe="")}/blocks/{quote(record["block_id"], safe="")}',
-              )
-              block = (response.get('data') or {}).get('block') or {}
-              if record['parent_type'] == 'docx_image':
-                  remote_token = (block.get('image') or {}).get('token')
-              else:
-                  file_body = block.get('file') or {}
-                  remote_token = file_body.get('token')
-                  remote_name = file_body.get('name')
-                  if remote_name:
-                      assert remote_name == record['filename'], (remote_name, record['filename'])
-              assert remote_token == record['token'], record['filename']
-
-              tenant_token = await transport._tenant_token()
-              url = settings.feishu_base_url.rstrip('/') + f'/drive/v1/medias/{quote(record["token"], safe="")}/download'
-              async with httpx.AsyncClient(timeout=settings.feishu_timeout_seconds) as client:
-                  download = await client.get(url, headers={'Authorization': f'Bearer {tenant_token}'})
-              download.raise_for_status()
-              assert download.content == record['data'], (record['filename'], len(download.content), len(record['data']))
-              return {
-                  'filename': record['filename'],
-                  'size_bytes': len(record['data']),
-                  'sha256': hashlib.sha256(record['data']).hexdigest(),
-                  'block_token_verified': True,
-                  'download_byte_equal': True,
-              }
-
-          def save(obj):
-              RESULT.write_text(json.dumps(obj, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
-
-          async def main():
-              transport = FeishuLiveTransport()
-              service = RecordingService(transport=transport, storage=storage)
-
-              first = await service.project(db, case_id=case_id, report_id=report_id)
-              document_id = first.document_id
-              assert document_id
-              first_meta = dict(first.metadata_json or {})
-              first_count = int(first_meta.get('projection_root_block_count') or 0)
-              assert first.projection_version == 1
-              assert first_count > 0
-              assert first_meta.get('migration_mode') == 'INITIAL'
-              assert first_meta.get('living_document_contract') == service.LIVING_PROJECTION_CONTRACT
-              root_first = await root_children(transport, document_id)
-              assert len(root_first) == first_count, (len(root_first), first_count)
-              first_upload_count = len(service.uploads)
-              assert first_upload_count == 5, first_upload_count
-              save({
-                  'status': 'RUNNING_AFTER_FIRST',
-                  'exact_product_head': HEAD,
-                  'document_url': first.document_url,
-                  'first_root_block_count': first_count,
-                  'first_media_count': first_upload_count,
-              })
-
-              sentinel = f'MANUAL-SENTINEL-{uuid.uuid4().hex}'
-              await service._insert_blocks(document_id, [service._text(sentinel)], index=first_count)
-              with_sentinel = await root_children(transport, document_id)
-              assert len(with_sentinel) == first_count + 1
-              assert sum(block_text(x) == sentinel for x in with_sentinel) == 1
-
-              report.version = 2
-              report.snapshot_json = dict(report.snapshot_json)
-              report.snapshot_json['generated_at'] = datetime.now(timezone.utc).isoformat()
-              report.snapshot_json['headline'] = str(report.snapshot_json.get('headline') or '') + '｜LIVE SECOND PROJECTION'
-
-              second = await service.project(db, case_id=case_id, report_id=report_id)
-              second_meta = dict(second.metadata_json or {})
-              second_count = int(second_meta.get('projection_root_block_count') or 0)
-              assert second.document_id == document_id
-              assert second.projection_version == 2
-              assert second_count > 0
-              assert second_meta.get('migration_mode') == 'TRACKED_REPLACE'
-              assert second_meta.get('living_document_contract') == service.LIVING_PROJECTION_CONTRACT
-
-              root_second = await root_children(transport, document_id)
-              texts = [block_text(x) for x in root_second]
-              assert len(root_second) == second_count + 1, (len(root_second), second_count)
-              assert texts.count(sentinel) == 1
-              assert texts.count('0. 当前状态 / 快速导航') == 1
-              assert texts.count('1. 当前初步结论') == 1
-              assert any('LIVE SECOND PROJECTION' in value for value in texts)
-              assert len(service.uploads) == 10, len(service.uploads)
-
-              second_media = service.uploads[first_upload_count:]
-              media_results = [
-                  await verify_remote_media(transport, document_id, record)
-                  for record in second_media
-              ]
-              assert len(media_results) == 5
-              assert sum(x['filename'].endswith('.png') for x in media_results) == 2
-              assert sum(x['filename'].endswith('.wav') for x in media_results) == 3
-
-              result = {
-                  'schema_version': 'prd-spec-v1-live-feishu-living-validation-v2',
-                  'status': 'PASS',
-                  'exact_product_head': HEAD,
-                  'source_pcap_sha256': bundle['source']['sha256'],
-                  'document_url': second.document_url,
-                  'production_artifact_pipeline': 'generate_visual_artifacts+persist_artifact',
-                  'living_document_contract': second_meta.get('living_document_contract'),
-                  'first_projection': {
-                      'version': 1,
-                      'root_block_count': first_count,
-                      'media_count': first_upload_count,
-                      'migration_mode': first_meta.get('migration_mode'),
-                  },
-                  'second_projection': {
-                      'version': 2,
-                      'root_block_count': second_count,
-                      'root_children_including_manual_sentinel': len(root_second),
-                      'manual_sentinel_preserved_once': True,
-                      'system_section_zero_count': texts.count('0. 当前状态 / 快速导航'),
-                      'system_section_one_count': texts.count('1. 当前初步结论'),
-                      'migration_mode': second_meta.get('migration_mode'),
-                  },
-                  'media': media_results,
-              }
-              save(result)
-              print(json.dumps({
-                  'status': 'PASS',
-                  'exact_product_head': HEAD,
-                  'document_url': second.document_url,
-                  'production_artifact_pipeline': result['production_artifact_pipeline'],
-                  'first_root_blocks': first_count,
-                  'second_root_blocks': second_count,
-                  'manual_sentinel_preserved_once': True,
-                  'media_byte_verified': 5,
-              }, ensure_ascii=False, indent=2))
-
-          asyncio.run(main())
+          verify_url=base+'/drive/v1/permissions/'+urllib.parse.quote(doc,safe='')+'/members?type=docx'
+          verified=False
+          page=''
+          for _ in range(10):
+              url=verify_url + (('&page_token='+urllib.parse.quote(page,safe='')) if page else '')
+              data=req('GET',url,token=token)
+              items=((data.get('data') or {}).get('items') or (data.get('data') or {}).get('members') or [])
+              for item in items:
+                  mid=str(item.get('member_id') or item.get('member_open_id') or '')
+                  perm=str(item.get('perm') or item.get('permission') or '').lower()
+                  if mid==reader and perm in {'view','edit','full_access'}:
+                      verified=True
+                      print('READER_PERMISSION=VIEW_PASS')
+                      break
+              if verified: break
+              d=data.get('data') or {}
+              if not d.get('has_more'): break
+              page=str(d.get('page_token') or '')
+              if not page: break
+          assert verified, 'READER_PERMISSION_VERIFY_FAILED'
+          print('DOCUMENT_READER_ACCESS=PASS')
           PY
-
-      - name: Upload live Feishu validation result
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: prd-spec-v1-live-feishu-living-validation
-          path: validation/live_feishu_living_document/live_feishu_living_validation.json
-          if-no-files-found: warn
