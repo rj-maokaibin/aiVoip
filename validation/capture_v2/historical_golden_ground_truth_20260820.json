@@ -1,0 +1,40 @@
+{
+  "schema_version": "capture-v2-historical-golden-ground-truth-v1",
+  "date": "20260820",
+  "timezone": "Asia/Shanghai",
+  "scope": "validation-only historical evidence; never substitutes for a fresh online R4/R5/R6 physical gate",
+  "cases": {
+    "APF1250": {
+      "device_id": "259f16e6-af9e-4dff-969b-2bb5eac43eb2",
+      "archive_sha256": "67ec0e64980a9c816f3cb5b494143f0410bb685e4177e7ffe89ba83d06abf9ad",
+      "fxs_offhook_utc": "2026-08-20T10:21:28.978000+00:00",
+      "pcm_sample_start_utc": "2026-08-20T10:21:29.267000+00:00",
+      "fxs_onhook_utc": "2026-08-20T10:22:27.774000+00:00",
+      "pcm_sample_stop_utc": "2026-08-20T10:22:27.783000+00:00",
+      "dialed_number": "301",
+      "connected_dtmf": "123#",
+      "tcpdump": {
+        "packets_captured": 19547,
+        "packets_received_by_filter": 19547,
+        "packets_dropped_by_kernel": 0
+      },
+      "source_files": ["APF1250-B.log", "APF1250-A.log"]
+    },
+    "APF3260-M": {
+      "device_id": "c132f336-df1b-4285-b175-01d848f23b5d",
+      "archive_sha256": "fedcb67763eb7bf65fb00aed68b4e03073fae6e779e71de318d65f7ab7a6489a",
+      "fxs_offhook_utc": "2026-08-20T11:47:54.269000+00:00",
+      "pcm_sample_start_utc": "2026-08-20T11:47:54.270000+00:00",
+      "fxs_onhook_utc": "2026-08-20T11:48:59.703000+00:00",
+      "pcm_sample_stop_utc": "2026-08-20T11:48:59.704000+00:00",
+      "dialed_number": "301",
+      "connected_dtmf": "123#",
+      "tcpdump": {
+        "packets_captured": 18766,
+        "packets_received_by_filter": 18766,
+        "packets_dropped_by_kernel": 0
+      },
+      "source_files": ["APF3260-B.log", "APF3260-A.log"]
+    }
+  }
+}
