@@ -1,9 +1,9 @@
 {
   "schema_version": "capture-v2-remote-action-v1",
-  "action_id": "R4-00-APF3260M-EXIT-STATS-RC30",
-  "sequence": 125,
-  "created_at": "2026-08-22T09:50:00+00:00",
-  "expires_at": "2026-08-22T21:50:00+00:00",
+  "action_id": "R5-01-APF3260M-LIVE-COVERAGE-RC30",
+  "sequence": 126,
+  "created_at": "2026-08-22T09:51:00+00:00",
+  "expires_at": "2026-08-22T21:51:00+00:00",
   "action_type": "GATE_READINESS_FXS",
   "parameters": {
     "device_id": "c132f336-df1b-4285-b175-01d848f23b5d",
@@ -19,11 +19,11 @@
     "output_root": "/tmp/capture-v2-gates",
     "repo_root": "..",
     "reproduction_session_id": "AUTO_NEW",
-    "worker_id": "r4-00-apf3260m-exit-stats-rc30",
-    "gate_id": "R4-00-APF3260M-EXIT-STATS-RC30",
-    "duration": 12,
+    "worker_id": "r5-01-apf3260m-live-coverage-rc30",
+    "gate_id": "R5-01-APF3260M-LIVE-COVERAGE-RC30",
+    "duration": 180,
     "transport": "scp",
-    "timeout_seconds": 600
+    "timeout_seconds": 900
   },
   "safety": {
     "require_clean_git": true,
@@ -34,5 +34,5 @@
     "expected_head": "b156075c485c42709bd0a1e98ed3a34f700f7836"
   },
   "requested_by": "ChatGPT-remote-validation-controller",
-  "note": "No-handset APF3260-M verification after tcpdump stdio persistence fix. Inspect exit_stats for real packets captured/received/dropped-by-kernel evidence; do not infer null as zero."
+  "note": "Second real APF3260-M R5 validation after fixing tcpdump kernel-drop evidence persistence, CoverageInterval source-kind DB contract, and PCM silence-vs-capture-availability semantics. Require real OFFHOOK/DTMF/ONHOOK, durable PCAP, kernel_drops=0, real UDP 40000/50000 packets, and PostgreSQL CoverageWindow/Track/Interval COMPLETE. Production V2 remains disabled."
 }
