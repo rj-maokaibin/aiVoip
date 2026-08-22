@@ -1,0 +1,44 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "RC24-SW-001",
+    "sequence": 106,
+    "created_at": "2026-08-22T03:22:00+00:00",
+    "expires_at": "2026-08-22T15:22:00+00:00",
+    "action_type": "SOFTWARE_REGRESSION",
+    "parameters": {
+      "timeout_seconds": 1800
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "9395bb97ebd8cdaafc700c0701482a960a514bf5"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "RC24 unified regression after correcting pre-OFFHOOK R4 readiness semantics, adding real PostgreSQL evidence-first report self-test, and adding bounded R7 validation-state soak. V1 authoritative; Production V2 disabled."
+  },
+  "action_sha256": "31d3da8451a3789d6cb89809dfba51c994406e905d7f7052d391832d3be10c1b",
+  "runner_id": "srv:3456908",
+  "state": "SUCCEEDED",
+  "return_code": 0,
+  "verdict": null,
+  "error": null,
+  "finished_at": "2026-08-22T03:23:16.328496+00:00",
+  "stdout_sha256": "e58fc99730468ae2decf383925686f27ac3cf971ca5fd22121358d17e53d89f9",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "local_stdout": ".capture-v2-control/logs/RC24-SW-001/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/RC24-SW-001/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "41c60fee518e2e4d8ef8408196010af6e2fd0efa",
+      "expected_product_head": "9395bb97ebd8cdaafc700c0701482a960a514bf5"
+    },
+    "parsed_output": null
+  }
+}
