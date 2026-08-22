@@ -10,6 +10,7 @@ from pathlib import Path
 
 from sqlalchemy import select
 
+from app.capture_v2.db_models import CaptureLease, CaptureSession
 from app.capture_v2.errors import CaptureV2Error
 from app.capture_v2.gate.context import build_asyncssh_adapter
 from app.capture_v2.gate.evidence import GateEvidenceCollector
@@ -122,10 +123,29 @@ def _create_r2_validation_session(device_id: str) -> str:
         return session_id
 
 
+def _reproduction_session_from_device_lease(device_id: str) -> str:
+    with SessionLocal() as db:
+        lease = db.get(CaptureLease, device_id)
+        if lease is None or not lease.capture_session_id:
+            raise CaptureV2Error(
+                "REBOOT_RESUME_DEVICE_LEASE_NOT_FOUND",
+                details={"device_id": device_id},
+            )
+        capture = db.get(CaptureSession, lease.capture_session_id)
+        if capture is None or str(capture.device_id) != str(device_id):
+            raise CaptureV2Error(
+                "REBOOT_RESUME_CAPTURE_SESSION_NOT_FOUND",
+                details={"device_id": device_id, "capture_session_id": lease.capture_session_id},
+            )
+        return str(capture.reproduction_session_id)
+
+
 def _resolve_reproduction_session_id(value: str, *, device_id: str, before_state: dict | None = None) -> str:
     marker = str(value or "").strip()
     if marker == "AUTO_NEW":
         return _create_r2_validation_session(device_id)
+    if marker == "FROM_DEVICE_LEASE":
+        return _reproduction_session_from_device_lease(device_id)
     if marker == "FROM_STATE":
         session_id = str((before_state or {}).get("reproduction_session_id") or "").strip()
         if not session_id:
@@ -281,7 +301,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     own = sub.add_parser("ownership", help="Establish A/B ownership and collect evidence")
     _common_device(own); _base_paths(own)
-    own.add_argument("--reproduction-session-id", required=True, help="Existing UUID or AUTO_NEW")
+    own.add_argument("--reproduction-session-id", required=True,
+                     help="Existing UUID, AUTO_NEW, or FROM_DEVICE_LEASE for reboot resume")
     own.add_argument("--worker-id", required=True)
     own.add_argument("--gate-id", default="R2-ESTABLISH")
     own.add_argument("--state-file", default="")
