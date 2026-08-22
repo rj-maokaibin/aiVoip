@@ -127,6 +127,27 @@ async def recover(args) -> int:
         "inventory": inventory,
         "attempts": attempts,
     }
+
+    # The recovery Gate stays about archive retrieval. Offline analysis is
+    # intentionally nested evidence: its result can strengthen R5/R6 evidence,
+    # but it never upgrades this recovery PASS into an R5 release PASS. Keeping
+    # the import local avoids a module cycle because the analyzer reuses the
+    # deterministic archive naming/root helpers above.
+    try:
+        from app.capture_v2.gate.golden_archive_analyze import analyze_archive
+
+        payload["analysis"] = analyze_archive(
+            device_id=spec.device_id,
+            model=spec.model,
+            archive_date=args.archive_date,
+        )
+    except Exception as exc:
+        payload["analysis"] = {
+            "verdict": "INCONCLUSIVE",
+            "reason": f"GOLDEN_ARCHIVE_ANALYSIS_ERROR:{type(exc).__name__}:{exc}",
+            "release_gate_effect": "EVIDENCE_ONLY_NOT_R5_PASS",
+        }
+
     print(json.dumps(payload, ensure_ascii=False, indent=2))
     return 0
 
