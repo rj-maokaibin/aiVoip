@@ -66,3 +66,56 @@ def test_sequence_must_be_monotonic(tmp_path, monkeypatch):
     assert r.process_once().state == ControlState.SUCCEEDED
     _write_action(repo, action_id="H-2", sequence=1)
     assert r.process_once().state == ControlState.REJECTED
+
+
+def test_control_source_update_requests_reexec(tmp_path, monkeypatch):
+    repo = _repo(tmp_path)
+    r = RemoteValidationRunner(repo_root=repo, runner_id="test-runner")
+    r._loaded_head = "old-head"
+    calls = []
+    monkeypatch.setattr(r, "_control_source_changed", lambda old, new: (old, new) == ("old-head", "new-head"))
+    monkeypatch.setattr(r, "_reexec_current_process", lambda: calls.append("reexec"))
+
+    r._maybe_reexec_after_sync("new-head")
+
+    assert calls == ["reexec"]
+    assert r._loaded_head == "new-head"
+
+
+def test_only_control_python_changes_require_reexec(tmp_path):
+    repo = _repo(tmp_path)
+    r = RemoteValidationRunner(repo_root=repo, runner_id="test-runner")
+    old_head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=repo, text=True).strip()
+
+    (repo / "validation/control/next_action.json").write_text("{}\n")
+    subprocess.run(["git", "add", "validation/control/next_action.json"], cwd=repo, check=True)
+    subprocess.run(["git", "commit", "-qm", "control action"], cwd=repo, check=True)
+    action_head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=repo, text=True).strip()
+    assert r._control_source_changed(old_head, action_head) is False
+
+    (repo / "backend/app/capture_v2/control").mkdir(parents=True)
+    (repo / "backend/app/capture_v2/control/schema.py").write_text("# changed control schema\n")
+    subprocess.run(["git", "add", "backend/app/capture_v2/control/schema.py"], cwd=repo, check=True)
+    subprocess.run(["git", "commit", "-qm", "control source"], cwd=repo, check=True)
+    source_head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=repo, text=True).strip()
+    assert r._control_source_changed(action_head, source_head) is True
+
+
+def test_runner_error_is_published_once_per_distinct_error(tmp_path):
+    repo = _repo(tmp_path)
+    r = RemoteValidationRunner(repo_root=repo, runner_id="test-runner")
+    pushes = []
+
+    class _Sync:
+        def commit_and_push(self, paths, *, message):
+            pushes.append((tuple(str(path) for path in paths), message))
+            return "deadbeef"
+
+    r.sync = _Sync()
+    r._publish_runner_error(ValueError("ACTION_TYPE_UNSUPPORTED"))
+    r._publish_runner_error(ValueError("ACTION_TYPE_UNSUPPORTED"))
+
+    status = json.loads((repo / "validation/control/status.json").read_text())
+    assert status["state"] == "RUNNER_ERROR"
+    assert status["error"] == "ValueError:ACTION_TYPE_UNSUPPORTED"
+    assert len(pushes) == 1
