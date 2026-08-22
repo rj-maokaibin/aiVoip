@@ -1,0 +1,44 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "RC27-HOOK-BOUNDARY-SW-001",
+    "sequence": 117,
+    "created_at": "2026-08-22T09:18:00+00:00",
+    "expires_at": "2026-08-22T21:18:00+00:00",
+    "action_type": "SOFTWARE_REGRESSION",
+    "parameters": {
+      "timeout_seconds": 1800
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "0a95a50772f8aa5dd06a38acd58042a1655eef8e"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "Regression after adding validation-only real Hook Flash and post-ONHOOK rebound Gates. Production Capture runtime unchanged; V1 remains authoritative and Production V2 remains disabled."
+  },
+  "action_sha256": "969d4a03ed840cd64007f1761e338ad9c3fb5c8b4bd16097de2932b839c00d3a",
+  "runner_id": "srv:3456908",
+  "state": "SUCCEEDED",
+  "return_code": 0,
+  "verdict": null,
+  "error": null,
+  "finished_at": "2026-08-22T09:20:52.066730+00:00",
+  "stdout_sha256": "d4e998b61d7890944bc9d61328332d7d896fdd5e78f4b443617e477c4c04b790",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "local_stdout": ".capture-v2-control/logs/RC27-HOOK-BOUNDARY-SW-001/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/RC27-HOOK-BOUNDARY-SW-001/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "32578ff8002121b5209369bd08e8cf42fe31fef0",
+      "expected_product_head": "0a95a50772f8aa5dd06a38acd58042a1655eef8e"
+    },
+    "parsed_output": null
+  }
+}
