@@ -1,12 +1,29 @@
 {
   "schema_version": "capture-v2-remote-action-v1",
-  "action_id": "RC27-HOOK-BOUNDARY-SW-001",
-  "sequence": 117,
-  "created_at": "2026-08-22T09:18:00+00:00",
-  "expires_at": "2026-08-22T21:18:00+00:00",
-  "action_type": "SOFTWARE_REGRESSION",
+  "action_id": "R4-02-APF3260M-HOOK-FLASH-RC27",
+  "sequence": 118,
+  "created_at": "2026-08-22T09:21:00+00:00",
+  "expires_at": "2026-08-22T21:21:00+00:00",
+  "action_type": "GATE_READINESS_FXS",
   "parameters": {
-    "timeout_seconds": 1800
+    "device_id": "c132f336-df1b-4285-b175-01d848f23b5d",
+    "model": "APF3260-M",
+    "host": "10.48.8.74",
+    "port": 10002,
+    "username": "root",
+    "platform_id": "mt7981",
+    "password_env": "DB:G1U060H000384",
+    "profile_root": "../profiles",
+    "profile_id": "voip-standard",
+    "object_root": "/tmp/voip-reproduction-objects",
+    "output_root": "/tmp/capture-v2-gates",
+    "repo_root": "..",
+    "reproduction_session_id": "AUTO_NEW",
+    "worker_id": "r4-02-apf3260m-hook-flash-rc27",
+    "gate_id": "R4-02-APF3260M-HOOK-FLASH-RC27",
+    "duration": 300,
+    "transport": "scp",
+    "timeout_seconds": 900
   },
   "safety": {
     "require_clean_git": true,
@@ -17,5 +34,5 @@
     "expected_head": "0a95a50772f8aa5dd06a38acd58042a1655eef8e"
   },
   "requested_by": "ChatGPT-remote-validation-controller",
-  "note": "Regression after adding validation-only real Hook Flash and post-ONHOOK rebound Gates. Production Capture runtime unchanged; V1 remains authoritative and Production V2 remains disabled."
+  "note": "Real APF3260-M Hook Flash validation. Accept only a physical 100..1000ms ONHOOK pulse during an active FXS Attempt; require FXS_HOOK_FLASH on the same Attempt, post-flash DTMF continuity, final ONHOOK source-time preservation, and no Attempt split. Out-of-window operator pulse is INCONCLUSIVE rather than product FAIL."
 }
