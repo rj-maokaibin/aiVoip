@@ -7,8 +7,7 @@ from sqlalchemy import delete, func, select
 
 from app.capture_v2.coverage.calculator import EvidenceInterval
 from app.capture_v2.coverage.ledger import CoverageLedgerService
-from app.capture_v2.db_models import CaptureInterval if False else CoverageInterval
-from app.capture_v2.db_models import CaptureSession, CoverageTrack, CoverageWindow
+from app.capture_v2.db_models import CaptureSession, CoverageInterval, CoverageTrack, CoverageWindow
 from app.capture_v2.enums import CoverageIntervalType, CoverageStatus
 from app.capture_v2.errors import CaptureV2Error
 from app.db.session import SessionLocal
