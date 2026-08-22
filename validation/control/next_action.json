@@ -1,12 +1,20 @@
 {
   "schema_version": "capture-v2-remote-action-v1",
-  "action_id": "RC22-SW-001",
-  "sequence": 100,
-  "created_at": "2026-08-22T03:04:00+00:00",
-  "expires_at": "2026-08-22T15:04:00+00:00",
-  "action_type": "SOFTWARE_REGRESSION",
+  "action_id": "R5-DB-APF1250-RC22",
+  "sequence": 101,
+  "created_at": "2026-08-22T03:10:00+00:00",
+  "expires_at": "2026-08-22T15:10:00+00:00",
+  "action_type": "GOLDEN_ARCHIVE_RECOVER",
   "parameters": {
-    "timeout_seconds": 1800
+    "device_id": "259f16e6-af9e-4dff-969b-2bb5eac43eb2",
+    "model": "APF1250",
+    "host": "10.48.8.74",
+    "port": 10001,
+    "username": "root",
+    "platform_id": "mt7621",
+    "password_env": "DB:G1V030E010214",
+    "archive_date": "20260820",
+    "timeout_seconds": 900
   },
   "safety": {
     "require_clean_git": true,
@@ -17,5 +25,5 @@
     "expected_head": "54008de1dc050511134da6a39a4457f76547c46f"
   },
   "requested_by": "ChatGPT-remote-validation-controller",
-  "note": "RC22 validation/tooling regression after adding historical Golden ground truth and real PostgreSQL Coverage Ledger validation-only self-test. V1 remains authoritative; Production V2 remains disabled."
+  "note": "Read-only APF1250 historical Golden recovery plus analyzers and validation-only real PostgreSQL Coverage Ledger self-test. No handset action. DB self-test rows are cleaned up before return and cannot by itself claim online R5 PASS."
 }
