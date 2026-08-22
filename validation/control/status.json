@@ -1,168 +1,34 @@
 {
   "schema_version": "capture-v2-remote-status-v1",
-  "action_id": "R3-10-APF3260M-SPOOL-PRESSURE-RC9",
-  "sequence": 54,
-  "action_type": "GATE_SEGMENT",
-  "state": "SUCCEEDED",
+  "action_id": "R2-05-APF1250-DUT-REBOOT-RC9-RETRY1",
+  "sequence": 55,
+  "action_type": "GATE_OWNERSHIP",
+  "state": "FAILED",
   "runner_id": "srv:3382405",
-  "action_sha256": "3a3635b67742bd9e567d5ba757d8cf32cb3454edb563ad7fc4fc336b637fba53",
-  "updated_at": "2026-08-22T00:12:17.667972+00:00",
+  "action_sha256": "fb9aade8c9276cd10b253740d6abc8f7b83cf3ea14883345a0d52856fbb8d389",
+  "updated_at": "2026-08-22T00:19:55.516166+00:00",
   "started_at": null,
-  "finished_at": "2026-08-22T00:12:17.667972+00:00",
-  "return_code": 0,
-  "verdict": "PASS",
-  "result_path": "validation/control/results/R3-10-APF3260M-SPOOL-PRESSURE-RC9/result.json",
-  "stdout_sha256": "29cbc8ed2cbe012b9161f26b28dab57efa627585f7227b6f322cdf3c7d4c5ed8",
+  "finished_at": "2026-08-22T00:19:55.516166+00:00",
+  "return_code": 2,
+  "verdict": null,
+  "result_path": "validation/control/results/R2-05-APF1250-DUT-REBOOT-RC9-RETRY1/result.json",
+  "stdout_sha256": "cc75417d545c45af4855d3cde92f84b3f5914de734ba172cb64cf309c2ca9188",
   "stderr_sha256": "b8258e86248ce6f15dfea1a12afcd2ad3fde62ba6d3cd24536ffc8cb3bb61c48",
   "error": null,
   "detail": {
     "safety": {
       "capture_engine_version": "V1",
       "capture_v2_production_enabled": "false",
-      "git_head": "fcf0f5114721c5a049e7238fa3dde53b50cb91fe",
+      "git_head": "62dc681898c3ba2cb494aa2db11f671f9f26a6d9",
       "expected_product_head": "958dc06d2bb1f29df44a4166f463739b6534f68a"
     },
     "parsed_output": {
-      "checks": [
-        {
-          "details": {},
-          "expected": ">0",
-          "name": "at_least_one_segment",
-          "observed": 6,
-          "passed": true,
-          "verdict": "PASS"
-        },
-        {
-          "details": {},
-          "expected": ">0 REMOTE_DELETED",
-          "name": "at_least_one_full_chain",
-          "observed": 6,
-          "passed": true,
-          "verdict": "PASS"
-        },
-        {
-          "details": {},
-          "expected": true,
-          "name": "server_store_observable",
-          "observed": [],
-          "passed": true,
-          "verdict": "PASS"
-        },
-        {
-          "details": {},
-          "expected": [],
-          "name": "no_server_and_dut_double_loss",
-          "observed": [],
-          "passed": true,
-          "verdict": "PASS"
-        },
-        {
-          "details": {},
-          "expected": [],
-          "name": "acked_segments_have_server_copy",
-          "observed": [],
-          "passed": true,
-          "verdict": "PASS"
-        },
-        {
-          "details": {},
-          "expected": true,
-          "name": "no_unacked_eviction",
-          "observed": null,
-          "passed": true,
-          "verdict": "PASS"
-        },
-        {
-          "details": {},
-          "expected": ">0",
-          "name": "spool_backlog_created",
-          "observed": 4,
-          "passed": true,
-          "verdict": "PASS"
-        },
-        {
-          "details": {},
-          "expected": ">0 bytes",
-          "name": "spool_backlog_has_bytes",
-          "observed": 4059,
-          "passed": true,
-          "verdict": "PASS"
-        },
-        {
-          "details": {},
-          "expected": "CRITICAL/UNACKED_BYTES_LIMIT",
-          "name": "spool_pressure_critical",
-          "observed": {
-            "reasons": [
-              "UNACKED_BYTES_LIMIT"
-            ],
-            "state": "CRITICAL"
-          },
-          "passed": true,
-          "verdict": "PASS"
-        },
-        {
-          "details": {},
-          "expected": "all sampled backlog segments remain on DUT",
-          "name": "unacked_segments_remained_on_dut",
-          "observed": {
-            "exists": 4,
-            "sample": 4
-          },
-          "passed": true,
-          "verdict": "PASS"
-        },
-        {
-          "details": {},
-          "expected": [
-            "9df993f9-567a-43d9-ab6b-9b320905c671",
-            "3731cea7-8c39-4f4b-a0de-477d3b24ca81",
-            "8f9a611d-c558-4e2d-ac97-b4154492dc8d",
-            "6493de7f-e63a-4f13-90b7-78cff88eca87"
-          ],
-          "name": "spool_backlog_recovered",
-          "observed": [
-            "3731cea7-8c39-4f4b-a0de-477d3b24ca81",
-            "6493de7f-e63a-4f13-90b7-78cff88eca87",
-            "8f9a611d-c558-4e2d-ac97-b4154492dc8d",
-            "9df993f9-567a-43d9-ab6b-9b320905c671"
-          ],
-          "passed": true,
-          "verdict": "PASS"
-        }
-      ],
-      "created_at": "2026-08-22T00:12:17.401475+00:00",
-      "evidence_bundle": "/tmp/capture-v2-gates/20260822T001216Z_R3-10-APF3260M-SPOOL-PRESSURE-RC9_c132f336-df1b-4285-b175-01d848f23b5d",
-      "facts": {
-        "backlog_remote_sample_exists": 4,
-        "backlog_sample_count": 4,
-        "backlog_segment_ids": [
-          "9df993f9-567a-43d9-ab6b-9b320905c671",
-          "3731cea7-8c39-4f4b-a0de-477d3b24ca81",
-          "8f9a611d-c558-4e2d-ac97-b4154492dc8d",
-          "6493de7f-e63a-4f13-90b7-78cff88eca87"
-        ],
-        "backlog_unacked_bytes": 4059,
-        "backlog_unacked_count": 4,
-        "capture_epoch_id": "19608881-b0d1-4f98-b49d-2836ae87c13e",
-        "capture_session_id": "0fbc672a-3541-4f79-aae3-9fbf0879cb50",
-        "cycles": 52,
-        "errors": 72,
-        "lease_epoch": 39,
-        "pressure_reasons": [
-          "UNACKED_BYTES_LIMIT"
-        ],
-        "pressure_state": "CRITICAL",
-        "recovered_backlog_ids": [
-          "9df993f9-567a-43d9-ab6b-9b320905c671",
-          "3731cea7-8c39-4f4b-a0de-477d3b24ca81",
-          "8f9a611d-c558-4e2d-ac97-b4154492dc8d",
-          "6493de7f-e63a-4f13-90b7-78cff88eca87"
-        ]
+      "details": {
+        "last_error": "DeviceConnectionError",
+        "old_boot_id": "9ccb9d68-3f7b-49c1-835c-dd52a5a1c345"
       },
-      "gate_id": "R3-10-APF3260M-SPOOL-PRESSURE-RC9",
-      "summary": "Reliable Segment / SFTP / ACK",
-      "verdict": "PASS"
+      "error": "GATE_DUT_REBOOT_RECONNECT_TIMEOUT",
+      "ok": false
     }
   }
 }
