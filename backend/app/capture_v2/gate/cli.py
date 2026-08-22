@@ -81,10 +81,10 @@ def _base_paths(parser: argparse.ArgumentParser) -> None:
 
 
 def _create_r2_validation_session(device_id: str) -> str:
-    """Create a clean R2-only ReproductionSession using the latest device profile snapshot.
+    """Create a clean validation ReproductionSession using the latest device profile snapshot.
 
     This deliberately clones only immutable/profile context. Runtime state, ownership,
-    calls, attempts and cleanup state are reset, so the R2 evidence is independent
+    calls, attempts and cleanup state are reset, so real-Gate evidence is independent
     from historical validation sessions.
     """
     with SessionLocal() as db:
@@ -189,12 +189,16 @@ async def _cmd_ownership_adopt(args) -> int:
 
 async def _cmd_segment(args) -> int:
     spec = _device(args)
+    reproduction_session_id = _resolve_reproduction_session_id(
+        args.reproduction_session_id,
+        device_id=spec.device_id,
+    )
     adapter = build_asyncssh_adapter(spec, password_env=args.password_env)
     await adapter.connect()
     try:
         plan = GateFaultPlan.load(Path(args.fault_plan) if args.fault_plan else None)
         result = await _runner(adapter, args).segment_normal(
-            reproduction_session_id=args.reproduction_session_id,
+            reproduction_session_id=reproduction_session_id,
             device=spec.as_profile_device(), worker_id=args.worker_id,
             duration_seconds=args.duration, cycle_interval_seconds=args.interval,
             gate_id=args.gate_id, fault_plan=plan,
@@ -292,7 +296,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     seg = sub.add_parser("segment", help="Run C reliable Segment/SFTP/ACK Gate")
     _common_device(seg); _base_paths(seg)
-    seg.add_argument("--reproduction-session-id", required=True)
+    seg.add_argument("--reproduction-session-id", required=True, help="Existing UUID or AUTO_NEW")
     seg.add_argument("--worker-id", required=True)
     seg.add_argument("--gate-id", default="R3-01")
     seg.add_argument("--duration", type=float, default=30.0)
