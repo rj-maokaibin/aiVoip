@@ -75,6 +75,16 @@ def _positive(section: Mapping[str, Any], key: str, *, allow_zero: bool = False)
     return value
 
 
+def _ratio(section: Mapping[str, Any], key: str) -> float:
+    try:
+        value = float(section[key])
+    except (KeyError, TypeError, ValueError) as exc:
+        raise AnalyzerProfileError(f"ANALYZER_PROFILE_INVALID_VALUE:{key}") from exc
+    if not 0.0 <= value <= 1.0:
+        raise AnalyzerProfileError(f"ANALYZER_PROFILE_OUT_OF_RANGE:{key}")
+    return value
+
+
 def validate_analyzer_profile(raw: dict[str, Any]) -> None:
     if int(raw.get("schema_version", 0)) != 1:
         raise AnalyzerProfileError("ANALYZER_PROFILE_SCHEMA_UNSUPPORTED")
@@ -93,6 +103,16 @@ def validate_analyzer_profile(raw: dict[str, Any]) -> None:
     if float(rtp["ptime_min_ms"]) >= float(rtp["ptime_max_ms"]):
         raise AnalyzerProfileError("ANALYZER_PROFILE_PTIME_RANGE_INVALID")
     _positive(rtp, "high_delta_multiplier")
+    _positive(rtp, "high_delta_additive_ms", allow_zero=True)
+    _positive(rtp, "high_delta_catch_up_max_packets")
+    accelerated = _ratio(rtp, "high_delta_catch_up_accelerated_ratio")
+    full_recovery = _ratio(rtp, "high_delta_catch_up_full_recovery_ratio")
+    partial_recovery = _ratio(rtp, "high_delta_catch_up_partial_recovery_ratio")
+    _ratio(rtp, "high_delta_timestamp_tolerance_ratio")
+    if accelerated <= 0:
+        raise AnalyzerProfileError("ANALYZER_PROFILE_HIGH_DELTA_ACCELERATED_RATIO_INVALID")
+    if partial_recovery <= 0 or partial_recovery >= full_recovery:
+        raise AnalyzerProfileError("ANALYZER_PROFILE_HIGH_DELTA_RECOVERY_RANGE_INVALID")
     _positive(rtp, "jitter_filter_divisor")
 
     silence = raw["silence"]
@@ -107,6 +127,17 @@ def validate_analyzer_profile(raw: dict[str, Any]) -> None:
     _positive(click, "min_energy_rise_db", allow_zero=True)
     if not 0 <= float(click["min_highband_ratio"]) <= 1:
         raise AnalyzerProfileError("ANALYZER_PROFILE_CLICK_HIGHBAND_INVALID")
+
+    candidate = raw.get("candidate_decision")
+    if candidate is not None:
+        if not isinstance(candidate, dict):
+            raise AnalyzerProfileError("ANALYZER_PROFILE_CANDIDATE_DECISION_INVALID")
+        _positive(candidate, "dtmf_guard_ms", allow_zero=True)
+        _positive(candidate, "media_boundary_guard_ms", allow_zero=True)
+        _ratio(candidate, "silence_counterpart_overlap_ratio")
+        _ratio(candidate, "silence_min_correlation")
+        _ratio(candidate, "silence_counterpart_active_ratio")
+        _positive(candidate, "silence_counterpart_active_margin_db", allow_zero=True)
 
     echo = raw["echo"]
     if float(echo["min_delay_ms"]) >= float(echo["max_delay_ms"]):
