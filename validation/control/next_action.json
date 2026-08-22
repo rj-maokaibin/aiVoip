@@ -1,29 +1,20 @@
 {
   "schema_version": "capture-v2-remote-action-v1",
-  "action_id": "R4-00-APF3260M-IDLE-READY-RC24",
-  "sequence": 108,
+  "action_id": "R6-DB-APF1250-RC24",
+  "sequence": 109,
   "created_at": "2026-08-22T03:25:00+00:00",
   "expires_at": "2026-08-22T15:25:00+00:00",
-  "action_type": "GATE_READINESS_FXS",
+  "action_type": "GOLDEN_ARCHIVE_RECOVER",
   "parameters": {
-    "device_id": "c132f336-df1b-4285-b175-01d848f23b5d",
-    "model": "APF3260-M",
+    "device_id": "259f16e6-af9e-4dff-969b-2bb5eac43eb2",
+    "model": "APF1250",
     "host": "10.48.8.74",
-    "port": 10002,
+    "port": 10001,
     "username": "root",
-    "platform_id": "mt7981",
-    "password_env": "DB:G1U060H000384",
-    "profile_root": "../profiles",
-    "profile_id": "voip-standard",
-    "object_root": "/tmp/voip-reproduction-objects",
-    "output_root": "/tmp/capture-v2-gates",
-    "repo_root": "..",
-    "reproduction_session_id": "AUTO_NEW",
-    "worker_id": "r4-00-apf3260m-idle-rc24",
-    "gate_id": "R4-00-APF3260M-IDLE-READY-RC24",
-    "duration": 12,
-    "transport": "scp",
-    "timeout_seconds": 600
+    "platform_id": "mt7621",
+    "password_env": "DB:G1V030E010214",
+    "archive_date": "20260820",
+    "timeout_seconds": 900
   },
   "safety": {
     "require_clean_git": true,
@@ -34,5 +25,5 @@
     "expected_head": "9395bb97ebd8cdaafc700c0701482a960a514bf5"
   },
   "requested_by": "ChatGPT-remote-validation-controller",
-  "note": "Corrected pre-OFFHOOK R4-00 on APF3260-M. Readiness uses armed producer/epoch, independent durable-store fsync probe and real SCP probe; idle business segment presence is supporting only. No handset action."
+  "note": "APF1250 historical Golden re-read plus real PostgreSQL R6 evidence-first EvidenceAsset/report self-test. Missing required FXS evidence must force insufficient conclusion/confidence; fully selected PCAP+FXS may retain only the bounded test conclusion. Validation rows cleaned up. No handset action."
 }
