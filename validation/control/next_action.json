@@ -1,30 +1,12 @@
 {
   "schema_version": "capture-v2-remote-action-v1",
-  "action_id": "R3-12-APF3260M-DUT-REBOOT-RC12",
-  "sequence": 63,
-  "created_at": "2026-08-22T00:33:00+00:00",
-  "expires_at": "2026-08-22T03:33:00+00:00",
-  "action_type": "GATE_SEGMENT",
+  "action_id": "RC13-SW-001",
+  "sequence": 64,
+  "created_at": "2026-08-22T00:37:00+00:00",
+  "expires_at": "2026-08-22T02:37:00+00:00",
+  "action_type": "SOFTWARE_REGRESSION",
   "parameters": {
-    "device_id": "c132f336-df1b-4285-b175-01d848f23b5d",
-    "model": "APF3260-M",
-    "host": "10.48.8.74",
-    "port": 10002,
-    "username": "root",
-    "platform_id": "mt7981",
-    "password_env": "DB:G1U060H000384",
-    "profile_root": "../profiles",
-    "profile_id": "voip-standard",
-    "object_root": "/tmp/voip-reproduction-objects",
-    "output_root": "/tmp/capture-v2-gates",
-    "repo_root": "..",
-    "reproduction_session_id": "AUTO_NEW",
-    "worker_id": "r3-12-apf3260m-rc12",
-    "gate_id": "R3-12-APF3260M-DUT-REBOOT-RC12",
-    "duration": 40,
-    "interval": 0.5,
-    "transport": "scp",
-    "timeout_seconds": 900
+    "timeout_seconds": 1800
   },
   "safety": {
     "require_clean_git": true,
@@ -32,8 +14,8 @@
     "require_v2_disabled": true,
     "allow_worker_kill": false,
     "allow_server_quarantine": false,
-    "expected_head": "a2c95832fce5e776a21a0518773363306efefe7f"
+    "expected_head": "5e743ccde61648cfb1998d4343f22da0a268cecd"
   },
   "requested_by": "ChatGPT-remote-validation-controller",
-  "note": "RC12 R3-12 APF3260-M real DUT reboot Segment Gate. Establish and drain pre-reboot CaptureEpoch, record boot_id, reboot DUT, reconnect, wait old lease expiry, require DUT_REBOOT recovery with a new CaptureEpoch and higher lease_epoch, close DUT_REBOOT_GAP/record reboot event, and prove at least one post-reboot segment completes durable store + ACK + exact remote delete with no Server/DUT double loss."
+  "note": "RC13 software regression after validation-only R3-12 deterministic post-reboot Segment fix. The real reboot/reconnect/recovery primitive is unchanged; after the repaired new CaptureEpoch is established, the Gate injects one valid closed 24-byte PCAP so the production Sealer/Pump must prove post-reboot durable store + ACK + exact DUT delete without relying on ambient traffic. Production V2 remains disabled."
 }
