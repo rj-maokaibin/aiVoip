@@ -1,0 +1,136 @@
+from datetime import datetime, timedelta, timezone
+
+from app.capture_v2.gate.models import GateVerdict
+from app.capture_v2.gate.r7_rollback import (
+    R7RollbackRehearsalGate,
+    RollbackEvidenceKind,
+    RollbackObservation,
+    RollbackPhase,
+)
+
+
+BASE = datetime(2026, 8, 22, 2, 0, tzinfo=timezone.utc)
+
+
+def _obs(
+    phase: RollbackPhase,
+    seconds: int,
+    *,
+    engine: str,
+    enabled: bool,
+    v1_healthy: bool,
+    v2_count: int,
+    kind: RollbackEvidenceKind = RollbackEvidenceKind.REAL_DUT,
+    ref: str | None = None,
+) -> RollbackObservation:
+    return RollbackObservation(
+        phase=phase,
+        observed_at=BASE + timedelta(seconds=seconds),
+        capture_engine_version=engine,
+        capture_v2_production_enabled=enabled,
+        v1_healthy=v1_healthy,
+        v2_producer_count=v2_count,
+        evidence_kind=kind,
+        evidence_refs=(ref or f"evidence://{phase.value.lower()}",),
+    )
+
+
+def _valid_real_rehearsal():
+    return (
+        _obs(RollbackPhase.PRE_V1, 0, engine="V1", enabled=False, v1_healthy=True, v2_count=0),
+        _obs(RollbackPhase.V2_ACTIVE, 10, engine="V2", enabled=True, v1_healthy=True, v2_count=1),
+        _obs(RollbackPhase.ROLLED_BACK_V1, 20, engine="V1", enabled=False, v1_healthy=True, v2_count=0),
+    )
+
+
+def test_missing_real_v2_phase_is_deferred_not_pass():
+    observations = _valid_real_rehearsal()
+    result = R7RollbackRehearsalGate.evaluate((observations[0], observations[2]))
+    assert result.verdict == GateVerdict.DEFERRED_REAL_GATE
+    assert result.facts["reason"] == "ROLLBACK_REAL_PHASES_MISSING"
+
+
+def test_simulated_rehearsal_can_never_pass_release_gate():
+    pre, v2, rolled = _valid_real_rehearsal()
+    v2 = _obs(
+        RollbackPhase.V2_ACTIVE,
+        10,
+        engine="V2",
+        enabled=True,
+        v1_healthy=True,
+        v2_count=1,
+        kind=RollbackEvidenceKind.SIMULATED,
+    )
+    result = R7RollbackRehearsalGate.evaluate((pre, v2, rolled))
+    assert result.verdict == GateVerdict.DEFERRED_REAL_GATE
+    assert result.facts["reason"] == "ROLLBACK_REAL_DUT_EVIDENCE_REQUIRED"
+
+
+def test_nonchronological_evidence_is_inconclusive():
+    pre, _, rolled = _valid_real_rehearsal()
+    v2 = _obs(RollbackPhase.V2_ACTIVE, 30, engine="V2", enabled=True, v1_healthy=True, v2_count=1)
+    result = R7RollbackRehearsalGate.evaluate((pre, v2, rolled))
+    assert result.verdict == GateVerdict.INCONCLUSIVE
+    assert result.facts["reason"] == "ROLLBACK_EVIDENCE_TIME_ORDER_INVALID"
+
+
+def test_reused_evidence_ref_is_inconclusive():
+    pre = _obs(RollbackPhase.PRE_V1, 0, engine="V1", enabled=False, v1_healthy=True, v2_count=0, ref="same")
+    v2 = _obs(RollbackPhase.V2_ACTIVE, 10, engine="V2", enabled=True, v1_healthy=True, v2_count=1, ref="same")
+    rolled = _obs(RollbackPhase.ROLLED_BACK_V1, 20, engine="V1", enabled=False, v1_healthy=True, v2_count=0)
+    result = R7RollbackRehearsalGate.evaluate((pre, v2, rolled))
+    assert result.verdict == GateVerdict.INCONCLUSIVE
+    assert result.facts["reason"] == "ROLLBACK_EVIDENCE_REF_REUSED"
+
+
+def test_real_observation_with_v1_not_restored_fails():
+    pre, v2, _ = _valid_real_rehearsal()
+    rolled = _obs(
+        RollbackPhase.ROLLED_BACK_V1,
+        20,
+        engine="V1",
+        enabled=False,
+        v1_healthy=False,
+        v2_count=0,
+    )
+    result = R7RollbackRehearsalGate.evaluate((pre, v2, rolled))
+    assert result.verdict == GateVerdict.FAIL
+    assert "rollback_v1_healthy" in result.facts["failed_checks"]
+
+
+def test_real_observation_with_v2_producer_left_after_rollback_fails():
+    pre, v2, _ = _valid_real_rehearsal()
+    rolled = _obs(
+        RollbackPhase.ROLLED_BACK_V1,
+        20,
+        engine="V1",
+        enabled=False,
+        v1_healthy=True,
+        v2_count=1,
+    )
+    result = R7RollbackRehearsalGate.evaluate((pre, v2, rolled))
+    assert result.verdict == GateVerdict.FAIL
+    assert "rollback_no_v2_producer" in result.facts["failed_checks"]
+
+
+def test_structurally_valid_real_dut_fixture_exercises_validator_pass_path_only():
+    # This is a unit test of the validator. It is not evidence that a real
+    # rollback rehearsal occurred and must never be used as a release artifact.
+    result = R7RollbackRehearsalGate.evaluate(_valid_real_rehearsal())
+    assert result.verdict == GateVerdict.PASS
+    assert result.facts["reason"] == "ROLLBACK_REHEARSAL_PROVEN"
+
+
+def test_dict_schema_requires_timezone_and_nonnegative_producer_count():
+    result = R7RollbackRehearsalGate.evaluate_dicts(({
+        "phase": "PRE_V1",
+        "observed_at": "2026-08-22T10:00:00",
+        "capture_engine_version": "V1",
+        "capture_v2_production_enabled": False,
+        "v1_healthy": True,
+        "v2_producer_count": 0,
+        "evidence_kind": "REAL_DUT",
+        "evidence_refs": ["evidence://pre"],
+    },))
+    assert result.verdict == GateVerdict.INCONCLUSIVE
+    assert result.facts["reason"] == "ROLLBACK_OBSERVED_AT_TZ_REQUIRED"
