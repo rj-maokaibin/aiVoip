@@ -14,6 +14,7 @@ classification:
     - cross_layer_correlation
     - finding_composition
     - artifact_semantics
+    - evidence_card_traceability
     - canonical_report_semantics
 source:
   filename: tcpdump-2026-08-14(2).pcap
@@ -62,12 +63,17 @@ expected:
         direction: TX
         packet_count: 6525
   rtp:
+    packet_count_semantics: UNIQUE_EFFECTIVE_RTP_PACKETS
     primary_uplink:
       src_ip: 192.168.150.4
       src_port: 10000
       dst_ip: 192.168.3.200
       dst_port: 11446
       codec: PCMU
+      observed_packet_count: 2423
+      unique_packet_count: 2423
+      duplicate_packets: 0
+      expected_packets: 2423
       lost_packets: 0
       high_delta_count: 2
       high_delta_ms:
@@ -84,10 +90,43 @@ expected:
           current_frame_number: 20344
           previous_sequence: 46519
           current_sequence: 46520
+      high_delta_semantics:
+        required_sequence_continuous: true
+        required_loss_semantics: NO_SEQUENCE_LOSS_AT_EVENT_BOUNDARY
+        allowed_classifications:
+          - INTERARRIVAL_STALL_WITHOUT_RTP_GAP
+          - INTERARRIVAL_STALL_WITH_MEDIA_TIMESTAMP_GAP
+        catch_up_required: true
+    primary_downlink:
+      src_ip: 192.168.3.200
+      src_port: 11446
+      dst_ip: 192.168.150.4
+      dst_port: 10000
+      codec: PCMU
+      observed_packet_count: 2427
+      unique_packet_count: 2425
+      duplicate_packets: 2
+      expected_packets: 2425
+      lost_packets: 0
+      max_arrival_delta_ms: {min: 35.5, max: 36.7}
+      duplicate_events:
+        - sequence: 14555
+          first_frame_number: 20413
+          duplicate_frame_number: 20414
+          rtp_timestamp: 492033328
+          arrival_delta_ms: {min: 0.13, max: 0.15}
+        - sequence: 14556
+          first_frame_number: 20416
+          duplicate_frame_number: 20417
+          rtp_timestamp: 492033488
+          arrival_delta_ms: {min: 0.15, max: 0.17}
     forbidden_anomaly_types: [PACKET_LOSS, BURST_LOSS]
     semantic_rules:
       high_delta_must_not_be_labeled_packet_loss: true
       sequence_must_remain_continuous_across_high_delta: true
+      duplicate_packets_must_not_inflate_effective_media_count: true
+      observed_packet_count_must_equal_unique_plus_duplicates: true
+      expected_packets_must_equal_unique_plus_loss: true
   dtmf:
     required_event_type: DTMF_SIP_DIAL_MATCH
     expected_match_count: 1
@@ -120,6 +159,27 @@ expected:
     sip_call_id: 00ad1c804c33b255@192.168.3.200
     dialed_number: "601"
     required_finding_types: [HIGH_DELTA, LOCAL_CAPTURE_PERIODIC_INTERFERENCE, DTMF_SIP_DIAL_MATCH]
+    high_delta_primary_stream_finding:
+      src_ip: 192.168.150.4
+      src_port: 10000
+      dst_ip: 192.168.3.200
+      dst_port: 11446
+      occurrence_count: 2
+      all_sequence_continuous: true
+      loss_interpretation: DELAY_NOT_PACKET_LOSS
+    evidence_cards:
+      high_delta_primary_stream:
+        finding_type: HIGH_DELTA
+        audio_status: AVAILABLE
+        packet_ref_count: 2
+        next_action_required: true
+        root_cause_boundary_required: true
+      local_periodic_interference:
+        finding_type: LOCAL_CAPTURE_PERIODIC_INTERFERENCE
+        audio_status: AVAILABLE
+        required_audio_sources: [pcm_rx, rtp_up]
+        next_action_required: true
+        root_cause_boundary_required: true
     forbidden_finding_types: [PACKET_LOSS, BURST_LOSS]
     forbidden_click_window:
       start: 1786690964.300000
@@ -140,8 +200,12 @@ notes:
   - 当前诊断对象只有 1 个 DUT-facing Call。PCM 40000/50000 的 UDP source IP 为 192.168.150.4，系统应使用这一原始 provenance 选择包含该设备 SDP/RTP endpoint 的主腿，而不是按“结束时间最新”选择 PBX 内部腿。
   - PCM DTMF 601 只能与选中的 DUT-facing SIP leg 形成 1 条 DTMF_SIP_DIAL_MATCH；同一 DTMF 不得复制到 PBX B2BUA 内部腿。
   - PCM 原始 UDP 人工复核为 40000/50000 各 6525 包，每包 payload 160 bytes；按已知 Profile 为 8kHz/16-bit little-endian，每包对应 10ms 音频。
+  - RTP packet_count 口径已显式冻结：有效媒体包按唯一 RTP Sequence 计数；抓包观察 Datagram 单独记录 observed_packet_count；重复 Datagram 记录 duplicate_packets。下行观察 2427 包，其中唯一 Sequence 2425、重复 2、丢失 0；不得把 2427 写成 2427 个有效媒体包，也不得把 2 个重复包写成 Packet Loss。
+  - 下行两个 duplicate 已做 Frame/Seq 级复核：Seq 14555 为 Frame 20413→20414，RTP timestamp 492033328；Seq 14556 为 Frame 20416→20417，RTP timestamp 492033488。两组均为相同 Sequence + 相同 RTP timestamp 的快速重复 Datagram。
   - 两个主上行 HIGH_DELTA 的边界 Frame/Seq 已人工复核：20272/46511→20285/46512，以及 20329/46519→20344/46520；Sequence 连续，因此不能写成 Packet Loss。high_delta_ms 是算法容差范围，high_delta_events 保存人工复核的精确 Frame/Seq Ground Truth。
-  - HIGH_DELTA 表示到包/发送节奏间隔异常，不等同于 RTP Sequence Loss。
+  - 两次主上行 HIGH_DELTA 后均可见快速到包/补偿性 burst；Golden 只要求存在 catch-up 证据，不冻结具体 recovery ratio，避免把实现算法数值当成人工 Ground Truth。
+  - HIGH_DELTA 表示到包/发送节奏间隔异常，不等同于 RTP Sequence Loss；Report 必须将 DUT 主上行 2 次事件聚合为同一 Stream Finding，并保留逐事件 Frame/Seq 下钻。
+  - PR5 的 Evidence Card Golden 只检查生产 Analyzer 实际生成的 Artifact 是否按生产绑定语义落到正确 Finding，不把 manifest 的 expected 值注入生产分析链；Focused PNG 的 Renderer 语义由独立软件 Gate 校验。
   - DTMF 起始沿附近的 Click/Pop 候选必须被 Negative Control 拦截，不得作为独立爆音故障升级。
   - PCM_TX 静音只有在对应 RTP 同窗明确活跃时才允许升级为 CROSS_LAYER_SILENCE_MISMATCH；同窗 RTP 静音/低能量必须 Reject，证据不足必须 Inconclusive。
   - 周期干扰只能收敛到“本地上行采集路径已可观察”，不能越级确认电源/接地/电话机/FXS-SLIC 等物理根因。

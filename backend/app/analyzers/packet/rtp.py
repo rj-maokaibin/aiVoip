@@ -3,11 +3,14 @@ from __future__ import annotations
 from collections import defaultdict
 from dataclasses import asdict, dataclass
 from statistics import mean, median
-from typing import Iterable
+from typing import Iterable, Mapping
 
 from .sdp import STATIC_PAYLOADS
 from .types import NormalizedPacket
 from app.analyzers.profile import get_default_analyzer_profile
+
+
+HIGH_DELTA_SEMANTICS_VERSION = "rtp-high-delta-semantics-v1"
 
 
 @dataclass(frozen=True, slots=True)
@@ -57,6 +60,7 @@ class RtpStreamAnalyzer:
         reference: int | None = None
         timestamp_reference: int | None = None
         duplicates = 0
+        duplicate_events: list[dict] = []
         reordered = 0
         payload_changes = 0
         payload_change_events: list[dict] = []
@@ -72,6 +76,20 @@ class RtpStreamAnalyzer:
             reference = ext if reference is None else max(reference, ext)
             if ext in seen:
                 duplicates += 1
+                first_packet = unique_packets.get(ext)
+                duplicate_events.append({
+                    "sequence": seq,
+                    "sequence_ext": ext,
+                    "first_frame_number": first_packet.frame_number if first_packet else None,
+                    "duplicate_frame_number": packet.frame_number,
+                    "first_timestamp": first_packet.timestamp if first_packet else None,
+                    "duplicate_timestamp": packet.timestamp,
+                    "arrival_delta_ms": round((packet.timestamp - first_packet.timestamp) * 1000.0, 6) if first_packet else None,
+                    "rtp_timestamp": packet.rtp.timestamp,
+                    "first_rtp_timestamp": first_packet.rtp.timestamp if first_packet and first_packet.rtp else None,
+                    "payload_type": packet.rtp.payload_type,
+                    "first_payload_type": first_packet.rtp.payload_type if first_packet and first_packet.rtp else None,
+                })
             else:
                 if max_seen is not None and ext < max_seen:
                     reordered += 1
@@ -138,6 +156,17 @@ class RtpStreamAnalyzer:
                 if delta >= high_threshold:
                     previous_packet = packets[idx - 1]
                     current_packet = packets[idx]
+                    semantics = _high_delta_semantics(
+                        packets=packets,
+                        current_index=idx,
+                        previous_packet=previous_packet,
+                        current_packet=current_packet,
+                        delta_ms=delta,
+                        ptime_ms=ptime_ms,
+                        threshold_ms=high_threshold,
+                        clock_rate=clock_rate,
+                        config=self.config,
+                    )
                     events.append(RtpEvent(
                         type="HIGH_DELTA",
                         start_time=current_packet.timestamp,
@@ -145,13 +174,16 @@ class RtpStreamAnalyzer:
                         details={
                             "delta_ms": round(delta, 3),
                             "expected_ptime_ms": round(ptime_ms, 3),
-                            "excess_delay_ms": round(max(0.0, delta-ptime_ms), 3),
+                            "threshold_ms": round(high_threshold, 3),
+                            "excess_delay_ms": round(max(0.0, delta - ptime_ms), 3),
+                            "delta_ratio_to_ptime": round(delta / ptime_ms, 3) if ptime_ms else None,
                             "previous_frame_number": previous_packet.frame_number,
                             "current_frame_number": current_packet.frame_number,
                             "previous_timestamp": previous_packet.timestamp,
                             "current_timestamp": current_packet.timestamp,
                             "previous_sequence": previous_packet.rtp.sequence,
                             "current_sequence": current_packet.rtp.sequence,
+                            **semantics,
                         },
                     ))
         if payload_changes:
@@ -194,6 +226,7 @@ class RtpStreamAnalyzer:
             "loss_rate_percent": loss_rate_value,
             "loss_rate": loss_rate_value,
             "duplicate_packets": duplicates,
+            "duplicate_events": duplicate_events,
             "out_of_order_packets": reordered,
             "max_consecutive_loss": max((e.details["lost_packets"] for e in burst_events), default=0),
             "burst_loss_count": len(burst_events),
@@ -201,7 +234,9 @@ class RtpStreamAnalyzer:
             "p95_delta_ms": round(_percentile(deltas_ms, 0.95), 6) if deltas_ms else None,
             "max_delta_ms": round(max(deltas_ms), 6) if deltas_ms else None,
             "high_delta_count": len(high_delta_events),
-            "max_excess_delay_ms": round(max((e.details.get("excess_delay_ms",0.0) for e in high_delta_events), default=0.0), 6),
+            "high_delta_without_sequence_loss_count": sum(1 for e in high_delta_events if e.details.get("sequence_continuous") is True),
+            "high_delta_catch_up_count": sum(1 for e in high_delta_events if (e.details.get("catch_up") or {}).get("status") in {"PARTIAL", "FULL"}),
+            "max_excess_delay_ms": round(max((e.details.get("excess_delay_ms", 0.0) for e in high_delta_events), default=0.0), 6),
             "avg_jitter_ms": avg_jitter,
             "p95_jitter_ms": p95_jitter,
             "max_jitter_ms": max_jitter,
@@ -215,6 +250,7 @@ class RtpStreamAnalyzer:
             "clock_rate": clock_rate,
             "ptime_ms": round(ptime_ms, 6) if ptime_ms else None,
             "ptime_source": ptime_source,
+            "high_delta_semantics_version": HIGH_DELTA_SEMANTICS_VERSION,
             "availability": {
                 "codec_mapping": "AVAILABLE" if mapping is not None else "UNAVAILABLE",
                 "clock_rate": "AVAILABLE" if clock_rate else "UNAVAILABLE",
@@ -222,6 +258,7 @@ class RtpStreamAnalyzer:
                 "rfc3550_jitter": "AVAILABLE" if jitter_ms else "UNAVAILABLE",
                 "estimated_audio_loss": "AVAILABLE" if ptime_ms is not None else "UNAVAILABLE",
                 "frame_level_evidence": "AVAILABLE",
+                "high_delta_semantics": "AVAILABLE" if ptime_ms is not None else "UNAVAILABLE",
             },
             "analyzer_profile": self.profile.metadata(),
             "events": [asdict(e) for e in sorted(events, key=lambda e: e.start_time)],
@@ -244,6 +281,115 @@ class RtpStreamAnalyzer:
         if float(self.config["ptime_min_ms"]) <= value <= float(self.config["ptime_max_ms"]):
             return value
         return None
+
+
+def _high_delta_semantics(*, packets: list[NormalizedPacket], current_index: int,
+                          previous_packet: NormalizedPacket, current_packet: NormalizedPacket,
+                          delta_ms: float, ptime_ms: float, threshold_ms: float,
+                          clock_rate: int | None, config: Mapping[str, object]) -> dict:
+    prev_seq = previous_packet.rtp.sequence if previous_packet.rtp else None
+    curr_seq = current_packet.rtp.sequence if current_packet.rtp else None
+    seq_step = ((int(curr_seq) - int(prev_seq)) & 0xFFFF) if prev_seq is not None and curr_seq is not None else None
+    sequence_continuous = seq_step == 1 if seq_step is not None else None
+    sequence_gap_packets = max(0, seq_step - 1) if seq_step is not None and seq_step > 0 else None
+
+    prev_rtp_ts = previous_packet.rtp.timestamp if previous_packet.rtp else None
+    curr_rtp_ts = current_packet.rtp.timestamp if current_packet.rtp else None
+    rtp_timestamp_step = ((int(curr_rtp_ts) - int(prev_rtp_ts)) & 0xFFFFFFFF) if prev_rtp_ts is not None and curr_rtp_ts is not None else None
+    expected_rtp_timestamp_step = round(clock_rate * ptime_ms / 1000.0) if clock_rate else None
+    if rtp_timestamp_step is not None and expected_rtp_timestamp_step:
+        tolerance_ratio = float(config["high_delta_timestamp_tolerance_ratio"])
+        tolerance = max(1, round(expected_rtp_timestamp_step * tolerance_ratio))
+        rtp_timestamp_continuous = abs(rtp_timestamp_step - expected_rtp_timestamp_step) <= tolerance
+    else:
+        rtp_timestamp_continuous = None
+
+    if sequence_continuous is True and rtp_timestamp_continuous is not False:
+        classification = "INTERARRIVAL_STALL_WITHOUT_RTP_GAP"
+        loss_semantics = "NO_SEQUENCE_LOSS_AT_EVENT_BOUNDARY"
+    elif sequence_continuous is False and seq_step is not None and seq_step > 1:
+        classification = "INTERARRIVAL_STALL_WITH_SEQUENCE_GAP"
+        loss_semantics = "SEQUENCE_GAP_PRESENT_AT_EVENT_BOUNDARY"
+    elif sequence_continuous is True:
+        classification = "INTERARRIVAL_STALL_WITH_MEDIA_TIMESTAMP_GAP"
+        loss_semantics = "NO_SEQUENCE_LOSS_BUT_MEDIA_TIMESTAMP_STEP_ABNORMAL"
+    else:
+        classification = "INTERARRIVAL_STALL_BOUNDARY_UNCERTAIN"
+        loss_semantics = "BOUNDARY_SEQUENCE_SEMANTICS_UNAVAILABLE"
+
+    excess = max(0.0, delta_ms - ptime_ms)
+    catch_up = _catch_up_after_high_delta(packets, current_index, ptime_ms, excess, config)
+    return {
+        "semantic_version": HIGH_DELTA_SEMANTICS_VERSION,
+        "classification": classification,
+        "loss_semantics": loss_semantics,
+        "sequence_step": seq_step,
+        "sequence_continuous": sequence_continuous,
+        "sequence_gap_packets": sequence_gap_packets,
+        "rtp_timestamp_step": rtp_timestamp_step,
+        "expected_rtp_timestamp_step": expected_rtp_timestamp_step,
+        "rtp_timestamp_continuous": rtp_timestamp_continuous,
+        "catch_up": catch_up,
+        "semantic_boundary": (
+            "HIGH_DELTA 证明该 RTP Stream 的相邻包到达/发送间隔显著大于 ptime；"
+            "只有 Sequence Gap 才能在该边界支持 Packet Loss。单独 HIGH_DELTA 不等同于丢包。"
+        ),
+        "threshold_context": {
+            "threshold_ms": round(threshold_ms, 3),
+            "expected_ptime_ms": round(ptime_ms, 3),
+            "actual_delta_ms": round(delta_ms, 3),
+        },
+    }
+
+
+def _catch_up_after_high_delta(packets: list[NormalizedPacket], current_index: int,
+                               ptime_ms: float, excess_delay_ms: float,
+                               config: Mapping[str, object]) -> dict:
+    deltas: list[float] = []
+    recovered_ms = 0.0
+    accelerated = 0
+    max_following_packets = int(config["high_delta_catch_up_max_packets"])
+    accelerated_ratio = float(config["high_delta_catch_up_accelerated_ratio"])
+    full_ratio = float(config["high_delta_catch_up_full_recovery_ratio"])
+    partial_ratio = float(config["high_delta_catch_up_partial_recovery_ratio"])
+    end = min(len(packets), current_index + 1 + max_following_packets)
+    for idx in range(current_index + 1, end):
+        delta = max(0.0, (packets[idx].timestamp - packets[idx - 1].timestamp) * 1000.0)
+        deltas.append(delta)
+        if delta < ptime_ms:
+            recovered_ms += ptime_ms - delta
+        if delta <= ptime_ms * accelerated_ratio:
+            accelerated += 1
+        if excess_delay_ms > 0 and recovered_ms >= excess_delay_ms * full_ratio:
+            break
+
+    recovery_ratio = min(1.0, recovered_ms / excess_delay_ms) if excess_delay_ms > 0 else 0.0
+    if excess_delay_ms <= 0 or not deltas:
+        status = "NONE"
+    elif recovery_ratio >= full_ratio:
+        status = "FULL"
+    elif recovery_ratio >= partial_ratio:
+        status = "PARTIAL"
+    else:
+        status = "NONE"
+    return {
+        "status": status,
+        "observed": status in {"PARTIAL", "FULL"},
+        "following_packet_count": len(deltas),
+        "accelerated_interval_count": accelerated,
+        "deltas_ms": [round(x, 3) for x in deltas],
+        "min_delta_ms": round(min(deltas), 3) if deltas else None,
+        "recovered_delay_ms": round(recovered_ms, 3),
+        "excess_delay_ms": round(excess_delay_ms, 3),
+        "recovery_ratio": round(recovery_ratio, 3),
+        "profile_thresholds": {
+            "max_following_packets": max_following_packets,
+            "accelerated_ratio": accelerated_ratio,
+            "full_recovery_ratio": full_ratio,
+            "partial_recovery_ratio": partial_ratio,
+        },
+        "definition": "catch-up 表示 HIGH_DELTA 后若干 RTP 到达间隔短于 ptime，回收了部分/大部分先前停顿时间；不代表接收端一定无听感影响。",
+    }
 
 
 def _extend_mod(value: int, reference: int | None, modulus: int) -> int:
@@ -326,11 +472,12 @@ def _rfc3550_jitter(packets: list[NormalizedPacket], clock_rate: int, filter_div
 def _percentile(values: list[float], q: float) -> float | None:
     if not values:
         return None
-    ordered=sorted(values)
-    pos=(len(ordered)-1)*q
-    lo=int(pos); hi=min(lo+1,len(ordered)-1)
-    frac=pos-lo
-    return ordered[lo]*(1-frac)+ordered[hi]*frac
+    ordered = sorted(values)
+    pos = (len(ordered) - 1) * q
+    lo = int(pos)
+    hi = min(lo + 1, len(ordered) - 1)
+    frac = pos - lo
+    return ordered[lo] * (1 - frac) + ordered[hi] * frac
 
 
 def _stream_id(key: tuple) -> str:

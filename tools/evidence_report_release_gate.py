@@ -43,6 +43,16 @@ def main() -> int:
     gates.append(run("PERFORMANCE_SOFTWARE_CORE", [sys.executable, "tools/evidence_report_performance_gate.py", "--iterations", "4"], category="PERFORMANCE", timeout=180))
     if not args.skip_tests:
         gates.append(run(
+            "DIAGNOSTIC_CONTRACT",
+            [sys.executable, "-m", "pytest", "-q",
+             "backend/tests/test_diagnostic_contract_v1.py",
+             "backend/tests/test_diagnostic_contract_transport_v1.py",
+             "backend/tests/test_diagnostic_event_identity_v1.py",
+             "backend/tests/test_diagnostic_unresolved_pcm_v1.py",
+             "backend/tests/test_diagnostic_claim_bridge_v1.py"],
+            category="CONTRACT", timeout=120,
+        ))
+        gates.append(run(
             "EVIDENCE_REPORT_REGRESSION",
             [sys.executable, "-m", "pytest", "-q",
              "backend/tests/test_preliminary_evidence_report_v1.py",
@@ -51,6 +61,9 @@ def main() -> int:
              "backend/tests/test_offline_subject_call_selection_v1.py",
              "backend/tests/test_pcm_source_provenance_v1.py",
              "backend/tests/test_dtmf_subject_call_correlation_v1.py",
+             "backend/tests/test_rtp_high_delta_semantics_v1.py",
+             "backend/tests/test_rtp_high_delta_report_v1.py",
+             "backend/tests/test_rtp_stream_call_binding_v1.py",
              "backend/tests/test_candidate_decision_negative_control_v1.py",
              "backend/tests/test_candidate_decision_rtp_activity_v1.py",
              "backend/tests/test_candidate_decision_field_regression_v1.py",
@@ -66,6 +79,14 @@ def main() -> int:
              "backend/tests/test_feishu_evidence_document_v1.py",
              "backend/tests/test_rtp_frame_evidence_v1.py",
              "backend/tests/test_dtmf_finding_v1.py",
+             "backend/tests/test_evidence_card_readability_v1.py",
+             "backend/tests/test_evidence_artifact_binding_v1.py",
+             "backend/tests/test_visual_annotation_contract_v1.py",
+             "backend/tests/test_sip_flow_visual_v1.py",
+             "backend/tests/test_evidence_card_artifact_permissions_v1.py",
+             "backend/tests/test_report_grounding_validator_v1.py",
+             "backend/tests/test_report_grounding_replay_boundary_v1.py",
+             "backend/tests/test_report_grounding_api_failure_persistence_v1.py",
              "backend/tests/test_evidence_retention_v1.py",
              "backend/tests/test_evidence_report_retention_expiry_v1.py",
              "backend/tests/test_evidence_permissions_v1.py",
@@ -76,7 +97,7 @@ def main() -> int:
     software_pass = all(x.status == "PASS" for x in gates)
     environment_gates = [
         {"key": "LIVE_FEISHU_TENANT", "status": "UNVERIFIED", "blocking_for_production": True,
-         "detail": "需要真实飞书应用/Tenant 验证 Docx Block、PNG/WAV、权限和卡片更新。"},
+         "detail": "需要真实飞书应用/Tenant 验证 Evidence Card 内联 PNG/WAV、权限、媒体替换、Grounding 状态投影和卡片更新。"},
         {"key": "REAL_DUT_END_TO_END", "status": "UNVERIFIED", "blocking_for_production": True,
          "detail": "需要真实 DUT 完成 PCAP+PCM RX/TX→Call→Analyzer→Report→Bundle→Cleanup；Offline Golden 不覆盖采集可靠性。"},
     ]
@@ -98,14 +119,14 @@ def main() -> int:
             "key": "OFFLINE_ANALYSIS_GOLDEN_001",
             "status": "UNVERIFIED",
             "blocking_for_production": True,
-            "detail": "设置 VOIP_OFFLINE_GOLDEN_001_PCAP 指向 SHA256=b038aa7c...e3f0 的外部 PCAP fixture 后，执行真实 Imported-Evidence Golden E2E。",
+            "detail": "设置 VOIP_OFFLINE_GOLDEN_001_PCAP 指向 SHA256=b038aa7c...e3f0 的外部 PCAP fixture 后，执行真实 Imported-Evidence Golden E2E，并验证 Evidence Card 图/音频/Frame、Grounding 语义以及 PR7 DiagnosticEvent/Decision/Finding 链路。",
         })
 
     environment_gates.append({
         "key": "BROADER_REAL_GOLDEN_DATASET",
         "status": "UNVERIFIED",
         "blocking_for_production": True,
-        "detail": "单个 Offline Golden 不能代表最终 Recall/Precision；仍需 Synthetic + Lab Real + 更多 Field/Imported Confirmed 样本覆盖正常、负控及各故障族。",
+        "detail": "单个 Offline Golden 不能代表最终 Recall/Precision、所有 Evidence Card 可读性、Grounding 规则或 Diagnostic Contract 的全部故障族覆盖；仍需 Synthetic + Lab Real + 更多 Field/Imported Confirmed 样本覆盖正常、负控及各故障族。",
     })
     environment_fail = any(x.get("blocking_for_production") and x.get("status") == "FAIL" for x in environment_gates)
     environment_pending = any(x.get("blocking_for_production") and x.get("status") == "UNVERIFIED" for x in environment_gates)
@@ -125,7 +146,7 @@ def main() -> int:
         "gates": [asdict(x) for x in gates],
         "environment_gates": environment_gates,
         "allowed_pending_environment_gates": [x["key"] for x in environment_gates if x.get("status") == "UNVERIFIED"],
-        "claim": "software_status covers machine-verifiable software gates. production_status also evaluates configured real/offline Golden fixtures; missing external fixtures remain explicit UNVERIFIED gates rather than being silently treated as PASS.",
+        "claim": "software_status covers machine-verifiable software gates, including PR5 Evidence Card traceability/renderer/permission boundaries; PR6 Structural/Semantic/Evidence/Explainability Grounding, runtime FAILED/audit/idempotency persistence and deterministic Claim Manifest; and PR7 canonical DiagnosticEvent v1 / CandidateDecision v2 / Finding Diagnostic Link v1 contracts with deterministic/reorder-stable IDs, lossless legacy-status projection, explicit MERGE, packet-only snapshot transport, unresolved-PCM INCONCLUSIVE degradation, Claim/event-ref bridge, and the invariant that SUPPRESS/INCONCLUSIVE decisions cannot justify user-visible Findings. production_status also evaluates configured real/offline Golden fixtures; missing external fixtures remain explicit UNVERIFIED gates rather than being silently treated as PASS.",
     }
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")

@@ -10,9 +10,9 @@ def _profile() -> dict:
     return yaml.safe_load(default_analyzer_profile_path().read_text(encoding="utf-8"))
 
 
-def test_candidate_decision_profile_v12_is_valid():
+def test_candidate_decision_profile_v13_is_valid():
     raw = _profile()
-    assert raw["version"] == "1.2.0"
+    assert raw["version"] == "1.3.0"
     validate_analyzer_profile(raw)
 
 

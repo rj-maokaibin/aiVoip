@@ -46,6 +46,6 @@ def test_dtmf_abnormal_is_a_frozen_p0_type_and_thresholds_are_profile_governed()
     assert "DTMF_ABNORMAL" in P0_FINDING_TYPES
     profile = get_default_analyzer_profile()
     dtmf = profile.section("dtmf")
-    assert profile.version == "1.1.0"
+    assert profile.version == "1.3.0"
     assert float(dtmf["min_interdigit_gap_ms"]) == 40.0
     assert float(dtmf["quality_min_confidence"]) == 0.55

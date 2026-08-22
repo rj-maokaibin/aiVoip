@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import timedelta
 
 from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi.responses import RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -11,16 +12,17 @@ from app.api.evidence_permissions import EvidencePermission, has_evidence_permis
 from app.core.config import settings
 from app.db.evidence_report_models import EvidenceFinding, PreliminaryEvidenceReport
 from app.integrations.storage import ObjectStorage
+from app.reports.report_grounding import ReportGroundingError
 from app.schemas.evidence_reports import EvidenceBundleRequest, EvidenceFindingOut, EvidenceReportOut, EvidenceReportRebuildRequest
 from app.services.audit import audit
-from app.services.evidence_report import generate_evidence_report
+from app.services.evidence_report import generate_evidence_report, mark_report_failed
 from app.services.evidence_report_artifacts import build_evidence_bundle, report_artifacts
-from app.services.idempotency import begin_idempotent, complete_idempotent
+from app.services.idempotency import begin_idempotent, complete_idempotent, fail_idempotent
 
 router=APIRouter(tags=["evidence-reports"])
 
 REPORT_SAFE_ARTIFACT_TYPES = {
-    "AUDIO_CLIP", "WAVEFORM_PNG", "SPECTRUM_PNG", "SPECTROGRAM_PNG",
+    "AUDIO_CLIP", "PERIODIC_AUDIO_CLIP", "WAVEFORM_PNG", "SPECTRUM_PNG", "SPECTROGRAM_PNG",
     "RTP_TIMELINE_PNG", "SIP_CALL_FLOW_PNG", "PRELIMINARY_REPORT_HTML",
     "PRELIMINARY_REPORT_JSON", "MANIFEST_JSON", "WAVEFORM_JSON", "SPECTROGRAM_JSON",
 }
@@ -64,11 +66,40 @@ def _rebuild(scope_type:str,scope_id:str,req:EvidenceReportRebuildRequest,db:Ses
     handle=begin_idempotent(db,scope=f"POST:/api/v1/{scope_type.lower()}/{scope_id}/reports/evidence/rebuild",key=idempotency_key,
                             payload={"scope_type":scope_type,"scope_id":scope_id,"force":req.force})
     if handle.replay is not None: return handle.replay
+    previous=_latest(db,scope_type,scope_id)
+    previous_id=previous.id if previous else None
+    previous_status=previous.status if previous else None
     try:
         row,_payload,_replay=generate_evidence_report(db,scope_type=scope_type,scope_id=scope_id,actor=identity.actor_id,force=req.force)
         response=EvidenceReportOut.model_validate(row).model_dump(mode="json")
         complete_idempotent(db,handle,response=response,status_code=200,resource_type="preliminary_evidence_report",resource_id=row.id)
         db.commit(); db.refresh(row); return row
+    except ReportGroundingError as exc:
+        failed=_latest(db,scope_type,scope_id)
+        if failed is not None and failed.id!=previous_id:
+            mark_report_failed(db,failed,exc)
+            completeness=dict(failed.completeness_json or {})
+            completeness.update({"state":"PARTIAL","reviewability":"NOT_REVIEWABLE","grounding_status":"FAIL"})
+            failed.completeness_json=completeness
+            failed.snapshot_json={
+                "schema_version":failed.schema_version,
+                "composer_version":failed.composer_version,
+                "report_version":failed.version,
+                "scope":{"type":failed.scope_type,"id":failed.scope_id},
+                "status":"FAILED",
+                "grounding_validation":exc.validation,
+                "reviewability_status":"NOT_REVIEWABLE",
+            }
+            audit(db,case_id=failed.case_id,actor=identity.actor_id,event_type="PRELIMINARY_EVIDENCE_REPORT_GROUNDING_BLOCKED",
+                  target_type="preliminary_evidence_report",target_id=failed.id,
+                  detail={"scope_type":scope_type,"scope_id":scope_id,"report_version":failed.version,
+                          "grounding_status":exc.validation.get("status"),"counts":exc.validation.get("counts"),
+                          "issues":(exc.validation.get("issues") or [])[:20]})
+        if previous is not None and previous.id==previous_id and previous_status is not None:
+            previous.status=previous_status
+        fail_idempotent(db,handle)
+        db.commit()
+        raise HTTPException(422,f"REPORT_GROUNDING_FAILED:{exc}")
     except ValueError as exc:
         db.rollback(); raise HTTPException(404,str(exc))
     except Exception as exc:
@@ -117,7 +148,8 @@ def links(report_id:str,db:Session=Depends(get_db),identity=Depends(require_evid
     if not row: raise HTTPException(404,"EVIDENCE_REPORT_NOT_FOUND")
     storage=ObjectStorage(); ttl=timedelta(minutes=settings.artifact_url_ttl_minutes)
     def url(key): return storage.presigned_get(key,ttl) if key else None
-    bundle_url=url(row.bundle_object_key) if row.bundle_object_key and has_evidence_permission(identity,EvidencePermission.DOWNLOAD_EVIDENCE_BUNDLE) else None
+    can_bundle=bool(row.bundle_object_key and has_evidence_permission(identity,EvidencePermission.DOWNLOAD_EVIDENCE_BUNDLE))
+    bundle_url=f"/api/v1/reports/evidence/{row.id}/bundle/download" if can_bundle else None
     return {"web_url":f"/evidence-report.html?case_id={row.case_id}","html_url":url(row.html_object_key),"json_url":url(row.json_object_key),"manifest_url":url(row.manifest_object_key),
             "bundle_url":bundle_url,"expires_minutes":settings.artifact_url_ttl_minutes,
             "permissions":{"view_report":True,"view_raw_evidence":has_evidence_permission(identity,EvidencePermission.VIEW_RAW_EVIDENCE),
@@ -125,15 +157,34 @@ def links(report_id:str,db:Session=Depends(get_db),identity=Depends(require_evid
                            "rebuild_report":has_evidence_permission(identity,EvidencePermission.REBUILD_REPORT)}}
 
 
+@router.get("/reports/evidence/{report_id}/bundle/download")
+def download_bundle(report_id:str,db:Session=Depends(get_db),identity=Depends(require_evidence_permission(EvidencePermission.DOWNLOAD_EVIDENCE_BUNDLE))):
+    """Audited download hand-off required by frozen FR-027.
+
+    The redirect keeps object bytes on ObjectStorage while ensuring every user
+    download request crosses the permission and audit boundary first.
+    """
+    _enabled()
+    row=db.get(PreliminaryEvidenceReport,report_id)
+    if not row: raise HTTPException(404,"EVIDENCE_REPORT_NOT_FOUND")
+    if not row.bundle_object_key: raise HTTPException(404,"EVIDENCE_BUNDLE_NOT_FOUND")
+    storage=ObjectStorage(); ttl=timedelta(minutes=settings.artifact_url_ttl_minutes)
+    target=storage.presigned_get(row.bundle_object_key,ttl)
+    audit(db,case_id=row.case_id,actor=identity.actor_id,event_type="EVIDENCE_BUNDLE_DOWNLOADED",target_type="preliminary_evidence_report",target_id=row.id,
+          detail={"report_id":row.id,"scope_type":row.scope_type,"scope_id":row.scope_id,"ttl_minutes":settings.artifact_url_ttl_minutes})
+    db.commit()
+    return RedirectResponse(url=target,status_code=307)
+
+
 @router.post("/reports/evidence/{report_id}/bundle")
 def create_bundle(report_id:str,req:EvidenceBundleRequest,db:Session=Depends(get_db),identity=Depends(require_evidence_permission(EvidencePermission.DOWNLOAD_EVIDENCE_BUNDLE))):
     _enabled()
     try:
         storage=ObjectStorage(); artifact=build_evidence_bundle(db,report_id=report_id,profile=req.profile,actor=identity.actor_id,storage=storage)
-        download_url=storage.presigned_get(artifact.object_key)
+        audited_download_url=f"/api/v1/reports/evidence/{report_id}/bundle/download"
         audit(db,case_id=artifact.case_id,actor=identity.actor_id,event_type="EVIDENCE_BUNDLE_DOWNLOAD_URL_ISSUED",target_type="artifact",target_id=artifact.id,
-              detail={"report_id":report_id,"profile":req.profile,"ttl_minutes":settings.artifact_url_ttl_minutes})
-        db.commit(); return {"artifact_id":artifact.id,"profile":req.profile,"download_url":download_url,"expires_minutes":settings.artifact_url_ttl_minutes}
+              detail={"report_id":report_id,"profile":req.profile,"ttl_minutes":settings.artifact_url_ttl_minutes,"audited":True})
+        db.commit(); return {"artifact_id":artifact.id,"profile":req.profile,"download_url":audited_download_url,"expires_minutes":settings.artifact_url_ttl_minutes}
     except ValueError as exc:
         db.rollback(); raise HTTPException(404,str(exc))
     except Exception as exc:
