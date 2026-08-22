@@ -1,0 +1,44 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "RC12-SW-001",
+    "sequence": 61,
+    "created_at": "2026-08-22T00:30:00+00:00",
+    "expires_at": "2026-08-22T02:30:00+00:00",
+    "action_type": "SOFTWARE_REGRESSION",
+    "parameters": {
+      "timeout_seconds": 1800
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "a2c95832fce5e776a21a0518773363306efefe7f"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "RC12 software regression after validation-only R3-11 Gate precondition fix. R3-11 now deterministically injects four valid 24-byte closed PCAP files under the current fenced CaptureEpoch while the durable store is faulted, so production Sealer/Pump must create real unacked spool before worker restart/adoption. Capture Engine runtime remains unchanged; Production V2 stays disabled."
+  },
+  "action_sha256": "eb1570e0cfa38a69096c3651b7d2762d0d31b47b7b1abc1c5a21a79546ac02bd",
+  "runner_id": "srv:3382405",
+  "state": "SUCCEEDED",
+  "return_code": 0,
+  "verdict": null,
+  "error": null,
+  "finished_at": "2026-08-22T00:30:47.110025+00:00",
+  "stdout_sha256": "d934d6ba8b3fd91581e678fbb927cb7c85c4695df043c305f276221898615123",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "local_stdout": ".capture-v2-control/logs/RC12-SW-001/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/RC12-SW-001/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "02dcd0a83c2e5458c45041c6e5bf2f256e32835d",
+      "expected_product_head": "a2c95832fce5e776a21a0518773363306efefe7f"
+    },
+    "parsed_output": null
+  }
+}
