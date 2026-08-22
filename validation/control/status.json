@@ -1,156 +1,27 @@
 {
   "schema_version": "capture-v2-remote-status-v1",
-  "action_id": "R3-10-APF3260M-SPOOL-PRESSURE-RC17",
-  "sequence": 88,
-  "action_type": "GATE_SEGMENT",
+  "action_id": "RC18-SW-001",
+  "sequence": 89,
+  "action_type": "SOFTWARE_REGRESSION",
   "state": "SUCCEEDED",
   "runner_id": "srv:3382405",
-  "action_sha256": "d1de7423359149de8d53e7f3a68be11f356fda9d4a7d8ecd8fd0e604a01fdbb6",
-  "updated_at": "2026-08-22T01:41:32.314009+00:00",
+  "action_sha256": "cde99a4a71dac118a446f3e164b064ae6a7a5ad7622e61aba911aeeda1194bb7",
+  "updated_at": "2026-08-22T01:46:07.952040+00:00",
   "started_at": null,
-  "finished_at": "2026-08-22T01:41:32.314009+00:00",
+  "finished_at": "2026-08-22T01:46:07.952040+00:00",
   "return_code": 0,
-  "verdict": "PASS",
-  "result_path": "validation/control/results/R3-10-APF3260M-SPOOL-PRESSURE-RC17/result.json",
-  "stdout_sha256": "5fa37ebe9eae0c9aec9df85d505b1dadd836583259ac288ee2348a62d92980ea",
-  "stderr_sha256": "b8258e86248ce6f15dfea1a12afcd2ad3fde62ba6d3cd24536ffc8cb3bb61c48",
+  "verdict": null,
+  "result_path": "validation/control/results/RC18-SW-001/result.json",
+  "stdout_sha256": "586a4d7be569a59bf185a2db47ecd2d9363a0f6624449574e5e12781c969b8e3",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "error": null,
   "detail": {
     "safety": {
       "capture_engine_version": "V1",
       "capture_v2_production_enabled": "false",
-      "git_head": "cc5a84105d9c063458be24b08cc4f0a57fae9329",
-      "expected_product_head": "3636ee32045cfc9c7acfcdfa47e5e27f0ce15849"
+      "git_head": "37bc4a8263adcdb9b2e5766e8a4d73d8f30a7100",
+      "expected_product_head": "735446237cdfafad8d3d70847b07c781b7b3de6c"
     },
-    "parsed_output": {
-      "checks": [
-        {
-          "details": {},
-          "expected": ">0",
-          "name": "at_least_one_segment",
-          "observed": 3,
-          "passed": true,
-          "verdict": "PASS"
-        },
-        {
-          "details": {},
-          "expected": ">0 REMOTE_DELETED",
-          "name": "at_least_one_full_chain",
-          "observed": 3,
-          "passed": true,
-          "verdict": "PASS"
-        },
-        {
-          "details": {},
-          "expected": true,
-          "name": "server_store_observable",
-          "observed": [],
-          "passed": true,
-          "verdict": "PASS"
-        },
-        {
-          "details": {},
-          "expected": [],
-          "name": "no_server_and_dut_double_loss",
-          "observed": [],
-          "passed": true,
-          "verdict": "PASS"
-        },
-        {
-          "details": {},
-          "expected": [],
-          "name": "acked_segments_have_server_copy",
-          "observed": [],
-          "passed": true,
-          "verdict": "PASS"
-        },
-        {
-          "details": {},
-          "expected": true,
-          "name": "no_unacked_eviction",
-          "observed": null,
-          "passed": true,
-          "verdict": "PASS"
-        },
-        {
-          "details": {},
-          "expected": ">0",
-          "name": "spool_backlog_created",
-          "observed": 1,
-          "passed": true,
-          "verdict": "PASS"
-        },
-        {
-          "details": {},
-          "expected": ">0 bytes",
-          "name": "spool_backlog_has_bytes",
-          "observed": 24,
-          "passed": true,
-          "verdict": "PASS"
-        },
-        {
-          "details": {},
-          "expected": "CRITICAL/UNACKED_BYTES_LIMIT",
-          "name": "spool_pressure_critical",
-          "observed": {
-            "reasons": [
-              "UNACKED_BYTES_LIMIT"
-            ],
-            "state": "CRITICAL"
-          },
-          "passed": true,
-          "verdict": "PASS"
-        },
-        {
-          "details": {},
-          "expected": "all sampled backlog segments remain on DUT",
-          "name": "unacked_segments_remained_on_dut",
-          "observed": {
-            "exists": 1,
-            "sample": 1
-          },
-          "passed": true,
-          "verdict": "PASS"
-        },
-        {
-          "details": {},
-          "expected": [
-            "92884d2f-1570-4375-aacf-e00f0936ff3b"
-          ],
-          "name": "spool_backlog_recovered",
-          "observed": [
-            "92884d2f-1570-4375-aacf-e00f0936ff3b"
-          ],
-          "passed": true,
-          "verdict": "PASS"
-        }
-      ],
-      "created_at": "2026-08-22T01:41:32.008635+00:00",
-      "evidence_bundle": "/tmp/capture-v2-gates/20260822T014131Z_R3-10-APF3260M-SPOOL-PRESSURE-RC17_c132f336-df1b-4285-b175-01d848f23b5d",
-      "facts": {
-        "backlog_remote_sample_exists": 1,
-        "backlog_sample_count": 1,
-        "backlog_segment_ids": [
-          "92884d2f-1570-4375-aacf-e00f0936ff3b"
-        ],
-        "backlog_unacked_bytes": 24,
-        "backlog_unacked_count": 1,
-        "capture_epoch_id": "73b11547-bbb9-43f5-994e-71adacb53dd8",
-        "capture_session_id": "f9f25994-eb3a-4ff7-8dc8-6906fccb5879",
-        "cycles": 68,
-        "errors": 18,
-        "lease_epoch": 57,
-        "pressure_reasons": [
-          "UNACKED_BYTES_LIMIT"
-        ],
-        "pressure_state": "CRITICAL",
-        "recovered_backlog_ids": [
-          "92884d2f-1570-4375-aacf-e00f0936ff3b"
-        ]
-      },
-      "gate_id": "R3-10-APF3260M-SPOOL-PRESSURE-RC17",
-      "summary": "Reliable Segment / SFTP / ACK",
-      "verdict": "PASS"
-    }
+    "parsed_output": null
   }
 }
