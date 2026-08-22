@@ -1,26 +1,26 @@
 {
   "schema_version": "capture-v2-remote-status-v1",
-  "action_id": "RC14-SW-001",
-  "sequence": 67,
+  "action_id": "RC15-SW-001",
+  "sequence": 68,
   "action_type": "SOFTWARE_REGRESSION",
   "state": "SUCCEEDED",
   "runner_id": "srv:3382405",
-  "action_sha256": "675e0f8d5c52766efc72fcd62dfc16293188356af22b1672a52874855285a287",
-  "updated_at": "2026-08-22T00:55:14.474786+00:00",
+  "action_sha256": "e886c213d6b74cfdfe879dbb44a87b0d728e1748a6e6cf79875d74ecedfd72b2",
+  "updated_at": "2026-08-22T00:57:31.241600+00:00",
   "started_at": null,
-  "finished_at": "2026-08-22T00:55:14.474786+00:00",
+  "finished_at": "2026-08-22T00:57:31.241600+00:00",
   "return_code": 0,
   "verdict": null,
-  "result_path": "validation/control/results/RC14-SW-001/result.json",
-  "stdout_sha256": "467d314f302a7213dcea7576b8640e2611fcc11fc2dfff49950f34bb9969ce71",
+  "result_path": "validation/control/results/RC15-SW-001/result.json",
+  "stdout_sha256": "91ae4c3d7a09297d6a5f6eb877b52e4f6638037e22bb1f82fd5bdbf6b1441a60",
   "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "error": null,
   "detail": {
     "safety": {
       "capture_engine_version": "V1",
       "capture_v2_production_enabled": "false",
-      "git_head": "a3670caec702a3111990d1d6d78258197c887421",
-      "expected_product_head": "35d69ea7a5c2fe4770cf8264904e12b50e0c7eae"
+      "git_head": "1a360f9187f9c8df3639f9cf73d3f7bc4a1ca063",
+      "expected_product_head": "81b440b28dbdcbfe0a77a7e0c6627b34ec68d82a"
     },
     "parsed_output": null
   }

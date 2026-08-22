@@ -1,0 +1,44 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "RC15-SW-001",
+    "sequence": 68,
+    "created_at": "2026-08-22T00:57:00+00:00",
+    "expires_at": "2026-08-22T02:57:00+00:00",
+    "action_type": "SOFTWARE_REGRESSION",
+    "parameters": {
+      "timeout_seconds": 1800
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "81b440b28dbdcbfe0a77a7e0c6627b34ec68d82a"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "RC15 validation-only reboot salvage regression. Stage B can now resolve the interrupted APF1250 reboot ReproductionSession from the device-scoped CaptureLease and rebuild a missing checkpoint from durable CaptureSession/CaptureEpoch/CaptureLease state, including old boot_id, producer identity and lease epoch. This salvages sequence 66 after the EWEB tunnel is restored without issuing another reboot. Capture Engine runtime paths remain unchanged; V1 authority and Production V2 disabled are mandatory."
+  },
+  "action_sha256": "e886c213d6b74cfdfe879dbb44a87b0d728e1748a6e6cf79875d74ecedfd72b2",
+  "runner_id": "srv:3382405",
+  "state": "SUCCEEDED",
+  "return_code": 0,
+  "verdict": null,
+  "error": null,
+  "finished_at": "2026-08-22T00:57:31.241600+00:00",
+  "stdout_sha256": "91ae4c3d7a09297d6a5f6eb877b52e4f6638037e22bb1f82fd5bdbf6b1441a60",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "local_stdout": ".capture-v2-control/logs/RC15-SW-001/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/RC15-SW-001/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "1a360f9187f9c8df3639f9cf73d3f7bc4a1ca063",
+      "expected_product_head": "81b440b28dbdcbfe0a77a7e0c6627b34ec68d82a"
+    },
+    "parsed_output": null
+  }
+}
