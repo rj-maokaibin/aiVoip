@@ -1,0 +1,44 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "RC17-SW-001",
+    "sequence": 74,
+    "created_at": "2026-08-22T01:21:00+00:00",
+    "expires_at": "2026-08-22T03:21:00+00:00",
+    "action_type": "SOFTWARE_REGRESSION",
+    "parameters": {
+      "timeout_seconds": 1200
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "3636ee32045cfc9c7acfcdfa47e5e27f0ce15849"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "RC17 software regression for validation-only R4 real FXS tooling. No physical handset action. Production Capture V2 remains disabled and V1 remains authoritative."
+  },
+  "action_sha256": "02c255aa3226b51c96b3af65311fa7a41c1f3d0a2f39a6412f64e4e96ca60b0b",
+  "runner_id": "srv:3382405",
+  "state": "SUCCEEDED",
+  "return_code": 0,
+  "verdict": null,
+  "error": null,
+  "finished_at": "2026-08-22T01:22:03.393066+00:00",
+  "stdout_sha256": "e49ec8f9777a5d2965b2dcd5851b9531948e956a7589e11819ecd76cd1c3482b",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "local_stdout": ".capture-v2-control/logs/RC17-SW-001/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/RC17-SW-001/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "0eec4dcdf3eb889bdcd6b041f03fab783420762a",
+      "expected_product_head": "3636ee32045cfc9c7acfcdfa47e5e27f0ce15849"
+    },
+    "parsed_output": null
+  }
+}
