@@ -1,5 +1,7 @@
 import json
+import os
 import subprocess
+import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -80,6 +82,28 @@ def test_control_source_update_requests_reexec(tmp_path, monkeypatch):
 
     assert calls == ["reexec"]
     assert r._loaded_head == "new-head"
+
+
+def test_reexec_preserves_module_launch_semantics(tmp_path, monkeypatch):
+    repo = _repo(tmp_path)
+    r = RemoteValidationRunner(repo_root=repo, runner_id="test-runner")
+    original_argv = [
+        "/repo/backend/app/capture_v2/control_cli.py",
+        "run",
+        "--repo-root",
+        "..",
+        "--git-sync",
+    ]
+    calls = []
+    monkeypatch.setattr(sys, "argv", original_argv)
+    monkeypatch.setattr(os, "execv", lambda executable, argv: calls.append((executable, argv)))
+
+    r._reexec_current_process()
+
+    assert calls == [(
+        sys.executable,
+        [sys.executable, "-m", "app.capture_v2.control_cli", *original_argv[1:]],
+    )]
 
 
 def test_only_control_python_changes_require_reexec(tmp_path):
