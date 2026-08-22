@@ -7,6 +7,7 @@ from pathlib import Path
 
 from app.capture_v2.gate.cli import _device, _resolve_reproduction_session_id
 from app.capture_v2.gate.context import build_asyncssh_adapter
+from app.capture_v2.gate.r4_preflight import run_r4_no_handset_preflight
 from app.capture_v2.gate.r4_real import run_r4_real_fxs_basic
 from app.capture_v2.gate.runner import GateRunner
 from app.core.config import settings
@@ -40,15 +41,28 @@ async def _run(args) -> int:
     adapter = build_asyncssh_adapter(spec, password_env=args.password_env)
     await adapter.connect()
     try:
-        result = await run_r4_real_fxs_basic(
-            _runner(adapter, args),
-            reproduction_session_id=reproduction_session_id,
-            device=spec.as_profile_device(),
-            worker_id=args.worker_id,
-            gate_id=args.gate_id,
-            duration_seconds=args.duration,
-            transport=args.transport,
-        )
+        runner = _runner(adapter, args)
+        normal_gate = str(args.gate_id).upper().replace("_", "-")
+        if normal_gate.startswith("R4-00"):
+            result = await run_r4_no_handset_preflight(
+                runner,
+                reproduction_session_id=reproduction_session_id,
+                device=spec.as_profile_device(),
+                worker_id=args.worker_id,
+                gate_id=args.gate_id,
+                duration_seconds=args.duration,
+                transport=args.transport,
+            )
+        else:
+            result = await run_r4_real_fxs_basic(
+                runner,
+                reproduction_session_id=reproduction_session_id,
+                device=spec.as_profile_device(),
+                worker_id=args.worker_id,
+                gate_id=args.gate_id,
+                duration_seconds=args.duration,
+                transport=args.transport,
+            )
         _json(result)
         return 0 if result.verdict.value == "PASS" else 2
     finally:
