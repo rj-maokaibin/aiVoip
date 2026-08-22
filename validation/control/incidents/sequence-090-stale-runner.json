@@ -1,0 +1,25 @@
+{
+  "schema_version": "capture-v2-control-incident-v1",
+  "incident_id": "CTRL-20260822-SEQ090-STALE-RUNNER",
+  "action_id": "GOLDEN-RECOVER-APF1250-20260820-RC18",
+  "sequence": 90,
+  "classification": "CONTROL_PLANE_STALE_RUNNER",
+  "product_verdict": "NOT_EVALUATED",
+  "release_gate_effect": "NONE",
+  "observed_remote_status_sequence": 89,
+  "observed_remote_status_action_id": "RC18-SW-001",
+  "diagnosis": "Persistent runner was started with RC17 imports. RC18 added GOLDEN_ARCHIVE_RECOVER to schema/policy on disk, but the already-running Python process did not reload imported enum/policy objects. RemoteAction.load therefore could not parse sequence 90. The old run_forever error path wrote RUNNER_ERROR only locally, leaving GitHub status at sequence 89.",
+  "evidence": {
+    "sequence_90_action_commit": "8d0220075ed1d0a0dd5cbc0529df1e2537448be8",
+    "rc17_control_schema": "3636ee32045cfc9c7acfcdfa47e5e27f0ce15849",
+    "rc18_tooling_head": "735446237cdfafad8d3d70847b07c781b7b3de6c",
+    "last_remote_terminal_action": "RC18-SW-001"
+  },
+  "remediation": {
+    "runner_hot_reload_added": true,
+    "runner_error_publish_added": true,
+    "do_not_reuse_action_id": true,
+    "do_not_treat_as_dut_failure": true,
+    "fresh_golden_recovery_required_after_software_regression": true
+  }
+}
