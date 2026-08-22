@@ -1,0 +1,211 @@
+schema_version: offline-analysis-golden-v1
+id: OFFLINE_ANALYSIS_20260814_001
+name: 2026-08-14 导入 PCAP｜601 通话｜本地上行周期干扰
+classification:
+  kind: OFFLINE_ANALYSIS_GOLDEN_E2E
+  source_mode: IMPORTED_EVIDENCE
+  live_acquisition_covered: false
+  validates:
+    - packet_analysis
+    - pcm_analysis
+    - media_analysis
+    - candidate_decision
+    - call_reconstruction
+    - cross_layer_correlation
+    - finding_composition
+    - artifact_semantics
+    - evidence_card_traceability
+    - canonical_report_semantics
+source:
+  filename: tcpdump-2026-08-14(2).pcap
+  sha256: b038aa7c9a0644581f2815f654fcdee4620860796382265b178823fccba2e3f0
+  pcm_profile: ruijie_aim_diag_v1
+  fixture_env: VOIP_OFFLINE_GOLDEN_001_PCAP
+  capture_note: 人工提供本地 PCAP；不是系统自动 SSH/ARM/Trigger 采集，因此不得用于证明 Acquisition Reliability。
+ground_truth:
+  reviewed_at: 2026-08-20
+  authority: HUMAN_REVIEWED_RAW_EVIDENCE
+  leakage_rule: expected/ground_truth 只能由 Golden Validator 使用，不得进入生产 Analyzer、FindingComposer、Diagnosis 或 AI Prompt。
+expected:
+  analysis_context:
+    analysis_mode: OFFLINE_IMPORTED
+    call_origin: RECONSTRUCTED_FROM_PCAP
+    call_scope: BOUND
+    call_selection_status: SELECTED
+    selection_rule: PCM_SOURCE_DEVICE_IDENTITY_MATCH
+    subject_device_ip: 192.168.150.4
+    semantic_status: OK
+    reviewability: FULLY_REVIEWABLE
+  call:
+    raw_sip_leg_count: 2
+    diagnostic_call_count: 1
+    selected_sip_call_id: 00ad1c804c33b255@192.168.3.200
+    selected_display_call_id: CALL-001
+    dialed_number: "601"
+    allowed_states: [ESTABLISHED, TERMINATED]
+    media_direction_status: BIDIRECTIONAL
+    other_sip_leg:
+      call_id: 60d32450633aea2363e5b73e-1786691379761-0x1067e2b4-2875d8158357@192.168.3.200
+      role: PBX_B2BUA_INTERNAL_LEG
+  pcm:
+    format:
+      sample_rate: 8000
+      bit_depth: 16
+      endian: little
+      udp_payload_bytes: 160
+    total_packets: 13050
+    source_device_ip: 192.168.150.4
+    taps:
+      pcm_rx:
+        direction: RX
+        packet_count: 6525
+      pcm_tx:
+        direction: TX
+        packet_count: 6525
+  rtp:
+    packet_count_semantics: UNIQUE_EFFECTIVE_RTP_PACKETS
+    primary_uplink:
+      src_ip: 192.168.150.4
+      src_port: 10000
+      dst_ip: 192.168.3.200
+      dst_port: 11446
+      codec: PCMU
+      observed_packet_count: 2423
+      unique_packet_count: 2423
+      duplicate_packets: 0
+      expected_packets: 2423
+      lost_packets: 0
+      high_delta_count: 2
+      high_delta_ms:
+        - {min: 140.0, max: 152.0}
+        - {min: 168.0, max: 182.0}
+      high_delta_events:
+        - delta_ms: {min: 140.0, max: 152.0}
+          previous_frame_number: 20272
+          current_frame_number: 20285
+          previous_sequence: 46511
+          current_sequence: 46512
+        - delta_ms: {min: 168.0, max: 182.0}
+          previous_frame_number: 20329
+          current_frame_number: 20344
+          previous_sequence: 46519
+          current_sequence: 46520
+      high_delta_semantics:
+        required_sequence_continuous: true
+        required_loss_semantics: NO_SEQUENCE_LOSS_AT_EVENT_BOUNDARY
+        allowed_classifications:
+          - INTERARRIVAL_STALL_WITHOUT_RTP_GAP
+          - INTERARRIVAL_STALL_WITH_MEDIA_TIMESTAMP_GAP
+        catch_up_required: true
+    primary_downlink:
+      src_ip: 192.168.3.200
+      src_port: 11446
+      dst_ip: 192.168.150.4
+      dst_port: 10000
+      codec: PCMU
+      observed_packet_count: 2427
+      unique_packet_count: 2425
+      duplicate_packets: 2
+      expected_packets: 2425
+      lost_packets: 0
+      max_arrival_delta_ms: {min: 35.5, max: 36.7}
+      duplicate_events:
+        - sequence: 14555
+          first_frame_number: 20413
+          duplicate_frame_number: 20414
+          rtp_timestamp: 492033328
+          arrival_delta_ms: {min: 0.13, max: 0.15}
+        - sequence: 14556
+          first_frame_number: 20416
+          duplicate_frame_number: 20417
+          rtp_timestamp: 492033488
+          arrival_delta_ms: {min: 0.15, max: 0.17}
+    forbidden_anomaly_types: [PACKET_LOSS, BURST_LOSS]
+    semantic_rules:
+      high_delta_must_not_be_labeled_packet_loss: true
+      sequence_must_remain_continuous_across_high_delta: true
+      duplicate_packets_must_not_inflate_effective_media_count: true
+      observed_packet_count_must_equal_unique_plus_duplicates: true
+      expected_packets_must_equal_unique_plus_loss: true
+  dtmf:
+    required_event_type: DTMF_SIP_DIAL_MATCH
+    expected_match_count: 1
+    call_id: 00ad1c804c33b255@192.168.3.200
+    pcm_digits: "601"
+    sip_target: "601"
+    pcm_tap: pcm_rx
+    reviewed_digits:
+      - {digit: "6", start: 1786690964.323755, end_approx: 1786690964.463755}
+      - {digit: "0", start: 1786690964.703755, end_approx: 1786690964.833755}
+      - {digit: "1", start: 1786690965.033755, end_approx: 1786690965.163755}
+  periodic_interference:
+    required_event_type: LOCAL_CAPTURE_PERIODIC_INTERFERENCE
+    require_pcm_rx: true
+    require_upstream_rtp: true
+    downstream_control_required: true
+    odd_50hz_comb_hits_min: 5
+    pcm_rx_ac20_min: 0.70
+    upstream_ac20_min: 0.55
+    root_cause_boundary_must_remain_preliminary: true
+  candidate_decision:
+    required_negative_control_reason: DTMF_OVERLAP
+    forbidden_promoted_click_window:
+      start: 1786690964.300000
+      end: 1786690964.450000
+    silence_promote_reason_required: CROSS_LAYER_SILENCE_MISMATCH
+  report:
+    display_call_required: true
+    display_call_id: CALL-001
+    sip_call_id: 00ad1c804c33b255@192.168.3.200
+    dialed_number: "601"
+    required_finding_types: [HIGH_DELTA, LOCAL_CAPTURE_PERIODIC_INTERFERENCE, DTMF_SIP_DIAL_MATCH]
+    high_delta_primary_stream_finding:
+      src_ip: 192.168.150.4
+      src_port: 10000
+      dst_ip: 192.168.3.200
+      dst_port: 11446
+      occurrence_count: 2
+      all_sequence_continuous: true
+      loss_interpretation: DELAY_NOT_PACKET_LOSS
+    evidence_cards:
+      high_delta_primary_stream:
+        finding_type: HIGH_DELTA
+        audio_status: AVAILABLE
+        packet_ref_count: 2
+        next_action_required: true
+        root_cause_boundary_required: true
+      local_periodic_interference:
+        finding_type: LOCAL_CAPTURE_PERIODIC_INTERFERENCE
+        audio_status: AVAILABLE
+        required_audio_sources: [pcm_rx, rtp_up]
+        next_action_required: true
+        root_cause_boundary_required: true
+    forbidden_finding_types: [PACKET_LOSS, BURST_LOSS]
+    forbidden_click_window:
+      start: 1786690964.300000
+      end: 1786690964.450000
+  artifacts:
+    periodic_audio_sources_required: [pcm_rx, rtp_up]
+    raw_click_silence_clip_must_be_candidate_unless_promoted: true
+  diagnosis:
+    required_hypothesis_code: LOCAL_CAPTURE_PERIODIC_INTERFERENCE
+    required_hypothesis_status: SUPPORTED
+    forbidden_confirmed_hypothesis_codes:
+      - POWER_SUPPLY_NOISE
+      - GROUNDING_NOISE
+      - PHONE_LINE_NOISE
+      - FXS_SLIC_NOISE
+notes:
+  - 原始 SIP 协议层存在 2 个 Call-ID：DUT→PBX 主腿和 PBX→被叫的 B2BUA 内部腿。Golden 不删除第二条腿；raw_sip_leg_count 必须为 2。
+  - 当前诊断对象只有 1 个 DUT-facing Call。PCM 40000/50000 的 UDP source IP 为 192.168.150.4，系统应使用这一原始 provenance 选择包含该设备 SDP/RTP endpoint 的主腿，而不是按“结束时间最新”选择 PBX 内部腿。
+  - PCM DTMF 601 只能与选中的 DUT-facing SIP leg 形成 1 条 DTMF_SIP_DIAL_MATCH；同一 DTMF 不得复制到 PBX B2BUA 内部腿。
+  - PCM 原始 UDP 人工复核为 40000/50000 各 6525 包，每包 payload 160 bytes；按已知 Profile 为 8kHz/16-bit little-endian，每包对应 10ms 音频。
+  - RTP packet_count 口径已显式冻结：有效媒体包按唯一 RTP Sequence 计数；抓包观察 Datagram 单独记录 observed_packet_count；重复 Datagram 记录 duplicate_packets。下行观察 2427 包，其中唯一 Sequence 2425、重复 2、丢失 0；不得把 2427 写成 2427 个有效媒体包，也不得把 2 个重复包写成 Packet Loss。
+  - 下行两个 duplicate 已做 Frame/Seq 级复核：Seq 14555 为 Frame 20413→20414，RTP timestamp 492033328；Seq 14556 为 Frame 20416→20417，RTP timestamp 492033488。两组均为相同 Sequence + 相同 RTP timestamp 的快速重复 Datagram。
+  - 两个主上行 HIGH_DELTA 的边界 Frame/Seq 已人工复核：20272/46511→20285/46512，以及 20329/46519→20344/46520；Sequence 连续，因此不能写成 Packet Loss。high_delta_ms 是算法容差范围，high_delta_events 保存人工复核的精确 Frame/Seq Ground Truth。
+  - 两次主上行 HIGH_DELTA 后均可见快速到包/补偿性 burst；Golden 只要求存在 catch-up 证据，不冻结具体 recovery ratio，避免把实现算法数值当成人工 Ground Truth。
+  - HIGH_DELTA 表示到包/发送节奏间隔异常，不等同于 RTP Sequence Loss；Report 必须将 DUT 主上行 2 次事件聚合为同一 Stream Finding，并保留逐事件 Frame/Seq 下钻。
+  - PR5 的 Evidence Card Golden 只检查生产 Analyzer 实际生成的 Artifact 是否按生产绑定语义落到正确 Finding，不把 manifest 的 expected 值注入生产分析链；Focused PNG 的 Renderer 语义由独立软件 Gate 校验。
+  - DTMF 起始沿附近的 Click/Pop 候选必须被 Negative Control 拦截，不得作为独立爆音故障升级。
+  - PCM_TX 静音只有在对应 RTP 同窗明确活跃时才允许升级为 CROSS_LAYER_SILENCE_MISMATCH；同窗 RTP 静音/低能量必须 Reject，证据不足必须 Inconclusive。
+  - 周期干扰只能收敛到“本地上行采集路径已可观察”，不能越级确认电源/接地/电话机/FXS-SLIC 等物理根因。

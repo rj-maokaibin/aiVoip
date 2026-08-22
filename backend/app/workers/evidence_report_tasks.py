@@ -14,6 +14,10 @@ log=get_task_logger(__name__)
 _ACTIVE_ANALYZER={"PENDING","RUNNING"}
 _TERMINAL_SESSION={ReproductionState.COMPLETED.value,ReproductionState.PARTIAL_SUCCESS.value,ReproductionState.FAILED.value,
                    ReproductionState.CANCELLED.value,ReproductionState.WATCH_TIMEOUT.value,ReproductionState.CAPTURE_TIMEOUT.value}
+# Frozen FR-029 states are deliberately accepted as persisted strings even when
+# an older enum revision does not expose them yet.
+_INTERRUPTED_CALL_STATUS={"ABORTED","INCOMPLETE","CANCELLED"}
+_REPORTABLE_CALL_STATUS={ReproductionCallStatus.ENDED.value,ReproductionCallStatus.ANALYZING.value,ReproductionCallStatus.ANALYZED.value,*_INTERRUPTED_CALL_STATUS}
 
 
 def notify_evidence_report_changed(case_id:str,reason:str="analyzer_changed") -> None:
@@ -27,6 +31,11 @@ def _active_analyzer_exists(db,case_id:str) -> bool:
     return db.scalar(select(AnalyzerRun.id).where(AnalyzerRun.case_id==case_id,AnalyzerRun.status.in_(_ACTIVE_ANALYZER)).limit(1)) is not None
 
 
+def _reportable_call_predicate():
+    """FR-001/029: completed *or interrupted* Calls must receive a report."""
+    return or_(ReproductionCall.ended_at.is_not(None),ReproductionCall.status.in_(sorted(_REPORTABLE_CALL_STATUS)))
+
+
 @celery_app.task(name="evidence_report.refresh_case",bind=True,max_retries=3,default_retry_delay=2)
 def refresh_case_evidence_reports(self,case_id:str,reason:str="case_changed"):
     if not settings.preliminary_evidence_report_enabled:
@@ -35,9 +44,7 @@ def refresh_case_evidence_reports(self,case_id:str,reason:str="case_changed"):
     try:
         if not db.get(Case,case_id): return {"status":"CASE_NOT_FOUND","case_id":case_id}
         if _active_analyzer_exists(db,case_id) and self.request.retries < self.max_retries: raise self.retry(countdown=2)
-        calls=list(db.scalars(select(ReproductionCall).where(ReproductionCall.case_id==case_id,or_(
-            ReproductionCall.ended_at.is_not(None),ReproductionCall.status.in_([ReproductionCallStatus.ENDED.value,ReproductionCallStatus.ANALYZING.value,ReproductionCallStatus.ANALYZED.value])
-        )).order_by(ReproductionCall.call_no.asc())))
+        calls=list(db.scalars(select(ReproductionCall).where(ReproductionCall.case_id==case_id,_reportable_call_predicate()).order_by(ReproductionCall.call_no.asc())))
         for call in calls:
             try:
                 row,_payload,replay=generate_evidence_report(db,scope_type="CALL",scope_id=call.id,actor="evidence-report-worker",force=False)

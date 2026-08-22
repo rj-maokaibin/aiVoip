@@ -4,9 +4,12 @@ from enum import StrEnum
 
 
 REPORT_SCHEMA_VERSION = "preliminary-evidence-report-v1"
-REPORT_COMPOSER_VERSION = "evidence-brief-composer-v1"
+REPORT_COMPOSER_VERSION = "evidence-brief-composer-v4"
 FINDING_SIGNATURE_VERSION = "sig-v1"
-RENDERER_VERSION = "evidence-renderer-v1"
+RENDERER_VERSION = "evidence-renderer-v2"
+EVIDENCE_CARD_VERSION = "evidence-card-v1"
+GROUNDING_VALIDATOR_VERSION = "report-grounding-v1"
+CLAIM_MANIFEST_VERSION = "report-claim-manifest-v1"
 
 
 class EvidenceReportScope(StrEnum):
@@ -87,18 +90,21 @@ class EvidenceReportArtifactType(StrEnum):
     MANIFEST_JSON = "MANIFEST_JSON"
 
 
-# Frozen Q92 core V1.0 anomaly coverage. This set intentionally names the
-# concrete Finding types emitted by the deterministic analyzers/composer rather
-# than future/aspirational taxonomy entries. The software Golden Gate requires
-# every item below to appear in labelled regression data and meet per-type gates.
+# Frozen SPEC §28 concrete deterministic Finding types. Only types that are
+# actually emitted by the current Analyzer/Composer are allowed here. Metric
+# capabilities such as RFC3550 jitter and dBFS remain mandatory report facts,
+# but are not promoted to a Finding until a calibrated anomaly threshold is
+# frozen in AnalyzerProfile/Golden data; this prevents threshold invention.
 P0_FINDING_TYPES = {
     "SIP_REGISTRATION_FAILED",
     "SIP_CALL_FAILED",
+    "SIP_CONFLICTING_FINAL_RESPONSE",
     "CODEC_NEGOTIATION_MISMATCH",
     "ONE_WAY_RTP_MEDIA",
     "PACKET_LOSS",
     "BURST_LOSS",
     "HIGH_DELTA",
+    "PAYLOAD_CHANGE",
     "PCM_GAP",
     "UNEXPECTED_SILENCE",
     "CLICK_POP",
@@ -107,6 +113,16 @@ P0_FINDING_TYPES = {
     "ECHO_PATH_DETECTED",
     "DTMF_ABNORMAL",
     "PERIODIC_INTERFERENCE_PATH_COMPARISON",
+}
+
+# Frozen §28 capabilities that are required as deterministic measurements even
+# when V1.0 has no calibrated standalone abnormal-Finding threshold for them.
+P0_MEASUREMENT_CAPABILITIES = {
+    "RTP_RFC3550_JITTER",
+    "RTP_PTIME",
+    "PCM_RMS_DBFS",
+    "PCM_PEAK_DBFS",
+    "EVIDENCE_COMPLETENESS_7D",
 }
 
 

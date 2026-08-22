@@ -5,7 +5,8 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
 PYTHON_BIN="${PYTHON_BIN:-python3}"
-VENV_DIR="${VOIP_AI_GATE_VENV:-$ROOT_DIR/.venv-release-gate}"
+VENV_BASE="${RUNNER_TEMP:-/tmp}"
+VENV_DIR="${VOIP_AI_GATE_VENV:-$VENV_BASE/voip-ai-release-gate}"
 PG_CONTAINER="voip-ai-gate-pg-$$"
 REDIS_CONTAINER="voip-ai-gate-redis-$$"
 PG_PORT=""
@@ -27,7 +28,7 @@ need curl
 
 docker info >/dev/null 2>&1 || fail "Docker daemon is not available"
 
-log "Preparing isolated Python environment"
+log "Preparing isolated Python environment: $VENV_DIR"
 if [[ ! -x "$VENV_DIR/bin/python" ]]; then
   "$PYTHON_BIN" -m venv "$VENV_DIR"
 fi

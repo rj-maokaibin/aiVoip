@@ -103,6 +103,16 @@ def validate_analyzer_profile(raw: dict[str, Any]) -> None:
     if float(rtp["ptime_min_ms"]) >= float(rtp["ptime_max_ms"]):
         raise AnalyzerProfileError("ANALYZER_PROFILE_PTIME_RANGE_INVALID")
     _positive(rtp, "high_delta_multiplier")
+    _positive(rtp, "high_delta_additive_ms", allow_zero=True)
+    _positive(rtp, "high_delta_catch_up_max_packets")
+    accelerated = _ratio(rtp, "high_delta_catch_up_accelerated_ratio")
+    full_recovery = _ratio(rtp, "high_delta_catch_up_full_recovery_ratio")
+    partial_recovery = _ratio(rtp, "high_delta_catch_up_partial_recovery_ratio")
+    _ratio(rtp, "high_delta_timestamp_tolerance_ratio")
+    if accelerated <= 0:
+        raise AnalyzerProfileError("ANALYZER_PROFILE_HIGH_DELTA_ACCELERATED_RATIO_INVALID")
+    if partial_recovery <= 0 or partial_recovery >= full_recovery:
+        raise AnalyzerProfileError("ANALYZER_PROFILE_HIGH_DELTA_RECOVERY_RANGE_INVALID")
     _positive(rtp, "jitter_filter_divisor")
 
     silence = raw["silence"]
