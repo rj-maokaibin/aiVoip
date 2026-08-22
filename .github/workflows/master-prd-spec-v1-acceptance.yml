@@ -5,12 +5,16 @@ on:
     branches:
       - master
 
+concurrency:
+  group: master-prd-spec-v1-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
 jobs:
   frozen-contracts:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, voip-controlled-linux]
     timeout-minutes: 30
     env:
       MASTER_HEAD: 03fa37ec0035204cf6b4711e2a1f824fc948227e
