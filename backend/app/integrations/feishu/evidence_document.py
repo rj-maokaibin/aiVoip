@@ -33,6 +33,24 @@ class FeishuEvidenceDocumentService:
     def _media_placeholder(*,image:bool)->dict:
         return {"block_type":27,"image":{}} if image else {"block_type":23,"file":{"token":""}}
 
+    @staticmethod
+    def _media_block_id(created_block:dict|None,*,image:bool)->str|None:
+        """Resolve the real media Block ID returned by Feishu.
+
+        Image creation returns the Image block directly. File creation returns a
+        View block wrapper whose first child is the actual File block. Media
+        upload/replace must target that child File block, not the View wrapper.
+        """
+        block=created_block or {}
+        if image:
+            return block.get("block_id") if block.get("block_type") in (None,27) else None
+        if block.get("block_type")==23:
+            return block.get("block_id")
+        children=block.get("children") or []
+        if block.get("block_type")==33 and children:
+            return children[0]
+        return None
+
     async def _create_document(self,title:str)->tuple[str,str|None]:
         data=await self.transport._request("POST","/docx/v1/documents",json_body={"title":title})
         doc=(data.get("data") or {}).get("document") or {};document_id=doc.get("document_id") or doc.get("token")
@@ -156,11 +174,12 @@ class FeishuEvidenceDocumentService:
         for item in plan:
             raw_index=item.get("block_index");index=int(raw_index) if raw_index is not None else -1
             if not 0<=index<len(created_blocks):continue
-            artifact=artifact_by_id.get(item.get("artifact_id"));block_id=(created_blocks[index] or {}).get("block_id")
+            artifact=artifact_by_id.get(item.get("artifact_id"));is_image=bool(item.get("is_image"))
+            block_id=self._media_block_id(created_blocks[index],image=is_image)
             if not artifact or not block_id or artifact.size_bytes>20*1024*1024:continue
-            data=self.storage.get_bytes(artifact.object_key);is_image=bool(item.get("is_image"))
-            await self._upload_media(block_id=block_id,filename=artifact.filename,data=data,parent_type="docx_image" if is_image else "docx_file")
-            used.add(artifact.id)
+            data=self.storage.get_bytes(artifact.object_key)
+            token=await self._upload_media(block_id=block_id,filename=artifact.filename,data=data,parent_type="docx_image" if is_image else "docx_file")
+            await self._replace_media(document_id,block_id,token,image=is_image);used.add(artifact.id)
         return used
 
     async def project(self,db:Session,*,case_id:str,report_id:str)->FeishuEvidenceDocumentBinding:
@@ -185,10 +204,11 @@ class FeishuEvidenceDocumentService:
         if candidates:
             placeholders=[self._media_placeholder(image=is_image) for _,is_image in candidates];created=await self._insert_blocks(binding.document_id,placeholders,index=attachment_index)
             for (artifact,is_image),block in zip(candidates,created):
-                block_id=block.get("block_id")
+                block_id=self._media_block_id(block,image=is_image)
                 if not block_id:continue
                 data=self.storage.get_bytes(artifact.object_key)
-                await self._upload_media(block_id=block_id,filename=artifact.filename,data=data,parent_type="docx_image" if is_image else "docx_file")
+                token=await self._upload_media(block_id=block_id,filename=artifact.filename,data=data,parent_type="docx_image" if is_image else "docx_file")
+                await self._replace_media(binding.document_id,block_id,token,image=is_image)
         binding.projected_report_id=report.id;binding.projection_version+=1;binding.status="SYNCED";binding.last_error=None
         binding.metadata_json={"report_version":report.version,"report_status":report.status,"finding_count":payload.get("finding_count"),"ordering_contract":"D112",
                                "inline_evidence_count":len(inline_ids),"attachment_count":len(candidates),"analysis_mode":(payload.get("analysis_context") or {}).get("analysis_mode"),
