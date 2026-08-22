@@ -5,6 +5,7 @@ import json
 import os
 import socket
 import subprocess
+import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -24,6 +25,11 @@ def _sha(text: str) -> str:
 
 
 class RemoteValidationRunner:
+    CONTROL_RELOAD_PREFIXES = (
+        "backend/app/capture_v2/control/",
+        "backend/app/capture_v2/control_cli.py",
+    )
+
     def __init__(self, *, repo_root: Path, action_path: Path | None = None,
                  branch: str = "feat/capture-v2.1.1-real-gates", remote: str = "origin",
                  git_sync: bool = False, runner_id: str | None = None):
@@ -39,6 +45,41 @@ class RemoteValidationRunner:
         self.sync = GitControlSync(self.repo_root, remote=remote, branch=branch) if git_sync else None
         self.result_root.mkdir(parents=True, exist_ok=True)
         self.local_root.mkdir(parents=True, exist_ok=True)
+        self._loaded_head = self._current_git_head() if self.sync else None
+
+    def _current_git_head(self) -> str | None:
+        cp = subprocess.run(
+            ["git", "rev-parse", "HEAD"], cwd=self.repo_root, text=True,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False,
+        )
+        return cp.stdout.strip() if cp.returncode == 0 and cp.stdout.strip() else None
+
+    def _control_source_changed(self, old_head: str, new_head: str) -> bool:
+        cp = subprocess.run(
+            ["git", "diff", "--name-only", f"{old_head}..{new_head}"],
+            cwd=self.repo_root, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            check=False,
+        )
+        if cp.returncode != 0:
+            raise RuntimeError(f"CONTROL_RELOAD_DIFF_FAILED:{cp.stderr.strip()}")
+        return any(
+            any(path.startswith(prefix) for prefix in self.CONTROL_RELOAD_PREFIXES)
+            for path in cp.stdout.splitlines() if path.strip()
+        )
+
+    def _reexec_current_process(self) -> None:
+        os.execv(sys.executable, [sys.executable, *sys.argv])
+
+    def _maybe_reexec_after_sync(self, new_head: str) -> None:
+        old_head = self._loaded_head
+        if not old_head or old_head == new_head:
+            self._loaded_head = new_head
+            return
+        if self._control_source_changed(old_head, new_head):
+            self._reexec_current_process()
+        # Normally execv never returns. Keeping this assignment makes the helper
+        # deterministic under tests that stub the re-exec boundary.
+        self._loaded_head = new_head
 
     def _load_ledger(self) -> dict[str, Any]:
         if not self.ledger_path.exists():
@@ -53,6 +94,34 @@ class RemoteValidationRunner:
     def _write_status(self, status: ControlStatus) -> None:
         self.status_path.parent.mkdir(parents=True, exist_ok=True)
         self.status_path.write_text(json.dumps(status.as_dict(), indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+    def _publish_runner_error(self, exc: Exception) -> None:
+        error = f"{type(exc).__name__}:{exc}"
+        previous: dict[str, Any] = {}
+        if self.status_path.exists():
+            try:
+                previous = json.loads(self.status_path.read_text(encoding="utf-8"))
+            except Exception:
+                previous = {}
+        # A persistent parse/sync fault must not create one Git commit every poll.
+        if previous.get("state") == "RUNNER_ERROR" and previous.get("error") == error:
+            return
+        payload = {
+            "schema_version": "capture-v2-remote-status-v1",
+            "state": "RUNNER_ERROR",
+            "runner_id": self.runner_id,
+            "updated_at": _now(),
+            "error": error,
+        }
+        self.status_path.parent.mkdir(parents=True, exist_ok=True)
+        self.status_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+        if not self.sync:
+            return
+        try:
+            self.sync.commit_and_push([self.status_path], message="capture-v2-control: runner error")
+        except GitSyncError as sync_exc:
+            payload["git_sync_error"] = str(sync_exc)
+            self.status_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
     @staticmethod
     def _parse_gate_output(stdout: str) -> tuple[str | None, dict[str, Any] | None]:
@@ -89,7 +158,8 @@ class RemoteValidationRunner:
 
     def process_once(self) -> ControlStatus | None:
         if self.sync:
-            self.sync.pull_ff_only()
+            synced_head = self.sync.pull_ff_only()
+            self._maybe_reexec_after_sync(synced_head)
         if not self.action_path.exists():
             return None
         action = RemoteAction.load(self.action_path)
@@ -208,8 +278,5 @@ class RemoteValidationRunner:
             try:
                 self.process_once()
             except Exception as exc:
-                self.status_path.parent.mkdir(parents=True, exist_ok=True)
-                self.status_path.write_text(json.dumps({"schema_version": "capture-v2-remote-status-v1",
-                    "state": "RUNNER_ERROR", "runner_id": self.runner_id, "updated_at": _now(),
-                    "error": f"{type(exc).__name__}:{exc}"}, indent=2) + "\n", encoding="utf-8")
+                self._publish_runner_error(exc)
             time.sleep(poll_seconds)
