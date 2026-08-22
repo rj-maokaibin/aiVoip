@@ -26,6 +26,7 @@ from app.capture_v2.gate.faults import (
 )
 from app.capture_v2.gate.missing_r3 import maybe_run_missing_r3_scenario
 from app.capture_v2.gate.models import GateCaseResult, GateRunPaths
+from app.capture_v2.gate.reboot_resume import maybe_run_reboot_resume_ownership_scenario
 from app.capture_v2.lease.manager import CaptureLeaseManager
 
 
@@ -51,13 +52,21 @@ class GateRunner:
 
     async def ownership_establish(self, *, reproduction_session_id: str, device: Any,
                                   worker_id: str, gate_id: str = "R2-ESTABLISH") -> tuple[GateCaseResult, dict[str, Any]]:
-        special = await maybe_run_ownership_scenario(
+        special = await maybe_run_reboot_resume_ownership_scenario(
             self,
             reproduction_session_id=reproduction_session_id,
             device=device,
             worker_id=worker_id,
             gate_id=gate_id,
         )
+        if special is None:
+            special = await maybe_run_ownership_scenario(
+                self,
+                reproduction_session_id=reproduction_session_id,
+                device=device,
+                worker_id=worker_id,
+                gate_id=gate_id,
+            )
         if special is not None:
             return special
 
