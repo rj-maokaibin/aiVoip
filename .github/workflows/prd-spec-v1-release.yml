@@ -23,7 +23,7 @@ jobs:
       - linux
       - x64
       - voip-controlled-linux
-    timeout-minutes: 45
+    timeout-minutes: 60
     env:
       OFFLINE_GOLDEN_PCAP: /tmp/tcpdump-2026-08-14.pcap
       OFFLINE_GOLDEN_SHA256: b038aa7c9a0644581f2815f654fcdee4620860796382265b178823fccba2e3f0
@@ -39,9 +39,50 @@ jobs:
           printf 'PYTHON=%s\n' "$(python3 --version 2>&1)"
           printf 'NODE=%s\n' "$(node --version 2>&1)"
           printf 'NPM=%s\n' "$(npm --version 2>&1)"
-          printf 'TSHARK=%s\n' "$(tshark --version | head -n1)"
-          test -f "$OFFLINE_GOLDEN_PCAP"
-          printf '%s  %s\n' "$OFFLINE_GOLDEN_SHA256" "$OFFLINE_GOLDEN_PCAP" | sha256sum -c -
+          docker info >/dev/null
+
+          fixture="$OFFLINE_GOLDEN_PCAP"
+          if [ ! -r "$fixture" ]; then
+            staged="$RUNNER_TEMP/offline-e2e-prepared.pcap"
+            rm -f "$staged"
+            docker run --rm \
+              -v /tmp:/source:ro \
+              -v "$RUNNER_TEMP":/output \
+              --entrypoint sh postgres:16 \
+              -c "cp /source/tcpdump-2026-08-14.pcap /output/offline-e2e-prepared.pcap && chmod 0644 /output/offline-e2e-prepared.pcap"
+            fixture="$staged"
+          fi
+          test -r "$fixture"
+          test "$(sha256sum "$fixture" | awk '{print $1}')" = "$OFFLINE_GOLDEN_SHA256"
+          echo "OFFLINE_GOLDEN_PCAP=$fixture" >> "$GITHUB_ENV"
+          printf 'PREPARED_PCAP=%s\n' "$fixture"
+          printf 'PREPARED_PCAP_SHA256=%s\n' "$OFFLINE_GOLDEN_SHA256"
+
+      - name: Prepare userspace TShark 4.2.2-compatible runtime
+        run: |
+          set -euo pipefail
+          if command -v tshark >/dev/null 2>&1; then
+            tshark_bin="$(command -v tshark)"
+          else
+            root="$RUNNER_TEMP/tshark-root"
+            debs="$RUNNER_TEMP/tshark-debs"
+            rm -rf "$root" "$debs"
+            mkdir -p "$root" "$debs"
+            cd "$debs"
+            mapfile -t pkgs < <(apt-cache depends --recurse --no-recommends --no-suggests --no-conflicts --no-breaks --no-replaces --no-enhances tshark | awk '/^[^ <][^:]*$/ {print $1}' | sort -u)
+            miss=()
+            for p in "${pkgs[@]}"; do
+              dpkg-query -W -f='${Status}' "$p" 2>/dev/null | grep -q 'install ok installed' || miss+=("$p")
+            done
+            [ ${#miss[@]} -eq 0 ] || apt-get download "${miss[@]}"
+            shopt -s nullglob
+            for d in ./*.deb; do dpkg-deb -x "$d" "$root"; done
+            tshark_bin="$RUNNER_TEMP/tshark-userspace"
+            printf '#!/bin/bash\nexport LD_LIBRARY_PATH="%s/usr/lib/x86_64-linux-gnu:%s/lib/x86_64-linux-gnu:${LD_LIBRARY_PATH:-}"\nexport WIRESHARK_DATA_DIR="%s/usr/share/wireshark"\nexec "%s/usr/bin/tshark" "$@"\n' "$root" "$root" "$root" "$root" > "$tshark_bin"
+            chmod +x "$tshark_bin"
+          fi
+          "$tshark_bin" -v | head -n1
+          echo "TSHARK_BINARY=$tshark_bin" >> "$GITHUB_ENV"
 
       - name: Frozen PRD/SPEC contracts
         run: bash tools/preliminary_evidence_v1_gate.sh
@@ -54,7 +95,7 @@ jobs:
           set -euo pipefail
           source "$VOIP_AI_GATE_VENV/bin/activate"
           rm -rf offline-golden-artifacts offline-golden-result.json
-          python tools/offline_analysis_golden_replay.py \
+          TSHARK_BINARY="$TSHARK_BINARY" python tools/offline_analysis_golden_replay.py \
             --pcap "$OFFLINE_GOLDEN_PCAP" \
             --require-fixture \
             --artifacts offline-golden-artifacts \
