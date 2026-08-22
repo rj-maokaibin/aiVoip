@@ -30,10 +30,15 @@ jobs:
           c='''                data=self.storage.get_bytes(artifact.object_key);token=await self._upload_media(block_id=block_id,filename=artifact.filename,data=data,parent_type="docx_image" if is_image else "docx_file")\n                await self._replace_media(binding.document_id,block_id,token,image=is_image)'''
           d='''                data=self.storage.get_bytes(artifact.object_key)\n                await self._upload_media(block_id=block_id,filename=artifact.filename,data=data,parent_type="docx_image" if is_image else "docx_file")'''
           assert a in s and c in s
-          p.write_text(s.replace(a,b,1).replace(c,d,1))
+          s=s.replace(a,b,1).replace(c,d,1)
+          old='            index=int(item.get("block_index") or -1)'
+          new='            raw_index=item.get("block_index");index=int(raw_index) if raw_index is not None else -1'
+          assert old in s
+          p.write_text(s.replace(old,new,1))
           fixed=p.read_text()
           assert 'await self._replace_media(document_id,block_id,token,image=is_image)' not in fixed
           assert 'await self._replace_media(binding.document_id,block_id,token,image=is_image)' not in fixed
+          assert new in fixed
           PY
           cat > backend/tests/test_feishu_evidence_media_materialization_v1.py <<'PY'
           from types import SimpleNamespace
@@ -54,7 +59,6 @@ jobs:
               assert calls==[("image-block","waveform.png",b"png","docx_image"),("file-block","clip.wav",b"wav","docx_file")]
           PY
           git diff --check
-          git diff -- backend/app/integrations/feishu/evidence_document.py
           echo "FIX_PATCH_PRESENT=PASS"
 
       - name: Stage PCAP and prepare environment
