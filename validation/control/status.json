@@ -1,27 +1,48 @@
 {
   "schema_version": "capture-v2-remote-status-v1",
-  "action_id": "RC44-REHEARSAL-NO-HOST-PORTS-SW-001",
-  "sequence": 156,
-  "action_type": "SOFTWARE_REGRESSION",
-  "state": "SUCCEEDED",
+  "action_id": "R7-02-APF3260M-SERVICE-ACTIVATION-ROLLBACK-RC44",
+  "sequence": 157,
+  "action_type": "ACTIVATION_REHEARSAL",
+  "state": "INCONCLUSIVE",
   "runner_id": "srv:257142",
-  "action_sha256": "0f2215b523f221b8cc85a84e4225ee9497e38dc61278254c156562f87741f224",
-  "updated_at": "2026-08-23T10:05:09.992311+00:00",
+  "action_sha256": "2b3ac1b1bd22b5d7f7130af9da7c6fb7609d50b08bc062c82d78549c46c8e51f",
+  "updated_at": "2026-08-23T10:06:19.625847+00:00",
   "started_at": null,
-  "finished_at": "2026-08-23T10:05:09.992311+00:00",
-  "return_code": 0,
-  "verdict": null,
-  "result_path": "validation/control/results/RC44-REHEARSAL-NO-HOST-PORTS-SW-001/result.json",
-  "stdout_sha256": "04530e79451c0d2174996530e3a46282f444b6613d0e0d696248af0ef1a50980",
+  "finished_at": "2026-08-23T10:06:19.625847+00:00",
+  "return_code": 2,
+  "verdict": "INCONCLUSIVE",
+  "result_path": "validation/control/results/R7-02-APF3260M-SERVICE-ACTIVATION-ROLLBACK-RC44/result.json",
+  "stdout_sha256": "483833a7c8a4f2a2bb99af88013678f4076d07ca272c58d71bafbc86b9a92dca",
   "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "error": null,
   "detail": {
     "safety": {
       "capture_engine_version": "V1",
       "capture_v2_production_enabled": "false",
-      "git_head": "0a75dd62e24ad1cefbd251d597116f13baf4b5e4",
+      "git_head": "130e37dc9018fe70896c5d473cd5ecc8f0da0a27",
       "expected_product_head": "0047463ab84f078f330a3b308e26086aeebcc4f2"
     },
-    "parsed_output": null
+    "parsed_output": {
+      "scope": "BOUNDED_SERVICE_LEVEL_ACTIVATION_REHEARSAL",
+      "production_v2_enabled": false,
+      "original_env_modified": false,
+      "project": "capture-v2-r7-rehearsal",
+      "device": {
+        "sn": "G1U060H000384",
+        "model": "APF3260-M",
+        "host": "10.48.8.74",
+        "port": 10002
+      },
+      "checks": [],
+      "verdict": "INCONCLUSIVE",
+      "reason": "SERVICE_LEVEL_REHEARSAL_EXCEPTION",
+      "failure_phase": "V1_BASELINE_BOOT",
+      "error": "RuntimeError:BACKEND_HEALTH_FAILED",
+      "final_server_target_state": "PRESTATE_NO_REHEARSAL_CONTAINERS",
+      "final_authority_target": "V1",
+      "guarded_rehearsal": true,
+      "host_port_publishing": "DISABLED_BY_COMPOSE_OVERRIDE",
+      "final_rehearsal_project_empty": true
+    }
   }
 }
