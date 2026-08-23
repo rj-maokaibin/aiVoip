@@ -49,9 +49,14 @@ def run(*, repo_root: Path, candidate_sha: str) -> tuple[int, dict[str, Any]]:
     runtime_root = Path(tempfile.mkdtemp(prefix="capture-v2-master-fix-candidate-"))
     worktree = runtime_root / "worktree"
     worktree_added = False
+    # Never rely on FETCH_HEAD here. The validation host can run more than one
+    # control loop and a concurrent fetch would overwrite the process-global
+    # FETCH_HEAD between fetch and rev-parse. A process-scoped ref keeps the
+    # candidate identity stable while still remaining local-only.
+    candidate_local_ref = f"refs/capture-v2-control/candidate/{os.getpid()}"
     try:
         fetch = _run(
-            ["git", "fetch", "--no-tags", "origin", CANDIDATE_REF],
+            ["git", "fetch", "--no-tags", "origin", f"{CANDIDATE_REF}:{candidate_local_ref}"],
             cwd=repo_root, timeout=180,
         )
         payload["stages"]["fetch_candidate"] = {
@@ -59,10 +64,11 @@ def run(*, repo_root: Path, candidate_sha: str) -> tuple[int, dict[str, Any]]:
             "passed": fetch.returncode == 0,
             "stdout_tail": _safe_tail(fetch.stdout),
             "stderr_tail": _safe_tail(fetch.stderr),
+            "local_ref": candidate_local_ref,
         }
         if fetch.returncode != 0:
             return 2, {**payload, "verdict": "INCONCLUSIVE", "reason": "MASTER_FIX_CANDIDATE_FETCH_FAILED"}
-        fetched = _git(repo_root, "rev-parse", "FETCH_HEAD")
+        fetched = _git(repo_root, "rev-parse", candidate_local_ref)
         payload["fetched_candidate_sha"] = fetched
         if fetched != candidate_sha:
             return 2, {**payload, "verdict": "INCONCLUSIVE", "reason": "MASTER_FIX_CANDIDATE_MOVED"}
@@ -213,6 +219,7 @@ def run(*, repo_root: Path, candidate_sha: str) -> tuple[int, dict[str, Any]]:
     finally:
         if worktree_added:
             _run(["git", "worktree", "remove", "--force", str(worktree)], cwd=repo_root, timeout=180)
+        _run(["git", "update-ref", "-d", candidate_local_ref], cwd=repo_root, timeout=30)
         shutil.rmtree(runtime_root, ignore_errors=True)
 
 
