@@ -60,6 +60,49 @@ def _install_backend_health_wait(timeout: float = 120.0) -> None:
     rehearsal._backend_http_health = _wait
 
 
+def _install_status_timeout_diagnostics() -> None:
+    original_wait_status = rehearsal._wait_status
+
+    def _wait_status_with_diagnostics(
+        repo_root: Path,
+        env_file: Path,
+        session_id: str,
+        predicate,
+        *,
+        timeout: float,
+        with_producer: bool = False,
+    ):
+        try:
+            return original_wait_status(
+                repo_root,
+                env_file,
+                session_id,
+                predicate,
+                timeout=timeout,
+                with_producer=with_producer,
+            )
+        except Exception as exc:
+            pieces = [f"{type(exc).__name__}:{_safe_error(str(exc))}"]
+            for service in (
+                "reproduction-worker",
+                "reproduction-control-high-worker",
+                "reproduction-watch-worker",
+                "backend",
+            ):
+                cp = _compose(
+                    repo_root,
+                    env_file,
+                    ["logs", "--no-color", "--tail", "60", service],
+                    timeout=60,
+                    check=False,
+                )
+                text = (cp.stdout or "") + "\n" + (cp.stderr or "")
+                pieces.append(f"[{service}]\n{_safe_error(text)}")
+            raise RuntimeError("SESSION_STATUS_TIMEOUT_DIAGNOSTICS:\n" + "\n".join(pieces)) from exc
+
+    rehearsal._wait_status = _wait_status_with_diagnostics
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Guarded bounded Capture V2 activation rehearsal"
@@ -96,6 +139,7 @@ def main(argv: list[str] | None = None) -> int:
         [str(base_compose), str(rehearsal_compose)]
     )
     _install_backend_health_wait()
+    _install_status_timeout_diagnostics()
 
     preclean_error = None
     try:
