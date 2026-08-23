@@ -1,0 +1,44 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "RC59-MASTER-BASELINE-REGRESSION-SW-001",
+    "sequence": 188,
+    "created_at": "2026-08-23T13:47:00+00:00",
+    "expires_at": "2026-08-23T23:47:00+00:00",
+    "action_type": "SOFTWARE_REGRESSION",
+    "parameters": {
+      "timeout_seconds": 1800
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "6ae0b8262aa8468977b4ef21e041c15c670253ba"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "Full Capture V2 software regression for the isolated master-baseline merge simulator. The simulator accepts only an exact 40-hex master SHA, uses a detached temporary worktree, creates no merge commit and does not mutate the PR branch. This regression itself performs no master merge simulation, no DUT I/O, and no production activation."
+  },
+  "action_sha256": "6e01a1e87480f2aba9ef8e7f5f93a07d02ce298f9c78890e21d64dac2078b4a4",
+  "runner_id": "srv:257142",
+  "state": "SUCCEEDED",
+  "return_code": 0,
+  "verdict": null,
+  "error": null,
+  "finished_at": "2026-08-23T13:43:23.814087+00:00",
+  "stdout_sha256": "10b48dcb8a210038540edacdbc78a19066854599d81f30adebf31f0a5f129b40",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "local_stdout": ".capture-v2-control/logs/RC59-MASTER-BASELINE-REGRESSION-SW-001/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/RC59-MASTER-BASELINE-REGRESSION-SW-001/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "92d8a329d28bf30b449095b3b96dd7eb63416398",
+      "expected_product_head": "6ae0b8262aa8468977b4ef21e041c15c670253ba"
+    },
+    "parsed_output": null
+  }
+}
