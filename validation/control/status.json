@@ -1,45 +1,27 @@
 {
   "schema_version": "capture-v2-remote-status-v1",
-  "action_id": "R7-02-APF3260M-SERVICE-ACTIVATION-ROLLBACK-RC41",
-  "sequence": 151,
-  "action_type": "ACTIVATION_REHEARSAL",
-  "state": "INCONCLUSIVE",
+  "action_id": "RC42-ACTIVATION-SUDO-CONTROL-SW-001",
+  "sequence": 152,
+  "action_type": "SOFTWARE_REGRESSION",
+  "state": "SUCCEEDED",
   "runner_id": "srv:257142",
-  "action_sha256": "96c5479d5b1a0aaec186db10ff3b91df31a3e6bf8280326bab0bfa10e0ebeb71",
-  "updated_at": "2026-08-23T09:55:42.905051+00:00",
+  "action_sha256": "1037d7da962320c2ee5d23f228e38aea6260ee56fea3d11d29b06c28f4ba7916",
+  "updated_at": "2026-08-23T09:57:36.972647+00:00",
   "started_at": null,
-  "finished_at": "2026-08-23T09:55:42.905051+00:00",
-  "return_code": 2,
-  "verdict": "INCONCLUSIVE",
-  "result_path": "validation/control/results/R7-02-APF3260M-SERVICE-ACTIVATION-ROLLBACK-RC41/result.json",
-  "stdout_sha256": "956aa7b6034caa08e166732c82c78cdeca5ba0de037aaf176ff969697dec81c4",
+  "finished_at": "2026-08-23T09:57:36.972647+00:00",
+  "return_code": 0,
+  "verdict": null,
+  "result_path": "validation/control/results/RC42-ACTIVATION-SUDO-CONTROL-SW-001/result.json",
+  "stdout_sha256": "4dfd92dc50be143e1c839c84a81db9050f8c2527278515f035b65331f5061aed",
   "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "error": null,
   "detail": {
     "safety": {
       "capture_engine_version": "V1",
       "capture_v2_production_enabled": "false",
-      "git_head": "475c4ce7f05617eb98e03fe8f232fbac77276a40",
-      "expected_product_head": "81609ed1279911ddeadf0d6b9efa6763afcb454d"
+      "git_head": "6a62c3f4c7885f6596d56dcc82dc34720caa06b9",
+      "expected_product_head": "e0d40b08d2b0479df7944dc88d114e9be88a37e3"
     },
-    "parsed_output": {
-      "scope": "BOUNDED_SERVICE_LEVEL_ACTIVATION_REHEARSAL",
-      "production_v2_enabled": false,
-      "original_env_modified": false,
-      "project": "capture-v2-r7-rehearsal",
-      "device": {
-        "sn": "G1U060H000384",
-        "model": "APF3260-M",
-        "host": "10.48.8.74",
-        "port": 10002
-      },
-      "checks": [],
-      "verdict": "INCONCLUSIVE",
-      "reason": "SERVICE_LEVEL_REHEARSAL_EXCEPTION",
-      "failure_phase": "V1_BASELINE_BOOT",
-      "error": "RuntimeError:COMMAND_FAILED:/usr/bin/docker:beat:rc=1:unable to get image 'capture-v2-r7-rehearsal-beat': permission denied while trying to connect to the Docker daemon socket at unix:///var/run/docker.sock: Get \"http://%2Fvar%2Frun%2Fdocker.sock/v1.51/images/capture-v2-r7-rehearsal-beat/json\": dial unix /var/run/docker.sock: connect: permission denied",
-      "final_server_target_state": "PRESTATE_NO_REHEARSAL_CONTAINERS",
-      "final_authority_target": "V1"
-    }
+    "parsed_output": null
   }
 }
