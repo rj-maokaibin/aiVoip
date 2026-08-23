@@ -1,0 +1,44 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "RC75-PRODUCTION-CUTOVER-SAFETY-SW-002",
+    "sequence": 206,
+    "created_at": "2026-08-23T15:49:00+00:00",
+    "expires_at": "2026-08-24T03:49:00+00:00",
+    "action_type": "SOFTWARE_REGRESSION",
+    "parameters": {
+      "timeout_seconds": 1800
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "20a956093c338a1b10daec6c6424c1a2c9ca3e6c"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "Run full Capture V2 software regression after concurrent candidate fetch isolation, guarded cutover rollback evidence, production deploy queue/runtime fixes, and local evidence cleanliness changes. No production/DUT mutation."
+  },
+  "action_sha256": "76f3cfb1730ac138a99ba8aa87702b431f72de3cc0ba02e25120fed64d00c257",
+  "runner_id": "srv:611900",
+  "state": "SUCCEEDED",
+  "return_code": 0,
+  "verdict": null,
+  "error": null,
+  "finished_at": "2026-08-23T15:46:12.200449+00:00",
+  "stdout_sha256": "76e8e4d3a0be8907c4d30c39be2a3932aa8c14444764c773df7823410f5a5535",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "local_stdout": ".capture-v2-control/logs/RC75-PRODUCTION-CUTOVER-SAFETY-SW-002/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/RC75-PRODUCTION-CUTOVER-SAFETY-SW-002/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "46036b51efc87ef4e9c669d5667e2111c1588304",
+      "expected_product_head": "20a956093c338a1b10daec6c6424c1a2c9ca3e6c"
+    },
+    "parsed_output": null
+  }
+}

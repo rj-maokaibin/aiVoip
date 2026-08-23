@@ -1,48 +1,27 @@
 {
   "schema_version": "capture-v2-remote-status-v1",
-  "action_id": "RC74-PRODUCTION-CUTOVER-FINAL-INTEGRATION-001",
-  "sequence": 205,
-  "action_type": "GATE_EVALUATE",
-  "state": "INCONCLUSIVE",
+  "action_id": "RC75-PRODUCTION-CUTOVER-SAFETY-SW-002",
+  "sequence": 206,
+  "action_type": "SOFTWARE_REGRESSION",
+  "state": "SUCCEEDED",
   "runner_id": "srv:611900",
-  "action_sha256": "1f13b5f27c5af7c1a374b465060c9c9525911decb5679f380aaeed4d69fcfbe6",
-  "updated_at": "2026-08-23T15:42:49.896875+00:00",
+  "action_sha256": "76f3cfb1730ac138a99ba8aa87702b431f72de3cc0ba02e25120fed64d00c257",
+  "updated_at": "2026-08-23T15:46:12.200449+00:00",
   "started_at": null,
-  "finished_at": "2026-08-23T15:42:49.896875+00:00",
-  "return_code": 2,
-  "verdict": "INCONCLUSIVE",
-  "result_path": "validation/control/results/RC74-PRODUCTION-CUTOVER-FINAL-INTEGRATION-001/result.json",
-  "stdout_sha256": "ba6a2f145ba1d0dc54381865b9318ae4039a5c2dbf909577542f27f0d3049b16",
+  "finished_at": "2026-08-23T15:46:12.200449+00:00",
+  "return_code": 0,
+  "verdict": null,
+  "result_path": "validation/control/results/RC75-PRODUCTION-CUTOVER-SAFETY-SW-002/result.json",
+  "stdout_sha256": "76e8e4d3a0be8907c4d30c39be2a3932aa8c14444764c773df7823410f5a5535",
   "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "error": null,
   "detail": {
     "safety": {
       "capture_engine_version": "V1",
       "capture_v2_production_enabled": "false",
-      "git_head": "dbc3cb9b4ae03ee1021b59e5a71f4ec06b79cd4f",
-      "expected_product_head": "0bb05f8cfdeb04212eca4a17d27fa19b8689f443"
+      "git_head": "46036b51efc87ef4e9c669d5667e2111c1588304",
+      "expected_product_head": "20a956093c338a1b10daec6c6424c1a2c9ca3e6c"
     },
-    "parsed_output": {
-      "scope": "ISOLATED_MASTER_FIX_CANDIDATE_PLUS_CAPTURE_V2_REGRESSION",
-      "candidate_ref": "fix/master-frozen-v2-contract-20260823",
-      "candidate_sha": "391486c7a70f8e36c088dcb512397044a552c78c",
-      "required_master_ancestor": "e8d108a228b151b7711bfe6048c3f39e94b57783",
-      "branch_mutation": false,
-      "merge_commit_created": false,
-      "production_mutation": false,
-      "dut_mutation": false,
-      "stages": {
-        "fetch_candidate": {
-          "return_code": 0,
-          "passed": true,
-          "stdout_tail": "",
-          "stderr_tail": "From github.com:rj-maokaibin/aiVoip\n * branch            fix/master-frozen-v2-contract-20260823 -> FETCH_HEAD"
-        }
-      },
-      "feature_head": "dbc3cb9b4ae03ee1021b59e5a71f4ec06b79cd4f",
-      "fetched_candidate_sha": "dbc3cb9b4ae03ee1021b59e5a71f4ec06b79cd4f",
-      "verdict": "INCONCLUSIVE",
-      "reason": "MASTER_FIX_CANDIDATE_MOVED"
-    }
+    "parsed_output": null
   }
 }
