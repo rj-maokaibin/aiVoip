@@ -1,0 +1,30 @@
+name: Self Hosted Workspace Cleanup
+
+on:
+  pull_request:
+    paths:
+      - '.ci/self-hosted-workspace-cleanup-20260823'
+
+permissions:
+  contents: read
+
+jobs:
+  cleanup:
+    runs-on:
+      - self-hosted
+      - linux
+      - x64
+      - voip-controlled-linux
+    timeout-minutes: 10
+    steps:
+      - name: Clean persistent repository workspace
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE"
+          test -d .git
+          echo "BEFORE_HEAD=$(git rev-parse HEAD)"
+          git reset --hard HEAD
+          git clean -ffdx
+          test -z "$(git status --porcelain)"
+          echo "WORKSPACE_CLEAN=1"
