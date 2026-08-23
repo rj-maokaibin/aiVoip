@@ -1,29 +1,27 @@
 {
   "schema_version": "capture-v2-remote-status-v1",
-  "action_id": "RC37-PRODUCTION-WIRING-SW-002",
-  "sequence": 144,
+  "action_id": "RC37-PRODUCTION-WIRING-SW-003",
+  "sequence": 145,
   "action_type": "SOFTWARE_REGRESSION",
-  "state": "FAILED",
+  "state": "SUCCEEDED",
   "runner_id": "srv:257142",
-  "action_sha256": "7c106179f03734320ea0ee82e70792e70913e5f58d9e13cf0cef309de2897f29",
-  "updated_at": "2026-08-23T09:04:20.783478+00:00",
+  "action_sha256": "36651cc853d12eaac2bcea25ce978e21eb029096d29e08b6f0c3dd6a544fcab9",
+  "updated_at": "2026-08-23T09:06:38.818868+00:00",
   "started_at": null,
-  "finished_at": "2026-08-23T09:04:20.783478+00:00",
-  "return_code": 1,
+  "finished_at": "2026-08-23T09:06:38.818868+00:00",
+  "return_code": 0,
   "verdict": null,
-  "result_path": "validation/control/results/RC37-PRODUCTION-WIRING-SW-002/result.json",
-  "stdout_sha256": "d60854e7f721131ff72fc2f6185ff87bea36d1fc4362396b2fa7d1ee0098709d",
+  "result_path": "validation/control/results/RC37-PRODUCTION-WIRING-SW-003/result.json",
+  "stdout_sha256": "d4220c6b33a10992acb76f6ff709b48ae58b0f25bce7a48ee91d2e48964af2f6",
   "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "error": null,
   "detail": {
     "safety": {
       "capture_engine_version": "V1",
       "capture_v2_production_enabled": "false",
-      "git_head": "158a333b0c0fcf98329724bda75011e248cf9430",
-      "expected_product_head": "ff19ea47dc413186336c42859a834d737e3215b8"
+      "git_head": "748b7b397ea9c59d72abafaa17b2a66e99440413",
+      "expected_product_head": "46f93dac70bf01189c081246bb5b369c7c1c61c8"
     },
-    "parsed_output": null,
-    "failure_stdout_tail": "........................................................................ [ 35%]\n....................................................................F... [ 71%]\n.........................................................                [100%]\n=================================== FAILURES ===================================\n__ test_platform_factory_routes_v2_watcher_but_can_force_semantic_only_legacy __\n\nmonkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x72ae36fce0c0>\ntmp_path = PosixPath('/tmp/pytest-of-dev/pytest-410/test_platform_factory_routes_v0')\n\n    def test_platform_factory_routes_v2_watcher_but_can_force_semantic_only_legacy(\n        monkeypatch, tmp_path\n    ):\n        _select_v2_rehearsal(monkeypatch, tmp_path)\n        monkeypatch.setenv(\"CAPTURE_V2_REUSE_LEGACY_REPRODUCTION_SEMANTICS\", \"true\")\n    \n        from app.reproduction.platform_factory import build_orchestrator\n    \n        class FakeAdapter:\n            ip = \"127.0.0.1\"\n            port = 22\n            username = \"root\"\n[REDACTED_SENSITIVE_LINE]\n            aim_prompt = \"AIM>\"\n            aim_executable = \"aim\"\n            kex_algs = [\"diffie-hellman-group14-sha1\"]\n    \n        orch, close = build_orchestrator(adapter=FakeAdapter(), connect=False)\n        try:\n>           assert orch.platform.uses_capture_v2 is True\n                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nE           AttributeError: 'MockReproductionPlatform' object has no attribute 'uses_capture_v2'\n\ntests/test_capture_v2_production_activation.py:100: AttributeError\n=============================== warnings summary ===============================\n../.venv-release-gate/lib/python3.12/site-packages/_pytest/cacheprovider.py:475\n  /home/dev/workspace/aiVoip/.venv-release-gate/lib/python3.12/site-packages/_pytest/cacheprovider.py:475: PytestCacheWarning: cache could not write path /home/dev/workspace/aiVoip/backend/.pytest_cache/v/cache/nodeids: [Errno 13] Permission denied: '/home/dev/workspace/aiVoip/backend/.pytest_cache/v/cache/nodeids'\n    config.cache.set(\"cache/nodeids\", sorted(self.cached_nodeids))\n\n../.venv-release-gate/lib/python3.12/site-packages/_pytest/cacheprovider.py:429\n  /home/dev/workspace/aiVoip/.venv-release-gate/lib/python3.12/site-packages/_pytest/cacheprovider.py:429: PytestCacheWarning: cache could not write path /home/dev/workspace/aiVoip/backend/.pytest_cache/v/cache/lastfailed: [Errno 13] Permission denied: '/home/dev/workspace/aiVoip/backend/.pytest_cache/v/cache/lastfailed'\n    config.cache.set(\"cache/lastfailed\", self.lastfailed)\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n=========================== short test summary info ============================\nFAILED tests/test_capture_v2_production_activation.py::test_platform_factory_routes_v2_watcher_but_can_force_semantic_only_legacy\n1 failed, 200 passed, 2 warnings in 7.46s",
-    "failure_stderr_tail": ""
+    "parsed_output": null
   }
 }

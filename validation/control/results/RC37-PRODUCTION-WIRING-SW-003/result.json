@@ -1,0 +1,44 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "RC37-PRODUCTION-WIRING-SW-003",
+    "sequence": 145,
+    "created_at": "2026-08-23T09:18:00+00:00",
+    "expires_at": "2026-08-23T21:18:00+00:00",
+    "action_type": "SOFTWARE_REGRESSION",
+    "parameters": {
+      "timeout_seconds": 1200
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "46f93dac70bf01189c081246bb5b369c7c1c61c8"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "RC37 third regression after fixing the platform routing test fixture to explicitly select real mode. Production V2 remains disabled and V1 remains authoritative during regression."
+  },
+  "action_sha256": "36651cc853d12eaac2bcea25ce978e21eb029096d29e08b6f0c3dd6a544fcab9",
+  "runner_id": "srv:257142",
+  "state": "SUCCEEDED",
+  "return_code": 0,
+  "verdict": null,
+  "error": null,
+  "finished_at": "2026-08-23T09:06:38.818868+00:00",
+  "stdout_sha256": "d4220c6b33a10992acb76f6ff709b48ae58b0f25bce7a48ee91d2e48964af2f6",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "local_stdout": ".capture-v2-control/logs/RC37-PRODUCTION-WIRING-SW-003/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/RC37-PRODUCTION-WIRING-SW-003/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "748b7b397ea9c59d72abafaa17b2a66e99440413",
+      "expected_product_head": "46f93dac70bf01189c081246bb5b369c7c1c61c8"
+    },
+    "parsed_output": null
+  }
+}
