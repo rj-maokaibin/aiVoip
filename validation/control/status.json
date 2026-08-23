@@ -1,29 +1,27 @@
 {
   "schema_version": "capture-v2-remote-status-v1",
-  "action_id": "RC57-R6-GUARDED-DATA-RUNTIME-SW-001",
-  "sequence": 183,
+  "action_id": "RC57-R6-GUARDED-DATA-RUNTIME-SW-002",
+  "sequence": 184,
   "action_type": "SOFTWARE_REGRESSION",
-  "state": "FAILED",
+  "state": "SUCCEEDED",
   "runner_id": "srv:257142",
-  "action_sha256": "1bba304f23402efb743e0b4885bb2ec9914db95510915d265a1ddfd3715fa237",
-  "updated_at": "2026-08-23T13:34:49.633532+00:00",
+  "action_sha256": "02ffefb623b3e9088b3d09f04a96ae6b76bbd02a36bf2c2e26a19f2ac8b8c8ab",
+  "updated_at": "2026-08-23T13:35:45.721885+00:00",
   "started_at": null,
-  "finished_at": "2026-08-23T13:34:49.633532+00:00",
-  "return_code": 1,
+  "finished_at": "2026-08-23T13:35:45.721885+00:00",
+  "return_code": 0,
   "verdict": null,
-  "result_path": "validation/control/results/RC57-R6-GUARDED-DATA-RUNTIME-SW-001/result.json",
-  "stdout_sha256": "16ea677bb3e0b4e5927cc31c787283b58aa9a8165982fdd383aede5219342d4d",
+  "result_path": "validation/control/results/RC57-R6-GUARDED-DATA-RUNTIME-SW-002/result.json",
+  "stdout_sha256": "5232ce41a4543187da9ad9a05f84b29d05a1b23b843044838e844710aa112b78",
   "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "error": null,
   "detail": {
     "safety": {
       "capture_engine_version": "V1",
       "capture_v2_production_enabled": "false",
-      "git_head": "8a569322d2aef5de6f28f2b05250bf6d3ea6a452",
-      "expected_product_head": "4ec450d0f2b84e72c30a43fa4003124a7740ca23"
+      "git_head": "6fa1a824afc2891efb6d09645f89a71e56c48045",
+      "expected_product_head": "927787df5e3f830a74c7f3d178d39121b6ae81f4"
     },
-    "parsed_output": null,
-    "failure_stdout_tail": "........................................................................ [ 33%]\n........................................................................ [ 67%]\n.............F.......................................................    [100%]\n=================================== FAILURES ===================================\n___________ test_gate_cli_bounded_r6_dispatch_only_for_exact_golden ____________\n\nmonkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x71c8dd2ee6c0>\ntmp_path = PosixPath('/tmp/pytest-of-dev/pytest-430/test_gate_cli_bounded_r6_dispa0')\n\n    def test_gate_cli_bounded_r6_dispatch_only_for_exact_golden(monkeypatch, tmp_path):\n        repo = tmp_path / \"repo\"\n        module = repo / \"backend/app/capture_v2/gate_cli.py\"\n        golden = repo / \"validation/capture_v2/R6_APF1250_FIRST_8000_ABNORMAL_GOLDEN_RC33.json\"\n        module.parent.mkdir(parents=True)\n        golden.parent.mkdir(parents=True)\n        module.write_text(\"# marker\\n\")\n        golden.write_text(\"{}\\n\")\n    \n        class FakePath(Path):\n            _flavour = type(Path())._flavour\n    \n        calls = []\n    \n        def fake_materialize(argv):\n            calls.append(argv)\n            return 0\n    \n        monkeypatch.setattr(gate_cli, \"__file__\", str(module))\n        monkeypatch.setattr(r6_report_materialize, \"main\", fake_materialize)\n    \n        rc = gate_cli._bounded_r6_materialization([\n            \"evaluate\",\n            \"--bundle\", str(golden),\n            \"--gate-id\", \"R6-PRODUCT-REPORT-MATERIALIZE-RC56\",\n        ])\n>       assert rc == 0\nE       assert 2 == 0\n\ntests/test_capture_v2_r6_report_materialize.py:36: AssertionError\n----------------------------- Captured stdout call -----------------------------\n{\n  \"verdict\": \"INCONCLUSIVE\",\n  \"reason\": \"DEPLOYMENT_ENV_FILE_NOT_FOUND\"\n}\n=============================== warnings summary ===============================\n../.venv-release-gate/lib/python3.12/site-packages/_pytest/cacheprovider.py:475\n  /home/dev/workspace/aiVoip/.venv-release-gate/lib/python3.12/site-packages/_pytest/cacheprovider.py:475: PytestCacheWarning: cache could not write path /home/dev/workspace/aiVoip/backend/.pytest_cache/v/cache/nodeids: [Errno 13] Permission denied: '/home/dev/workspace/aiVoip/backend/.pytest_cache/v/cache/nodeids'\n    config.cache.set(\"cache/nodeids\", sorted(self.cached_nodeids))\n\n../.venv-release-gate/lib/python3.12/site-packages/_pytest/cacheprovider.py:429\n  /home/dev/workspace/aiVoip/.venv-release-gate/lib/python3.12/site-packages/_pytest/cacheprovider.py:429: PytestCacheWarning: cache could not write path /home/dev/workspace/aiVoip/backend/.pytest_cache/v/cache/lastfailed: [Errno 13] Permission denied: '/home/dev/workspace/aiVoip/backend/.pytest_cache/v/cache/lastfailed'\n    config.cache.set(\"cache/lastfailed\", self.lastfailed)\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n=========================== short test summary info ============================\nFAILED tests/test_capture_v2_r6_report_materialize.py::test_gate_cli_bounded_r6_dispatch_only_for_exact_golden\n1 failed, 212 passed, 2 warnings in 7.71s",
-    "failure_stderr_tail": ""
+    "parsed_output": null
   }
 }
