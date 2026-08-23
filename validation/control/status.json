@@ -1,26 +1,26 @@
 {
   "schema_version": "capture-v2-remote-status-v1",
-  "action_id": "RC33-PCAP-WINDOW-SCOPE-SW-002",
-  "sequence": 136,
+  "action_id": "RC34-R6-ABNORMAL-GOLDEN-FINAL-SW-001",
+  "sequence": 137,
   "action_type": "SOFTWARE_REGRESSION",
   "state": "SUCCEEDED",
   "runner_id": "srv:231819",
-  "action_sha256": "739db6b21b4f85a7c5279259c2b61985a2d1315f52082e07152e0dfdf8043844",
-  "updated_at": "2026-08-23T07:16:48.288483+00:00",
+  "action_sha256": "08222136c04fc428257e9324fcab28f8eba959efef656f1b02c41a260dac580a",
+  "updated_at": "2026-08-23T07:20:50.842988+00:00",
   "started_at": null,
-  "finished_at": "2026-08-23T07:16:48.288483+00:00",
+  "finished_at": "2026-08-23T07:20:50.842988+00:00",
   "return_code": 0,
   "verdict": null,
-  "result_path": "validation/control/results/RC33-PCAP-WINDOW-SCOPE-SW-002/result.json",
-  "stdout_sha256": "e1b8ac9686179fc8229732fd601b562bb643f88994722418e45100318c37917f",
+  "result_path": "validation/control/results/RC34-R6-ABNORMAL-GOLDEN-FINAL-SW-001/result.json",
+  "stdout_sha256": "4df4aebafc5d7450f1ebfc105f5740bce90b9edf829201cea6e272c2cdca9808",
   "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "error": null,
   "detail": {
     "safety": {
       "capture_engine_version": "V1",
       "capture_v2_production_enabled": "false",
-      "git_head": "5ac3cbd238d13a04d41c025d57f2157fce330db0",
-      "expected_product_head": "56b9353ee7281a7c1de7729dfc28672e0ae64893"
+      "git_head": "5758e17a08f2a66cafc26f1b6263e24b8c16692b",
+      "expected_product_head": "3b69b1d0d0b6e01fd01ad3fd4beb635f47eb4be3"
     },
     "parsed_output": null
   }
