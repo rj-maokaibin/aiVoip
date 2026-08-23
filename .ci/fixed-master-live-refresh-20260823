@@ -25,3 +25,4 @@ final acceptance: migrated D112 V1 contract + full backend + real PCAP + canonic
 final acceptance: latest master + isolated release/missing-session contracts
 final acceptance: isolated capture-v2 tmp paths + diagnosis DB handoff
 final acceptance: canonical scope tuple validation + live Feishu readback
+final acceptance: preserve original V1 audit + 120s Feishu bundle upload timeout
