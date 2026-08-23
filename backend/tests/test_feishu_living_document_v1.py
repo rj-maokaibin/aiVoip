@@ -80,4 +80,4 @@ def test_feishu_section_3_renders_frozen_seven_dimension_completeness():
     for name in dimensions:
         assert any(name in text for text in texts)
     assert any("DEBUG" in text and "缺失/不可用" in text for text in texts)
-    assert service.LIVING_PROJECTION_CONTRACT == "feishu-evidence-living-document-v1"
+    assert service.LIVING_PROJECTION_CONTRACT == "feishu-evidence-living-document-v2"
