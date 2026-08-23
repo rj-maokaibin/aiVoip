@@ -1,20 +1,37 @@
 {
-  "schema_version": "capture-v2-remote-status-v1",
-  "action_id": "RC40-DEPLOYMENT-PREFLIGHT-002",
-  "sequence": 149,
-  "action_type": "DEPLOYMENT_PREFLIGHT",
-  "state": "FAILED",
-  "runner_id": "srv:257142",
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "RC40-DEPLOYMENT-PREFLIGHT-002",
+    "sequence": 149,
+    "created_at": "2026-08-23T09:47:00+00:00",
+    "expires_at": "2026-08-23T21:47:00+00:00",
+    "action_type": "DEPLOYMENT_PREFLIGHT",
+    "parameters": {
+      "timeout_seconds": 120
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "c5c9d82444b0070db0fde9869a7c7a3a7f131410"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "Second read-only deployment preflight. Discover non-default Compose projects from Docker labels, identify the actual running reproduction stack, verify sanitized V1 authority, and report whether containers need recreation for the new /app/validation mount. No mutation or restart."
+  },
   "action_sha256": "32848c7141d8451138985fb4545da32f0d311dca21735af7f8686b29435cba29",
-  "updated_at": "2026-08-23T09:46:48.000951+00:00",
-  "started_at": null,
-  "finished_at": "2026-08-23T09:46:48.000951+00:00",
+  "runner_id": "srv:257142",
+  "state": "FAILED",
   "return_code": 1,
   "verdict": "FAIL",
-  "result_path": "validation/control/results/RC40-DEPLOYMENT-PREFLIGHT-002/result.json",
+  "error": null,
+  "finished_at": "2026-08-23T09:46:48.000951+00:00",
   "stdout_sha256": "090d06577a7091009d62ba917eb2a382bf43dc1ba98980769861ff3f82d2881a",
   "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-  "error": null,
+  "local_stdout": ".capture-v2-control/logs/RC40-DEPLOYMENT-PREFLIGHT-002/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/RC40-DEPLOYMENT-PREFLIGHT-002/stderr.log",
   "detail": {
     "safety": {
       "capture_engine_version": "V1",
