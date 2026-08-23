@@ -1,10 +1,9 @@
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
 from app.capture_v2 import gate_cli
-from app.capture_v2.control import r6_report_materialize
+from app.capture_v2.control import r6_report_materialize, r6_report_materialize_guarded
 
 
 def test_gate_cli_bounded_r6_dispatch_only_for_exact_golden(monkeypatch, tmp_path):
@@ -16,9 +15,6 @@ def test_gate_cli_bounded_r6_dispatch_only_for_exact_golden(monkeypatch, tmp_pat
     module.write_text("# marker\n")
     golden.write_text("{}\n")
 
-    class FakePath(Path):
-        _flavour = type(Path())._flavour
-
     calls = []
 
     def fake_materialize(argv):
@@ -26,7 +22,7 @@ def test_gate_cli_bounded_r6_dispatch_only_for_exact_golden(monkeypatch, tmp_pat
         return 0
 
     monkeypatch.setattr(gate_cli, "__file__", str(module))
-    monkeypatch.setattr(r6_report_materialize, "main", fake_materialize)
+    monkeypatch.setattr(r6_report_materialize_guarded, "main", fake_materialize)
 
     rc = gate_cli._bounded_r6_materialization([
         "evaluate",
