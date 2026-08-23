@@ -1,0 +1,43 @@
+{
+  "schema_version": "capture-v2-release-gate-v1",
+  "software_gate_passed": true,
+  "real_ownership_gate_passed": true,
+  "real_segment_gate_passed": true,
+  "readiness_gate_passed": true,
+  "coverage_gate_passed": true,
+  "e2e_gate_passed": true,
+  "rollback_gate_passed": false,
+  "approved": true,
+  "approval_scope": "AUTHORIZED_TO_BEGIN_REAL_ACTIVATION_VALIDATION_AND_CUTOVER_SEQUENCE",
+  "approval_recorded_at": "2026-08-23T08:10:00+00:00",
+  "production_v2_enabled": false,
+  "capture_engine_version": "V1",
+  "release_decision": "BLOCKED_PENDING_REAL_PRODUCTION_V2_ACTIVE_ROLLBACK_AND_PRODUCTION_RUNTIME_WIRING",
+  "evidence": {
+    "software_regression": "validation/control/results/RC35-R7-VALIDATION-ROLLBACK-SW-001/result.json",
+    "ownership_recovery": [
+      "validation/control/results/R2-01B-APF1250-CONTROLLER-LOSS-ADOPT-RC17/result.json",
+      "validation/control/results/R2-01B-APF3260M-CONTROLLER-LOSS-ADOPT-RC17/result.json"
+    ],
+    "segment_transfer_ack": [
+      "validation/control/results/R3-APF1250-SEGMENT-RC6/result.json",
+      "validation/control/results/R3-APF3260M-SEGMENT-RC6/result.json"
+    ],
+    "readiness_fxs": [
+      "validation/control/results/R4-01-APF1250-FRESH-FXS-RC26/result.json",
+      "validation/control/results/R4-01-APF3260M-FRESH-FXS-RC26/result.json",
+      "validation/control/results/R4-02-APF3260M-HOOK-FLASH-RC27/result.json"
+    ],
+    "coverage": "validation/control/results/R5-01-APF3260M-LIVE-COVERAGE-RC32/result.json",
+    "e2e_abnormal_golden": "validation/capture_v2/R6_APF1250_FIRST_8000_ABNORMAL_GOLDEN_RC33.json",
+    "validation_scope_rollback_mechanics": [
+      "validation/control/results/R7-01-APF1250-VALIDATION-ROLLBACK-REUSE-RC35/result.json",
+      "validation/control/results/R7-01-APF3260M-VALIDATION-ROLLBACK-RC35/result.json"
+    ]
+  },
+  "blocking_reasons": [
+    "Production reproduction.start still routes to V1 ReproductionOrchestrator and only forbids V1 when CAPTURE_ENGINE_VERSION=V2; no production V2 I/O orchestrator is wired yet.",
+    "CaptureV2DSession explicitly leaves real FXS stream wiring outside the class.",
+    "Actual production PRE_V1 -> V2_ACTIVE -> ROLLED_BACK_V1 evidence is not yet available and must not be inferred from validation-scope rollback mechanics."
+  ]
+}
