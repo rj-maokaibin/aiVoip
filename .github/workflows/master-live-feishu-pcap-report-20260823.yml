@@ -1,0 +1,308 @@
+name: Exact Master PCAP Live Feishu Report
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/master-live-feishu-pcap-report-20260823.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  exact-master-pcap-live-feishu:
+    runs-on:
+      - self-hosted
+      - linux
+      - x64
+      - voip-controlled-linux
+    timeout-minutes: 60
+    env:
+      MASTER_HEAD: 03fa37ec0035204cf6b4711e2a1f824fc948227e
+      OFFLINE_PCAP: /tmp/tcpdump-2026-08-14.pcap
+      OFFLINE_PCAP_SHA256: b038aa7c9a0644581f2815f654fcdee4620860796382265b178823fccba2e3f0
+      TARGET_OPEN_ID: ou_67bee3c2e462a7f8939093bd8e697a96
+
+    steps:
+      - name: Checkout exact master product code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.MASTER_HEAD }}
+          fetch-depth: 1
+
+      - name: Verify master and stage PCAP
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$MASTER_HEAD"
+          fixture="$OFFLINE_PCAP"
+          if [ ! -r "$fixture" ]; then
+            fixture="$RUNNER_TEMP/master-live-feishu-input.pcap"
+            rm -f "$fixture"
+            docker run --rm \
+              -v /tmp:/source:ro \
+              -v "$RUNNER_TEMP":/output \
+              --entrypoint sh postgres:16 \
+              -c "cp /source/tcpdump-2026-08-14.pcap /output/master-live-feishu-input.pcap && chmod 0644 /output/master-live-feishu-input.pcap"
+          fi
+          test -r "$fixture"
+          actual_sha="$(sha256sum "$fixture" | awk '{print $1}')"
+          test "$actual_sha" = "$OFFLINE_PCAP_SHA256"
+          echo "OFFLINE_PCAP=$fixture" >> "$GITHUB_ENV"
+          printf 'EXACT_MASTER_HEAD=%s\nINPUT_PCAP_SHA256=%s\n' "$MASTER_HEAD" "$actual_sha"
+
+      - name: Prepare exact TShark 4.2.2 and Python runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          tshark_bin=""
+          if command -v tshark >/dev/null 2>&1; then
+            candidate="$(command -v tshark)"
+            candidate_version="$($candidate -v | head -n1)"
+            [[ "$candidate_version" == *'4.2.2'* ]] && tshark_bin="$candidate"
+          fi
+          if [ -z "$tshark_bin" ]; then
+            root="$RUNNER_TEMP/tshark-root"; debs="$RUNNER_TEMP/tshark-debs"
+            rm -rf "$root" "$debs"; mkdir -p "$root" "$debs"; cd "$debs"
+            mapfile -t pkgs < <(apt-cache depends --recurse --no-recommends --no-suggests --no-conflicts --no-breaks --no-replaces --no-enhances tshark | awk '/^[^ <][^:]*$/ {print $1}' | sort -u)
+            miss=(); for p in "${pkgs[@]}"; do dpkg-query -W -f='${Status}' "$p" 2>/dev/null | grep -q 'install ok installed' || miss+=("$p"); done
+            [ ${#miss[@]} -eq 0 ] || apt-get download "${miss[@]}"
+            shopt -s nullglob; for d in ./*.deb; do dpkg-deb -x "$d" "$root"; done
+            tshark_bin="$RUNNER_TEMP/tshark-userspace"
+            printf '#!/bin/bash\nexport LD_LIBRARY_PATH="%s/usr/lib/x86_64-linux-gnu:%s/lib/x86_64-linux-gnu:${LD_LIBRARY_PATH:-}"\nexport WIRESHARK_DATA_DIR="%s/usr/share/wireshark"\nexec "%s/usr/bin/tshark" "$@"\n' "$root" "$root" "$root" "$root" > "$tshark_bin"
+            chmod +x "$tshark_bin"
+          fi
+          version="$($tshark_bin -v | head -n1)"
+          printf 'TSHARK=%s\n' "$version"
+          [[ "$version" == *'4.2.2'* ]]
+          echo "TSHARK_BINARY=$tshark_bin" >> "$GITHUB_ENV"
+
+          cd "$GITHUB_WORKSPACE"
+          venv="$RUNNER_TEMP/voip-ai-master-live-feishu"
+          rm -rf "$venv"
+          python3 -m venv "$venv"
+          "$venv/bin/python" -m pip install -r backend/requirements.txt >/dev/null
+          echo "LIVE_FEISHU_VENV=$venv" >> "$GITHUB_ENV"
+
+      - name: Analyze PCAP, publish Feishu report, grant editor, verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f /home/github-runner/.config/voip-ai/.env
+          test -f /home/github-runner/.config/voip-ai/feishu_app_secret
+          set -a; source /home/github-runner/.config/voip-ai/.env; set +a
+          export FEISHU_APP_SECRET_FILE=/home/github-runner/.config/voip-ai/feishu_app_secret
+          export PYTHONPATH=backend
+          "$LIVE_FEISHU_VENV/bin/python" - <<'PY'
+          import asyncio
+          import hashlib
+          import json
+          import os
+          import uuid
+          from datetime import datetime, timezone
+          from pathlib import Path
+          from urllib.parse import quote
+          from types import SimpleNamespace
+
+          import httpx
+
+          import app.integrations.feishu.evidence_document as edm
+          from app.contracts.evidence_report import REPORT_COMPOSER_VERSION, REPORT_SCHEMA_VERSION
+          from app.core.config import settings
+          from app.db.evidence_report_models import FeishuEvidenceDocumentBinding, PreliminaryEvidenceReport
+          from app.db.models import Artifact
+          from app.golden.offline_analysis_e2e import build_offline_analysis_bundle
+          from app.integrations.feishu.document_acl import FeishuDocumentPermissionAdapter
+          from app.integrations.feishu.evidence_document import FeishuEvidenceDocumentService
+          from app.integrations.feishu.transport import FeishuLiveTransport
+          from app.services.evidence_report_artifacts import generate_visual_artifacts, persist_artifact
+
+          HEAD = os.environ['MASTER_HEAD']
+          PCAP = Path(os.environ['OFFLINE_PCAP'])
+          PCAP_SHA = os.environ['OFFLINE_PCAP_SHA256']
+          TSHARK = os.environ['TSHARK_BINARY']
+          TARGET_OPEN_ID = os.environ['TARGET_OPEN_ID']
+          OUT = Path('validation/master_live_feishu_pcap_report')
+          OUT.mkdir(parents=True, exist_ok=True)
+          RESULT = OUT / 'result.json'
+
+          assert settings.feishu_app_id, 'FEISHU_APP_ID_NOT_CONFIGURED'
+
+          bundle = build_offline_analysis_bundle(
+              pcap_path=PCAP,
+              pcm_profile_path='profiles/pcm/ruijie_aim_diag_v1.yaml',
+              output_dir=OUT / 'analysis',
+              tshark_binary=TSHARK,
+          )
+          assert bundle['source']['sha256'] == PCAP_SHA
+          assert bundle['report'].get('schema') == REPORT_SCHEMA_VERSION or bundle['report'].get('schema_version') == REPORT_SCHEMA_VERSION
+
+          case_id = f'master-pcap-case-{uuid.uuid4().hex[:12]}'
+          report_id = f'master-pcap-report-{uuid.uuid4().hex[:12]}'
+          case = SimpleNamespace(id=case_id, case_no=f'MASTER-PCAP-{datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")}')
+          payload = dict(bundle['report'])
+          payload['generated_at'] = datetime.now(timezone.utc).isoformat()
+          report = PreliminaryEvidenceReport(
+              id=report_id,
+              case_id=case_id,
+              session_id=None,
+              call_id=None,
+              scope_type='CASE',
+              scope_id=case_id,
+              version=1,
+              status='COMPLETE',
+              schema_version=REPORT_SCHEMA_VERSION,
+              composer_version=REPORT_COMPOSER_VERSION,
+              input_snapshot_hash=PCAP_SHA,
+              idempotency_key=f'master-pcap-live-feishu-{uuid.uuid4().hex}',
+              snapshot_json=payload,
+              created_at=datetime.now(timezone.utc),
+          )
+
+          blob = {}
+          class Storage:
+              def put_bytes(self, key, data, content_type): blob[key] = bytes(data)
+              def get_bytes(self, key): return blob[key]
+          storage = Storage()
+
+          class DB:
+              def __init__(self): self.binding = None; self.rows = []
+              def get(self, model, key):
+                  name = getattr(model, '__name__', '')
+                  if name == 'Case' and key == case_id: return case
+                  if name == 'PreliminaryEvidenceReport' and key == report_id: return report
+                  return None
+              def scalar(self, _stmt): return self.binding
+              def scalars(self, _stmt): return []
+              def add(self, row):
+                  self.rows.append(row)
+                  if getattr(row, 'id', None) is None and hasattr(row, 'id'): row.id = str(uuid.uuid4())
+                  if getattr(row, 'created_at', None) is None and hasattr(row, 'created_at'): row.created_at = datetime.now(timezone.utc)
+                  if isinstance(row, FeishuEvidenceDocumentBinding):
+                      self.binding = row
+                      if row.projection_version is None: row.projection_version = 0
+              def flush(self):
+                  for row in self.rows:
+                      if getattr(row, 'id', None) is None and hasattr(row, 'id'): row.id = str(uuid.uuid4())
+                      if getattr(row, 'created_at', None) is None and hasattr(row, 'created_at'): row.created_at = datetime.now(timezone.utc)
+                  if self.binding is not None and self.binding.projection_version is None: self.binding.projection_version = 0
+          db = DB()
+
+          results = {
+              'packet_intelligence': bundle['packet'],
+              'pcm_intelligence': bundle['pcm'],
+              'media_intelligence': bundle['media'],
+          }
+          png_artifacts = [a for a in generate_visual_artifacts(db, storage, report=report, results=results, runs={}) if a.content_type == 'image/png']
+          png_types = {a.type for a in png_artifacts}
+          assert {'RTP_TIMELINE_PNG', 'SIP_CALL_FLOW_PNG'} <= png_types, png_types
+          selected_png = [
+              next(a for a in png_artifacts if a.type == 'RTP_TIMELINE_PNG'),
+              next(a for a in png_artifacts if a.type == 'SIP_CALL_FLOW_PNG'),
+          ]
+
+          wavs = sorted((OUT / 'analysis').rglob('*.wav'))
+          by_name = {p.name: p for p in wavs}
+          preferred = ['periodic_00_pcm_rx.wav', 'periodic_00_rtp_up.wav', 'periodic_00_rtp_down.wav']
+          selected_wavs = [by_name[name] for name in preferred if name in by_name]
+          if len(selected_wavs) < 3: selected_wavs = wavs[:3]
+          assert len(selected_wavs) == 3, [str(x) for x in wavs]
+          wav_artifacts = []
+          for index, path in enumerate(selected_wavs):
+              data = path.read_bytes()
+              assert len(data) > 1000 and data[:4] == b'RIFF' and data[8:12] == b'WAVE'
+              wav_artifacts.append(persist_artifact(
+                  db, storage, report=report, artifact_type='AUDIO_CLIP', filename=path.name,
+                  data=data, content_type='audio/wav',
+                  metadata={'source': 'exact-master-offline-pcap', 'validation_role': f'audio-{index}'},
+                  role='FINDING',
+              ))
+          artifacts = selected_png + wav_artifacts
+          assert len(artifacts) == 5 and all(isinstance(a, Artifact) for a in artifacts)
+          edm.report_artifacts = lambda _db, _report_id: artifacts
+
+          class RecordingService(FeishuEvidenceDocumentService):
+              def __init__(self, **kwargs): super().__init__(**kwargs); self.uploads = []
+              async def _upload_media(self, *, block_id, filename, data, parent_type):
+                  token = await super()._upload_media(block_id=block_id, filename=filename, data=data, parent_type=parent_type)
+                  self.uploads.append({'block_id': block_id, 'filename': filename, 'data': bytes(data), 'token': token, 'parent_type': parent_type})
+                  return token
+
+          async def verify_remote_media(transport, document_id, record):
+              response = await transport._request('GET', f'/docx/v1/documents/{quote(document_id, safe="")}/blocks/{quote(record["block_id"], safe="")}')
+              block = (response.get('data') or {}).get('block') or {}
+              if record['parent_type'] == 'docx_image':
+                  remote_token = (block.get('image') or {}).get('token')
+              else:
+                  remote_token = (block.get('file') or {}).get('token')
+              assert remote_token == record['token'], record['filename']
+              tenant_token = await transport._tenant_token()
+              url = settings.feishu_base_url.rstrip('/') + f'/drive/v1/medias/{quote(record["token"], safe="")}/download'
+              async with httpx.AsyncClient(timeout=settings.feishu_timeout_seconds) as client:
+                  download = await client.get(url, headers={'Authorization': f'Bearer {tenant_token}'})
+              download.raise_for_status()
+              assert download.content == record['data'], record['filename']
+              return {'filename': record['filename'], 'size_bytes': len(record['data']), 'sha256': hashlib.sha256(record['data']).hexdigest(), 'verified': True}
+
+          async def main():
+              transport = FeishuLiveTransport()
+              service = RecordingService(transport=transport, storage=storage)
+              binding = await service.project(db, case_id=case_id, report_id=report_id)
+              document_id = binding.document_id
+              assert document_id and binding.document_url
+              assert len(service.uploads) == 5, len(service.uploads)
+
+              permission = FeishuDocumentPermissionAdapter(transport=transport)
+              collaborators = await permission.list_collaborators(document_id)
+              current = next((c for c in collaborators if c.member_type == 'openid' and c.member_id == TARGET_OPEN_ID), None)
+              if current is None:
+                  await permission.add_collaborator(document_id, member_type='openid', member_id=TARGET_OPEN_ID, perm='edit')
+                  acl_action = 'ADD_EDIT'
+              elif current.perm != 'edit':
+                  await permission.update_collaborator(document_id, member_type='openid', member_id=TARGET_OPEN_ID, perm='edit')
+                  acl_action = f'UPDATE_{current.perm}_TO_EDIT'
+              else:
+                  acl_action = 'ALREADY_EDIT'
+              collaborators = await permission.list_collaborators(document_id)
+              verified_acl = next((c for c in collaborators if c.member_type == 'openid' and c.member_id == TARGET_OPEN_ID), None)
+              assert verified_acl is not None and verified_acl.perm == 'edit', collaborators
+
+              media = [await verify_remote_media(transport, document_id, item) for item in service.uploads]
+              diagnosis = bundle.get('diagnosis') or {}
+              result = {
+                  'status': 'PASS',
+                  'exact_master_head': HEAD,
+                  'source_pcap': PCAP.name,
+                  'source_pcap_sha256': bundle['source']['sha256'],
+                  'document_id': document_id,
+                  'document_url': binding.document_url,
+                  'acl': {'member_type': 'openid', 'member_id': TARGET_OPEN_ID, 'permission': verified_acl.perm, 'verified': True, 'action': acl_action},
+                  'media': media,
+                  'analysis_context': bundle.get('analysis_context'),
+                  'display_call': bundle.get('display_call'),
+                  'media_summary': bundle.get('media_summary'),
+                  'finding_summary': bundle.get('finding_summary'),
+                  'diagnosis': diagnosis,
+              }
+              RESULT.write_text(json.dumps(result, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+              print(json.dumps({
+                  'status': 'PASS',
+                  'exact_master_head': HEAD,
+                  'source_pcap_sha256': result['source_pcap_sha256'],
+                  'document_url': binding.document_url,
+                  'editor_permission': 'VERIFIED_EDIT',
+                  'target_open_id': TARGET_OPEN_ID,
+                  'media_verified': len(media),
+                  'diagnosis_headline': ((diagnosis.get('summary') or {}).get('headline')),
+              }, ensure_ascii=False, indent=2))
+
+          asyncio.run(main())
+          PY
+
+      - name: Upload execution evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: exact-master-live-feishu-pcap-report
+          path: validation/master_live_feishu_pcap_report/result.json
+          if-no-files-found: warn
