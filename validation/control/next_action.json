@@ -1,9 +1,9 @@
 {
   "schema_version": "capture-v2-remote-action-v1",
-  "action_id": "RC37-PRODUCTION-WIRING-SW-001",
-  "sequence": 143,
-  "created_at": "2026-08-23T09:05:00+00:00",
-  "expires_at": "2026-08-23T21:05:00+00:00",
+  "action_id": "RC37-PRODUCTION-WIRING-SW-002",
+  "sequence": 144,
+  "created_at": "2026-08-23T09:12:00+00:00",
+  "expires_at": "2026-08-23T21:12:00+00:00",
   "action_type": "SOFTWARE_REGRESSION",
   "parameters": {
     "timeout_seconds": 1200
@@ -14,8 +14,8 @@
     "require_v2_disabled": true,
     "allow_worker_kill": false,
     "allow_server_quarantine": false,
-    "expected_head": "49f81b51454bcf61acf7b64a0394ba72c6a9efa3"
+    "expected_head": "ff19ea47dc413186336c42859a834d737e3215b8"
   },
   "requested_by": "ChatGPT-remote-validation-controller",
-  "note": "RC37 regression for Production V2 authority routing: fail-closed rehearsal gate, lazy watcher-owned V2 lease/producer, V2 segmented platform shim, finalizer-before-cleanup, and semantic-only legacy start path. V1 remains authoritative and Production V2 remains disabled during this regression."
+  "note": "RC37 second regression after adding redacted pytest failure-tail publishing to the control runner. Exercises Production V2 authority routing while V1 remains authoritative and Production V2 remains disabled."
 }
