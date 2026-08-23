@@ -12,6 +12,7 @@ from app.capture_v2.gate.r4_preflight import run_r4_no_handset_preflight
 from app.capture_v2.gate.r4_real import run_r4_real_fxs_basic
 from app.capture_v2.gate.r5_live_coverage_rc29 import run_r5_real_live_coverage
 from app.capture_v2.gate.r7_soak import run_r7_validation_soak
+from app.capture_v2.gate.r7_validation_rollback import run_r7_validation_rollback
 from app.capture_v2.gate.runner import GateRunner
 from app.core.config import settings
 from app.db.session import SessionLocal
@@ -52,7 +53,9 @@ async def _run(args):
             duration_seconds=args.duration,
             transport=args.transport,
         )
-        if gate.startswith("R7-00"):
+        if gate.startswith("R7-01") or "VALIDATION-ROLLBACK" in gate:
+            result = await run_r7_validation_rollback(**common)
+        elif gate.startswith("R7-00"):
             result = await run_r7_validation_soak(cycle_interval_seconds=0.5, **common)
         elif gate.startswith("R5-01") or "LIVE-COVERAGE" in gate:
             result = await run_r5_real_live_coverage(**common)
