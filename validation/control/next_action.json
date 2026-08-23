@@ -1,14 +1,12 @@
 {
   "schema_version": "capture-v2-remote-action-v1",
-  "action_id": "R6-03-APF1250-8000-PRODUCT-REPORT-MATERIALIZE-RC58",
-  "sequence": 187,
-  "created_at": "2026-08-23T13:42:00+00:00",
-  "expires_at": "2026-08-23T23:42:00+00:00",
-  "action_type": "GATE_EVALUATE",
+  "action_id": "RC59-MASTER-BASELINE-REGRESSION-SW-001",
+  "sequence": 188,
+  "created_at": "2026-08-23T13:47:00+00:00",
+  "expires_at": "2026-08-23T23:47:00+00:00",
+  "action_type": "SOFTWARE_REGRESSION",
   "parameters": {
-    "timeout_seconds": 900,
-    "bundle": "../validation/capture_v2/R6_APF1250_FIRST_8000_ABNORMAL_GOLDEN_RC33.json",
-    "gate_id": "R6-PRODUCT-REPORT-MATERIALIZE-RC56"
+    "timeout_seconds": 1800
   },
   "safety": {
     "require_clean_git": true,
@@ -16,8 +14,8 @@
     "require_v2_disabled": true,
     "allow_worker_kill": false,
     "allow_server_quarantine": false,
-    "expected_head": "376a04bdcc18359f25317d6c364474f300ec6377"
+    "expected_head": "6ae0b8262aa8468977b4ef21e041c15c670253ba"
   },
   "requested_by": "ChatGPT-remote-validation-controller",
-  "note": "Retry the bounded non-DUT R6 product binding after RC58 software regression passed. Use the guarded PostgreSQL data runtime only, reuse the existing persistent validation database, recalculate the stale PCAP CoverageWindow with current fixed logic, verify zero kernel drops, exact raw FXS DTMF 000, and durable server PCAP integrity, then idempotently create EvidenceAsset rows, QualitySnapshot, and evidence-first report. Restore the original absent-container prestate afterwards. No DUT I/O, no application worker startup, no Production V2 activation, and no synthetic evidence."
+  "note": "Full Capture V2 software regression for the isolated master-baseline merge simulator. The simulator accepts only an exact 40-hex master SHA, uses a detached temporary worktree, creates no merge commit and does not mutate the PR branch. This regression itself performs no master merge simulation, no DUT I/O, and no production activation."
 }
