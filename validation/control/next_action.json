@@ -1,12 +1,20 @@
 {
   "schema_version": "capture-v2-remote-action-v1",
-  "action_id": "RC53-ACTIVATION-TERMINAL-DIAGNOSTICS-SW-001",
-  "sequence": 174,
-  "created_at": "2026-08-23T12:23:00+00:00",
-  "expires_at": "2026-08-23T23:23:00+00:00",
-  "action_type": "SOFTWARE_REGRESSION",
+  "action_id": "R7-02-APF3260M-SERVICE-ACTIVATION-ROLLBACK-RC53",
+  "sequence": 175,
+  "created_at": "2026-08-23T12:24:00+00:00",
+  "expires_at": "2026-08-23T23:24:00+00:00",
+  "action_type": "ACTIVATION_REHEARSAL",
   "parameters": {
-    "timeout_seconds": 1200
+    "timeout_seconds": 3600,
+    "sn": "G1U060H000384",
+    "host": "10.48.8.74",
+    "port": 10002,
+    "username": "root",
+    "platform_id": "mt7981",
+    "model": "APF3260-M",
+    "profile_id": "VOIP_GENERIC_FULL_CAPTURE",
+    "observation_seconds": 20
   },
   "safety": {
     "require_clean_git": true,
@@ -17,5 +25,5 @@
     "expected_head": "93fe8e5e25c7f13a64913daba144e939a5c2e4f8"
   },
   "requested_by": "ChatGPT-remote-validation-controller",
-  "note": "Regression for diagnostic-only improvement after RC52 proved V2 producer and durable segment but the business session terminalized before the active gate. On status timeout, preserve authoritative DB terminal_reason, cleanup/capture/lease state, and latest ArmValidation evidence at the end of the bounded error. No activation semantics or production fencing are changed. V1 remains authoritative; Production V2 remains false."
+  "note": "Guarded APF3260-M service-level activation/rollback diagnostic rerun. RC52 already proved the stale-fence blocker is removed and the V2 producer can create a durable segment; this run preserves DB terminal_reason and latest ArmValidation if the business session still exits before V2_ACTIVE. No production activation is authorized: Production V2 remains false and original env remains untouched."
 }
