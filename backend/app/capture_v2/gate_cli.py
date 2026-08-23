@@ -24,11 +24,12 @@ def _bounded_r6_materialization(argv: list[str]) -> int | None:
     """Dispatch exactly one audited non-DUT R6 product-binding invocation.
 
     The remote control policy already permits only the fixed ``gate_cli evaluate``
-    executable surface.  Do not broaden that policy or teach the generic evaluator
-    to mutate product data.  This compatibility entry point recognizes only the
-    immutable RC33 Golden and one exact Gate ID, then delegates to the dedicated
-    fail-closed materializer which independently verifies the same path again.
-    Every other invocation remains a normal deterministic Gate evaluation.
+    executable surface. This compatibility entry point recognizes only the
+    immutable RC33 Golden and one exact Gate ID. The guarded materializer may
+    temporarily start only PostgreSQL against the existing persistent validation
+    data directory when the normal application stack is absent; it restores that
+    prestate afterwards. Every other invocation remains a normal deterministic Gate
+    evaluation.
     """
     if not argv or argv[0] != "evaluate":
         return None
@@ -47,7 +48,7 @@ def _bounded_r6_materialization(argv: list[str]) -> int | None:
     if supplied != expected:
         return None
 
-    from app.capture_v2.control.r6_report_materialize import main as materialize_main
+    from app.capture_v2.control.r6_report_materialize_guarded import main as materialize_main
 
     return materialize_main([
         "--repo-root", str(repo_root),
