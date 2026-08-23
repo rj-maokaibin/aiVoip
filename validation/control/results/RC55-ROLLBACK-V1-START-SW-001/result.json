@@ -1,0 +1,44 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "RC55-ROLLBACK-V1-START-SW-001",
+    "sequence": 178,
+    "created_at": "2026-08-23T12:53:00+00:00",
+    "expires_at": "2026-08-23T23:53:00+00:00",
+    "action_type": "SOFTWARE_REGRESSION",
+    "parameters": {
+      "timeout_seconds": 1800
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "02f17a1d46cdf42e48e212b0047cb1bff79b9c3e"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "Software regression for the R7 rollback helper branch fix. V2 enqueue-start still requires strict activation-rehearsal stale-fence cleanup; V1 rollback health enqueue-start must skip that V2-only guard and use the legacy V1 business path. Production V2 remains false and no DUT activation occurs in this action."
+  },
+  "action_sha256": "07047c7c0347c21bdf50ebb5e797a53584791949ddc941a8d6caa317ab3c581d",
+  "runner_id": "srv:257142",
+  "state": "SUCCEEDED",
+  "return_code": 0,
+  "verdict": null,
+  "error": null,
+  "finished_at": "2026-08-23T12:54:18.550641+00:00",
+  "stdout_sha256": "2b1095defcb8fbf5e4525db128bffbfdb2b95845b937b2c725f6aa4ae5dab0f9",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "local_stdout": ".capture-v2-control/logs/RC55-ROLLBACK-V1-START-SW-001/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/RC55-ROLLBACK-V1-START-SW-001/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "d1cb4617f931dfef7969559d222c8292d2e857b3",
+      "expected_product_head": "02f17a1d46cdf42e48e212b0047cb1bff79b9c3e"
+    },
+    "parsed_output": null
+  }
+}
