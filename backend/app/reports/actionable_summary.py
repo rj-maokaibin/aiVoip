@@ -169,8 +169,6 @@ def _bind_time_semantics(finding: dict, window: dict) -> None:
     time_range = dict(finding.get("time_range") or {})
     ftype = str(finding.get("type") or "")
     if _has_bound_time(time_range):
-        # Session-wide periodic detection is a confirmed analysis window, but is
-        # not automatically the exact audible anomaly onset/offset.
         if ftype in _PERIODIC_FINDINGS:
             time_range.setdefault("semantics", "ANALYSIS_WINDOW")
             time_range.setdefault("exact_event_window_known", False)
@@ -204,14 +202,20 @@ def _bind_time_semantics(finding: dict, window: dict) -> None:
 
 def _bind_scope(finding: dict, payload: dict) -> None:
     scope = dict(finding.get("scope") or {})
+    # Compatibility migration: older persisted/report fixtures may carry the
+    # authoritative Finding scope only in Evidence Card V1. Reuse only explicit
+    # non-UNKNOWN values; never invent a layer that is absent from both sources.
+    legacy_card_scope = dict(((finding.get("evidence_card") or {}).get("scope") or {}))
+    for key in ("layer", "call_id", "rtp_stream_id", "direction", "pcm_tap", "ssrc", "call_direction_role", "path_role"):
+        if scope.get(key) in (None, "", "UNKNOWN") and legacy_card_scope.get(key) not in (None, "", "UNKNOWN"):
+            scope[key] = legacy_card_scope[key]
+
     ftype = str(finding.get("type") or "")
     call_id = _display_call_id(payload)
     if call_id and not scope.get("call_id"):
         scope["call_id"] = call_id
 
     if ftype == "LOCAL_CAPTURE_PERIODIC_INTERFERENCE":
-        # This is an Evidence Boundary, not a physical root-cause claim. The
-        # deterministic Media Analyzer has already established PCM_RX -> RTP_UP.
         scope.setdefault("layer", "PCM_RX_TO_RTP_UPSTREAM")
         scope.setdefault("pcm_tap", "pcm_rx")
         scope.setdefault("direction", "LOCAL_CAPTURE_TO_UPSTREAM_RTP")
@@ -224,6 +228,17 @@ def _bind_scope(finding: dict, payload: dict) -> None:
     finding["scope_binding_status"] = "BOUND" if any(
         scope.get(key) not in (None, "") for key in ("layer", "pcm_tap", "rtp_stream_id", "call_id")
     ) else "UNKNOWN"
+
+    # If an older Finding already declared OBSERVED_BOUNDARY but omitted the
+    # redundant layer field, backfill it only from the now-bound explicit scope.
+    correlation = dict(finding.get("correlation") or {})
+    first = dict(correlation.get("first_observable_boundary") or {})
+    if first.get("status") == "OBSERVED_BOUNDARY" and not first.get("first_observable_layer"):
+        layer = scope.get("layer") or scope.get("pcm_tap")
+        if layer not in (None, "", "UNKNOWN"):
+            first["first_observable_layer"] = layer
+            correlation["first_observable_boundary"] = first
+            finding["correlation"] = correlation
 
 
 def _choose_action(finding: dict, actions: list[dict]) -> dict | None:
@@ -244,13 +259,6 @@ def _choose_action(finding: dict, actions: list[dict]) -> dict | None:
 
 
 def bind_actionable_findings(payload: dict) -> dict:
-    """Project Case/Diagnosis actions into each Finding without inventing facts.
-
-    Frozen SPEC requires each Finding to be independently reviewable. If an exact
-    event interval is absent, the confirmed Call/media observation boundary is
-    attached with explicit OBSERVATION_BOUNDARY semantics rather than pretending
-    it is the precise anomaly interval.
-    """
     window = payload.get("observation_window") or build_observation_window(payload)
     actions = list(payload.get("next_actions") or [])
     for finding in payload.get("findings") or []:
