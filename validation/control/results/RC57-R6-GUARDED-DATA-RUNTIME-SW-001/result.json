@@ -1,20 +1,37 @@
 {
-  "schema_version": "capture-v2-remote-status-v1",
-  "action_id": "RC57-R6-GUARDED-DATA-RUNTIME-SW-001",
-  "sequence": 183,
-  "action_type": "SOFTWARE_REGRESSION",
-  "state": "FAILED",
-  "runner_id": "srv:257142",
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "RC57-R6-GUARDED-DATA-RUNTIME-SW-001",
+    "sequence": 183,
+    "created_at": "2026-08-23T13:33:00+00:00",
+    "expires_at": "2026-08-23T23:33:00+00:00",
+    "action_type": "SOFTWARE_REGRESSION",
+    "parameters": {
+      "timeout_seconds": 1800
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "4ec450d0f2b84e72c30a43fa4003124a7740ca23"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "Full Capture V2 software regression for the guarded R6 product-materialization data runtime. The new wrapper may start only a temporary PostgreSQL Compose service against the existing persistent validation bind mount when no PostgreSQL container is running, rewrites DATABASE_URL only in the child process, forces V1 authority and Production V2 disabled, then removes the temporary project to restore the original absent-container prestate. No DUT I/O and no product materialization is performed by this software-regression action."
+  },
   "action_sha256": "1bba304f23402efb743e0b4885bb2ec9914db95510915d265a1ddfd3715fa237",
-  "updated_at": "2026-08-23T13:34:49.633532+00:00",
-  "started_at": null,
-  "finished_at": "2026-08-23T13:34:49.633532+00:00",
+  "runner_id": "srv:257142",
+  "state": "FAILED",
   "return_code": 1,
   "verdict": null,
-  "result_path": "validation/control/results/RC57-R6-GUARDED-DATA-RUNTIME-SW-001/result.json",
+  "error": null,
+  "finished_at": "2026-08-23T13:34:49.633532+00:00",
   "stdout_sha256": "16ea677bb3e0b4e5927cc31c787283b58aa9a8165982fdd383aede5219342d4d",
   "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-  "error": null,
+  "local_stdout": ".capture-v2-control/logs/RC57-R6-GUARDED-DATA-RUNTIME-SW-001/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/RC57-R6-GUARDED-DATA-RUNTIME-SW-001/stderr.log",
   "detail": {
     "safety": {
       "capture_engine_version": "V1",
