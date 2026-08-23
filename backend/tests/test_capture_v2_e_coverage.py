@@ -18,6 +18,29 @@ def test_traffic_silence_inside_running_epoch_is_not_gap():
     assert result.unknown_ms == 0
 
 
+def test_partitioned_full_coverage_rounds_once_and_stays_complete():
+    required_end = T0 + timedelta(seconds=41, milliseconds=641)
+    result = CoverageCalculator.calculate(
+        required_start=T0,
+        required_end=required_end,
+        evidence=[
+            EvidenceInterval(T0, required_end, CoverageIntervalType.COVERED, "CAPTURE_READY", "A"),
+            EvidenceInterval(
+                T0 + timedelta(seconds=10, microseconds=478408),
+                T0 + timedelta(seconds=32, microseconds=107865),
+                CoverageIntervalType.COVERED,
+                "REAL_PCM_TX_UDP_PCAP",
+                "B",
+            ),
+        ],
+    )
+    assert result.required_ms == 41641
+    assert result.covered_ms == 41641
+    assert result.gap_ms == 0
+    assert result.unknown_ms == 0
+    assert result.status == CoverageStatus.COMPLETE
+
+
 def test_confirmed_gap_downgrades_to_partial():
     result = CoverageCalculator.calculate(
         required_start=T0, required_end=T0 + timedelta(seconds=10),
