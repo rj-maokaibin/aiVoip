@@ -372,7 +372,22 @@ def build_evidence_card(finding: dict, *, call: dict | None = None) -> dict:
         )
         audio_source = "CANONICAL_ARTIFACT_REFS"
 
-    next_action = finding.get("next_action") or _default_next_action(ftype)
+    legacy_next_action = str(legacy_card.get("next_action") or "").strip()
+    canonical_next_action = str(finding.get("next_action") or "").strip()
+    finding_action_source = str(finding.get("next_action_source") or "")
+    if finding_action_source == "DEFAULT_ACTIONABLE_FALLBACK" and legacy_next_action:
+        next_action = legacy_next_action
+        next_action_source = "LEGACY_EVIDENCE_CARD_V1"
+    elif canonical_next_action:
+        next_action = canonical_next_action
+        next_action_source = finding_action_source or "CANONICAL_FINDING"
+    elif legacy_next_action:
+        next_action = legacy_next_action
+        next_action_source = "LEGACY_EVIDENCE_CARD_V1"
+    else:
+        next_action = _default_next_action(ftype)
+        next_action_source = "EVIDENCE_CARD_DEFAULT"
+
     acceptance = finding.get("verification_acceptance")
     compatibility_sources = {
         "time": time_source,
@@ -381,6 +396,7 @@ def build_evidence_card(finding: dict, *, call: dict | None = None) -> dict:
         "visual_evidence": "CANONICAL_ARTIFACT_REFS" if canonical_visuals else ("LEGACY_EVIDENCE_CARD_V1" if legacy_visuals else "NONE"),
         "audio_evidence": audio_source,
         "detail_artifacts": "CANONICAL_ARTIFACT_REFS" if canonical_details else ("LEGACY_EVIDENCE_CARD_V1" if legacy_details else "NONE"),
+        "next_action": next_action_source,
     }
     projected_artifact_ids = {
         str(item.get("artifact_id"))
