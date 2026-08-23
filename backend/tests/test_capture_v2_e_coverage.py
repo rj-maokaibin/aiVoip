@@ -57,7 +57,8 @@ def test_confirmed_gap_downgrades_to_partial():
 def test_unknown_gap_boundary_cannot_be_complete_even_with_epoch_coverage():
     result = CoverageCalculator.calculate(
         required_start=T0, required_end=T0 + timedelta(seconds=10),
-        evidence=[EvidenceInterval(T0, T0 + timedelta(seconds=10), CoverageIntervalType.COVERED, "EPOCH", "E1")],
+        evidence=[EvidenceInterval(T0, T0 + timedelta(seconds=10), CoverageIntervalType.COVERED,
+                                   "EPOCH", "E1")],
         uncertain_boundary=True,
     )
     assert result.status == CoverageStatus.PARTIAL
@@ -114,6 +115,53 @@ def test_pcap_builder_marks_kernel_drop_uncertain():
         capture_session_id='S', required_start=T0, required_end=T0 + timedelta(seconds=10))
     assert uncertain is True
     assert 'KERNEL_CAPTURE_DROP' in reasons
+
+
+def test_pcap_builder_ignores_historical_unknown_drop_epoch_outside_required_window():
+    from app.capture_v2.coverage.pcap_source import PcapCoverageEvidenceBuilder
+    from app.capture_v2.db_models import CaptureEpoch
+    F = _pcap_builder_factory()
+    with F() as db, db.begin():
+        db.add_all([
+            CaptureEpoch(id='OLD', capture_session_id='S', device_id='D', epoch_index=1,
+                epoch_token='CAP_OLD', lease_epoch_started=1, state='ENDED',
+                started_at=T0, ended_at=T0 + timedelta(seconds=10), packets_dropped_kernel=None),
+            CaptureEpoch(id='CUR', capture_session_id='S', device_id='D', epoch_index=2,
+                epoch_token='CAP_CUR', lease_epoch_started=2, state='ENDED',
+                started_at=T0 + timedelta(seconds=100), ended_at=T0 + timedelta(seconds=140),
+                packets_dropped_kernel=0),
+        ])
+    evidence, uncertain, reasons = PcapCoverageEvidenceBuilder(F).build(
+        capture_session_id='S', required_start=T0 + timedelta(seconds=105),
+        required_end=T0 + timedelta(seconds=135))
+    assert uncertain is False
+    assert 'KERNEL_DROP_STATUS_UNKNOWN' not in reasons
+    assert {str(item.source_id) for item in evidence} == {'CUR'}
+
+
+def test_pcap_builder_ignores_historical_non_durable_segment_outside_required_window():
+    from app.capture_v2.coverage.pcap_source import PcapCoverageEvidenceBuilder
+    from app.capture_v2.db_models import CaptureEpoch, CaptureSegment
+    F = _pcap_builder_factory()
+    with F() as db, db.begin():
+        db.add_all([
+            CaptureEpoch(id='OLD', capture_session_id='S', device_id='D', epoch_index=1,
+                epoch_token='CAP_OLD', lease_epoch_started=1, state='ENDED',
+                started_at=T0, ended_at=T0 + timedelta(seconds=10), packets_dropped_kernel=0),
+            CaptureEpoch(id='CUR', capture_session_id='S', device_id='D', epoch_index=2,
+                epoch_token='CAP_CUR', lease_epoch_started=2, state='ENDED',
+                started_at=T0 + timedelta(seconds=100), ended_at=T0 + timedelta(seconds=140),
+                packets_dropped_kernel=0),
+            CaptureSegment(id='SEG_OLD', capture_session_id='S', capture_epoch_id='OLD', device_id='D',
+                segment_seq=1, remote_path='/tmp/old.pcap', remote_inode=1, remote_size=24,
+                state='SEALED', first_packet_ts=T0 + timedelta(seconds=1),
+                last_packet_ts=T0 + timedelta(seconds=9)),
+        ])
+    _evidence, uncertain, reasons = PcapCoverageEvidenceBuilder(F).build(
+        capture_session_id='S', required_start=T0 + timedelta(seconds=105),
+        required_end=T0 + timedelta(seconds=135))
+    assert uncertain is False
+    assert 'SEGMENT_NOT_DURABLE' not in reasons
 
 
 def test_pcap_builder_does_not_treat_remote_deleted_segment_with_missing_server_copy_as_durable():
