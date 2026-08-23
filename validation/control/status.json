@@ -1,36 +1,27 @@
 {
   "schema_version": "capture-v2-remote-status-v1",
-  "action_id": "R6-03-APF1250-8000-PRODUCT-REPORT-MATERIALIZE-RC57",
-  "sequence": 185,
-  "action_type": "GATE_EVALUATE",
-  "state": "FAILED",
+  "action_id": "RC58-R6-SUDO-DOCKER-GUARD-SW-001",
+  "sequence": 186,
+  "action_type": "SOFTWARE_REGRESSION",
+  "state": "SUCCEEDED",
   "runner_id": "srv:257142",
-  "action_sha256": "21283f4eb4e72ff58196a8274f0c662e40a63ff6c1044a6c023024d48f2da22d",
-  "updated_at": "2026-08-23T13:36:19.621298+00:00",
+  "action_sha256": "e1bc70f4e0d5826682edaf87ad840d49986939e085081523b64923861456ed3f",
+  "updated_at": "2026-08-23T13:38:14.730936+00:00",
   "started_at": null,
-  "finished_at": "2026-08-23T13:36:19.621298+00:00",
-  "return_code": 1,
-  "verdict": "FAIL",
-  "result_path": "validation/control/results/R6-03-APF1250-8000-PRODUCT-REPORT-MATERIALIZE-RC57/result.json",
-  "stdout_sha256": "9bbc110eb8fd6146f36f311b94bb51f50551ca68ab512c9fdc88d127696dd349",
+  "finished_at": "2026-08-23T13:38:14.730936+00:00",
+  "return_code": 0,
+  "verdict": null,
+  "result_path": "validation/control/results/RC58-R6-SUDO-DOCKER-GUARD-SW-001/result.json",
+  "stdout_sha256": "70c3e9727472ac912ab15af48a07203f036cdb91efe7594a4be7ddd07988d715",
   "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "error": null,
   "detail": {
     "safety": {
       "capture_engine_version": "V1",
       "capture_v2_production_enabled": "false",
-      "git_head": "67b2632853c00b81ac539652b4fb1024c392c6a5",
-      "expected_product_head": "927787df5e3f830a74c7f3d178d39121b6ae81f4"
+      "git_head": "424ffd7c44792a4bc051833c420da146fb23eb1d",
+      "expected_product_head": "376a04bdcc18359f25317d6c364474f300ec6377"
     },
-    "parsed_output": {
-      "scope": "R6_BOUNDED_POSTGRES_PRODUCT_MATERIALIZATION",
-      "production_mutation": false,
-      "dut_mutation": false,
-      "temporary_postgres_started": false,
-      "prestate_application_services_running": false,
-      "verdict": "FAIL",
-      "reason": "R6_PRODUCT_MATERIALIZATION_RUNTIME_EXCEPTION",
-      "error": "RuntimeError:COMMAND_FAILED:/usr/bin/docker:rc=1:unable to get image 'postgres:16': permission denied while trying to connect to the Docker daemon socket at unix:///var/run/docker.sock: Get \"http://%2Fvar%2Frun%2Fdocker.sock/v1.51/images/postgres:16/json\": dial unix /var/run/docker.sock: connect: permission denied"
-    }
+    "parsed_output": null
   }
 }
