@@ -28,17 +28,42 @@ jobs:
         run: |
           set -euo pipefail
           cd "$GITHUB_WORKSPACE"
-          test -d .git
-          git reset --hard HEAD
-          git clean -ffdx
+          if [ -d .git ]; then
+            git reset --hard HEAD || true
+            git clean -ffdx || true
+          fi
 
-      - name: Checkout latest master with job token
-        uses: actions/checkout@v4
-        with:
-          ref: master
-          fetch-depth: 1
-          clean: true
-          persist-credentials: false
+      - name: Sync latest master with bounded retry
+        shell: bash
+        timeout-minutes: 5
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE"
+          if [ ! -d .git ]; then
+            git init
+          fi
+          if git remote get-url origin >/dev/null 2>&1; then
+            git remote set-url origin "https://github.com/${GITHUB_REPOSITORY}.git"
+          else
+            git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
+          fi
+          auth="$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
+          ok=0
+          for attempt in 1 2 3; do
+            echo "master fetch attempt ${attempt}/3"
+            if timeout 60s git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $auth" \
+              fetch --no-tags --prune --depth=1 origin master; then
+              ok=1
+              break
+            fi
+            sleep $((attempt * 3))
+          done
+          test "$ok" = 1
+          git checkout -f -B master FETCH_HEAD
+          git reset --hard FETCH_HEAD
+          git clean -ffdx
 
       - name: Validate latest master product snapshot
         shell: bash
