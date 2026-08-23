@@ -15,7 +15,7 @@ jobs:
       - linux
       - x64
       - voip-controlled-linux
-    timeout-minutes: 60
+    timeout-minutes: 30
     env:
       OFFLINE_PCAP: /tmp/tcpdump-2026-08-14.pcap
       OFFLINE_PCAP_SHA256: b038aa7c9a0644581f2815f654fcdee4620860796382265b178823fccba2e3f0
@@ -23,28 +23,13 @@ jobs:
       TARGET_OPEN_ID: ou_67bee3c2e462a7f8939093bd8e697a96
 
     steps:
-      - name: Sync current master with retry
+      - name: Validate local fixed-master product snapshot
         shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           cd "$GITHUB_WORKSPACE"
           test -d .git
-          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
-          ok=0
-          for i in 1 2 3 4 5 6 7 8; do
-            if git -c http.lowSpeedLimit=1 -c http.lowSpeedTime=120 fetch --no-tags --prune origin master; then
-              ok=1
-              break
-            fi
-            sleep 10
-          done
-          test "$ok" = 1
-          git reset --hard HEAD || true
-          git clean -ffdx
-          git checkout -f -B master FETCH_HEAD
-          git reset --hard FETCH_HEAD
+          git reset --hard HEAD
           git clean -ffdx
           head="$(git rev-parse HEAD)"
           echo "FIXED_MASTER_HEAD=$head" >> "$GITHUB_ENV"
@@ -52,8 +37,9 @@ jobs:
           grep -q '"plan": \[item.to_dict()' backend/app/golden/offline_analysis_e2e.py
           grep -q '1.1 问题范围与绝对时间' backend/app/integrations/feishu/evidence_document.py
           grep -q '1.2 下一步建议 / 验证顺序 / 通过标准' backend/app/integrations/feishu/evidence_document.py
+          test -f backend/tests/test_actionable_report_projection.py
           test -f scripts/fixed_master_live_refresh_20260823.py
-          git log -1 --oneline
+          echo "LOCAL_PRODUCT_SNAPSHOT=$head"
 
       - name: Prepare PCAP TShark and Python
         shell: bash
