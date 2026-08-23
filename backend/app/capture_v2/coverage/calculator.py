@@ -41,6 +41,22 @@ def _ms(start: datetime, end: datetime) -> int:
     return max(0, int(round((end - start).total_seconds() * 1000)))
 
 
+def _duration_ms(items: list[EvidenceInterval]) -> int:
+    """Round once after summing interval durations.
+
+    Coverage normalization partitions a window at every evidence boundary. Rounding
+    every partition independently is not additive and can lose/gain milliseconds
+    even when the partitions exactly cover the required window. Sum at microsecond
+    precision first, then round once so a fully covered partitioned window remains
+    exactly fully covered.
+    """
+    total_us = 0
+    for item in items:
+        delta = _as_utc(item.end) - _as_utc(item.start)
+        total_us += max(0, int(round(delta.total_seconds() * 1_000_000)))
+    return max(0, int(round(total_us / 1000.0)))
+
+
 def _clip(item: EvidenceInterval, start: datetime, end: datetime) -> EvidenceInterval | None:
     a = max(start, item.start)
     b = min(end, item.end)
@@ -96,9 +112,9 @@ class CoverageCalculator:
                 source.certainty, source.details or {},
             ))
 
-        covered_ms = sum(_ms(i.start, i.end) for i in normalized if i.interval_type == CoverageIntervalType.COVERED)
-        gap_ms = sum(_ms(i.start, i.end) for i in normalized if i.interval_type == CoverageIntervalType.GAP)
-        unknown_ms = sum(_ms(i.start, i.end) for i in normalized if i.interval_type == CoverageIntervalType.UNKNOWN)
+        covered_ms = _duration_ms([i for i in normalized if i.interval_type == CoverageIntervalType.COVERED])
+        gap_ms = _duration_ms([i for i in normalized if i.interval_type == CoverageIntervalType.GAP])
+        unknown_ms = _duration_ms([i for i in normalized if i.interval_type == CoverageIntervalType.UNKNOWN])
         reasons = []
         if gap_ms:
             reasons.append("CONFIRMED_GAP")
