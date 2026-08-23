@@ -1,29 +1,27 @@
 {
   "schema_version": "capture-v2-remote-status-v1",
-  "action_id": "RC63-CANDIDATE-DISPATCH-GUARD-SW-001",
-  "sequence": 194,
+  "action_id": "RC64-CANDIDATE-DISPATCH-GUARD-SW-002",
+  "sequence": 195,
   "action_type": "SOFTWARE_REGRESSION",
-  "state": "FAILED",
+  "state": "SUCCEEDED",
   "runner_id": "srv:257142",
-  "action_sha256": "57f697bf39652cff7074adcf3fbc051d9bd69753ff05e16a4f2f4a9c0e8e7251",
-  "updated_at": "2026-08-23T14:04:45.810922+00:00",
+  "action_sha256": "b6cb6ebdb7adb27898d78bf8eadf44414d927f3490b56d2dc930cd8d2895127f",
+  "updated_at": "2026-08-23T14:05:40.913844+00:00",
   "started_at": null,
-  "finished_at": "2026-08-23T14:04:45.810922+00:00",
-  "return_code": 1,
+  "finished_at": "2026-08-23T14:05:40.913844+00:00",
+  "return_code": 0,
   "verdict": null,
-  "result_path": "validation/control/results/RC63-CANDIDATE-DISPATCH-GUARD-SW-001/result.json",
-  "stdout_sha256": "d45db1ca9ecbbe3c7245d2caa434e23f02b07a2a543b88acb550446312e75f0b",
+  "result_path": "validation/control/results/RC64-CANDIDATE-DISPATCH-GUARD-SW-002/result.json",
+  "stdout_sha256": "20c44b938711839cbdce4b44106b7728aedb7e965e0dfbe01b0811bfacce4bab",
   "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "error": null,
   "detail": {
     "safety": {
       "capture_engine_version": "V1",
       "capture_v2_production_enabled": "false",
-      "git_head": "12d2cccfbce1d5a18e6d05ec3a0c14ed0e19280a",
-      "expected_product_head": "a4cef0de410e6078e220f568deab489039742d02"
+      "git_head": "f434c5d284a8d82fc3ee4135a4eac60ff868bf7d",
+      "expected_product_head": "4f151f45e89fe14ffdb92dd91c3cd548b9b55c8b"
     },
-    "parsed_output": null,
-    "failure_stdout_tail": "........................................................................ [ 32%]\n..........................................................F............. [ 64%]\n........................................................................ [ 96%]\n.......                                                                  [100%]\n=================================== FAILURES ===================================\n_____ test_gate_cli_master_fix_candidate_dispatch_is_exact_and_fail_closed _____\n\nmonkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x79bb77847560>\ntmp_path = PosixPath('/tmp/pytest-of-dev/pytest-440/test_gate_cli_master_fix_candi0')\n\n    def test_gate_cli_master_fix_candidate_dispatch_is_exact_and_fail_closed(monkeypatch, tmp_path):\n        repo = tmp_path / \"repo\"\n        module = repo / \"backend/app/capture_v2/gate_cli.py\"\n        module.parent.mkdir(parents=True, exist_ok=True)\n        module.write_text(\"# marker\\n\")\n        calls = []\n    \n        def fake_main(argv):\n            calls.append(argv)\n            return 0\n    \n        monkeypatch.setattr(gate_cli, \"__file__\", str(module))\n        monkeypatch.setattr(master_fix_candidate_regression, \"main\", fake_main)\n        sha = \"c962c0d174099bae1afc8db55067402b36717487\"\n        rc = gate_cli._bounded_master_fix_candidate_regression([\n            \"evaluate\", \"--bundle\", sha,\n            \"--gate-id\", \"MASTER-FIX-CANDIDATE-INTEGRATION-RC60\",\n        ])\n>       assert rc == 0\nE       assert None == 0\n\ntests/test_capture_v2_master_baseline_regression.py:58: AssertionError\n=============================== warnings summary ===============================\n../.venv-release-gate/lib/python3.12/site-packages/_pytest/cacheprovider.py:475\n  /home/dev/workspace/aiVoip/.venv-release-gate/lib/python3.12/site-packages/_pytest/cacheprovider.py:475: PytestCacheWarning: cache could not write path /home/dev/workspace/aiVoip/backend/.pytest_cache/v/cache/nodeids: [Errno 13] Permission denied: '/home/dev/workspace/aiVoip/backend/.pytest_cache/v/cache/nodeids'\n    config.cache.set(\"cache/nodeids\", sorted(self.cached_nodeids))\n\n../.venv-release-gate/lib/python3.12/site-packages/_pytest/cacheprovider.py:429\n  /home/dev/workspace/aiVoip/.venv-release-gate/lib/python3.12/site-packages/_pytest/cacheprovider.py:429: PytestCacheWarning: cache could not write path /home/dev/workspace/aiVoip/backend/.pytest_cache/v/cache/lastfailed: [Errno 13] Permission denied: '/home/dev/workspace/aiVoip/backend/.pytest_cache/v/cache/lastfailed'\n    config.cache.set(\"cache/lastfailed\", self.lastfailed)\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n=========================== short test summary info ============================\nFAILED tests/test_capture_v2_master_baseline_regression.py::test_gate_cli_master_fix_candidate_dispatch_is_exact_and_fail_closed\n1 failed, 222 passed, 2 warnings in 7.65s",
-    "failure_stderr_tail": ""
+    "parsed_output": null
   }
 }
