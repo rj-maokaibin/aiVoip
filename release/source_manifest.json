@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "file_count": 594,
-  "aggregate_sha256": "4ee482eb58411dea8ff3f447de0646c7a9975b3c64a50c6d6a8cfbfba603e1e4",
+  "aggregate_sha256": "3109561f332d2aa9f60e7861bb9388f6b2e6ccb0d23e0c4df41fb096b741931a",
   "files": [
     {
       "path": ".env.example",
@@ -2230,8 +2230,8 @@
     },
     {
       "path": "deploy/deployment_preflight.py",
-      "size": 10394,
-      "sha256": "6ccb888685b7beed41d132ed6e93f2399b4e4d48407a43c60be765a745a14791"
+      "size": 10801,
+      "sha256": "98de88acfa7a9267d8f7711f05513187aaf8128c8e432a873b914f397b871c1a"
     },
     {
       "path": "deploy/local_backup.sh",
@@ -2245,8 +2245,8 @@
     },
     {
       "path": "deploy/production.env.example",
-      "size": 3211,
-      "sha256": "6100318242fac1c1292c4f5dee604008380e2991a649360560be27feb90b8b3d"
+      "size": 3245,
+      "sha256": "ca57df818f1968263bb4461144d8c9bf4083d34a8b7dee8319d9b1d55c0d127d"
     },
     {
       "path": "deploy/production_runtime_verify.py",

@@ -45,6 +45,14 @@ def test_production_compose_mounts_required_secrets_and_release_runner():
     assert required <= backend_secrets
 
 
+def test_production_feishu_rbac_is_declared_and_preflight_enforced():
+    template = (ROOT / "deploy/production.env.example").read_text(encoding="utf-8")
+    preflight = (ROOT / "deploy/deployment_preflight.py").read_text(encoding="utf-8")
+    assert "FEISHU_IDENTITY_RBAC_ENABLED=true" in template
+    assert '"FEISHU_IDENTITY_RBAC"' in preflight
+    assert 'values.get("FEISHU_IDENTITY_RBAC_ENABLED", "false")' in preflight
+
+
 def test_production_cli_is_fail_closed_and_non_destructive():
     path = ROOT / "deploy/voip-ai"
     text = path.read_text(encoding="utf-8")
