@@ -84,17 +84,22 @@ def test_fr014_frozen_completeness_has_exact_seven_dimensions():
     assert result["missing"] == []
 
 
-def test_fr014_missing_debug_fails_closed_and_downgrades_report():
+def test_fr014_missing_optional_debug_preserves_complete_report():
     payload = _complete_payload()
     payload["completeness"]["capture"]["debug"] = False
     report = _report()
 
     finalize_report_contract(report, payload)
 
-    assert payload["capture_quality"]["dimensions"]["DEBUG"]["available"] is False
-    assert payload["capture_quality"]["state"] == "PARTIAL"
-    assert payload["status"] == "PARTIAL_COMPLETE"
-    assert report.status == "PARTIAL_COMPLETE"
+    quality = payload["capture_quality"]
+    assert quality["dimensions"]["DEBUG"]["available"] is False
+    assert quality["dimensions"]["DEBUG"]["requirement"] == "OPTIONAL"
+    assert quality["dimensions"]["DEBUG"]["status"] == "OPTIONAL_NOT_AVAILABLE"
+    assert quality["missing_required"] == []
+    assert quality["missing_optional"] == ["DEBUG"]
+    assert quality["state"] == "COMPLETE"
+    assert payload["status"] == "COMPLETE"
+    assert report.status == "COMPLETE"
 
 
 def test_spec_section_5_canonical_schema_fields_are_materialized():
