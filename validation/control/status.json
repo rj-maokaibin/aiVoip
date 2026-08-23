@@ -1,86 +1,27 @@
 {
   "schema_version": "capture-v2-remote-status-v1",
-  "action_id": "R7-02-APF3260M-SERVICE-ACTIVATION-ROLLBACK-RC47",
-  "sequence": 163,
-  "action_type": "ACTIVATION_REHEARSAL",
-  "state": "INCONCLUSIVE",
+  "action_id": "RC48-REHEARSAL-WORKER-TIMEOUT-DIAGNOSTICS-SW-001",
+  "sequence": 164,
+  "action_type": "SOFTWARE_REGRESSION",
+  "state": "SUCCEEDED",
   "runner_id": "srv:257142",
-  "action_sha256": "55abb4de182828921767866886d812bd1b07510c74118832a238474baac81219",
-  "updated_at": "2026-08-23T10:27:54.542987+00:00",
+  "action_sha256": "d2a24d6c81ccc3d7a026df13fa703154f5ac0598cf6c7be13c80687906e8e9af",
+  "updated_at": "2026-08-23T10:29:48.597456+00:00",
   "started_at": null,
-  "finished_at": "2026-08-23T10:27:54.542987+00:00",
-  "return_code": 2,
-  "verdict": "INCONCLUSIVE",
-  "result_path": "validation/control/results/R7-02-APF3260M-SERVICE-ACTIVATION-ROLLBACK-RC47/result.json",
-  "stdout_sha256": "339be9625f483a7d59e06c1d43787485c164115f4fa789445dd9b66164fdd912",
+  "finished_at": "2026-08-23T10:29:48.597456+00:00",
+  "return_code": 0,
+  "verdict": null,
+  "result_path": "validation/control/results/RC48-REHEARSAL-WORKER-TIMEOUT-DIAGNOSTICS-SW-001/result.json",
+  "stdout_sha256": "312fc9800ec46c74a72b80b1ac326820901c1304b4696b5b8c3d11f90db07a3c",
   "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "error": null,
   "detail": {
     "safety": {
       "capture_engine_version": "V1",
       "capture_v2_production_enabled": "false",
-      "git_head": "3ffd5345241d800f28694897556bff97d0886c1e",
-      "expected_product_head": "9d7faa8c68d6984e376be4a8e7a025c5d555e2c9"
+      "git_head": "76c7f5d7e7f488543643336bc20232ab7bcd3bee",
+      "expected_product_head": "449c4ceece0349027d245357b3c2bb8721adae8d"
     },
-    "parsed_output": {
-      "scope": "BOUNDED_SERVICE_LEVEL_ACTIVATION_REHEARSAL",
-      "production_v2_enabled": false,
-      "original_env_modified": false,
-      "project": "capture-v2-r7-rehearsal",
-      "device": {
-        "sn": "G1U060H000384",
-        "model": "APF3260-M",
-        "host": "10.48.8.74",
-        "port": 10002
-      },
-      "checks": [],
-      "pre_v1": {
-        "contract": {
-          "capture_engine_version": "V1",
-          "capture_v2_production_enabled": false,
-          "contract_ok": true,
-          "expected": "V1",
-          "reproduction_platform_mode": "real"
-        },
-        "session": {
-          "business_lock_status": null,
-          "capture": null,
-          "case_id": "99e09db8-b95b-4827-b480-519ffd418c2b",
-          "cleanup_status": "NOT_REQUIRED",
-          "device_id": "bec4802d-28ef-42a6-8448-af2facc612ce",
-          "dut": {
-            "producer_count": 0,
-            "producers": []
-          },
-          "exists": true,
-          "session_id": "124f2cd3-fccb-405e-aff1-1abab5e3d6e8",
-          "state": "CREATED",
-          "terminal_reason": null
-        }
-      },
-      "verdict": "INCONCLUSIVE",
-      "reason": "SERVICE_LEVEL_REHEARSAL_EXCEPTION",
-      "failure_phase": "V2_REHEARSAL_ACTIVATION",
-      "error": "RuntimeError:SESSION_STATUS_TIMEOUT:{\"business_lock_status\": null, \"capture\": null, \"case_id\": \"99e09db8-b95b-4827-b480-519ffd418c2b\", \"cleanup_status\": \"NOT_REQUIRED\", \"device_id\": \"bec4802d-28ef-42a6-8448-af2facc612ce\", \"exists\": true, \"session_id\": \"124f2cd3-fccb-405e-aff1-1abab5e3d6e8\", \"state\": \"CREATED\", \"terminal_reason\": null}",
-      "final_server_target_state": "PRESTATE_NO_REHEARSAL_CONTAINERS",
-      "final_authority_target": "V1",
-      "diagnostics": {
-        "compose_ps": "NAME      IMAGE     COMMAND   SERVICE   CREATED   STATUS    PORTS\n",
-        "logs_tail": {
-          "backend": "",
-          "postgres": "",
-          "redis": "",
-          "minio": "",
-          "reproduction-worker": "",
-          "reproduction-control-high-worker": "",
-          "reproduction-watch-worker": "",
-          "beat": ""
-        }
-      },
-      "guarded_rehearsal": true,
-      "host_port_publishing": "DISABLED_BY_COMPOSE_OVERRIDE",
-      "backend_health_wait_seconds": 120,
-      "final_rehearsal_project_empty": true
-    }
+    "parsed_output": null
   }
 }
