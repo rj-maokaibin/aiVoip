@@ -1,9 +1,9 @@
 {
   "schema_version": "capture-v2-remote-action-v1",
-  "action_id": "RC33-PCAP-WINDOW-SCOPE-SW-002",
-  "sequence": 136,
-  "created_at": "2026-08-23T07:16:00+00:00",
-  "expires_at": "2026-08-23T19:16:00+00:00",
+  "action_id": "RC34-R6-ABNORMAL-GOLDEN-FINAL-SW-001",
+  "sequence": 137,
+  "created_at": "2026-08-23T07:20:00+00:00",
+  "expires_at": "2026-08-23T19:20:00+00:00",
   "action_type": "SOFTWARE_REGRESSION",
   "parameters": {
     "timeout_seconds": 1200
@@ -14,8 +14,8 @@
     "require_v2_disabled": true,
     "allow_worker_kill": false,
     "allow_server_quarantine": false,
-    "expected_head": "56b9353ee7281a7c1de7729dfc28672e0ae64893"
+    "expected_head": "3b69b1d0d0b6e01fd01ad3fd4beb635f47eb4be3"
   },
   "requested_by": "ChatGPT-remote-validation-controller",
-  "note": "Full regression after normalizing PCAP CoverageWindow overlap timestamps and limiting historical epoch/segment uncertainty to the current required window. Production V2 remains disabled."
+  "note": "Final full Capture V2 regression after PCAP window-scope fix, control-surface cleanup, and R6 abnormal Golden audit. V1 remains authoritative and Production V2 remains disabled."
 }
