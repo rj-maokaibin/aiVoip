@@ -1,12 +1,14 @@
 {
   "schema_version": "capture-v2-remote-action-v1",
-  "action_id": "RC61-INTEGRATION-TEST-COMPAT-SW-001",
-  "sequence": 192,
-  "created_at": "2026-08-23T14:02:00+00:00",
-  "expires_at": "2026-08-24T02:02:00+00:00",
-  "action_type": "SOFTWARE_REGRESSION",
+  "action_id": "RC62-MASTER-FIX-CANDIDATE-INTEGRATION-002",
+  "sequence": 193,
+  "created_at": "2026-08-23T14:04:00+00:00",
+  "expires_at": "2026-08-24T02:04:00+00:00",
+  "action_type": "GATE_EVALUATE",
   "parameters": {
-    "timeout_seconds": 1800
+    "timeout_seconds": 7200,
+    "bundle": "391486c7a70f8e36c088dcb512397044a552c78c",
+    "gate_id": "MASTER-FIX-CANDIDATE-INTEGRATION-RC62"
   },
   "safety": {
     "require_clean_git": true,
@@ -17,5 +19,5 @@
     "expected_head": "20c87b75e7c1c19e9449f41d17fc8341627c7493"
   },
   "requested_by": "ChatGPT-remote-validation-controller",
-  "note": "Full Capture V2 software regression after aligning the legacy reproduction auto-diagnosis FakeReconciler test double with the production exclude_session_ids contract exposed by RC60. Test-only change; V1 remains authoritative, Production V2 remains disabled, no DUT I/O and no cutover."
+  "note": "Repeat isolated full acceptance with audited Draft PR #37 candidate 391486c7a70f8e36c088dcb512397044a552c78c after both RC60 integration-only test contract mismatches were corrected. Verify candidate ancestry from master e8d108a228b151b7711bfe6048c3f39e94b57783, no-conflict detached merge simulation with current Capture V2 product head, Capture V2 regression, Frozen contracts, full VOIP AI software release gate, and Real Offline Golden #001 142/142. Remove temporary worktree afterwards. Do not mutate either branch, create a merge commit, access DUT, or enable Production V2."
 }
