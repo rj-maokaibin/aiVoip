@@ -1,29 +1,27 @@
 {
   "schema_version": "capture-v2-remote-status-v1",
-  "action_id": "R6-02-APF1250-8000-ABNORMAL-EVIDENCE-COLLECT-RC32",
-  "sequence": 134,
-  "action_type": "GATE_COLLECT",
-  "state": "SUCCEEDED",
+  "action_id": "RC33-PCAP-WINDOW-SCOPE-SW-001",
+  "sequence": 135,
+  "action_type": "SOFTWARE_REGRESSION",
+  "state": "FAILED",
   "runner_id": "srv:231819",
-  "action_sha256": "a6b4a913c3bcb666affb1d8a7cf60f879980f9dfc7dcce04ec20ce9fc12a5134",
-  "updated_at": "2026-08-23T07:10:21.557471+00:00",
+  "action_sha256": "acaea5c7b4034a2ac2d2ac90fe82d1de7cd178df4ae3942164c725c9a77780eb",
+  "updated_at": "2026-08-23T07:13:06.862139+00:00",
   "started_at": null,
-  "finished_at": "2026-08-23T07:10:21.557471+00:00",
-  "return_code": 0,
+  "finished_at": "2026-08-23T07:13:06.862139+00:00",
+  "return_code": 1,
   "verdict": null,
-  "result_path": "validation/control/results/R6-02-APF1250-8000-ABNORMAL-EVIDENCE-COLLECT-RC32/result.json",
-  "stdout_sha256": "889558c5579fcef562ca0a8874cdb95ea2d88bd45e450f755567b4ef7fe1c6cb",
-  "stderr_sha256": "b8258e86248ce6f15dfea1a12afcd2ad3fde62ba6d3cd24536ffc8cb3bb61c48",
+  "result_path": "validation/control/results/RC33-PCAP-WINDOW-SCOPE-SW-001/result.json",
+  "stdout_sha256": "6ddc941f0b1be4d1f9fa5f2a799621b416e1b5433121862c8ecca9f253bc100b",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "error": null,
   "detail": {
     "safety": {
       "capture_engine_version": "V1",
       "capture_v2_production_enabled": "false",
-      "git_head": "32748211a33159598a91117090e783eb901b8d40",
-      "expected_product_head": "86f7d7c01bdfe613e149f2e048cc7beb9538fd97"
+      "git_head": "c805f2ac344f3edcabadb784441fcd8f3a4762b6",
+      "expected_product_head": "9a125cf0d32ddccdf629401d0e8587ba9433b933"
     },
-    "parsed_output": {
-      "bundle": "/tmp/capture-v2-gates/20260823T071020Z_R6-02-APF1250-8000-ABNORMAL-EVIDENCE-COLLECT-RC32_259f16e6-af9e-4dff-969b-2bb5eac43eb2"
-    }
+    "parsed_output": null
   }
 }
