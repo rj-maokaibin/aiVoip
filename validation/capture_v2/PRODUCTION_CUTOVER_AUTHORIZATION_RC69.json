@@ -1,0 +1,27 @@
+{
+  "schema_version": "capture-v2-production-cutover-authorization-v1",
+  "authorization_id": "PRODUCTION_CUTOVER_AUTHORIZATION_RC69",
+  "authorized": true,
+  "recorded_at": "2026-08-23T15:27:00+00:00",
+  "source": "explicit_user_instruction",
+  "instruction": "进入生产切换",
+  "technical_release_validation": "PASS",
+  "final_acceptance_action": "RC68-MASTER-FIX-CANDIDATE-INTEGRATION-005",
+  "final_acceptance_verdict": "PASS",
+  "real_offline_golden_001": "142/142 PASS",
+  "rollback_rehearsal": "R7-02-APF3260M-SERVICE-ACTIVATION-ROLLBACK-RC55:PASS",
+  "current_runtime_before_cutover": {
+    "capture_engine_version": "V1",
+    "capture_v2_production_enabled": false
+  },
+  "authorized_sequence": [
+    "READ_ONLY_DEPLOYMENT_PREFLIGHT",
+    "MERGE_VALIDATED_BASELINE_REPAIR_PR_37",
+    "READY_AND_MERGE_VALIDATED_CAPTURE_V2_PR_27",
+    "GUARDED_ENV_SWITCH_TO_V2_PRODUCTION",
+    "RECREATE_REQUIRED_RUNTIME_SERVICES",
+    "POST_CUTOVER_HEALTH_AND_AUTHORITY_VERIFY",
+    "AUTO_ROLLBACK_TO_V1_ON_FAILED_POSTCHECK"
+  ],
+  "rollback_required_on_failure": true
+}
