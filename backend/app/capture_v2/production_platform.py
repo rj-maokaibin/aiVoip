@@ -9,6 +9,7 @@ from sqlalchemy import select
 from app.capture_v2.c_bridge import CaptureV2CBridge, CaptureV2CGateSession
 from app.capture_v2.db_models import CaptureSegment, CaptureSession
 from app.capture_v2.finalizer import CaptureV2CaptureFinalizer, FinalizeResult
+from app.capture_v2.production_readiness import evaluate_production_stage1
 from app.core.config import settings
 from app.db.models import DeviceDiagnosticLock
 from app.db.session import SessionLocal
@@ -140,7 +141,7 @@ class CaptureV2ProductionPlatform(RealReproductionPlatform):
         self._reproduction_session_id, self._capture_worker_id = self._resolve_reproduction_binding(device)
         self._capture_bridge.run(self._connect_capture_v2())
 
-    async def _pcap_readiness_snapshot(self) -> dict:
+    async def _pcap_readiness_snapshot(self, arm_snapshot: dict) -> dict:
         session = self._capture_session
         if session is None:
             return {
@@ -149,24 +150,28 @@ class CaptureV2ProductionPlatform(RealReproductionPlatform):
                 "advancing": False,
                 "enabled": False,
                 "pcap_header_valid": False,
+                "capture_path_ready": False,
                 "capture_engine": "V2",
                 "reason": "CAPTURE_SESSION_NOT_READY",
             }
-        await asyncio.to_thread(session.components["lease"].validate, session.token)
-        owned = await session.components["producer"].inspect_owned()
-        expected = session.bootstrap.ownership.producer
-        exact = [
-            p for p in owned
-            if int(p.pid) == int(expected.pid)
-            and int(p.process_starttime) == int(expected.process_starttime)
-        ]
+
+        # Production activation must use the same real pre-OFFHOOK Stage-1 contract
+        # already proven by R4. This persists CaptureSession.path_ready_at and never
+        # treats an idle line's lack of business packets as a PCAP-path failure.
+        stage1 = await evaluate_production_stage1(
+            c_session=session,
+            arm_snapshot=arm_snapshot,
+            session_factory=SessionLocal,
+        )
+
+        # Keep actual PCAP-header observation as diagnostics/data-plane evidence.
+        # It is intentionally not the Stage-1 gate because tcpdump may not create a
+        # rotated business file until packets arrive on an otherwise healthy path.
         epoch = shlex.quote(session.bootstrap.ownership.capture_epoch_token)
         header_valid = False
         header_size = 0
         header_magic = ""
-        # tcpdump writes the classic-PCAP global header immediately after opening a
-        # rotated file. Retry briefly so readiness never races process creation.
-        for _ in range(30):
+        for _ in range(10):
             raw = (
                 await session.components["reader"].run(
                     "root=/tmp/aivoip_capture/epochs/" + epoch + "/active; "
@@ -189,20 +194,26 @@ class CaptureV2ProductionPlatform(RealReproductionPlatform):
             if header_valid:
                 break
             await asyncio.sleep(0.1)
-        producer_ready = len(owned) == 1 and len(exact) == 1
-        ready = producer_ready and header_valid and session.control_authority == "ACTIVE"
+
+        ready = bool(stage1.get("ready"))
+        exact_count = int(stage1.get("exact_producer_count") or 0)
+        producer_count = int(stage1.get("producer_count") or 0)
         return {
             "status": ChannelHealth.HEALTHY.value if ready else ChannelHealth.FAILED.value,
             "packet_count": 0,
-            "advancing": producer_ready,
-            "enabled": producer_ready,
+            "advancing": exact_count == 1,
+            "enabled": exact_count == 1,
             "pcap_header_valid": header_valid,
+            "capture_path_ready": ready,
+            "verification_pending": not header_valid,
+            "readiness_phase": "CAPTURE_PATH_READY" if ready else "NOT_READY",
             "capture_engine": "V2",
-            "producer_count": len(owned),
-            "exact_producer_count": len(exact),
+            "producer_count": producer_count,
+            "exact_producer_count": exact_count,
             "lease_epoch": int(session.token.lease_epoch),
             "header_size": header_size,
             "header_magic": header_magic,
+            "stage1": stage1,
         }
 
     def resolve_voice_context(self, device):
@@ -235,7 +246,7 @@ class CaptureV2ProductionPlatform(RealReproductionPlatform):
         filtered = [action for action in actions if action != "START_VOICE_PCAP"]
         result = super().arm(session_id=session_id, device=device, actions=filtered)
         if "START_VOICE_PCAP" in actions:
-            result["PCAP"] = self._capture_bridge.run(self._pcap_readiness_snapshot())
+            result["PCAP"] = self._capture_bridge.run(self._pcap_readiness_snapshot(result))
         return self._normalize_snapshot(result)
 
     def _durable_segment_paths(self) -> tuple[list[Path], int]:
