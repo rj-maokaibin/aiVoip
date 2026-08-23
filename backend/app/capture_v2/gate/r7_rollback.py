@@ -23,6 +23,12 @@ class RollbackEvidenceKind(StrEnum):
     SYNTHETIC = "SYNTHETIC"
 
 
+class RollbackActivationMode(StrEnum):
+    V1 = "V1"
+    ACTIVATION_REHEARSAL = "ACTIVATION_REHEARSAL"
+    PRODUCTION = "PRODUCTION"
+
+
 def _strict_bool(raw: dict[str, Any], key: str) -> bool:
     value = raw.get(key)
     if not isinstance(value, bool):
@@ -36,6 +42,7 @@ class RollbackObservation:
     observed_at: datetime
     capture_engine_version: str
     capture_v2_production_enabled: bool
+    activation_mode: RollbackActivationMode
     v1_healthy: bool
     v2_producer_count: int
     evidence_kind: RollbackEvidenceKind
@@ -58,11 +65,18 @@ class RollbackObservation:
         count = raw.get("v2_producer_count")
         if isinstance(count, bool) or not isinstance(count, int) or count < 0:
             raise ValueError("ROLLBACK_V2_PRODUCER_COUNT_INVALID")
+        try:
+            activation_mode = RollbackActivationMode(str(raw["activation_mode"]))
+        except KeyError as exc:
+            raise ValueError("ROLLBACK_ACTIVATION_MODE_REQUIRED") from exc
+        except ValueError as exc:
+            raise ValueError("ROLLBACK_ACTIVATION_MODE_INVALID") from exc
         return cls(
             phase=RollbackPhase(str(raw["phase"])),
             observed_at=observed_at,
             capture_engine_version=str(raw["capture_engine_version"]),
             capture_v2_production_enabled=_strict_bool(raw, "capture_v2_production_enabled"),
+            activation_mode=activation_mode,
             v1_healthy=_strict_bool(raw, "v1_healthy"),
             v2_producer_count=count,
             evidence_kind=RollbackEvidenceKind(str(raw["evidence_kind"])),
@@ -73,22 +87,30 @@ class RollbackObservation:
         payload = asdict(self)
         payload["phase"] = self.phase.value
         payload["observed_at"] = self.observed_at.isoformat()
+        payload["activation_mode"] = self.activation_mode.value
         payload["evidence_kind"] = self.evidence_kind.value
         payload["evidence_refs"] = list(self.evidence_refs)
         return payload
 
 
 class R7RollbackRehearsalGate:
-    """Validate evidence from a real V2 -> V1 rollback rehearsal.
+    """Validate a real-DUT pre-cutover activation/rollback rehearsal.
 
-    This class is intentionally observation-only. It never edits product
-    configuration, never enables Capture V2, and never performs a rollback.
-    Release PASS is possible only when externally collected REAL_DUT evidence
-    proves all three chronological phases.
+    The release rollback gate must be provable *before* Production V2 is enabled.
+    Therefore V2_ACTIVE may be one of two explicit modes:
+
+    - ACTIVATION_REHEARSAL: engine V2, Production flag false, exact production
+      runtime path enabled only by the bounded rehearsal interlock.
+    - PRODUCTION: engine V2, Production flag true, accepted if such evidence exists.
+
+    Ambiguous ``V2 + production=false`` without the explicit rehearsal mode never
+    passes. This removes the historical circular dependency where Production V2
+    required rollback_gate_passed=true while the rollback validator itself required
+    Production V2=true.
     """
 
     GATE_ID = "R7-ROLLBACK-REHEARSAL"
-    EVIDENCE_SCHEMA = "capture-v2-r7-rollback-evidence-v1"
+    EVIDENCE_SCHEMA = "capture-v2-r7-rollback-evidence-v2"
     REQUIRED_PHASES = (
         RollbackPhase.PRE_V1,
         RollbackPhase.V2_ACTIVE,
@@ -221,30 +243,49 @@ class R7RollbackRehearsalGate:
             )
 
         pre, v2, rolled = ordered
+        v2_rehearsal = (
+            v2.capture_engine_version == "V2"
+            and not v2.capture_v2_production_enabled
+            and v2.activation_mode == RollbackActivationMode.ACTIVATION_REHEARSAL
+        )
+        v2_production = (
+            v2.capture_engine_version == "V2"
+            and v2.capture_v2_production_enabled
+            and v2.activation_mode == RollbackActivationMode.PRODUCTION
+        )
+        v2_phase_valid = v2_rehearsal or v2_production
         checks = (
             GateCheck(
                 "pre_v1_authoritative",
-                pre.capture_engine_version == "V1" and not pre.capture_v2_production_enabled,
-                {"capture_engine_version": "V1", "capture_v2_production_enabled": False},
+                pre.capture_engine_version == "V1"
+                and not pre.capture_v2_production_enabled
+                and pre.activation_mode == RollbackActivationMode.V1,
+                {"capture_engine_version": "V1", "production_v2": False, "activation_mode": "V1"},
                 {"capture_engine_version": pre.capture_engine_version,
-                 "capture_v2_production_enabled": pre.capture_v2_production_enabled},
+                 "production_v2": pre.capture_v2_production_enabled,
+                 "activation_mode": pre.activation_mode.value},
             ),
             GateCheck("pre_v1_healthy", pre.v1_healthy, True, pre.v1_healthy),
             GateCheck("pre_no_v2_producer", pre.v2_producer_count == 0, 0, pre.v2_producer_count),
             GateCheck(
                 "v2_phase_observed",
-                v2.capture_engine_version == "V2" and v2.capture_v2_production_enabled,
-                {"capture_engine_version": "V2", "capture_v2_production_enabled": True},
+                v2_phase_valid,
+                "explicit ACTIVATION_REHEARSAL or PRODUCTION V2 authority",
                 {"capture_engine_version": v2.capture_engine_version,
-                 "capture_v2_production_enabled": v2.capture_v2_production_enabled},
+                 "production_v2": v2.capture_v2_production_enabled,
+                 "activation_mode": v2.activation_mode.value},
+                details={"rehearsal": v2_rehearsal, "production": v2_production},
             ),
             GateCheck("v2_producer_observed", v2.v2_producer_count >= 1, ">=1", v2.v2_producer_count),
             GateCheck(
                 "rollback_v1_authoritative",
-                rolled.capture_engine_version == "V1" and not rolled.capture_v2_production_enabled,
-                {"capture_engine_version": "V1", "capture_v2_production_enabled": False},
+                rolled.capture_engine_version == "V1"
+                and not rolled.capture_v2_production_enabled
+                and rolled.activation_mode == RollbackActivationMode.V1,
+                {"capture_engine_version": "V1", "production_v2": False, "activation_mode": "V1"},
                 {"capture_engine_version": rolled.capture_engine_version,
-                 "capture_v2_production_enabled": rolled.capture_v2_production_enabled},
+                 "production_v2": rolled.capture_v2_production_enabled,
+                 "activation_mode": rolled.activation_mode.value},
             ),
             GateCheck("rollback_v1_healthy", rolled.v1_healthy, True, rolled.v1_healthy),
             GateCheck("rollback_no_v2_producer", rolled.v2_producer_count == 0, 0, rolled.v2_producer_count),
@@ -257,13 +298,18 @@ class R7RollbackRehearsalGate:
             verdict=verdict,
             checks=checks,
             summary=(
-                "Real-DUT evidence proves V2 -> V1 rollback and V1 health restoration."
+                "Real-DUT evidence proves bounded V2 authority activation, rollback, and V1 health restoration."
                 if verdict == GateVerdict.PASS
                 else "Real-DUT rollback evidence contains failed state/health checks."
             ),
             facts={
                 "reason": reason,
                 "failed_checks": failed,
+                "v2_activation_mode": v2.activation_mode.value,
+                "release_gate_scope": (
+                    "PRE_CUTOVER_ACTIVATION_REHEARSAL"
+                    if v2_rehearsal else "PRODUCTION_ROLLBACK_OBSERVATION"
+                ),
                 "observations": [obs.as_dict() for obs in ordered],
             },
         )
