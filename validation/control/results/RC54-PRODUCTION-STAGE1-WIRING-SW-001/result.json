@@ -1,0 +1,44 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "RC54-PRODUCTION-STAGE1-WIRING-SW-001",
+    "sequence": 176,
+    "created_at": "2026-08-23T12:48:00+00:00",
+    "expires_at": "2026-08-23T23:48:00+00:00",
+    "action_type": "SOFTWARE_REGRESSION",
+    "parameters": {
+      "timeout_seconds": 1800
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "b3692cbf91b60f3d4d0135ab5422a745f73dd577"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "Software regression for production Phase-D Stage-1 wiring. Capture V2 ProductionPlatform now evaluates and persists the real pre-OFFHOOK Stage-1 contract proven by R4; PCAP Arm readiness accepts only explicit persisted capture_path_ready when no idle business PCAP header exists. Production V2 remains false, V1 remains authoritative, and no DUT activation is performed by this action."
+  },
+  "action_sha256": "ccb2151b48e8ca46eb07c0446a3f802d0035892406dda4a43403a3225ecf8e46",
+  "runner_id": "srv:257142",
+  "state": "SUCCEEDED",
+  "return_code": 0,
+  "verdict": null,
+  "error": null,
+  "finished_at": "2026-08-23T12:48:28.947139+00:00",
+  "stdout_sha256": "1bd74ba43b40226ddf08f32a0f303919439d6963872acf8c58eb08a0d100ed6d",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "local_stdout": ".capture-v2-control/logs/RC54-PRODUCTION-STAGE1-WIRING-SW-001/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/RC54-PRODUCTION-STAGE1-WIRING-SW-001/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "b0303b90ff56686a2b1de504cf72c6197849b58c",
+      "expected_product_head": "b3692cbf91b60f3d4d0135ab5422a745f73dd577"
+    },
+    "parsed_output": null
+  }
+}
