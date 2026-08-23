@@ -171,7 +171,7 @@ class ControlPolicy:
             # The entire elevated surface is this fixed, audited Python module.
             # No shell is involved and every user-supplied argument is validated above.
             argv = [
-                str(sudo), "-n", sys.executable, "-m", "app.capture_v2.control.activation_rehearsal",
+                str(sudo), "-n", sys.executable, "-m", "app.capture_v2.control.activation_rehearsal_guarded",
                 "--repo-root", str(self.repo_root),
                 "--action-id", action.action_id,
                 "--sn", str(p["sn"]),
