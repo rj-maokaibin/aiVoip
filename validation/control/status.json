@@ -1,27 +1,33 @@
 {
   "schema_version": "capture-v2-remote-status-v1",
-  "action_id": "RC56-R6-PRODUCT-MATERIALIZER-SW-001",
-  "sequence": 180,
-  "action_type": "SOFTWARE_REGRESSION",
-  "state": "SUCCEEDED",
+  "action_id": "R6-03-APF1250-8000-PRODUCT-REPORT-MATERIALIZE-RC56",
+  "sequence": 181,
+  "action_type": "GATE_EVALUATE",
+  "state": "FAILED",
   "runner_id": "srv:257142",
-  "action_sha256": "c838b185dc32619e5228300b30c9e039eec4d5d7e3afe7a8742e7a9c33835851",
-  "updated_at": "2026-08-23T13:06:58.022070+00:00",
+  "action_sha256": "cae24c81649b2a0cc5a4283b8ff9a52a05311cf5172eb9f45659b874662da9a8",
+  "updated_at": "2026-08-23T13:07:45.082270+00:00",
   "started_at": null,
-  "finished_at": "2026-08-23T13:06:58.022070+00:00",
-  "return_code": 0,
-  "verdict": null,
-  "result_path": "validation/control/results/RC56-R6-PRODUCT-MATERIALIZER-SW-001/result.json",
-  "stdout_sha256": "50126432b08abbccedb376234409155f2b43158a5ad33a8d760d0fab6ca6b8a2",
+  "finished_at": "2026-08-23T13:07:45.082270+00:00",
+  "return_code": 1,
+  "verdict": "FAIL",
+  "result_path": "validation/control/results/R6-03-APF1250-8000-PRODUCT-REPORT-MATERIALIZE-RC56/result.json",
+  "stdout_sha256": "35f5311a96c4787d7b7b845ca0cfedb78956ce0083690590d39586b8e572370e",
   "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "error": null,
   "detail": {
     "safety": {
       "capture_engine_version": "V1",
       "capture_v2_production_enabled": "false",
-      "git_head": "315488b84a197f2cfc52567f4e9b076bf6b2011c",
+      "git_head": "d243cfd57f025907668e5d164fac792bab54f80b",
       "expected_product_head": "9066dda3e050556cb5e881929f9ce64d730c4341"
     },
-    "parsed_output": null
+    "parsed_output": {
+      "verdict": "FAIL",
+      "reason": "R6_PRODUCT_REPORT_MATERIALIZATION_EXCEPTION",
+      "error": "OperationalError:(psycopg.OperationalError) connection failed: connection to server at \"172.18.0.4\", port 5432 failed: server closed the connection unexpectedly\n\tThis probably means the server terminated abnormally\n\tbefore or while processing the request.\n(Background on this error at: https://sqlalche.me/e/20/e3q8)",
+      "production_mutation": false,
+      "dut_mutation": false
+    }
   }
 }

@@ -1,0 +1,52 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "R6-03-APF1250-8000-PRODUCT-REPORT-MATERIALIZE-RC56",
+    "sequence": 181,
+    "created_at": "2026-08-23T13:10:00+00:00",
+    "expires_at": "2026-08-23T23:10:00+00:00",
+    "action_type": "GATE_EVALUATE",
+    "parameters": {
+      "timeout_seconds": 600,
+      "bundle": "../validation/capture_v2/R6_APF1250_FIRST_8000_ABNORMAL_GOLDEN_RC33.json",
+      "gate_id": "R6-PRODUCT-REPORT-MATERIALIZE-RC56"
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "9066dda3e050556cb5e881929f9ce64d730c4341"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "Bounded non-DUT product binding for the immutable RC33 APF1250 abnormal first-8000 Golden. Recalculate the stale PCAP CoverageWindow using current fixed coverage logic; require COMPLETE coverage, zero kernel drops, verified durable server PCAP bytes, and exact DB raw FXS DTMF digits 000; then idempotently materialize real EvidenceAsset rows, a QualitySnapshot, and an evidence-first report manifest. No DUT I/O, no production activation, and no synthetic evidence is permitted."
+  },
+  "action_sha256": "cae24c81649b2a0cc5a4283b8ff9a52a05311cf5172eb9f45659b874662da9a8",
+  "runner_id": "srv:257142",
+  "state": "FAILED",
+  "return_code": 1,
+  "verdict": "FAIL",
+  "error": null,
+  "finished_at": "2026-08-23T13:07:45.082270+00:00",
+  "stdout_sha256": "35f5311a96c4787d7b7b845ca0cfedb78956ce0083690590d39586b8e572370e",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "local_stdout": ".capture-v2-control/logs/R6-03-APF1250-8000-PRODUCT-REPORT-MATERIALIZE-RC56/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/R6-03-APF1250-8000-PRODUCT-REPORT-MATERIALIZE-RC56/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "d243cfd57f025907668e5d164fac792bab54f80b",
+      "expected_product_head": "9066dda3e050556cb5e881929f9ce64d730c4341"
+    },
+    "parsed_output": {
+      "verdict": "FAIL",
+      "reason": "R6_PRODUCT_REPORT_MATERIALIZATION_EXCEPTION",
+      "error": "OperationalError:(psycopg.OperationalError) connection failed: connection to server at \"172.18.0.4\", port 5432 failed: server closed the connection unexpectedly\n\tThis probably means the server terminated abnormally\n\tbefore or while processing the request.\n(Background on this error at: https://sqlalche.me/e/20/e3q8)",
+      "production_mutation": false,
+      "dut_mutation": false
+    }
+  }
+}
