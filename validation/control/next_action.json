@@ -1,10 +1,10 @@
 {
   "schema_version": "capture-v2-remote-action-v1",
-  "action_id": "R6-SETUP-APF1250-FIRST-DIGIT-LOSS-REBOOT-RC32",
-  "sequence": 130,
-  "created_at": "2026-08-23T06:28:30+00:00",
-  "expires_at": "2026-08-23T18:28:30+00:00",
-  "action_type": "GATE_OWNERSHIP",
+  "action_id": "R6-01-APF1250-FIRST-DIGIT-LOSS-LIVE-COVERAGE-RC32",
+  "sequence": 131,
+  "created_at": "2026-08-23T06:33:30+00:00",
+  "expires_at": "2026-08-23T18:33:30+00:00",
+  "action_type": "GATE_READINESS_FXS",
   "parameters": {
     "device_id": "259f16e6-af9e-4dff-969b-2bb5eac43eb2",
     "model": "APF1250",
@@ -19,9 +19,11 @@
     "output_root": "/tmp/capture-v2-gates",
     "repo_root": "..",
     "reproduction_session_id": "AUTO_NEW",
-    "worker_id": "r6-apf1250-first-digit-loss-reboot-rc32",
-    "gate_id": "R2-05-APF1250-DUT-REBOOT-RC13",
-    "timeout_seconds": 900
+    "worker_id": "r6-apf1250-first-digit-loss-live-rc32",
+    "gate_id": "R6-FIRST-DIGIT-LOSS-LIVE-COVERAGE-RC32",
+    "duration": 240,
+    "transport": "scp",
+    "timeout_seconds": 1200
   },
   "safety": {
     "require_clean_git": true,
@@ -32,5 +34,5 @@
     "expected_head": "86f7d7c01bdfe613e149f2e048cc7beb9538fd97"
   },
   "requested_by": "ChatGPT-remote-validation-controller",
-  "note": "R6 setup only. Reboot APF1250 to establish a genuine post-boot first-dial condition for the first-digit-loss Product E2E. Do not perform handset actions during reboot/recovery. After tunnel/recovery is proven, a separate real FXS/PCAP/PCM evidence Gate will be armed before the operator performs the first dial. Production V2 remains disabled and V1 remains authoritative."
+  "note": "Arm APF1250 immediately after proven DUT reboot for first-digit-loss Product E2E evidence. Use the real live Coverage Gate path so PCAP, PCM RX/TX, AIM/FXS/debug, kernel-drop evidence, durable segments and Coverage Ledger are all active before the operator performs the first post-reboot dial. Do not enable Production V2; V1 remains authoritative."
 }
