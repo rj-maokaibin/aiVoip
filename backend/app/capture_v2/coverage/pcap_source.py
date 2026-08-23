@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import or_, select
 
@@ -18,9 +18,21 @@ class PcapCoverageEvidenceBuilder:
         self.session_factory = session_factory
 
     @staticmethod
-    def _overlaps(start: datetime | None, end: datetime | None,
+    def _utc(value: datetime | None) -> datetime | None:
+        if value is None:
+            return None
+        if value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value.astimezone(timezone.utc)
+
+    @classmethod
+    def _overlaps(cls, start: datetime | None, end: datetime | None,
                   required_start: datetime, required_end: datetime) -> bool:
-        if start is None:
+        start = cls._utc(start)
+        end = cls._utc(end)
+        required_start = cls._utc(required_start)
+        required_end = cls._utc(required_end)
+        if start is None or required_start is None or required_end is None:
             return False
         effective_end = end or required_end
         return start < required_end and effective_end > required_start
@@ -102,10 +114,17 @@ class PcapCoverageEvidenceBuilder:
             if segment.first_packet_ts is not None or segment.last_packet_ts is not None:
                 seg_start = segment.first_packet_ts or segment.last_packet_ts
                 seg_end = segment.last_packet_ts or segment.first_packet_ts
-                if seg_start is not None and seg_end is not None and seg_end <= seg_start:
+                seg_start_utc = self._utc(seg_start)
+                seg_end_utc = self._utc(seg_end)
+                required_start_utc = self._utc(required_start)
+                required_end_utc = self._utc(required_end)
+                if seg_start_utc is not None and seg_end_utc is not None and seg_end_utc <= seg_start_utc:
                     # A single-timestamp segment is treated as relevant if the point
                     # falls within the required interval.
-                    relevant = required_start <= seg_start < required_end
+                    relevant = bool(
+                        required_start_utc is not None and required_end_utc is not None
+                        and required_start_utc <= seg_start_utc < required_end_utc
+                    )
                 else:
                     relevant = self._overlaps(seg_start, seg_end, required_start, required_end)
             else:
