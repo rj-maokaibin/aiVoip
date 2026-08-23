@@ -1,12 +1,20 @@
 {
   "schema_version": "capture-v2-remote-action-v1",
-  "action_id": "RC45-REHEARSAL-DIAGNOSTICS-SW-001",
-  "sequence": 158,
-  "created_at": "2026-08-23T10:15:00+00:00",
-  "expires_at": "2026-08-23T22:15:00+00:00",
-  "action_type": "SOFTWARE_REGRESSION",
+  "action_id": "R7-02-APF3260M-SERVICE-ACTIVATION-ROLLBACK-RC45",
+  "sequence": 159,
+  "created_at": "2026-08-23T10:18:00+00:00",
+  "expires_at": "2026-08-23T22:18:00+00:00",
+  "action_type": "ACTIVATION_REHEARSAL",
   "parameters": {
-    "timeout_seconds": 1200
+    "timeout_seconds": 3600,
+    "sn": "G1U060H000384",
+    "host": "10.48.8.74",
+    "port": 10002,
+    "username": "root",
+    "platform_id": "mt7981",
+    "model": "APF3260-M",
+    "profile_id": "VOIP_GENERIC_FULL_CAPTURE",
+    "observation_seconds": 20
   },
   "safety": {
     "require_clean_git": true,
@@ -17,5 +25,5 @@
     "expected_head": "4feb91604e426a518d0e040777ba243a3e775497"
   },
   "requested_by": "ChatGPT-remote-validation-controller",
-  "note": "Regression after adding sanitized Compose service diagnostics to guarded service-level activation rehearsal. V1 remains authoritative and Production V2 remains disabled. On PASS, retry APF3260-M rehearsal immediately."
+  "note": "Retry guarded APF3260-M service-level activation/rollback rehearsal with sanitized Compose diagnostics retained before cleanup. Zero host port publishing; original env untouched; Production V2 remains false; final isolated project must be empty."
 }
