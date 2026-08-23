@@ -18,7 +18,7 @@ from app.reproduction.real_platform import RealCapture, RealReproductionPlatform
 class CaptureV2ProductionPlatform(RealReproductionPlatform):
     """Real reproduction platform whose only long-lived PCAP authority is V2.
 
-    V1's mature FXS/call state machine is intentionally reused.  Capture V2 is
+    V1's mature FXS/call state machine is intentionally reused. Capture V2 is
     lazy-bound only after the watcher resolves the real device and its ACTIVE
     diagnostic lock, so the short-lived ``reproduction.start`` task can never own
     a V2 lease that becomes orphaned when that task exits.
@@ -178,13 +178,9 @@ class CaptureV2ProductionPlatform(RealReproductionPlatform):
         return self._capture_bridge.spawn(self._capture_next_segment(int(seconds)))
 
     def seal_segmented_ring(self, session_id: str | None = None) -> None:
-        # Compatibility no-op: continuous V2 acquisition stays live through the
-        # End Anchor; the watcher's next delayed segment fetch is the tail drain.
         del session_id
 
     def stop_segmented_ring(self, session_id: str | None = None) -> None:
-        # Compatibility no-op for the V1.1 "restart idle ring" call.  V2 remained
-        # continuous, so there is nothing to restart.
         del session_id
 
     async def _finalize_capture_v2(self, reason: str) -> FinalizeResult | None:
@@ -223,14 +219,17 @@ class CaptureV2ProductionPlatform(RealReproductionPlatform):
         return self._capture_bridge.run(self._finalize_capture_v2(reason))
 
     def cleanup(self, *, session_id: str, device, actions: list[str]):
+        # A high-priority cancel runs in a different worker from the watcher. The
+        # deterministic worker id makes re-acquire idempotent for the same session;
+        # bind here if needed so cleanup can never claim success before V2 stops.
+        if self._capture_session is None and not self._capture_finalized:
+            self._ensure_capture_v2(device)
         self.finalize_capture_if_active(reason="REPRODUCTION_CLEANUP")
         return super().cleanup(session_id=session_id, device=device, actions=actions)
 
     async def _disconnect_capture_adapter(self) -> None:
         session = self._capture_session
         if session is not None and not self._capture_finalized:
-            # Exceptional watcher exits retain the DUT producer for fenced recovery,
-            # but stop this worker's renewer so the lease can expire/take over.
             await session.stop_lease_renewer(release_lease=False)
         try:
             await self._capture_adapter.disconnect()
