@@ -1,0 +1,5 @@
+services:
+  minio:
+    ports: !reset []
+  backend:
+    ports: !reset []
