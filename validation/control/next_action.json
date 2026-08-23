@@ -1,28 +1,11 @@
 {
   "schema_version": "capture-v2-remote-action-v1",
-  "action_id": "R7-01-APF3260M-VALIDATION-ROLLBACK-RC35",
-  "sequence": 141,
-  "created_at": "2026-08-23T07:57:00+00:00",
-  "expires_at": "2026-08-23T19:57:00+00:00",
-  "action_type": "GATE_READINESS_FXS",
+  "action_id": "RC36-AUTHORIZED-FAIL-CLOSED-CHECKPOINT-SW-001",
+  "sequence": 142,
+  "created_at": "2026-08-23T08:12:00+00:00",
+  "expires_at": "2026-08-23T20:12:00+00:00",
+  "action_type": "SOFTWARE_REGRESSION",
   "parameters": {
-    "device_id": "c132f336-df1b-4285-b175-01d848f23b5d",
-    "model": "APF3260-M",
-    "host": "10.48.8.74",
-    "port": 10002,
-    "username": "root",
-    "platform_id": "mt7981",
-    "password_env": "DB:G1U060H000384",
-    "profile_root": "../profiles",
-    "profile_id": "voip-standard",
-    "object_root": "/tmp/voip-reproduction-objects",
-    "output_root": "/tmp/capture-v2-gates",
-    "repo_root": "..",
-    "reproduction_session_id": "AUTO_NEW",
-    "worker_id": "r7-apf3260m-validation-rollback-rc35",
-    "gate_id": "R7-01-APF3260M-VALIDATION-ROLLBACK-RC35",
-    "duration": 60,
-    "transport": "scp",
     "timeout_seconds": 1200
   },
   "safety": {
@@ -31,8 +14,8 @@
     "require_v2_disabled": true,
     "allow_worker_kill": false,
     "allow_server_quarantine": false,
-    "expected_head": "910f854de2a9431734b7143c843636530a92a340"
+    "expected_head": "4c83ceb1f33b22af3b4fa62fa693122a9494ca84"
   },
   "requested_by": "ChatGPT-remote-validation-controller",
-  "note": "Real-DUT APF3260-M validation-scope rollback rehearsal: run fenced V2 producer/lease/segment pipeline for 60 seconds, then prove exact cleanup and V1 configuration authority restoration. Production V2 remains disabled throughout; no handset action required."
+  "note": "Freeze the explicitly authorized but still fail-closed checkpoint before production V2 runtime wiring. Release artifact records approved=true while rollback_gate_passed=false; V1 remains authoritative and Production V2 remains disabled."
 }
