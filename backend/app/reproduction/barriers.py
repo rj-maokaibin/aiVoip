@@ -45,7 +45,14 @@ class ArmReadinessBarrier:
             return False, f'{channel.value}_NOT_HEALTHY'
         require_adv=profile.arm_barrier.require_advancing
         if channel == CaptureChannel.PCAP:
-            if not data.get('pcap_header_valid',False): return False,'PCAP_HEADER_INVALID'
+            # Capture V2 Stage-1 is a pre-OFFHOOK path-readiness contract.  A real
+            # business packet/rotated file may not exist yet, so an already-persisted
+            # Phase-D CAPTURE_PATH_READY proof can satisfy PCAP readiness without
+            # pretending that a PCAP header was observed. Legacy/non-activity-gated
+            # paths still require the historical header proof.
+            capture_path_ready=(activity_gated and data.get('capture_path_ready') is True)
+            if not data.get('pcap_header_valid',False) and not capture_path_ready:
+                return False,'PCAP_HEADER_INVALID'
             if int(data.get('packet_count',0)) < profile.arm_barrier.min_pcap_packets: return False,'PCAP_PACKET_COUNT_LOW'
             if require_adv and not data.get('advancing',False): return False,'PCAP_NOT_ADVANCING'
         elif channel in {CaptureChannel.PCM_RX,CaptureChannel.PCM_TX}:
