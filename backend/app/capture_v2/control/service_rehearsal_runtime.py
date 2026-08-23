@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy import func, select
 
+from app.capture_v2.control.rehearsal_fence_cleanup import clear_stale_fence_for_rehearsal
 from app.capture_v2.db_models import CaptureEpoch, CaptureLease, CaptureSegment, CaptureSession
 from app.capture_v2.producer.identity import parse_process_record
 from app.capture_v2.transport.readonly import ReadOnlyDeviceTransport
@@ -87,10 +88,60 @@ def clone_session(args) -> dict:
     return {"session_id": session_id, "source_session_id": args.source_session_id}
 
 
+async def _device_adapter_for_session(session_id: str):
+    from app.collectors.asyncssh_adapter import AsyncSSHDeviceAdapter
+    from app.integrations.credentials import LocalSecretCredentialProvider, get_credential_provider
+
+    with SessionLocal() as db:
+        session = db.get(ReproductionSession, session_id)
+        if session is None:
+            raise RuntimeError("SESSION_NOT_FOUND")
+        device = db.get(CaseDevice, session.device_id)
+        if device is None:
+            raise RuntimeError("DEVICE_NOT_FOUND")
+        sn = device.sn
+        ip = device.ip
+        port = int(device.ssh_port)
+        username = device.username
+
+    provider = get_credential_provider()
+    password = await provider.get_password(sn=sn, ip=ip)
+    if isinstance(provider, LocalSecretCredentialProvider):
+        try:
+            username = provider.resolve_username(ip=ip, fallback=username)
+        except Exception:
+            pass
+
+    adapter = AsyncSSHDeviceAdapter(ip=ip, port=port, username=username, password=password)
+    await adapter.connect()
+    return adapter
+
+
+async def _clear_rehearsal_fence(session_id: str) -> dict:
+    adapter = await _device_adapter_for_session(session_id)
+    try:
+        return await clear_stale_fence_for_rehearsal(adapter)
+    finally:
+        await adapter.disconnect()
+
+
 def enqueue_start(args) -> dict:
+    # The isolated rehearsal PostgreSQL project starts with a fresh lease sequence,
+    # while the DUT /tmp fence survives between validation runs.  Clear only that
+    # stale rehearsal fence after the dedicated helper proves: explicit activation
+    # rehearsal mode, Production V2 disabled, no AIVOIP producer, and no live op.lock.
+    # Generic production fencing remains unchanged and monotonic.
+    stale_fence_cleanup = asyncio.run(_clear_rehearsal_fence(args.session_id))
+
     from app.workers.reproduction_tasks import start_reproduction
     result = start_reproduction.apply_async(args=[args.session_id], queue="reproduction-control")
-    return {"queued": True, "task_id": result.id, "session_id": args.session_id, "operation": "start"}
+    return {
+        "queued": True,
+        "task_id": result.id,
+        "session_id": args.session_id,
+        "operation": "start",
+        "stale_fence_cleanup": stale_fence_cleanup,
+    }
 
 
 def enqueue_cancel(args) -> dict:
@@ -161,31 +212,7 @@ def _db_status(session_id: str) -> dict:
 
 
 async def _producer_status(session_id: str) -> dict:
-    from app.collectors.asyncssh_adapter import AsyncSSHDeviceAdapter
-    from app.integrations.credentials import LocalSecretCredentialProvider, get_credential_provider
-
-    with SessionLocal() as db:
-        session = db.get(ReproductionSession, session_id)
-        if session is None:
-            return {"producer_count": None, "error": "SESSION_NOT_FOUND"}
-        device = db.get(CaseDevice, session.device_id)
-        if device is None:
-            return {"producer_count": None, "error": "DEVICE_NOT_FOUND"}
-        sn = device.sn
-        ip = device.ip
-        port = int(device.ssh_port)
-        username = device.username
-
-    provider = get_credential_provider()
-    password = await provider.get_password(sn=sn, ip=ip)
-    if isinstance(provider, LocalSecretCredentialProvider):
-        try:
-            username = provider.resolve_username(ip=ip, fallback=username)
-        except Exception:
-            pass
-
-    adapter = AsyncSSHDeviceAdapter(ip=ip, port=port, username=username, password=password)
-    await adapter.connect()
+    adapter = await _device_adapter_for_session(session_id)
     try:
         records = await ReadOnlyDeviceTransport(adapter).list_tcpdump_processes()
         identities = [parse_process_record(row.pid, row.starttime, row.cmdline) for row in records]
