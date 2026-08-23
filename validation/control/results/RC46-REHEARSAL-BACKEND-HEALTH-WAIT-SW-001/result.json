@@ -1,0 +1,44 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "RC46-REHEARSAL-BACKEND-HEALTH-WAIT-SW-001",
+    "sequence": 160,
+    "created_at": "2026-08-23T10:19:00+00:00",
+    "expires_at": "2026-08-23T22:19:00+00:00",
+    "action_type": "SOFTWARE_REGRESSION",
+    "parameters": {
+      "timeout_seconds": 1200
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "07602c9f6b85ea162548f3b94b4bb0e5b334e974"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "Regression after replacing one-shot rehearsal Backend /health probing with a bounded 120-second readiness wait. V1 remains authoritative and Production V2 remains disabled. On PASS, retry APF3260-M service-level activation rehearsal immediately."
+  },
+  "action_sha256": "f66524f4c902f1d73dd9287833f1c87779c213fd8845933454becb79e7453946",
+  "runner_id": "srv:257142",
+  "state": "SUCCEEDED",
+  "return_code": 0,
+  "verdict": null,
+  "error": null,
+  "finished_at": "2026-08-23T10:19:49.427645+00:00",
+  "stdout_sha256": "32e2b2ee62d3abecd35fa660889dac4ac576599d40128a3af79fb31724d63914",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "local_stdout": ".capture-v2-control/logs/RC46-REHEARSAL-BACKEND-HEALTH-WAIT-SW-001/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/RC46-REHEARSAL-BACKEND-HEALTH-WAIT-SW-001/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "b63fae50d9e0888a0493108503426a7a7596ac55",
+      "expected_product_head": "07602c9f6b85ea162548f3b94b4bb0e5b334e974"
+    },
+    "parsed_output": null
+  }
+}
