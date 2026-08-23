@@ -1,27 +1,31 @@
 from __future__ import annotations
 
 import asyncio
+import shlex
 from pathlib import Path
 
 from sqlalchemy import select
 
 from app.capture_v2.c_bridge import CaptureV2CBridge, CaptureV2CGateSession
-from app.capture_v2.db_models import CaptureSegment
+from app.capture_v2.db_models import CaptureSegment, CaptureSession
 from app.capture_v2.finalizer import CaptureV2CaptureFinalizer, FinalizeResult
 from app.core.config import settings
 from app.db.models import DeviceDiagnosticLock
 from app.db.session import SessionLocal
 from app.reproduction.pcap_codec import merge_classic_pcaps
 from app.reproduction.real_platform import RealCapture, RealReproductionPlatform, _EventLoopBridge
+from app.contracts.enums import ChannelHealth
 
 
 class CaptureV2ProductionPlatform(RealReproductionPlatform):
     """Real reproduction platform whose only long-lived PCAP authority is V2.
 
-    V1's mature FXS/call state machine is intentionally reused. Capture V2 is
-    lazy-bound only after the watcher resolves the real device and its ACTIVE
-    diagnostic lock, so the short-lived ``reproduction.start`` task can never own
-    a V2 lease that becomes orphaned when that task exits.
+    The mature V1.1 FXS/call business state machine is reused, but START_VOICE_PCAP
+    is translated into a real Capture V2 fenced producer before ARM readiness may
+    pass.  The short-lived start task then drops only its controller renewer; the
+    producer keeps capturing continuously until the reproduction-watch worker
+    idempotently adopts/renews the same logical owner.  This closes the historical
+    ARM->watcher acquisition gap without ever starting the legacy ring producer.
     """
 
     platform_id = "ruijie-voip-capture-v2"
@@ -29,7 +33,15 @@ class CaptureV2ProductionPlatform(RealReproductionPlatform):
     supports_segmented_ring = True
     uses_capture_v2 = True
 
-    def __init__(self, *, adapter, capture_adapter=None, transport: str | None = None):
+    def __init__(
+        self,
+        *,
+        adapter,
+        capture_adapter=None,
+        transport: str | None = None,
+        reproduction_session_id: str | None = None,
+        worker_id: str | None = None,
+    ):
         super().__init__(adapter=adapter)
         if capture_adapter is None:
             from app.collectors.asyncssh_adapter import AsyncSSHDeviceAdapter
@@ -54,8 +66,8 @@ class CaptureV2ProductionPlatform(RealReproductionPlatform):
         self._capture_finalize_result: FinalizeResult | None = None
         self._capture_seen_segments: set[str] = set()
         self._capture_device = None
-        self._reproduction_session_id: str | None = None
-        self._capture_worker_id: str | None = None
+        self._reproduction_session_id = str(reproduction_session_id) if reproduction_session_id else None
+        self._capture_worker_id = str(worker_id) if worker_id else None
         self._merge_no = 0
 
     @property
@@ -70,7 +82,14 @@ class CaptureV2ProductionPlatform(RealReproductionPlatform):
     def capture_finalize_result(self) -> FinalizeResult | None:
         return self._capture_finalize_result
 
+    @staticmethod
+    def _worker_id(session_id: str) -> str:
+        configured = str(getattr(settings, "capture_v2_worker_id", "") or "").strip()
+        return configured or f"reproduction-watch:{session_id}"
+
     def _resolve_reproduction_binding(self, device) -> tuple[str, str]:
+        if self._reproduction_session_id:
+            return self._reproduction_session_id, self._capture_worker_id or self._worker_id(self._reproduction_session_id)
         with SessionLocal() as db:
             lock = db.scalar(
                 select(DeviceDiagnosticLock).where(
@@ -81,9 +100,17 @@ class CaptureV2ProductionPlatform(RealReproductionPlatform):
         if lock is None or not lock.session_id:
             raise RuntimeError("CAPTURE_V2_ACTIVE_DEVICE_LOCK_NOT_FOUND")
         session_id = str(lock.session_id)
-        configured = str(getattr(settings, "capture_v2_worker_id", "") or "").strip()
-        worker_id = configured or f"reproduction-watch:{session_id}"
-        return session_id, worker_id
+        return session_id, self._worker_id(session_id)
+
+    def _has_existing_capture_session(self) -> bool:
+        if not self._reproduction_session_id:
+            return False
+        with SessionLocal() as db:
+            return db.scalar(
+                select(CaptureSession.id).where(
+                    CaptureSession.reproduction_session_id == self._reproduction_session_id
+                )
+            ) is not None
 
     async def _connect_capture_v2(self) -> None:
         if self._capture_session is not None:
@@ -113,10 +140,85 @@ class CaptureV2ProductionPlatform(RealReproductionPlatform):
         self._reproduction_session_id, self._capture_worker_id = self._resolve_reproduction_binding(device)
         self._capture_bridge.run(self._connect_capture_v2())
 
+    async def _pcap_readiness_snapshot(self) -> dict:
+        session = self._capture_session
+        if session is None:
+            return {
+                "status": ChannelHealth.FAILED.value,
+                "packet_count": 0,
+                "advancing": False,
+                "enabled": False,
+                "pcap_header_valid": False,
+                "capture_engine": "V2",
+                "reason": "CAPTURE_SESSION_NOT_READY",
+            }
+        await asyncio.to_thread(session.components["lease"].validate, session.token)
+        owned = await session.components["producer"].inspect_owned()
+        expected = session.bootstrap.ownership.producer
+        exact = [
+            p for p in owned
+            if int(p.pid) == int(expected.pid)
+            and int(p.process_starttime) == int(expected.process_starttime)
+        ]
+        epoch = shlex.quote(session.bootstrap.ownership.capture_epoch_token)
+        header_valid = False
+        header_size = 0
+        header_magic = ""
+        # tcpdump writes the classic-PCAP global header immediately after opening a
+        # rotated file. Retry briefly so readiness never races process creation.
+        for _ in range(30):
+            raw = (
+                await session.components["reader"].run(
+                    "root=/tmp/aivoip_capture/epochs/" + epoch + "/active; "
+                    "f=$(ls \"$root\"/*.pcap 2>/dev/null | sort | tail -n 1); "
+                    "if [ -n \"$f\" ]; then "
+                    "n=$(wc -c < \"$f\" 2>/dev/null || echo 0); "
+                    "m=$(od -An -tx1 -N4 \"$f\" 2>/dev/null | tr -d ' \\n'); "
+                    "printf '%s %s\\n' \"$n\" \"$m\"; else echo '0'; fi"
+                )
+            ).strip()
+            parts = raw.split()
+            try:
+                header_size = int(parts[0]) if parts else 0
+            except ValueError:
+                header_size = 0
+            header_magic = parts[1].lower() if len(parts) > 1 else ""
+            header_valid = header_size >= 24 and header_magic in {
+                "d4c3b2a1", "a1b2c3d4", "4d3cb2a1", "a1b23c4d"
+            }
+            if header_valid:
+                break
+            await asyncio.sleep(0.1)
+        producer_ready = len(owned) == 1 and len(exact) == 1
+        ready = producer_ready and header_valid and session.control_authority == "ACTIVE"
+        return {
+            "status": ChannelHealth.HEALTHY.value if ready else ChannelHealth.FAILED.value,
+            "packet_count": 0,
+            "advancing": producer_ready,
+            "enabled": producer_ready,
+            "pcap_header_valid": header_valid,
+            "capture_engine": "V2",
+            "producer_count": len(owned),
+            "exact_producer_count": len(exact),
+            "lease_epoch": int(session.token.lease_epoch),
+            "header_size": header_size,
+            "header_magic": header_magic,
+        }
+
     def resolve_voice_context(self, device):
         context = super().resolve_voice_context(device)
         self._ensure_capture_v2(device)
         return context
+
+    def arm(self, *, session_id: str, device, actions: list[str]):
+        # START_VOICE_PCAP is deliberately removed before entering the legacy real
+        # platform.  Its historical implementation starts a separate 3s tcpdump
+        # probe; V2 readiness below proves the actual long-lived fenced producer.
+        filtered = [action for action in actions if action != "START_VOICE_PCAP"]
+        result = super().arm(session_id=session_id, device=device, actions=filtered)
+        if "START_VOICE_PCAP" in actions:
+            result["PCAP"] = self._capture_bridge.run(self._pcap_readiness_snapshot())
+        return self._normalize_snapshot(result)
 
     def _durable_segment_paths(self) -> tuple[list[Path], int]:
         session = self._capture_session
@@ -219,17 +321,27 @@ class CaptureV2ProductionPlatform(RealReproductionPlatform):
         return self._capture_bridge.run(self._finalize_capture_v2(reason))
 
     def cleanup(self, *, session_id: str, device, actions: list[str]):
-        # A high-priority cancel runs in a different worker from the watcher. The
-        # deterministic worker id makes re-acquire idempotent for the same session;
-        # bind here if needed so cleanup can never claim success before V2 stops.
+        # Cleanup-only workers may run after the business device lock expired. An
+        # explicit reproduction_session_id lets them safely adopt an existing V2
+        # CaptureSession. Never create a brand-new V2 epoch solely to clean up a
+        # session which never started V2 capture.
         if self._capture_session is None and not self._capture_finalized:
-            self._ensure_capture_v2(device)
+            if self._reproduction_session_id is None:
+                self._capture_device = device
+                self._reproduction_session_id, self._capture_worker_id = self._resolve_reproduction_binding(device)
+            if self._has_existing_capture_session():
+                self._capture_device = device
+                if self._capture_worker_id is None:
+                    self._capture_worker_id = self._worker_id(self._reproduction_session_id)
+                self._capture_bridge.run(self._connect_capture_v2())
         self.finalize_capture_if_active(reason="REPRODUCTION_CLEANUP")
         return super().cleanup(session_id=session_id, device=device, actions=actions)
 
     async def _disconnect_capture_adapter(self) -> None:
         session = self._capture_session
         if session is not None and not self._capture_finalized:
+            # Handoff/crash behavior: stop controller renewal but leave the exact
+            # producer running.  The next controller adopts it without a gap.
             await session.stop_lease_renewer(release_lease=False)
         try:
             await self._capture_adapter.disconnect()
