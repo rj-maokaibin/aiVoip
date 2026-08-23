@@ -15,6 +15,8 @@ _R6_GOLDEN_RELATIVE = Path("validation/capture_v2/R6_APF1250_FIRST_8000_ABNORMAL
 _MASTER_BASELINE_GATE_ID = "MASTER-BASELINE-INTEGRATION-RC59"
 _MASTER_FIX_CANDIDATE_GATE_RE = re.compile(r"^MASTER-FIX-CANDIDATE-INTEGRATION-RC\d+$")
 _MASTER_FIX_CANDIDATE_SHA = "391486c7a70f8e36c088dcb512397044a552c78c"
+_PRODUCTION_PREFLIGHT_GATE_RE = re.compile(r"^PRODUCTION-DEPLOYMENT-PREFLIGHT-RC\d+$")
+_PRODUCTION_AUTH_RELATIVE = Path("validation/capture_v2/PRODUCTION_CUTOVER_AUTHORIZATION_RC69.json")
 _TSHARK_HOST_CANDIDATES = (
     Path("/usr/bin/tshark"),
     Path("/usr/local/bin/tshark"),
@@ -133,6 +135,34 @@ def _bounded_master_fix_candidate_regression(argv: list[str]) -> int | None:
             os.environ.pop("TSHARK_BINARY", None)
 
 
+def _bounded_production_deployment_preflight(argv: list[str]) -> int | None:
+    """Dispatch only the audited production preflight authorization artifact."""
+    if not argv or argv[0] != "evaluate":
+        return None
+    gate_id = str(_arg_value(argv, "--gate-id") or "").strip()
+    if not _PRODUCTION_PREFLIGHT_GATE_RE.fullmatch(gate_id):
+        return None
+    bundle = str(_arg_value(argv, "--bundle") or "").strip()
+    if not bundle:
+        return None
+    repo_root = Path(__file__).resolve().parents[3]
+    expected = (repo_root / _PRODUCTION_AUTH_RELATIVE).resolve()
+    supplied = Path(bundle)
+    if not supplied.is_absolute():
+        supplied = (Path.cwd() / supplied).resolve()
+    else:
+        supplied = supplied.resolve()
+    if supplied != expected:
+        return None
+
+    from app.capture_v2.control.production_deployment_preflight_guarded import main as preflight_main
+
+    return preflight_main([
+        "--repo-root", str(repo_root),
+        "--authorization", str(expected),
+    ])
+
+
 def main(argv: list[str] | None = None) -> int:
     args = list(sys.argv[1:] if argv is None else argv)
     bounded = _bounded_r6_materialization(args)
@@ -142,6 +172,9 @@ def main(argv: list[str] | None = None) -> int:
     if bounded is not None:
         return bounded
     bounded = _bounded_master_fix_candidate_regression(args)
+    if bounded is not None:
+        return bounded
+    bounded = _bounded_production_deployment_preflight(args)
     if bounded is not None:
         return bounded
     return gate_main(args)
