@@ -177,7 +177,18 @@ def validate_canonical_report(report: dict) -> None:
     pscope = periodic.get("scope") or {}
     assert pscope.get("pcm_tap") == "pcm_rx", pscope
     assert pscope.get("call_id"), pscope
-    assert pscope.get("layer") == "PCM_RX_TO_RTP_UPSTREAM", pscope
+    # Canonical V2 represents path semantics orthogonally instead of encoding the
+    # whole path into one synthetic layer value. Validate the complete tuple so
+    # the acceptance gate remains fail-closed while matching the canonical model.
+    assert pscope.get("layer") == "pcm_rx", pscope
+    assert pscope.get("direction") == "LOCAL_CAPTURE_TO_UPSTREAM_RTP", pscope
+    assert pscope.get("path_role") == "LOCAL_CAPTURE_PATH", pscope
+    assert pscope.get("upstream_rtp_stream_id"), pscope
+    assert pscope.get("downstream_rtp_stream_id"), pscope
+    active_window = pscope.get("active_media_window") or {}
+    assert active_window.get("start_time") is not None and active_window.get("end_time") is not None, pscope
+    representative_window = pscope.get("representative_evidence_window") or {}
+    assert representative_window.get("start_time") is not None and representative_window.get("end_time") is not None, pscope
     time_range = periodic.get("time_range") or {}
     assert time_range.get("start") is not None and time_range.get("end") is not None, time_range
     assert time_range.get("exact_event_window_known") is False, time_range
