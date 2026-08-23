@@ -1,0 +1,83 @@
+{
+  "schema_version": "capture-v2-final-blocker-audit-v3",
+  "audit_id": "RC55-FINAL-BLOCKER-AUDIT",
+  "final_software_regression": {
+    "action_id": "RC55-ROLLBACK-V1-START-SW-001",
+    "sequence": 178,
+    "state": "SUCCEEDED",
+    "return_code": 0,
+    "expected_product_head": "02f17a1d46cdf42e48e212b0047cb1bff79b9c3e"
+  },
+  "safety": {
+    "capture_engine_version": "V1",
+    "capture_v2_production_enabled": false,
+    "production_cutover_approved": false,
+    "pr_27_must_remain_draft": true,
+    "merge_or_cutover_authorized": false
+  },
+  "closed_gates": {
+    "R1_postgresql_lease_fencing": "PASS",
+    "R2_dual_platform_ownership_recovery": "PASS",
+    "R3_dual_platform_segment_transfer_ack": "PASS",
+    "R4_dual_platform_fresh_fxs": "PASS",
+    "R4_hook_flash": "PASS",
+    "R5_historical_real_golden_multi_plane": "PASS",
+    "R5_real_postgresql_coverage_ledger_runtime": "PASS",
+    "R5_live_real_call_coverage_complete": "PASS",
+    "R6_real_postgresql_evidence_first_runtime": "PASS",
+    "R6_fault_version_first_8000_abnormal_golden": "CAPTURED_WITH_HIGH_CONFIDENCE_LOCALIZATION_BOUNDARY",
+    "R7_dual_platform_validation_state_soak": "PASS",
+    "R7_real_service_activation_rollback": "PASS"
+  },
+  "R7_real_service_activation_rollback": {
+    "action": "R7-02-APF3260M-SERVICE-ACTIVATION-ROLLBACK-RC55",
+    "platform": "APF3260-M",
+    "verdict": "PASS",
+    "pre_v1_no_v2_producer": true,
+    "v2_path_ready": true,
+    "v2_business_state": "WATCHING",
+    "stable_v2_producer_count": 1,
+    "durable_segment": true,
+    "v2_cleanup_verified": true,
+    "kernel_capture_drops": 0,
+    "lease_released": true,
+    "post_cleanup_v2_producer_count": 0,
+    "v1_business_health_restored": true,
+    "post_rollback_v2_producer_count": 0,
+    "r7_gate": "PASS",
+    "production_v2_enabled_during_rehearsal": false,
+    "original_deployment_env_modified": false
+  },
+  "R6_abnormal_golden": {
+    "platform": "APF1250",
+    "expected_panel_target": "8000",
+    "observed_aim_fxs_digits": "000",
+    "finding": "FIRST_DIGIT_8_MISSING_BY_AIM_FXS_DTMF_EVENT_LAYER",
+    "finding_confidence": "HIGH",
+    "source_action": "R6-01-APF1250-FIRST-8000-LIVE-REUSE-RC32",
+    "immutable_collect_action": "R6-02-APF1250-8000-ABNORMAL-EVIDENCE-COLLECT-RC32",
+    "audit_file": "validation/capture_v2/R6_APF1250_FIRST_8000_ABNORMAL_GOLDEN_RC33.json",
+    "exact_component_not_proven": [
+      "panel event generation",
+      "SLIC/driver",
+      "libhardware",
+      "AIM"
+    ]
+  },
+  "remaining_autonomous_non_physical": [
+    "Optional product binding: materialize this specific abnormal Golden as EvidenceAsset rows/report manifest using a bounded validation invocation. The real PostgreSQL EvidenceAsset/report runtime is already independently PASS."
+  ],
+  "remaining_physical_handset": [
+    "Optional controlled <=100ms / approximately-20ms rebound calibration if required as a release gate",
+    "Another first-call reproduction only if lower-layer raw debug earlier than AIM/FXS is added and exact failing-component localization is required"
+  ],
+  "remaining_requires_explicit_production_authorization": [
+    "production cutover approval",
+    "CAPTURE_ENGINE_VERSION=V2",
+    "CAPTURE_V2_PRODUCTION_ENABLED=true",
+    "PR ready / merge / cutover"
+  ],
+  "technical_release_gates_passed": true,
+  "release_decision": "BLOCKED_PENDING_EXPLICIT_PRODUCTION_CUTOVER_APPROVAL",
+  "reason": "All mandatory Capture V2.1.1 technical gates including real service activation/rollback are PASS. Production authority remains V1 and production cutover has not been explicitly approved."
+}
