@@ -1,12 +1,20 @@
 {
   "schema_version": "capture-v2-remote-action-v1",
-  "action_id": "RC52-REHEARSAL-GUARD-SELF-EXCLUSION-SW-001",
-  "sequence": 172,
-  "created_at": "2026-08-23T12:16:00+00:00",
-  "expires_at": "2026-08-23T23:16:00+00:00",
-  "action_type": "SOFTWARE_REGRESSION",
+  "action_id": "R7-02-APF3260M-SERVICE-ACTIVATION-ROLLBACK-RC52",
+  "sequence": 173,
+  "created_at": "2026-08-23T12:17:00+00:00",
+  "expires_at": "2026-08-23T23:17:00+00:00",
+  "action_type": "ACTIVATION_REHEARSAL",
   "parameters": {
-    "timeout_seconds": 1200
+    "timeout_seconds": 3600,
+    "sn": "G1U060H000384",
+    "host": "10.48.8.74",
+    "port": 10002,
+    "username": "root",
+    "platform_id": "mt7981",
+    "model": "APF3260-M",
+    "profile_id": "VOIP_GENERIC_FULL_CAPTURE",
+    "observation_seconds": 20
   },
   "safety": {
     "require_clean_git": true,
@@ -17,5 +25,5 @@
     "expected_head": "d71df4d54fb01f0df67934d57ad5f3170fcc2fd7"
   },
   "requested_by": "ChatGPT-remote-validation-controller",
-  "note": "Regression after correcting the rehearsal DUT /proc producer race guard to exclude only the executing guard shell itself. All other process scans remain fail-closed; live op.lock and AIVOIP producers still block cleanup; generic production fencing remains unchanged. V1 remains authoritative and Production V2 remains false."
+  "note": "Guarded APF3260-M service-level activation/rollback rerun after RC52 self-process exclusion regression passed. The rehearsal-only stale fence cleanup remains fail-closed for any real AIVOIP producer or live op.lock and does not alter generic production fencing. PASS requires PRE_V1 -> rehearsal V2 exactly-one producer + durable segment -> cleanup -> restored V1 business path and zero residual V2 producer. Production V2 remains false and original env remains untouched."
 }
