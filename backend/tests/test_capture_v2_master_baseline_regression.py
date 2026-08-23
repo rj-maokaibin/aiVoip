@@ -50,10 +50,10 @@ def test_gate_cli_master_fix_candidate_dispatch_is_exact_and_fail_closed(monkeyp
 
     monkeypatch.setattr(gate_cli, "__file__", str(module))
     monkeypatch.setattr(master_fix_candidate_regression, "main", fake_main)
-    sha = "c962c0d174099bae1afc8db55067402b36717487"
+    sha = gate_cli._MASTER_FIX_CANDIDATE_SHA
     rc = gate_cli._bounded_master_fix_candidate_regression([
         "evaluate", "--bundle", sha,
-        "--gate-id", "MASTER-FIX-CANDIDATE-INTEGRATION-RC60",
+        "--gate-id", "MASTER-FIX-CANDIDATE-INTEGRATION-RC63",
     ])
     assert rc == 0
     assert calls == [["--repo-root", str(repo), "--candidate-sha", sha]]
@@ -61,7 +61,7 @@ def test_gate_cli_master_fix_candidate_dispatch_is_exact_and_fail_closed(monkeyp
     calls.clear()
     assert gate_cli._bounded_master_fix_candidate_regression([
         "evaluate", "--bundle", "a" * 40,
-        "--gate-id", "MASTER-FIX-CANDIDATE-INTEGRATION-RC60",
+        "--gate-id", "MASTER-FIX-CANDIDATE-INTEGRATION-RC63",
     ]) is None
     assert gate_cli._bounded_master_fix_candidate_regression([
         "evaluate", "--bundle", sha, "--gate-id", "R3-01",
