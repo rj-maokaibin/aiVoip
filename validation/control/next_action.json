@@ -1,9 +1,9 @@
 {
   "schema_version": "capture-v2-remote-action-v1",
-  "action_id": "RC37-PRODUCTION-WIRING-SW-002",
-  "sequence": 144,
-  "created_at": "2026-08-23T09:12:00+00:00",
-  "expires_at": "2026-08-23T21:12:00+00:00",
+  "action_id": "RC37-PRODUCTION-WIRING-SW-003",
+  "sequence": 145,
+  "created_at": "2026-08-23T09:18:00+00:00",
+  "expires_at": "2026-08-23T21:18:00+00:00",
   "action_type": "SOFTWARE_REGRESSION",
   "parameters": {
     "timeout_seconds": 1200
@@ -14,8 +14,8 @@
     "require_v2_disabled": true,
     "allow_worker_kill": false,
     "allow_server_quarantine": false,
-    "expected_head": "ff19ea47dc413186336c42859a834d737e3215b8"
+    "expected_head": "46f93dac70bf01189c081246bb5b369c7c1c61c8"
   },
   "requested_by": "ChatGPT-remote-validation-controller",
-  "note": "RC37 second regression after adding redacted pytest failure-tail publishing to the control runner. Exercises Production V2 authority routing while V1 remains authoritative and Production V2 remains disabled."
+  "note": "RC37 third regression after fixing the platform routing test fixture to explicitly select real mode. Production V2 remains disabled and V1 remains authoritative during regression."
 }
