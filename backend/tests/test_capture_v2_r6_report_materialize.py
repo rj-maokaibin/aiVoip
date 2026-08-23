@@ -1,4 +1,5 @@
 from pathlib import Path
+import subprocess
 
 import pytest
 
@@ -48,6 +49,63 @@ def test_gate_cli_bounded_r6_dispatch_only_for_exact_golden(monkeypatch, tmp_pat
         "--gate-id", "R6-PRODUCT-REPORT-MATERIALIZE-RC56",
     ]) is None
     assert calls == []
+
+
+def test_guarded_docker_tools_prefers_direct_daemon(monkeypatch, tmp_path):
+    calls = []
+
+    def fake_which(name):
+        return {"docker": "/usr/bin/docker", "sudo": "/usr/bin/sudo"}.get(name)
+
+    def fake_run(argv, **kwargs):
+        calls.append(list(argv))
+        return subprocess.CompletedProcess(argv, 0, "ok\n", "")
+
+    monkeypatch.setattr(r6_report_materialize_guarded.shutil, "which", fake_which)
+    monkeypatch.setattr(r6_report_materialize_guarded, "_run", fake_run)
+
+    docker_cmd, compose, authority = r6_report_materialize_guarded._docker_tools(tmp_path)
+    assert docker_cmd == ["/usr/bin/docker"]
+    assert compose == ["/usr/bin/docker", "compose"]
+    assert authority == "DIRECT"
+    assert ["/usr/bin/sudo", "-n", "/usr/bin/docker", "ps", "-q"] not in calls
+
+
+def test_guarded_docker_tools_falls_back_to_noninteractive_sudo(monkeypatch, tmp_path):
+    calls = []
+
+    def fake_which(name):
+        return {"docker": "/usr/bin/docker", "sudo": "/usr/bin/sudo"}.get(name)
+
+    def fake_run(argv, **kwargs):
+        argv = list(argv)
+        calls.append(argv)
+        if argv == ["/usr/bin/docker", "ps", "-q"]:
+            return subprocess.CompletedProcess(argv, 1, "", "permission denied")
+        return subprocess.CompletedProcess(argv, 0, "ok\n", "")
+
+    monkeypatch.setattr(r6_report_materialize_guarded.shutil, "which", fake_which)
+    monkeypatch.setattr(r6_report_materialize_guarded, "_run", fake_run)
+
+    docker_cmd, compose, authority = r6_report_materialize_guarded._docker_tools(tmp_path)
+    assert docker_cmd == ["/usr/bin/sudo", "-n", "/usr/bin/docker"]
+    assert compose == ["/usr/bin/sudo", "-n", "/usr/bin/docker", "compose"]
+    assert authority == "SUDO_NONINTERACTIVE"
+    assert ["/usr/bin/sudo", "-n", "/usr/bin/docker", "ps", "-q"] in calls
+
+
+def test_guarded_docker_tools_fails_closed_when_sudo_is_not_authorized(monkeypatch, tmp_path):
+    def fake_which(name):
+        return {"docker": "/usr/bin/docker", "sudo": "/usr/bin/sudo"}.get(name)
+
+    def fake_run(argv, **kwargs):
+        return subprocess.CompletedProcess(argv, 1, "", "not allowed")
+
+    monkeypatch.setattr(r6_report_materialize_guarded.shutil, "which", fake_which)
+    monkeypatch.setattr(r6_report_materialize_guarded, "_run", fake_run)
+
+    with pytest.raises(RuntimeError, match="DOCKER_DAEMON_PERMISSION_DENIED"):
+        r6_report_materialize_guarded._docker_tools(tmp_path)
 
 
 def test_golden_loader_rejects_wrong_finding(tmp_path):
