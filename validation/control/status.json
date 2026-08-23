@@ -1,26 +1,26 @@
 {
   "schema_version": "capture-v2-remote-status-v1",
-  "action_id": "RC34-R6-ABNORMAL-GOLDEN-FINAL-SW-001",
-  "sequence": 137,
+  "action_id": "RC35-R7-VALIDATION-ROLLBACK-SW-001",
+  "sequence": 138,
   "action_type": "SOFTWARE_REGRESSION",
   "state": "SUCCEEDED",
   "runner_id": "srv:231819",
-  "action_sha256": "08222136c04fc428257e9324fcab28f8eba959efef656f1b02c41a260dac580a",
-  "updated_at": "2026-08-23T07:20:50.842988+00:00",
+  "action_sha256": "077fa690125a3f3d0b9f56da6200d14a973b8f12f11abe29e354c6f6f259c023",
+  "updated_at": "2026-08-23T07:28:26.349026+00:00",
   "started_at": null,
-  "finished_at": "2026-08-23T07:20:50.842988+00:00",
+  "finished_at": "2026-08-23T07:28:26.349026+00:00",
   "return_code": 0,
   "verdict": null,
-  "result_path": "validation/control/results/RC34-R6-ABNORMAL-GOLDEN-FINAL-SW-001/result.json",
-  "stdout_sha256": "4df4aebafc5d7450f1ebfc105f5740bce90b9edf829201cea6e272c2cdca9808",
+  "result_path": "validation/control/results/RC35-R7-VALIDATION-ROLLBACK-SW-001/result.json",
+  "stdout_sha256": "8988759e707e7aa6c7fcc832dfbafbd6c6be013c54823f6743a869c7ddfcba34",
   "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "error": null,
   "detail": {
     "safety": {
       "capture_engine_version": "V1",
       "capture_v2_production_enabled": "false",
-      "git_head": "5758e17a08f2a66cafc26f1b6263e24b8c16692b",
-      "expected_product_head": "3b69b1d0d0b6e01fd01ad3fd4beb635f47eb4be3"
+      "git_head": "a1fee81b8d91e65d462959ae8cdb11aebfaa1354",
+      "expected_product_head": "910f854de2a9431734b7143c843636530a92a340"
     },
     "parsed_output": null
   }
