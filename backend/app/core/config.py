@@ -113,7 +113,10 @@ class Settings(BaseSettings):
     feishu_verification_token: str = ""
     feishu_verification_token_file: str = ""
     feishu_verification_token_env: str = ""
-    feishu_timeout_seconds: float = 8.0
+    # Live Evidence Bundle/media uploads regularly exceed the generic 8s request
+    # budget. Keep a bounded but production-safe floor so a valid multi-MB upload
+    # is not classified as a report failure solely because of socket write time.
+    feishu_timeout_seconds: float = 120.0
     feishu_attachment_max_bytes: int = 100 * 1024 * 1024
     feishu_identity_rbac_enabled: bool = False
     feishu_identity_discover_unmapped: bool = True
@@ -162,6 +165,10 @@ class Settings(BaseSettings):
         self.ai_semantic_router_mode = semantic_mode
         if not 0.0 <= float(self.ai_semantic_router_min_confidence) <= 1.0:
             raise ValueError("AI_SEMANTIC_ROUTER_MIN_CONFIDENCE_INVALID")
+        # Do not allow a stale/deployment-level FEISHU_TIMEOUT_SECONDS=8 override
+        # to re-introduce the real 6MB Evidence Bundle WriteTimeout seen in the
+        # final acceptance run. The timeout remains finite and configurable upward.
+        self.feishu_timeout_seconds = max(120.0, float(self.feishu_timeout_seconds))
         mode = str(self.feishu_document_acl_mode or "AUTO").upper()
         if mode not in {"AUTO", "CHAT_SCOPE", "MEMBER_MIRROR"}:
             raise ValueError("FEISHU_DOCUMENT_ACL_MODE_INVALID")
