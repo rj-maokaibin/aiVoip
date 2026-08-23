@@ -1,20 +1,37 @@
 {
-  "schema_version": "capture-v2-remote-status-v1",
-  "action_id": "RC69-PRODUCTION-DEPLOYMENT-PREFLIGHT-001",
-  "sequence": 200,
-  "action_type": "DEPLOYMENT_PREFLIGHT",
-  "state": "FAILED",
-  "runner_id": "srv:611900",
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "RC69-PRODUCTION-DEPLOYMENT-PREFLIGHT-001",
+    "sequence": 200,
+    "created_at": "2026-08-23T15:29:00+00:00",
+    "expires_at": "2026-08-24T03:29:00+00:00",
+    "action_type": "DEPLOYMENT_PREFLIGHT",
+    "parameters": {
+      "timeout_seconds": 120
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "05bc82a1fcdd1baca2be1d756b3c0053dced8401"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "Explicit production cutover is authorized. Perform read-only deployment preflight while V1 remains authoritative and Production V2 remains disabled. Discover actual Compose project/runtime, verify required services, env-file presence, current V1 authority, and validation artifact mount readiness. No restart, no env mutation, no DUT access."
+  },
   "action_sha256": "f9e17537a51f847c1c7605f2eb25e3c066e2184e057953e8974b5e2cb6a39297",
-  "updated_at": "2026-08-23T15:30:58.970073+00:00",
-  "started_at": null,
-  "finished_at": "2026-08-23T15:30:58.970073+00:00",
+  "runner_id": "srv:611900",
+  "state": "FAILED",
   "return_code": 1,
   "verdict": "FAIL",
-  "result_path": "validation/control/results/RC69-PRODUCTION-DEPLOYMENT-PREFLIGHT-001/result.json",
+  "error": null,
+  "finished_at": "2026-08-23T15:30:58.970073+00:00",
   "stdout_sha256": "090d06577a7091009d62ba917eb2a382bf43dc1ba98980769861ff3f82d2881a",
   "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-  "error": null,
+  "local_stdout": ".capture-v2-control/logs/RC69-PRODUCTION-DEPLOYMENT-PREFLIGHT-001/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/RC69-PRODUCTION-DEPLOYMENT-PREFLIGHT-001/stderr.log",
   "detail": {
     "safety": {
       "capture_engine_version": "V1",
