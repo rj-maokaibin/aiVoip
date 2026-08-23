@@ -1,0 +1,111 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "R7-02-APF3260M-SERVICE-ACTIVATION-ROLLBACK-RC53",
+    "sequence": 175,
+    "created_at": "2026-08-23T12:24:00+00:00",
+    "expires_at": "2026-08-23T23:24:00+00:00",
+    "action_type": "ACTIVATION_REHEARSAL",
+    "parameters": {
+      "timeout_seconds": 3600,
+      "sn": "G1U060H000384",
+      "host": "10.48.8.74",
+      "port": 10002,
+      "username": "root",
+      "platform_id": "mt7981",
+      "model": "APF3260-M",
+      "profile_id": "VOIP_GENERIC_FULL_CAPTURE",
+      "observation_seconds": 20
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "93fe8e5e25c7f13a64913daba144e939a5c2e4f8"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "Guarded APF3260-M service-level activation/rollback diagnostic rerun. RC52 already proved the stale-fence blocker is removed and the V2 producer can create a durable segment; this run preserves DB terminal_reason and latest ArmValidation if the business session still exits before V2_ACTIVE. No production activation is authorized: Production V2 remains false and original env remains untouched."
+  },
+  "action_sha256": "f5dcfd2621b73091ad94d0f6f2e07f9fe89f5c0a5e82f85f23a3f815a071bb1d",
+  "runner_id": "srv:257142",
+  "state": "INCONCLUSIVE",
+  "return_code": 2,
+  "verdict": "INCONCLUSIVE",
+  "error": null,
+  "finished_at": "2026-08-23T12:28:38.342287+00:00",
+  "stdout_sha256": "f7f3e7d202265b94341fae4c0253952b1d88ce54b7c5e4fe78ab7549e41333b0",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "local_stdout": ".capture-v2-control/logs/R7-02-APF3260M-SERVICE-ACTIVATION-ROLLBACK-RC53/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/R7-02-APF3260M-SERVICE-ACTIVATION-ROLLBACK-RC53/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "922d158ca989f1c16122be33238856f0dfcc44e0",
+      "expected_product_head": "93fe8e5e25c7f13a64913daba144e939a5c2e4f8"
+    },
+    "parsed_output": {
+      "scope": "BOUNDED_SERVICE_LEVEL_ACTIVATION_REHEARSAL",
+      "production_v2_enabled": false,
+      "original_env_modified": false,
+      "project": "capture-v2-r7-rehearsal",
+      "device": {
+        "sn": "G1U060H000384",
+        "model": "APF3260-M",
+        "host": "10.48.8.74",
+        "port": 10002
+      },
+      "checks": [],
+      "pre_v1": {
+        "contract": {
+          "capture_engine_version": "V1",
+          "capture_v2_production_enabled": false,
+          "contract_ok": true,
+          "expected": "V1",
+          "reproduction_platform_mode": "real"
+        },
+        "session": {
+          "business_lock_status": null,
+          "capture": null,
+          "case_id": "a09d36cc-7e19-44ec-93e6-c82338e38485",
+          "cleanup_status": "NOT_REQUIRED",
+          "device_id": "edb969c6-7b02-43a5-a137-8b465b441ea9",
+          "dut": {
+            "producer_count": 0,
+            "producers": []
+          },
+          "exists": true,
+          "session_id": "6a1ef0ee-19a1-4675-a5b0-fe9f15d1c45c",
+          "state": "CREATED",
+          "terminal_reason": null
+        }
+      },
+      "verdict": "INCONCLUSIVE",
+      "reason": "SERVICE_LEVEL_REHEARSAL_EXCEPTION",
+      "failure_phase": "V2_REHEARSAL_ACTIVATION",
+      "error": "RuntimeError:reproduction-worker-1  |   echo AIVOIP_FENCED\nreproduction-worker-1  |   exit 73\nreproduction-worker-1  | fi\nreproduction-worker-1  | [ -f /tmp/aivoip_capture/epochs/CAP_819d7c50_0001_6a4e962f/spool/seg_000000000001__capture_20260823_202453.pcap ] || exit 0\nreproduction-worker-1  | inode=$(stat -c %i /tmp/aivoip_capture/epochs/CAP_819d7c50_0001_6a4e962f/spool/seg_000000000001__capture_20260823_202453.pcap 2>/dev/null || echo 0)\nreproduction-worker-1  | size=$(stat -c %s /tmp/aivoip_capture/epochs/CAP_819d7c50_0001_6a4e962f/spool/seg_000000000001__capture_20260823_202453.pcap 2>/dev/null || echo 0)\nreproduction-worker-1  | [ \"$inode\" = 7385468 ] || exit 74\nreproduction-worker-1  | [ \"$size\" = 24 ] || exit 74\nreproduction-worker-1  | rm -f -- /tmp/aivoip_capture/epochs/CAP_819d7c50_0001_6a4e962f/spool/seg_000000000001__capture_20260823_202453.pcap || exit 82\nreproduction-worker-1  | [ ! -e /tmp/aivoip_capture/epochs/CAP_819d7c50_0001_6a4e962f/spool/seg_000000000001__capture_20260823_202453.pcap ] || exit 82\nreproduction-worker-1  | \nreproduction-worker-1  | \nreproduction-worker-1  | [2026-08-23 12:25:02,283: INFO/ForkPoolWorker-1] [conn=1, chan=68] Received exit status 0\nreproduction-worker-1  | [2026-08-23 12:25:02,283: INFO/ForkPoolWorker-1] [conn=1, chan=68] Received channel close\nreproduction-worker-1  | [2026-08-23 12:25:02,283: INFO/ForkPoolWorker-1] [conn=1, chan=68] Channel closed\nreproduction-worker-1  | [2026-08-23 12:25:02,381: INFO/ForkPoolWorker-1] [conn=1] Closing connection\nreproduction-worker-1  | [2026-08-23 12:25:02,381: INFO/ForkPoolWorker-1] [conn=1] Sending disconnect: Disconnected by application (11)\nreproduction-worker-1  | [2026-08-23 12:25:02,381: INFO/ForkPoolWorker-1] [conn=1] Connection closed\nreproduction-worker-1  | [2026-08-23 12:25:02,385: INFO/ForkPoolWorker-1] [conn=0, chan=6] Received exit signal HUP\nreproduction-worker-1  | [2026-08-23 12:25:02,385: INFO/ForkPoolWorker-1] [conn=0, chan=6] Received channel close\nreproduction-worker-1  | [2026-08-23 12:25:02,385: INFO/ForkPoolWorker-1] [conn=0, chan=6] Channel closed\nreproduction-worker-1  | [2026-08-23 12:25:02,385: INFO/ForkPoolWorker-1] [conn=0] Closing connection\nreproduction-worker-1  | [2026-08-23 12:25:02,385: INFO/ForkPoolWorker-1] [conn=0] Sending disconnect: Disconnected by application (11)\nreproduction-worker-1  | [2026-08-23 12:25:02,386: INFO/ForkPoolWorker-1] [conn=0] Connection closed\nreproduction-worker-1  | [2026-08-23 12:25:02,421: INFO/ForkPoolWorker-1] Task reproduction.start[60c28da2-c879-40e4-86b6-724caf40cb67] succeeded in 12.049203649861738s: {'session_id': '6a1ef0ee-19a1-4675-a5b0-fe9f15d1c45c', 'state': 'PARTIAL_SUCCESS', 'diagnosis': {'status': 'TRIGGERED', 'job_id': '2a2563d6-e0ef-4d2d-825d-0553a73adaf8', 'run_id': 'fc76e78c-14f9-499b-af72-dcd6d34fc65c', 'case_id': 'a09d36cc-7e19-44ec-93e6-c82338e38485', 'session_id': '6a1ef0ee-19a1-4675-a5b0-fe9f15d1c45c', 'fix_\n\n[db-diagnostic]\n{\"capture\": {\"capture_session_id\": \"819d7c50-11e8-4f5c-8959-b0404b23a543\", \"cleanup_status\": null, \"evidence_durable\": true, \"health_status\": \"HEALTHY\", \"lease_epoch\": 1, \"lease_state\": \"RELEASED\", \"path_ready\": false, \"state\": \"PREPARING\"}, \"cleanup_status\": \"CLEANUP_VERIFIED\", \"exists\": true, \"latest_arm_validation\": {\"failed_reasons\": [\"PCAP_NOT_HEALTHY\"], \"observed_channels\": {\"DEBUG\": {\"advancing\": true, \"enabled\": true, \"heartbeat\": true, \"packet_count\": 0, \"reader_alive\": true, \"status\": \n\nDB_TIMEOUT:RuntimeError:SESSION_STATUS_TIMEOUT:{\"business_lock_status\": \"RELEASED\", \"capture\": {\"capture_session_id\": \"819d7c50-11e8-4f5c-8959-b0404b23a543\", \"cleanup_status\": null, \"ended\": false, \"epochs\": [{\"ended\": true, \"id\": \"4a260d9e-4960-4252-ac4f-5101d31d50c8\", \"kernel_drops\": 0, \"producer_pid\": 15476, \"state\": \"ENDED\"}], \"evidence_durable\": true, \"health_status\": \"HEALTHY\", \"lease\": {\"lease_epoch\": 1, \"owner_worker_id\": \"reproduction-watch:6a1ef0ee-19a1-4675-a5b0-fe9f15d1c45c\", \"state\"",
+      "final_server_target_state": "PRESTATE_NO_REHEARSAL_CONTAINERS",
+      "final_authority_target": "V1",
+      "diagnostics": {
+        "compose_ps": "NAME      IMAGE     COMMAND   SERVICE   CREATED   STATUS    PORTS\n",
+        "logs_tail": {
+          "backend": "",
+          "postgres": "",
+          "redis": "",
+          "minio": "",
+          "reproduction-worker": "",
+          "reproduction-control-high-worker": "",
+          "reproduction-watch-worker": "",
+          "beat": ""
+        }
+      },
+      "guarded_rehearsal": true,
+      "host_port_publishing": "DISABLED_BY_COMPOSE_OVERRIDE",
+      "backend_health_wait_seconds": 120,
+      "final_rehearsal_project_empty": true
+    }
+  }
+}

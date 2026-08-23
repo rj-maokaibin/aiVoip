@@ -1,0 +1,23 @@
+{
+  "schema_version": "capture-v2-remote-action-v1",
+  "action_id": "RC78-SINGLE-EXECUTOR-FINAL-INTEGRATION-001",
+  "sequence": 209,
+  "created_at": "2026-08-23T15:54:00+00:00",
+  "expires_at": "2026-08-24T03:54:00+00:00",
+  "action_type": "GATE_EVALUATE",
+  "parameters": {
+    "timeout_seconds": 7200,
+    "bundle": "391486c7a70f8e36c088dcb512397044a552c78c",
+    "gate_id": "MASTER-FIX-CANDIDATE-INTEGRATION-RC78"
+  },
+  "safety": {
+    "require_clean_git": true,
+    "require_v1_authority": true,
+    "require_v2_disabled": true,
+    "allow_worker_kill": false,
+    "allow_server_quarantine": false,
+    "expected_head": "a44cfd49da8a0ba82b0235bb7b2ccad3293b2d2c"
+  },
+  "requested_by": "ChatGPT-remote-validation-controller",
+  "note": "Final release acceptance for the exact latest product/control head including host single-executor lock and production cutover/deploy safeguards. Require isolated audited PR #37 candidate fetch, no-conflict detached merge, Capture V2 regression, Frozen contracts, full VOIP AI software release gate, and Real Offline Golden #001 exactly 142/142. No production or DUT mutation."
+}

@@ -1,0 +1,44 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "RC18-SW-001",
+    "sequence": 89,
+    "created_at": "2026-08-22T01:43:00+00:00",
+    "expires_at": "2026-08-22T03:43:00+00:00",
+    "action_type": "SOFTWARE_REGRESSION",
+    "parameters": {
+      "timeout_seconds": 1200
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "735446237cdfafad8d3d70847b07c781b7b3de6c"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "RC18 validation-tooling regression after adding fixed historical Golden archive recovery. No Capture runtime path changed. V1 remains authoritative; Production V2 disabled."
+  },
+  "action_sha256": "cde99a4a71dac118a446f3e164b064ae6a7a5ad7622e61aba911aeeda1194bb7",
+  "runner_id": "srv:3382405",
+  "state": "SUCCEEDED",
+  "return_code": 0,
+  "verdict": null,
+  "error": null,
+  "finished_at": "2026-08-22T01:46:07.952040+00:00",
+  "stdout_sha256": "586a4d7be569a59bf185a2db47ecd2d9363a0f6624449574e5e12781c969b8e3",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "local_stdout": ".capture-v2-control/logs/RC18-SW-001/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/RC18-SW-001/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "37bc4a8263adcdb9b2e5766e8a4d73d8f30a7100",
+      "expected_product_head": "735446237cdfafad8d3d70847b07c781b7b3de6c"
+    },
+    "parsed_output": null
+  }
+}

@@ -1,0 +1,44 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "RC34-R6-ABNORMAL-GOLDEN-FINAL-SW-001",
+    "sequence": 137,
+    "created_at": "2026-08-23T07:20:00+00:00",
+    "expires_at": "2026-08-23T19:20:00+00:00",
+    "action_type": "SOFTWARE_REGRESSION",
+    "parameters": {
+      "timeout_seconds": 1200
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "3b69b1d0d0b6e01fd01ad3fd4beb635f47eb4be3"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "Final full Capture V2 regression after PCAP window-scope fix, control-surface cleanup, and R6 abnormal Golden audit. V1 remains authoritative and Production V2 remains disabled."
+  },
+  "action_sha256": "08222136c04fc428257e9324fcab28f8eba959efef656f1b02c41a260dac580a",
+  "runner_id": "srv:231819",
+  "state": "SUCCEEDED",
+  "return_code": 0,
+  "verdict": null,
+  "error": null,
+  "finished_at": "2026-08-23T07:20:50.842988+00:00",
+  "stdout_sha256": "4df4aebafc5d7450f1ebfc105f5740bce90b9edf829201cea6e272c2cdca9808",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "local_stdout": ".capture-v2-control/logs/RC34-R6-ABNORMAL-GOLDEN-FINAL-SW-001/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/RC34-R6-ABNORMAL-GOLDEN-FINAL-SW-001/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "5758e17a08f2a66cafc26f1b6263e24b8c16692b",
+      "expected_product_head": "3b69b1d0d0b6e01fd01ad3fd4beb635f47eb4be3"
+    },
+    "parsed_output": null
+  }
+}

@@ -1,0 +1,77 @@
+{
+  "schema_version": "capture-v2-r6-abnormal-golden-v1",
+  "gate": "R6_FIRST_DIGIT_LOSS_PRODUCT_E2E",
+  "platform": "APF1250",
+  "scenario": "fault-version panel phone first one-touch call after reboot/version switch",
+  "expected_panel_target": "8000",
+  "source_action": "R6-01-APF1250-FIRST-8000-LIVE-REUSE-RC32",
+  "source_sequence": 133,
+  "source_result": "validation/control/results/R6-01-APF1250-FIRST-8000-LIVE-REUSE-RC32/result.json",
+  "immutable_evidence_collect_action": "R6-02-APF1250-8000-ABNORMAL-EVIDENCE-COLLECT-RC32",
+  "immutable_evidence_collect_sequence": 134,
+  "capture_session_id": "21aab150-2aa0-4fba-aff9-8c5a68ae653f",
+  "capture_attempt_id": "0f52f304-47eb-45f5-9eed-44495c9ad452",
+  "coverage_window_id": "61753390-c170-4147-8dae-f022c95c8ac5",
+  "observed_fxs_timeline": [
+    {"event": "OFFHOOK", "source_ts": "2026-08-23T15:05:31.334000+08:00"},
+    {"event": "OFFHOOK", "source_ts": "2026-08-23T15:05:31.336001+08:00"},
+    {"event": "DTMF", "digit": "0", "source_ts": "2026-08-23T15:05:32.658000+08:00"},
+    {"event": "DTMF", "digit": "0", "source_ts": "2026-08-23T15:05:32.818000+08:00"},
+    {"event": "DTMF", "digit": "0", "source_ts": "2026-08-23T15:05:32.978000+08:00"},
+    {"event": "ONHOOK", "source_ts": "2026-08-23T15:05:49.570000+08:00"}
+  ],
+  "observed_dtmf_digits": "000",
+  "first_digit_expected": "8",
+  "first_digit_observed_at_aim_fxs": false,
+  "capture_integrity": {
+    "stage1_ready": true,
+    "single_producer": true,
+    "durable": true,
+    "kernel_capture_drops": 0,
+    "segments_sealed": 1,
+    "segments_transferred": 1,
+    "segments_acked": 1,
+    "segments_remote_deleted": 1,
+    "pcm_rx_packets": 1159,
+    "pcm_tx_packets": 1159,
+    "pcm_rx_first_packet_ts": "2026-08-23T07:05:31.351463+00:00",
+    "pcm_tx_first_packet_ts": "2026-08-23T07:05:31.351503+00:00",
+    "cleanup_errors": []
+  },
+  "finding": {
+    "status": "SUPPORTED",
+    "conclusion": "FIRST_DIGIT_8_MISSING_BY_AIM_FXS_DTMF_EVENT_LAYER",
+    "confidence": "HIGH",
+    "why": [
+      "The physical panel target is fixed to 8000 for this fault-version scenario.",
+      "The real AIM/FXS transcript contains only three DTMF events and all three are digit 0.",
+      "The first expected digit 8 is absent before SIP-level interpretation is needed.",
+      "The capture plane was armed, durable and reported zero kernel drops, with PCM RX/TX present, so the missing 8 cannot be attributed to a known PCAP capture drop."
+    ]
+  },
+  "localization_boundary": {
+    "proven": "The loss occurs no later than AIM/FXS DTMF event ingestion; it is upstream of SIP call-number construction.",
+    "not_proven": "This evidence alone does not distinguish panel event generation, SLIC/driver, libhardware, and AIM as the exact first failing component.",
+    "required_for_deeper_root_cause": "A lower-layer raw event/debug source earlier than the current AIM/FXS event stream, correlated by source time against the same first-call scenario."
+  },
+  "coverage_anomaly": {
+    "sequence_133_window_status": "PARTIAL",
+    "sequence_133_pcap_track": {
+      "required_ms": 38236,
+      "covered_ms": 38236,
+      "gap_ms": 0,
+      "unknown_ms": 0,
+      "status": "PARTIAL"
+    },
+    "classification": "VALIDATION_COVERAGE_LOGIC_DEFECT_NOT_DATA_PLANE_LOSS",
+    "root_cause": "PcapCoverageEvidenceBuilder allowed historical epochs/non-durable segments outside the current required CoverageWindow to contaminate the uncertain boundary decision for a long-lived CaptureSession.",
+    "fix": "Scope epoch/gap/non-durable-segment uncertainty to objects which overlap the current required CoverageWindow; normalize datetime timezone semantics for SQLite/PostgreSQL parity.",
+    "software_regression": "RC33-PCAP-WINDOW-SCOPE-SW-002:SUCCEEDED",
+    "release_effect": "Does not invalidate the abnormal first-digit-loss finding."
+  },
+  "production_safety": {
+    "capture_engine_authority": "V1",
+    "production_v2_enabled": false,
+    "cutover_performed": false
+  }
+}

@@ -1,0 +1,38 @@
+diff --git a/backend/app/workers/reproduction_tasks.py b/backend/app/workers/reproduction_tasks.py
+--- a/backend/app/workers/reproduction_tasks.py
++++ b/backend/app/workers/reproduction_tasks.py
+@@ -5,4 +5,5 @@
+ from sqlalchemy import select
+ 
+ from app.collectors.asyncssh_adapter import DeviceCommandError, DeviceConnectionError
++from app.capture_v2.runtime import assert_v1_live_capture_allowed
+ from app.core.config import settings
+@@ -231,6 +232,12 @@
+ def start_reproduction(self, session_id: str):
+     if settings.app_env.lower()=='production' and settings.reproduction_platform_mode=='mock':
+         raise RuntimeError('REPRODUCTION_PLATFORM_NOT_CONFIGURED')
++    # V2.1-A/B owns fenced producer authority only; C/D have not installed
++    # durable segment transfer/readiness yet. If V2 is selected, fail closed
++    # before the V1 orchestrator can start its own ring producer. Ownership B-Gates
++    # use CaptureV2ABBridge directly. Default V1 behavior is unchanged.
++    if str(settings.reproduction_platform_mode or 'mock').lower() != 'mock':
++        assert_v1_live_capture_allowed()
+     with SessionLocal() as db:
+         row=db.get(ReproductionSession,session_id)
+         if not row: return {'status':'NOT_FOUND','session_id':session_id}
+diff --git a/backend/app/workers/reproduction_event_tasks.py b/backend/app/workers/reproduction_event_tasks.py
+--- a/backend/app/workers/reproduction_event_tasks.py
++++ b/backend/app/workers/reproduction_event_tasks.py
+@@ -9,2 +9,3 @@
+ from app.collectors.asyncssh_adapter import DeviceCommandError, DeviceConnectionError
++from app.capture_v2.runtime import assert_v1_live_capture_allowed
+ from app.contracts.enums import (
+@@ -246,4 +247,8 @@
+         if resolve_platform_mode() == 'mock':
+             configured=int(((session.effective_profile_snapshot or {}).get('timeouts') or {}).get('watching_timeout_seconds') or 900)
+             return await _watch_mock(db, session, device, int(max_seconds or configured))
++        # A stale queued V1 watcher must not become a second capture authority after
++        # CAPTURE_ENGINE_VERSION flips to V2. Fail closed before _watch_real_v11
++        # can construct/start the legacy segmented ring.
++        assert_v1_live_capture_allowed()
+         return await _watch_real_v11(db, session, device, max_seconds)

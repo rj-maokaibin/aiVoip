@@ -1,0 +1,44 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "RC26-FROZEN-CHECKPOINT-SW-001",
+    "sequence": 114,
+    "created_at": "2026-08-22T03:58:00+00:00",
+    "expires_at": "2026-08-22T15:58:00+00:00",
+    "action_type": "SOFTWARE_REGRESSION",
+    "parameters": {
+      "timeout_seconds": 1800
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "e49441e5efd1cd9e8171143dcacb8286a85fc614"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "Freeze the post-RC25 status/documentation checkpoint as the next reusable validation expected_head. Final regression only; no product activation, no handset action, V1 authoritative and Production V2 disabled. After this action, do not add non-validation/control branch commits before the next real Gate."
+  },
+  "action_sha256": "b60ccddc6baacf2b29362e14c1db71e54f2c80cea0ed8a8e1a4681afb17aac46",
+  "runner_id": "srv:3456908",
+  "state": "SUCCEEDED",
+  "return_code": 0,
+  "verdict": null,
+  "error": null,
+  "finished_at": "2026-08-22T03:58:46.612944+00:00",
+  "stdout_sha256": "a30f0080794bf9c92e9af21dc77686f6d27fdf95985d84ba310dc64d93db8391",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "local_stdout": ".capture-v2-control/logs/RC26-FROZEN-CHECKPOINT-SW-001/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/RC26-FROZEN-CHECKPOINT-SW-001/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "b105c5ac092e821e67114fc75956568ab213c0e2",
+      "expected_product_head": "e49441e5efd1cd9e8171143dcacb8286a85fc614"
+    },
+    "parsed_output": null
+  }
+}

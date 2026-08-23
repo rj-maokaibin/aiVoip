@@ -1,0 +1,44 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "RC25-FINAL-SW-001",
+    "sequence": 113,
+    "created_at": "2026-08-22T03:52:00+00:00",
+    "expires_at": "2026-08-22T15:52:00+00:00",
+    "action_type": "SOFTWARE_REGRESSION",
+    "parameters": {
+      "timeout_seconds": 1800
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "9395bb97ebd8cdaafc700c0701482a960a514bf5"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "Final RC25 software regression after dual-platform R4 no-handset readiness, R5 real PostgreSQL Coverage Ledger self-test, R6 real PostgreSQL evidence-first self-test, and dual-platform 300-second R7 validation-state soak. V1 remains authoritative; Production V2 remains disabled; no cutover authorization implied."
+  },
+  "action_sha256": "b7c360a019f5a53158dc3bcbc7438fac3f4af972d7d426367f9e34b5e8c56b9f",
+  "runner_id": "srv:3456908",
+  "state": "SUCCEEDED",
+  "return_code": 0,
+  "verdict": null,
+  "error": null,
+  "finished_at": "2026-08-22T03:52:45.103294+00:00",
+  "stdout_sha256": "90e365d4fc213d5950368f1ed30864ba6b16ba9db0bafc7234d8607b40ba15f5",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "local_stdout": ".capture-v2-control/logs/RC25-FINAL-SW-001/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/RC25-FINAL-SW-001/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "09272a48b7b37465ef6d3b372aa5e7171667e3ad",
+      "expected_product_head": "9395bb97ebd8cdaafc700c0701482a960a514bf5"
+    },
+    "parsed_output": null
+  }
+}

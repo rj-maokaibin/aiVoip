@@ -1,0 +1,10 @@
+{
+  "sftp_fail_before_get_count": 1,
+  "sftp_fail_after_get_count": 0,
+  "persist_fail_count": 0,
+  "metadata": {
+    "gate": "R3-07",
+    "mode": "REMOTE_DELETE_FAIL_ONCE",
+    "purpose": "Fail the first fenced immutable-segment DELETE before mutation. The segment must remain ACKED with durable server evidence and a later retry must delete it safely."
+  }
+}

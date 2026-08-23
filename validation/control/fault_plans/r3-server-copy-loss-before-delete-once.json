@@ -1,0 +1,10 @@
+{
+  "sftp_fail_before_get_count": 0,
+  "sftp_fail_after_get_count": 0,
+  "persist_fail_count": 1,
+  "metadata": {
+    "gate": "R3-08",
+    "mode": "SERVER_COPY_LOSS_BEFORE_DELETE",
+    "purpose": "Quarantine one real durable server object immediately before DUT delete verification. The system must refuse DUT deletion, re-fetch the exact immutable DUT segment, repair the server copy, then delete safely."
+  }
+}

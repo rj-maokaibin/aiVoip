@@ -1,0 +1,221 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "R3-09-APF1250-SILENT24B-RC15",
+    "sequence": 70,
+    "created_at": "2026-08-22T00:59:00+00:00",
+    "expires_at": "2026-08-22T02:59:00+00:00",
+    "action_type": "GATE_SEGMENT",
+    "parameters": {
+      "device_id": "259f16e6-af9e-4dff-969b-2bb5eac43eb2",
+      "model": "APF1250",
+      "host": "10.48.8.74",
+      "port": 10001,
+      "username": "root",
+      "platform_id": "mt7621",
+      "password_env": "DB:G1V030E010214",
+      "profile_root": "../profiles",
+      "profile_id": "voip-standard",
+      "object_root": "/tmp/voip-reproduction-objects",
+      "output_root": "/tmp/capture-v2-gates",
+      "repo_root": "..",
+      "reproduction_session_id": "AUTO_NEW",
+      "worker_id": "r3-09-apf1250-rc15",
+      "gate_id": "R3-09-APF1250-SILENT24B-RC15",
+      "duration": 20,
+      "interval": 0.5,
+      "transport": "scp",
+      "timeout_seconds": 600
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "81b440b28dbdcbfe0a77a7e0c6627b34ec68d82a"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "RC15 APF1250 R3-09 real 24-byte silent PCAP Gate. Under the active fenced CaptureEpoch, inject exactly one valid classic-PCAP global-header-only closed file, then require production Sealer + SCP + validation + durable store + DB + ACK + exact DUT delete. Preserve remote/server size=24, pcap_valid=true, packet_count=0, and prove no Server/DUT double loss."
+  },
+  "action_sha256": "f312401684a7b831c7d15c5f09f75a6eb228a734c2fbafd6922b561622ec2d03",
+  "runner_id": "srv:3382405",
+  "state": "SUCCEEDED",
+  "return_code": 0,
+  "verdict": "PASS",
+  "error": null,
+  "finished_at": "2026-08-22T00:59:32.664257+00:00",
+  "stdout_sha256": "6c427656ef9771294ba4984d909e928f1e5428be7be2bbf881a1313ed9fdbf56",
+  "stderr_sha256": "b8258e86248ce6f15dfea1a12afcd2ad3fde62ba6d3cd24536ffc8cb3bb61c48",
+  "local_stdout": ".capture-v2-control/logs/R3-09-APF1250-SILENT24B-RC15/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/R3-09-APF1250-SILENT24B-RC15/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "a24370c9b149fb7ba3534b5181be0376d05a8984",
+      "expected_product_head": "81b440b28dbdcbfe0a77a7e0c6627b34ec68d82a"
+    },
+    "parsed_output": {
+      "checks": [
+        {
+          "details": {},
+          "expected": ">0",
+          "name": "at_least_one_segment",
+          "observed": 3,
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": ">0 REMOTE_DELETED",
+          "name": "at_least_one_full_chain",
+          "observed": 3,
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": true,
+          "name": "server_store_observable",
+          "observed": [],
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": [],
+          "name": "no_server_and_dut_double_loss",
+          "observed": [],
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": [],
+          "name": "acked_segments_have_server_copy",
+          "observed": [],
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": true,
+          "name": "no_unacked_eviction",
+          "observed": null,
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": 1,
+          "name": "silent_24b_exactly_one_segment",
+          "observed": 1,
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": {
+            "remote_size": 24,
+            "server_size": 24
+          },
+          "name": "silent_24b_size_preserved",
+          "observed": {
+            "remote_size": 24,
+            "server_size": 24
+          },
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": {
+            "packet_count": 0,
+            "pcap_valid": true
+          },
+          "name": "silent_24b_valid_zero_packet_pcap",
+          "observed": {
+            "packet_count": 0,
+            "pcap_valid": true
+          },
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": "PERSISTED->ACKED->REMOTE_DELETED",
+          "name": "silent_24b_full_ack_delete_chain",
+          "observed": {
+            "ack_pending_at": "2026-08-22T00:59:11.611623+00:00",
+            "acked_at": "2026-08-22T00:59:11.613758+00:00",
+            "capture_epoch_id": "bbb4c931-dc02-4abe-83df-3844fef6fc74",
+            "capture_session_id": "be0e4546-5ae5-4922-ad94-b2fb254f81bd",
+            "device_id": "259f16e6-af9e-4dff-969b-2bb5eac43eb2",
+            "discovered_at": "2026-08-22T00:59:11.491233+00:00",
+            "download_started_at": "2026-08-22T00:59:11.533877+00:00",
+            "downloaded_at": "2026-08-22T00:59:11.600294+00:00",
+            "first_packet_ts": null,
+            "id": "670500a3-4f3c-4abf-bb59-12a721c1e8d7",
+            "last_error_code": null,
+            "last_error_detail": null,
+            "last_packet_ts": null,
+            "lease_epoch_at_ack": 52,
+            "local_temp_path": null,
+            "packet_count": 0,
+            "pcap_valid": true,
+            "persisted_at": "2026-08-22T00:59:11.607999+00:00",
+            "remote_deleted_at": "2026-08-22T00:59:11.681064+00:00",
+            "remote_inode": 44332,
+            "remote_mtime_epoch": 1787360351,
+            "remote_path": "/tmp/aivoip_capture/epochs/CAP_be0e4546_0001_3dba0b62/spool/seg_000000000001__gate_silent_24b_76f2d1464e_01.pcap",
+            "remote_size": 24,
+            "retention_state": "ROLLING",
+            "segment_seq": 1,
+            "server_size": 24,
+            "sha256": "acc530668c8bc60b2d229281130b1899bfc81d70fdada5c34b3236c628f739c8",
+            "state": "REMOTE_DELETED",
+            "storage_key": "capture-v2/259f16e6-af9e-4dff-969b-2bb5eac43eb2/bbb4c931-dc02-4abe-83df-3844fef6fc74/seg_000000000001.pcap",
+            "transfer_attempts": 1,
+            "verified_at": "2026-08-22T00:59:11.603346+00:00",
+            "version": 8
+          },
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": true,
+          "name": "silent_24b_server_copy_durable",
+          "observed": true,
+          "passed": true,
+          "verdict": "PASS"
+        }
+      ],
+      "created_at": "2026-08-22T00:59:32.350261+00:00",
+      "evidence_bundle": "/tmp/capture-v2-gates/20260822T005931Z_R3-09-APF1250-SILENT24B-RC15_259f16e6-af9e-4dff-969b-2bb5eac43eb2",
+      "facts": {
+        "capture_epoch_id": "bbb4c931-dc02-4abe-83df-3844fef6fc74",
+        "capture_session_id": "be0e4546-5ae5-4922-ad94-b2fb254f81bd",
+        "cycles": 33,
+        "errors": 0,
+        "lease_epoch": 52,
+        "silent_acked_at": true,
+        "silent_marker": "gate_silent_24b_76f2d1464e",
+        "silent_match_count": 1,
+        "silent_packet_count": 0,
+        "silent_pcap_valid": true,
+        "silent_persisted_at": true,
+        "silent_remote_deleted_at": true,
+        "silent_remote_size": 24,
+        "silent_segment_id": "670500a3-4f3c-4abf-bb59-12a721c1e8d7",
+        "silent_server_size": 24,
+        "silent_state": "REMOTE_DELETED"
+      },
+      "gate_id": "R3-09-APF1250-SILENT24B-RC15",
+      "summary": "Reliable Segment / SFTP / ACK",
+      "verdict": "PASS"
+    }
+  }
+}

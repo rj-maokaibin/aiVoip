@@ -1,0 +1,44 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "RC44-REHEARSAL-NO-HOST-PORTS-SW-001",
+    "sequence": 156,
+    "created_at": "2026-08-23T10:10:00+00:00",
+    "expires_at": "2026-08-23T22:10:00+00:00",
+    "action_type": "SOFTWARE_REGRESSION",
+    "parameters": {
+      "timeout_seconds": 1200
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "0047463ab84f078f330a3b308e26086aeebcc4f2"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "Regression after introducing the rehearsal-only Compose override which removes Backend and MinIO host port publishing and preserves unconditional isolated-project cleanup. Production V2 remains disabled and V1 remains authoritative."
+  },
+  "action_sha256": "0f2215b523f221b8cc85a84e4225ee9497e38dc61278254c156562f87741f224",
+  "runner_id": "srv:257142",
+  "state": "SUCCEEDED",
+  "return_code": 0,
+  "verdict": null,
+  "error": null,
+  "finished_at": "2026-08-23T10:05:09.992311+00:00",
+  "stdout_sha256": "04530e79451c0d2174996530e3a46282f444b6613d0e0d696248af0ef1a50980",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "local_stdout": ".capture-v2-control/logs/RC44-REHEARSAL-NO-HOST-PORTS-SW-001/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/RC44-REHEARSAL-NO-HOST-PORTS-SW-001/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "0a75dd62e24ad1cefbd251d597116f13baf4b5e4",
+      "expected_product_head": "0047463ab84f078f330a3b308e26086aeebcc4f2"
+    },
+    "parsed_output": null
+  }
+}

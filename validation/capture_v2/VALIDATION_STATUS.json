@@ -1,0 +1,137 @@
+{
+  "schema_version": "capture-v2-real-gates-validation-v6",
+  "production_v2_enabled": false,
+  "capture_engine_authority": "V1",
+  "approved": true,
+  "merge_ready": true,
+  "latest_software_regression": {
+    "action_id": "RC67-TSHARK-HOST-PIN-SW-001",
+    "sequence": 198,
+    "state": "SUCCEEDED",
+    "return_code": 0,
+    "expected_product_head": "22656bd8a14e1815d52481dff6f26c8442057ae1"
+  },
+  "evidence_audit": {
+    "R1_POSTGRESQL_LEASE_FENCING": {"status": "PASS", "remaining": []},
+    "R2_OWNERSHIP_RECOVERY": {"status": "PASS", "platforms": ["APF1250", "APF3260-M"], "remaining": []},
+    "R3_SEGMENT_TRANSFER_ACK": {"status": "PASS", "platforms": ["APF1250", "APF3260-M"], "remaining": []},
+    "R4_READINESS_FXS": {
+      "status": "PASS_WITH_REBOUND_CALIBRATION_REMAINING",
+      "APF1250_fresh_fxs": "R4-01-APF1250-FRESH-FXS-RC26:PASS",
+      "APF3260M_fresh_fxs": "R4-01-APF3260M-FRESH-FXS-RC26:PASS",
+      "APF3260M_hook_flash": {"action": "R4-02-APF3260M-HOOK-FLASH-RC27", "status": "PASS", "measured_flash_ms": 599, "same_attempt_preserved": true, "glitch_misclassification": false},
+      "APF3260M_short_rebound": {"action": "R4-03-APF3260M-REBOUND-RC27", "status": "INCONCLUSIVE", "manual_pulse_ms": 281, "reason": "manual action did not hit <=100ms glitch window"},
+      "remaining": ["DEFERRED_PHYSICAL_OPTIONAL_CALIBRATION: obtain a controlled <=100ms / approximately-20ms rebound using a relay/hook jig or natural rebound evidence"]
+    },
+    "R5_COVERAGE": {
+      "status": "PASS",
+      "historical_real_golden_multi_plane": "PASS",
+      "real_postgresql_coverage_ledger_runtime": "PASS",
+      "live_real_call": {"platform": "APF3260-M", "action": "R5-01-APF3260M-LIVE-COVERAGE-RC32", "status": "PASS", "coverage_window": "COMPLETE", "required_tracks": {"FXS": "COMPLETE", "PCAP": "COMPLETE", "PCM_RX": "COMPLETE", "PCM_TX": "COMPLETE"}, "kernel_capture_drops": 0},
+      "remaining": []
+    },
+    "R6_EVIDENCE_FIRST_REPORT_E2E": {
+      "status": "PASS_WITH_LOCALIZATION_BOUNDARY",
+      "real_postgresql_evidence_first_runtime": "PASS",
+      "abnormal_real_golden": {
+        "platform": "APF1250",
+        "scenario": "fault-version panel phone first one-touch call",
+        "expected_target": "8000",
+        "observed_aim_fxs_digits": "000",
+        "source_action": "R6-01-APF1250-FIRST-8000-LIVE-REUSE-RC32",
+        "immutable_collect_action": "R6-02-APF1250-8000-ABNORMAL-EVIDENCE-COLLECT-RC32",
+        "audit_file": "validation/capture_v2/R6_APF1250_FIRST_8000_ABNORMAL_GOLDEN_RC33.json",
+        "finding": "FIRST_DIGIT_8_MISSING_BY_AIM_FXS_DTMF_EVENT_LAYER",
+        "finding_confidence": "HIGH",
+        "capture_integrity": {"kernel_capture_drops": 0, "pcm_rx_packets": 1159, "pcm_tx_packets": 1159, "durable": true, "cleanup_errors": 0}
+      },
+      "coverage_defect_found_and_fixed": {
+        "issue": "historical CaptureEpoch/non-durable segment outside current required window could contaminate PCAP uncertain-boundary status",
+        "fix": "scope PCAP uncertainty to the current CoverageWindow and normalize timezone comparisons",
+        "regression": "RC33-PCAP-WINDOW-SCOPE-SW-002:SUCCEEDED"
+      },
+      "product_report_materialization": {
+        "action": "R6-03-APF1250-8000-PRODUCT-REPORT-MATERIALIZE-RC58",
+        "status": "PASS",
+        "result_file": "validation/control/results/R6-03-APF1250-8000-PRODUCT-REPORT-MATERIALIZE-RC58/result.json",
+        "coverage_window": "COMPLETE",
+        "required_tracks": {"FXS": "COMPLETE", "PCAP": "COMPLETE", "PCM_RX": "COMPLETE", "PCM_TX": "COMPLETE"},
+        "pcap_uncertain_boundary": false,
+        "observed_raw_fxs_digits": "000",
+        "evidence_asset_count": 8,
+        "quality_snapshot_id": "376e7a85-5e06-4660-8bd5-ac758098ffb8",
+        "diagnostic_confidence": "HIGH",
+        "finding_supported": true,
+        "temporary_postgres_restored_to_absent": true,
+        "dut_mutation": false,
+        "production_mutation": false
+      },
+      "remaining": ["OPTIONAL_ROOT_CAUSE_DEPTH: current evidence proves loss no later than AIM/FXS DTMF event ingestion, but does not distinguish panel event generation vs SLIC/driver vs libhardware vs AIM as the exact first failing component"]
+    },
+    "R7_SHADOW_LONGRUN_ROLLBACK": {
+      "status": "PASS",
+      "validation_state_soak": {"status": "PASS", "APF1250": "R7-00-APF1250-SOAK300-RC24:PASS", "APF3260-M": "R7-00-APF3260M-SOAK300-RC24:PASS"},
+      "real_service_activation_rollback": {
+        "action": "R7-02-APF3260M-SERVICE-ACTIVATION-ROLLBACK-RC55",
+        "status": "PASS",
+        "pre_v1_no_v2_producer": true,
+        "v2_path_ready": true,
+        "v2_business_state": "WATCHING",
+        "stable_v2_producer_count": 1,
+        "durable_segment": true,
+        "cleanup_verified": true,
+        "kernel_capture_drops": 0,
+        "lease_released": true,
+        "post_cleanup_v2_producer_count": 0,
+        "v1_health_restored": true,
+        "post_rollback_v2_producer_count": 0,
+        "r7_rollback_gate": "PASS"
+      },
+      "remaining": []
+    }
+  },
+  "master_baseline_integration": {
+    "status": "PASS",
+    "audited_master": "e8d108a228b151b7711bfe6048c3f39e94b57783",
+    "draft_master_fix_pr": 37,
+    "draft_master_fix_candidate": "391486c7a70f8e36c088dcb512397044a552c78c",
+    "RC60": "FAILED_IN_FULL_BACKEND_WITH_2_INTEGRATION_TEST_CONTRACT_MISMATCHES",
+    "RC61_capture_v2_regression": "SUCCEEDED",
+    "RC64_dispatch_regression": "SUCCEEDED",
+    "RC66": "INCONCLUSIVE_ONLY_TSHARK_DISCOVERY; merge/capture/frozen/full-software passed",
+    "RC67_tshark_host_pin_regression": "SUCCEEDED",
+    "RC68": {
+      "status": "PASS",
+      "action": "RC68-MASTER-FIX-CANDIDATE-INTEGRATION-005",
+      "sequence": 199,
+      "return_code": 0,
+      "verdict": "PASS",
+      "merge_conflicts": [],
+      "capture_v2_tests_passed": 225,
+      "frozen_contracts": "PASS",
+      "full_software_acceptance": "PASS",
+      "tshark_binary": "/usr/bin/tshark",
+      "real_offline_golden_001": {"status": "PASS", "checks_passed": 142, "checks_total": 142},
+      "branch_mutation": false,
+      "merge_commit_created": false,
+      "production_mutation": false,
+      "dut_mutation": false
+    }
+  },
+  "non_physical_validation_remaining": [],
+  "remaining_user_assistance": {
+    "physical_handset": ["optional <=100ms rebound calibration if this is required as a release gate", "another fault first-call reproduction only if lower-layer raw debug earlier than AIM/FXS is added to localize the exact failing component"],
+    "production_cutover": []
+  },
+  "production_cutover": {
+    "status": "AUTHORIZED_PREFLIGHT_PENDING",
+    "capture_engine_version": "V1",
+    "capture_v2_production_enabled": false,
+    "approved": true,
+    "authorized_at": "2026-08-23T15:27:00+00:00",
+    "authorization_source": "explicit_user_instruction",
+    "technical_gates_passed": true,
+    "pr_must_remain_draft": false
+  },
+  "next_required_step": "DEPLOYMENT_PREFLIGHT_THEN_GUARDED_PRODUCTION_CUTOVER"
+}

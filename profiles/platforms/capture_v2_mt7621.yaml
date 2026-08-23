@@ -1,0 +1,12 @@
+schema_version: 1
+platform_id: mt7621
+profile_version: "1"
+models:
+  - APF1250
+  - APF1250-M
+  - APF1250-S
+resource:
+  max_transfer_parallelism: 1
+  # Frozen in Phase C after SFTP/backlog fault injection.
+  spool_max_unacked_bytes: null
+  spool_min_free_bytes: null

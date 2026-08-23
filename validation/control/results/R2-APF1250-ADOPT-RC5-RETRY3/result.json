@@ -1,0 +1,148 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "R2-APF1250-ADOPT-RC5-RETRY3",
+    "sequence": 16,
+    "created_at": "2026-08-21T13:34:00+00:00",
+    "expires_at": "2026-08-21T15:34:00+00:00",
+    "action_type": "GATE_OWNERSHIP_ADOPT",
+    "parameters": {
+      "device_id": "259f16e6-af9e-4dff-969b-2bb5eac43eb2",
+      "model": "APF1250",
+      "host": "47.104.22.0",
+      "port": 63111,
+      "username": "root",
+      "platform_id": "mt7621",
+      "password_env": "DB:G1V030E010214",
+      "profile_root": "../profiles",
+      "profile_id": "voip-standard",
+      "object_root": "/tmp/voip-reproduction-objects",
+      "output_root": "/tmp/capture-v2-gates",
+      "repo_root": "..",
+      "reproduction_session_id": "FROM_STATE",
+      "worker_id": "r2-apf1250-b-retry3",
+      "before_state": "/tmp/capture-v2-control/r2-apf1250-before.json",
+      "gate_id": "R2-01-ADOPT-RC5-RETRY3",
+      "timeout_seconds": 300
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "068c8586947e426b7924442839cd35c751618aa4"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "Retry APF1250 R2 takeover using refreshed EWEB SSH tunnel 47.104.22.0:63111. Secret stays local via DB:<SN>. Must adopt the same DUT producer with identical PID/starttime/CaptureEpoch, increased lease_epoch, exactly one producer, and no unrecovered gap. Keep V1 authoritative and Production V2 disabled."
+  },
+  "action_sha256": "89631d41f90083dda0a60c3127bf818a4c6dfdf122e9469ede5e024e654bc67d",
+  "runner_id": "srv:2933695",
+  "state": "SUCCEEDED",
+  "return_code": 0,
+  "verdict": "PASS",
+  "error": null,
+  "finished_at": "2026-08-21T13:36:17.529795+00:00",
+  "stdout_sha256": "aa6c3174eb8a2805b3a685f51ad64108d3945d423c495a0c715c5f68e12ffe5d",
+  "stderr_sha256": "b8258e86248ce6f15dfea1a12afcd2ad3fde62ba6d3cd24536ffc8cb3bb61c48",
+  "local_stdout": ".capture-v2-control/logs/R2-APF1250-ADOPT-RC5-RETRY3/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/R2-APF1250-ADOPT-RC5-RETRY3/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "cf292978054979027b31452df53d6f119422461e",
+      "expected_product_head": "068c8586947e426b7924442839cd35c751618aa4"
+    },
+    "parsed_output": {
+      "checks": [
+        {
+          "details": {},
+          "expected": 1,
+          "name": "exactly_one_owned_producer",
+          "observed": 1,
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": 1,
+          "name": "one_running_epoch",
+          "observed": 1,
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": "one ACTIVE lease",
+          "name": "lease_active",
+          "observed": [
+            {
+              "lease_epoch": 28,
+              "state": "ACTIVE"
+            }
+          ],
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": 0,
+          "name": "no_unrecovered_gap",
+          "observed": 0,
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": 5148,
+          "name": "producer_pid_adopted",
+          "observed": 5148,
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": 9647000,
+          "name": "producer_starttime_adopted",
+          "observed": 9647000,
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": "cd7eae82-0f4c-4b57-9b42-5faa04ae7034",
+          "name": "capture_epoch_unchanged",
+          "observed": "cd7eae82-0f4c-4b57-9b42-5faa04ae7034",
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": "> before",
+          "name": "lease_epoch_increased",
+          "observed": 28,
+          "passed": true,
+          "verdict": "PASS"
+        }
+      ],
+      "created_at": "2026-08-21T13:36:17.228812+00:00",
+      "evidence_bundle": "/tmp/capture-v2-gates/20260821T133613Z_R2-01-ADOPT-RC5-RETRY3_259f16e6-af9e-4dff-969b-2bb5eac43eb2",
+      "facts": {
+        "after_capture_epoch_id": "cd7eae82-0f4c-4b57-9b42-5faa04ae7034",
+        "after_lease_epoch": 28,
+        "after_pid": 5148,
+        "after_starttime": 9647000,
+        "before_capture_epoch_id": "cd7eae82-0f4c-4b57-9b42-5faa04ae7034",
+        "before_lease_epoch": 27,
+        "before_pid": 5148,
+        "before_starttime": 9647000,
+        "recovery_status": "ADOPTED"
+      },
+      "gate_id": "R2-01-ADOPT-RC5-RETRY3",
+      "summary": "Ownership/recovery invariant",
+      "verdict": "PASS"
+    }
+  }
+}

@@ -1,0 +1,111 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "R7-02-APF3260M-SERVICE-ACTIVATION-ROLLBACK-RC51",
+    "sequence": 171,
+    "created_at": "2026-08-23T12:12:00+00:00",
+    "expires_at": "2026-08-23T23:12:00+00:00",
+    "action_type": "ACTIVATION_REHEARSAL",
+    "parameters": {
+      "timeout_seconds": 3600,
+      "sn": "G1U060H000384",
+      "host": "10.48.8.74",
+      "port": 10002,
+      "username": "root",
+      "platform_id": "mt7981",
+      "model": "APF3260-M",
+      "profile_id": "VOIP_GENERIC_FULL_CAPTURE",
+      "observation_seconds": 20
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "1216d0c304d9677a5faee617db5ba3a5de4a2147"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "Guarded APF3260-M service-level activation/rollback rerun after RC51 rehearsal-only stale-fence fix and successful software regression. Before V2 enqueue, the runtime must prove ACTIVATION_REHEARSAL mode, Production V2=false, zero AIVOIP producer and no live op.lock, then clear only stale DUT control fence identity. PASS still requires PRE_V1 -> rehearsal V2 with exactly one real DUT producer and durable segment -> serialized cleanup -> restored V1 business path with zero residual V2 producer. Original env remains untouched and Production V2 remains false."
+  },
+  "action_sha256": "ba838c3362745d24ed1ac23119ff993f8eec44479b10a02721477bf79739cdb2",
+  "runner_id": "srv:257142",
+  "state": "INCONCLUSIVE",
+  "return_code": 2,
+  "verdict": "INCONCLUSIVE",
+  "error": null,
+  "finished_at": "2026-08-23T12:13:34.161591+00:00",
+  "stdout_sha256": "40c494cec252cae9cdab26632c488bc9614bbf758974052ba68f2008bb161527",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "local_stdout": ".capture-v2-control/logs/R7-02-APF3260M-SERVICE-ACTIVATION-ROLLBACK-RC51/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/R7-02-APF3260M-SERVICE-ACTIVATION-ROLLBACK-RC51/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "17dc55c33b29a673fd7a23ab5df5d880a129a5c8",
+      "expected_product_head": "1216d0c304d9677a5faee617db5ba3a5de4a2147"
+    },
+    "parsed_output": {
+      "scope": "BOUNDED_SERVICE_LEVEL_ACTIVATION_REHEARSAL",
+      "production_v2_enabled": false,
+      "original_env_modified": false,
+      "project": "capture-v2-r7-rehearsal",
+      "device": {
+        "sn": "G1U060H000384",
+        "model": "APF3260-M",
+        "host": "10.48.8.74",
+        "port": 10002
+      },
+      "checks": [],
+      "pre_v1": {
+        "contract": {
+          "capture_engine_version": "V1",
+          "capture_v2_production_enabled": false,
+          "contract_ok": true,
+          "expected": "V1",
+          "reproduction_platform_mode": "real"
+        },
+        "session": {
+          "business_lock_status": null,
+          "capture": null,
+          "case_id": "3a6432f7-08fd-43bb-96bc-7288526cb27b",
+          "cleanup_status": "NOT_REQUIRED",
+          "device_id": "a825af74-b960-4f76-b9d8-50afd30e57cf",
+          "dut": {
+            "producer_count": 0,
+            "producers": []
+          },
+          "exists": true,
+          "session_id": "01dbe1ae-3e0b-40fb-87ae-b983431b6a13",
+          "state": "CREATED",
+          "terminal_reason": null
+        }
+      },
+      "verdict": "INCONCLUSIVE",
+      "reason": "SERVICE_LEVEL_REHEARSAL_EXCEPTION",
+      "failure_phase": "V2_REHEARSAL_ACTIVATION",
+      "error": "RuntimeError:COMMAND_FAILED:/usr/bin/docker:01dbe1ae-3e0b-40fb-87ae-b983431b6a13:rc=1:  self._pn = dh.DHParameterNumbers(p, g)\n/usr/local/lib/python3.12/site-packages/asyncssh/crypto/dh.py:43: CryptographyDeprecationWarning: Diffie-Hellman over finite fields (FFDH) is deprecated and support will be removed in a future release. Use a more modern key exchange algorithm.\n  peer_key = dh.DHPublicNumbers(peer_public, self._pn).public_key()\nTraceback (most recent call last):\n  File \"<frozen runpy>\", line 198, in _run_module_as_main\n  File \"<frozen runpy>\", line 88, in _run_code\n  File \"/app/app/capture_v2/control/service_rehearsal_runtime.py\", line 311, in <module>\n    raise SystemExit(main())\n                     ^^^^^^\n  File \"/app/app/capture_v2/control/service_rehearsal_runtime.py\", line 299, in main\n    payload = enqueue_start(args)\n              ^^^^^^^^^^^^^^^^^^^\n  File \"/app/app/capture_v2/control/service_rehearsal_runtime.py\", line 134, in enqueue_start\n    stale_fence_cleanup = asyncio.run(_clear_rehearsal_fence(args.session_id))\n                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/asyncio/runners.py\", line 195, in run\n    return runner.run(main)\n           ^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/asyncio/runners.py\", line 118, in run\n    return self._loop.run_until_complete(task)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/asyncio/base_events.py\", line 691, in run_until_complete\n    return future.result()\n           ^^^^^^^^^^^^^^^\n  File \"/app/app/capture_v2/control/service_rehearsal_runtime.py\", line 123, in _clear_rehearsal_fence\n    return await clear_stale_fence_for_rehearsal(adapter)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/app/app/capture_v2/control/rehearsal_fence_cleanup.py\", line 104, in clear_stale_fence_for_rehearsal\n    raise RuntimeError(\"REHEARSAL_STALE_FENCE_CLEAR_PRODUCER_RACE\")\nRuntimeError: REHEARSAL_STALE_FENCE_CLEAR_PRODUCER_RACE",
+      "final_server_target_state": "PRESTATE_NO_REHEARSAL_CONTAINERS",
+      "final_authority_target": "V1",
+      "diagnostics": {
+        "compose_ps": "NAME      IMAGE     COMMAND   SERVICE   CREATED   STATUS    PORTS\n",
+        "logs_tail": {
+          "backend": "",
+          "postgres": "",
+          "redis": "",
+          "minio": "",
+          "reproduction-worker": "",
+          "reproduction-control-high-worker": "",
+          "reproduction-watch-worker": "",
+          "beat": ""
+        }
+      },
+      "guarded_rehearsal": true,
+      "host_port_publishing": "DISABLED_BY_COMPOSE_OVERRIDE",
+      "backend_health_wait_seconds": 120,
+      "final_rehearsal_project_empty": true
+    }
+  }
+}

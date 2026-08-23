@@ -1,0 +1,44 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "RC10-SW-001",
+    "sequence": 56,
+    "created_at": "2026-08-22T00:23:30+00:00",
+    "expires_at": "2026-08-22T02:23:30+00:00",
+    "action_type": "SOFTWARE_REGRESSION",
+    "parameters": {
+      "timeout_seconds": 1800
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "efb4e67bc76a750b40bf6bb093d35e5014ac7b56"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "RC10 software regression after adding validation-only R3-09 header-only 24B PCAP and R3-11 pending-spool worker restart/adoption real Gate tooling plus deterministic evaluators. Capture Engine runtime paths remain unchanged; production V2 stays disabled."
+  },
+  "action_sha256": "ce4b77de1108d6cc960ba7cd58adbde73e2e0d5decd24e7f3067f37ef1f2cec0",
+  "runner_id": "srv:3382405",
+  "state": "SUCCEEDED",
+  "return_code": 0,
+  "verdict": null,
+  "error": null,
+  "finished_at": "2026-08-22T00:23:35.516174+00:00",
+  "stdout_sha256": "7e83b0ad76db330e54a47b1160cc324620c5f842df0c171660806c1879a16989",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "local_stdout": ".capture-v2-control/logs/RC10-SW-001/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/RC10-SW-001/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "afcf65657be8b2574de949bbed16fda6e1d93fde",
+      "expected_product_head": "efb4e67bc76a750b40bf6bb093d35e5014ac7b56"
+    },
+    "parsed_output": null
+  }
+}

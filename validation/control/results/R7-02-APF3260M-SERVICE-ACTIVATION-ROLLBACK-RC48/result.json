@@ -1,0 +1,111 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "R7-02-APF3260M-SERVICE-ACTIVATION-ROLLBACK-RC48",
+    "sequence": 165,
+    "created_at": "2026-08-23T10:30:00+00:00",
+    "expires_at": "2026-08-23T22:30:00+00:00",
+    "action_type": "ACTIVATION_REHEARSAL",
+    "parameters": {
+      "timeout_seconds": 3600,
+      "sn": "G1U060H000384",
+      "host": "10.48.8.74",
+      "port": 10002,
+      "username": "root",
+      "platform_id": "mt7981",
+      "model": "APF3260-M",
+      "profile_id": "VOIP_GENERIC_FULL_CAPTURE",
+      "observation_seconds": 20
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "449c4ceece0349027d245357b3c2bb8721adae8d"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "Guarded APF3260-M service-level activation/rollback rehearsal with worker-timeout logs retained before cleanup. Production V2 remains false; original env untouched; zero host ports; project preclean/final cleanup required."
+  },
+  "action_sha256": "f755416d7de98f1d0fadbccd793c92f1201af286debee260f6b17e0451f147d6",
+  "runner_id": "srv:257142",
+  "state": "INCONCLUSIVE",
+  "return_code": 2,
+  "verdict": "INCONCLUSIVE",
+  "error": null,
+  "finished_at": "2026-08-23T10:34:54.661988+00:00",
+  "stdout_sha256": "0265f879a3a491878783991deeece46abe912da8a065274f6b0275e0558115cb",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "local_stdout": ".capture-v2-control/logs/R7-02-APF3260M-SERVICE-ACTIVATION-ROLLBACK-RC48/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/R7-02-APF3260M-SERVICE-ACTIVATION-ROLLBACK-RC48/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "91348519e105af8271ee2d0e27930f1404cebcb6",
+      "expected_product_head": "449c4ceece0349027d245357b3c2bb8721adae8d"
+    },
+    "parsed_output": {
+      "scope": "BOUNDED_SERVICE_LEVEL_ACTIVATION_REHEARSAL",
+      "production_v2_enabled": false,
+      "original_env_modified": false,
+      "project": "capture-v2-r7-rehearsal",
+      "device": {
+        "sn": "G1U060H000384",
+        "model": "APF3260-M",
+        "host": "10.48.8.74",
+        "port": 10002
+      },
+      "checks": [],
+      "pre_v1": {
+        "contract": {
+          "capture_engine_version": "V1",
+          "capture_v2_production_enabled": false,
+          "contract_ok": true,
+          "expected": "V1",
+          "reproduction_platform_mode": "real"
+        },
+        "session": {
+          "business_lock_status": null,
+          "capture": null,
+          "case_id": "1d2a9880-7e4a-4509-8cbf-532b98d5bb96",
+          "cleanup_status": "NOT_REQUIRED",
+          "device_id": "9425e414-32c7-4d7e-aa52-361e3c36fb9d",
+          "dut": {
+            "producer_count": 0,
+            "producers": []
+          },
+          "exists": true,
+          "session_id": "fd69d7e9-0b7c-420f-b1b6-0e782dfe7c91",
+          "state": "CREATED",
+          "terminal_reason": null
+        }
+      },
+      "verdict": "INCONCLUSIVE",
+      "reason": "SERVICE_LEVEL_REHEARSAL_EXCEPTION",
+      "failure_phase": "V2_REHEARSAL_ACTIVATION",
+      "error": "RuntimeError:reproduction-watch-worker-1  |   . feishu.ingest_attachments\nreproduction-watch-worker-1  |   . feishu.ingest_follow_up\nreproduction-watch-worker-1  |   . feishu.long_connection\nreproduction-watch-worker-1  |   . feishu.project_evidence_report\nreproduction-watch-worker-1  |   . feishu.reply_text\nreproduction-watch-worker-1  |   . feishu.sync_case_card\nreproduction-watch-worker-1  |   . feishu.sync_document_acl\nreproduction-watch-worker-1  |   . fix_verification.schedule_reproduction\nreproduction-watch-worker-1  |   . media.analyze_evidence\nreproduction-watch-worker-1  |   . packet.analyze_evidence\nreproduction-watch-worker-1  |   . pcm.analyze_evidence\nreproduction-watch-worker-1  |   . reproduction.cancel\nreproduction-watch-worker-1  |   . reproduction.reconcile\nreproduction-watch-worker-1  |   . reproduction.start\nreproduction-watch-worker-1  |   . reproduction.v2_cleanup\nreproduction-watch-worker-1  |   . reproduction.watch_fxs_events\nreproduction-watch-worker-1  | \nreproduction-watch-worker-1  | [2026-08-23 10:30:59,898: INFO/MainProcess] Connected to redis://redis:6379/0\nreproduction-watch-worker-1  | [2026-08-23 10:30:59,901: INFO/MainProcess] mingle: searching for neighbors\nreproduction-watch-worker-1  | [2026-08-23 10:31:00,909: INFO/MainProcess] mingle: all alone\nreproduction-watch-worker-1  | [2026-08-23 10:31:00,921: INFO/MainProcess] celery@a508d677b2ce ready.\n\n[backend]\nbackend-1  | INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.\nbackend-1  | INFO  [alembic.runtime.migration] Will assume transactional DDL.\nbackend-1  | INFO:     Started server process [15]\nbackend-1  | INFO:     Waiting for application startup.\nbackend-1  | INFO:     Application startup complete.\nbackend-1  | INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)\nbackend-1  | INFO:     127.0.0.1:37976 - \"GET /health HTTP/1.1\" 200 OK",
+      "final_server_target_state": "PRESTATE_NO_REHEARSAL_CONTAINERS",
+      "final_authority_target": "V1",
+      "diagnostics": {
+        "compose_ps": "NAME      IMAGE     COMMAND   SERVICE   CREATED   STATUS    PORTS\n",
+        "logs_tail": {
+          "backend": "",
+          "postgres": "",
+          "redis": "",
+          "minio": "",
+          "reproduction-worker": "",
+          "reproduction-control-high-worker": "",
+          "reproduction-watch-worker": "",
+          "beat": ""
+        }
+      },
+      "guarded_rehearsal": true,
+      "host_port_publishing": "DISABLED_BY_COMPOSE_OVERRIDE",
+      "backend_health_wait_seconds": 120,
+      "final_rehearsal_project_empty": true
+    }
+  }
+}

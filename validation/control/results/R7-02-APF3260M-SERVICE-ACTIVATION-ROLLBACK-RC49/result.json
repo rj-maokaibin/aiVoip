@@ -1,0 +1,111 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "R7-02-APF3260M-SERVICE-ACTIVATION-ROLLBACK-RC49",
+    "sequence": 167,
+    "created_at": "2026-08-23T10:39:00+00:00",
+    "expires_at": "2026-08-23T22:39:00+00:00",
+    "action_type": "ACTIVATION_REHEARSAL",
+    "parameters": {
+      "timeout_seconds": 3600,
+      "sn": "G1U060H000384",
+      "host": "10.48.8.74",
+      "port": 10002,
+      "username": "root",
+      "platform_id": "mt7981",
+      "model": "APF3260-M",
+      "profile_id": "VOIP_GENERIC_FULL_CAPTURE",
+      "observation_seconds": 20
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "8cc6b32177e7504738ec1a32098cdb5880ce41e8"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "Guarded APF3260-M service rehearsal focused on preserving reproduction.start worker failure tail. Production V2 remains false; original env untouched; zero host ports; project cleanup is unconditional."
+  },
+  "action_sha256": "aa8eac7add8afc10029d44d9e7ba4691209976ee2c2a53832dc19cc7eac497cb",
+  "runner_id": "srv:257142",
+  "state": "INCONCLUSIVE",
+  "return_code": 2,
+  "verdict": "INCONCLUSIVE",
+  "error": null,
+  "finished_at": "2026-08-23T10:44:11.892352+00:00",
+  "stdout_sha256": "1d78c3aaa15241404d37943b93ef3cf39a1fd18e03c6ca3340ed73fa4b9ec2e2",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "local_stdout": ".capture-v2-control/logs/R7-02-APF3260M-SERVICE-ACTIVATION-ROLLBACK-RC49/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/R7-02-APF3260M-SERVICE-ACTIVATION-ROLLBACK-RC49/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "25ff4cc6c32bb663c745cce760d887cb369e2dd6",
+      "expected_product_head": "8cc6b32177e7504738ec1a32098cdb5880ce41e8"
+    },
+    "parsed_output": {
+      "scope": "BOUNDED_SERVICE_LEVEL_ACTIVATION_REHEARSAL",
+      "production_v2_enabled": false,
+      "original_env_modified": false,
+      "project": "capture-v2-r7-rehearsal",
+      "device": {
+        "sn": "G1U060H000384",
+        "model": "APF3260-M",
+        "host": "10.48.8.74",
+        "port": 10002
+      },
+      "checks": [],
+      "pre_v1": {
+        "contract": {
+          "capture_engine_version": "V1",
+          "capture_v2_production_enabled": false,
+          "contract_ok": true,
+          "expected": "V1",
+          "reproduction_platform_mode": "real"
+        },
+        "session": {
+          "business_lock_status": null,
+          "capture": null,
+          "case_id": "af16fc30-6765-46f1-aa55-dacec1240096",
+          "cleanup_status": "NOT_REQUIRED",
+          "device_id": "4f82b20b-4b5f-4717-8048-731c8460a2b3",
+          "dut": {
+            "producer_count": 0,
+            "producers": []
+          },
+          "exists": true,
+          "session_id": "2d1a8707-5f23-400c-8fec-74d2dd4abd0d",
+          "state": "CREATED",
+          "terminal_reason": null
+        }
+      },
+      "verdict": "INCONCLUSIVE",
+      "reason": "SERVICE_LEVEL_REHEARSAL_EXCEPTION",
+      "failure_phase": "V2_REHEARSAL_ACTIVATION",
+      "error": "RuntimeError:[reproduction-worker]\nreproduction-worker-1  | [2026-08-23 10:40:26,859: INFO/ForkPoolWorker-1] [conn=0] Sending disconnect: Disconnected by application (11)\nreproduction-worker-1  | [2026-08-23 10:40:26,859: INFO/ForkPoolWorker-1] [conn=0] Connection closed\nreproduction-worker-1  | [2026-08-23 10:40:26,866: ERROR/ForkPoolWorker-1] Task reproduction.start[6f05a357-1605-428c-b619-f03f5d8cce4c] raised unexpected: RuntimeError('CAPTURE_V2_ACTIVE_DEVICE_LOCK_NOT_FOUND')\nreproduction-worker-1  | Traceback (most recent call last):\nreproduction-worker-1  |   File \"/usr/local/lib/python3.12/site-packages/celery/app/trace.py\", line 453, in trace_task\nreproduction-worker-1  |     R = retval = fun(*args, **kwargs)\nreproduction-worker-1  |                  ^^^^^^^^^^^^^^^^^^^^\nreproduction-worker-1  |   File \"/usr/local/lib/python3.12/site-packages/celery/app/trace.py\", line 736, in __protected_call__\nreproduction-worker-1  |     return self.run(*args, **kwargs)\nreproduction-worker-1  |            ^^^^^^^^^^^^^^^^^^^^^^^^^\nreproduction-worker-1  |   File \"/usr/local/lib/python3.12/site-packages/celery/app/autoretry.py\", line 38, in run\nreproduction-worker-1  |     return task._orig_run(*args, **kwargs)\nreproduction-worker-1  |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nreproduction-worker-1  |   File \"/app/app/workers/reproduction_tasks.py\", line 278, in start_reproduction\nreproduction-worker-1  |     orch.start(db,session=row,owner_worker=f'celery:{self.request.id}',actor='reproduction-worker')\nreproduction-worker-1  |   File \"/app/app/reproduction/orchestrator.py\", line 216, in start\nreproduction-worker-1  |     return self._arm_current_stage(db,session=session,actor=actor)\nreproduction-worker-1  |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nreproduction-worker-1  |   File \"/app/app/reproduction/orchestrator.py\", line 223, in _arm_current_stage\nreproduction-worker-1  |     context=self.platform.resolve_voice_context(device)\nreproduction-worker-1  |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nreproduction-worker-1  |   File \"/app/app/capture_v2/production_platform.py\", line 210, in resolve_voice_context\nreproduction-worker-1  |     self._ensure_capture_v2(device)\nreproduction-worker-1  |   File \"/app/app/capture_v2/production_platform.py\", line 140, in _ensure_capture_v2\nreproduction-worker-1  |     self._reproduction_session_id, self._capture_worker_id = self._resolve_reproduction_binding(device)\nreproduction-worker-1  |                                                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nreproduction-worker-1  |   File \"/app/app/capture_v2/production_platform.py\", line 101, in _resolve_reproduction_binding\nreproduction-worker-1  |     raise RuntimeError(\"CAPTURE_V2_ACTIVE_DEVICE_LOCK_NOT_FOUND\")\nreproduction-worker-1  | RuntimeError: CAPTURE_V2_ACTIVE_DEVICE_LOCK_NOT_FOUND",
+      "final_server_target_state": "PRESTATE_NO_REHEARSAL_CONTAINERS",
+      "final_authority_target": "V1",
+      "diagnostics": {
+        "compose_ps": "NAME      IMAGE     COMMAND   SERVICE   CREATED   STATUS    PORTS\n",
+        "logs_tail": {
+          "backend": "",
+          "postgres": "",
+          "redis": "",
+          "minio": "",
+          "reproduction-worker": "",
+          "reproduction-control-high-worker": "",
+          "reproduction-watch-worker": "",
+          "beat": ""
+        }
+      },
+      "guarded_rehearsal": true,
+      "host_port_publishing": "DISABLED_BY_COMPOSE_OVERRIDE",
+      "backend_health_wait_seconds": 120,
+      "final_rehearsal_project_empty": true
+    }
+  }
+}

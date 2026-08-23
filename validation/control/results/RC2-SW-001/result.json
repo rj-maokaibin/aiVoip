@@ -1,0 +1,36 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "RC2-SW-001",
+    "sequence": 3,
+    "created_at": "2026-08-21T08:33:00+00:00",
+    "expires_at": "2026-08-21T10:33:00+00:00",
+    "action_type": "SOFTWARE_REGRESSION",
+    "parameters": {
+      "timeout_seconds": 1800
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "4bcf0b21ae211705c309e51b9d8f6aaba3a8558b"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "RC2 software regression after adding the allowlisted real PostgreSQL stale-lease fencing Gate. Must pass before R1-02 executes."
+  },
+  "action_sha256": "fccd39cc4313d37270602725c07d351d7d3cf6b48aed9e0643452625c04addd1",
+  "runner_id": "srv:2903921",
+  "state": "REJECTED",
+  "return_code": null,
+  "verdict": null,
+  "error": "SAFETY_GIT_DIRTY:M validation/control/status.json",
+  "finished_at": "2026-08-21T08:36:40.191705+00:00",
+  "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "local_stdout": ".capture-v2-control/logs/RC2-SW-001/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/RC2-SW-001/stderr.log",
+  "detail": {}
+}

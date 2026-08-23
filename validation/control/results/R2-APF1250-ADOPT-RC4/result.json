@@ -1,0 +1,60 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "R2-APF1250-ADOPT-RC4",
+    "sequence": 9,
+    "created_at": "2026-08-21T12:54:30+00:00",
+    "expires_at": "2026-08-21T14:54:30+00:00",
+    "action_type": "GATE_OWNERSHIP_ADOPT",
+    "parameters": {
+      "device_id": "259f16e6-af9e-4dff-969b-2bb5eac43eb2",
+      "model": "APF1250",
+      "host": "47.104.22.0",
+      "port": 65394,
+      "username": "root",
+      "platform_id": "mt7621",
+      "password_env": "DB:G1V030E010214",
+      "profile_root": "../profiles",
+      "profile_id": "voip-standard",
+      "object_root": "/tmp/voip-reproduction-objects",
+      "output_root": "/tmp/capture-v2-gates",
+      "repo_root": "..",
+      "reproduction_session_id": "FROM_STATE",
+      "worker_id": "r2-apf1250-b",
+      "before_state": "/tmp/capture-v2-control/r2-apf1250-before.json",
+      "gate_id": "R2-01-ADOPT-RC4",
+      "timeout_seconds": 300
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "e87c4c97944590b21c4fc1f932e9f073bb82bea4"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "Clean RC4 APF1250 R2 takeover after the establish lease naturally expires. Worker B must adopt the same DUT producer: identical PID/starttime/CaptureEpoch, increased lease_epoch, exactly one producer, no unrecovered gap. Password remains local via DB:<SN>."
+  },
+  "action_sha256": "d4d31b47bbaed09b2e34829c3c54ca138f10b351e8088b1889280a961dd46297",
+  "runner_id": "srv:2933695",
+  "state": "FAILED",
+  "return_code": 1,
+  "verdict": null,
+  "error": null,
+  "finished_at": "2026-08-21T12:55:04.555075+00:00",
+  "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "stderr_sha256": "ccbb2aacee25325f87d3540a3e1050e8aa806d3d4dd5803869305668f25919d8",
+  "local_stdout": ".capture-v2-control/logs/R2-APF1250-ADOPT-RC4/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/R2-APF1250-ADOPT-RC4/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "9f99a24521ff35d8d306248becc12a876256b2e8",
+      "expected_product_head": "e87c4c97944590b21c4fc1f932e9f073bb82bea4"
+    },
+    "parsed_output": null
+  }
+}

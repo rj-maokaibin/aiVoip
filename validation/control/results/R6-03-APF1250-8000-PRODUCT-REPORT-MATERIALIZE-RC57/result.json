@@ -1,0 +1,55 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "R6-03-APF1250-8000-PRODUCT-REPORT-MATERIALIZE-RC57",
+    "sequence": 185,
+    "created_at": "2026-08-23T13:37:00+00:00",
+    "expires_at": "2026-08-23T23:37:00+00:00",
+    "action_type": "GATE_EVALUATE",
+    "parameters": {
+      "timeout_seconds": 900,
+      "bundle": "../validation/capture_v2/R6_APF1250_FIRST_8000_ABNORMAL_GOLDEN_RC33.json",
+      "gate_id": "R6-PRODUCT-REPORT-MATERIALIZE-RC56"
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "927787df5e3f830a74c7f3d178d39121b6ae81f4"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "Bounded non-DUT product binding for immutable RC33 APF1250 first-8000 abnormal Golden using the guarded persistent PostgreSQL runtime. If no PostgreSQL container is running, start only the temporary capture-v2-r6-materialize postgres project against the existing VOIP_DATA_ROOT/postgres bind mount; verify the Golden and persisted DB evidence, recalculate stale PCAP CoverageWindow with current fixed logic, require COMPLETE coverage, zero kernel drops, exact raw FXS digits 000, and verified durable server PCAP bytes; then idempotently create real EvidenceAsset rows, QualitySnapshot and evidence-first report. Finally remove the temporary project and prove the absent-container prestate is restored. No DUT I/O, no Production V2 activation, no backend/worker startup, and no synthetic evidence."
+  },
+  "action_sha256": "21283f4eb4e72ff58196a8274f0c662e40a63ff6c1044a6c023024d48f2da22d",
+  "runner_id": "srv:257142",
+  "state": "FAILED",
+  "return_code": 1,
+  "verdict": "FAIL",
+  "error": null,
+  "finished_at": "2026-08-23T13:36:19.621298+00:00",
+  "stdout_sha256": "9bbc110eb8fd6146f36f311b94bb51f50551ca68ab512c9fdc88d127696dd349",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "local_stdout": ".capture-v2-control/logs/R6-03-APF1250-8000-PRODUCT-REPORT-MATERIALIZE-RC57/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/R6-03-APF1250-8000-PRODUCT-REPORT-MATERIALIZE-RC57/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "67b2632853c00b81ac539652b4fb1024c392c6a5",
+      "expected_product_head": "927787df5e3f830a74c7f3d178d39121b6ae81f4"
+    },
+    "parsed_output": {
+      "scope": "R6_BOUNDED_POSTGRES_PRODUCT_MATERIALIZATION",
+      "production_mutation": false,
+      "dut_mutation": false,
+      "temporary_postgres_started": false,
+      "prestate_application_services_running": false,
+      "verdict": "FAIL",
+      "reason": "R6_PRODUCT_MATERIALIZATION_RUNTIME_EXCEPTION",
+      "error": "RuntimeError:COMMAND_FAILED:/usr/bin/docker:rc=1:unable to get image 'postgres:16': permission denied while trying to connect to the Docker daemon socket at unix:///var/run/docker.sock: Get \"http://%2Fvar%2Frun%2Fdocker.sock/v1.51/images/postgres:16/json\": dial unix /var/run/docker.sock: connect: permission denied"
+    }
+  }
+}

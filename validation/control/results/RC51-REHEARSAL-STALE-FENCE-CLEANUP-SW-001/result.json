@@ -1,0 +1,44 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "RC51-REHEARSAL-STALE-FENCE-CLEANUP-SW-001",
+    "sequence": 170,
+    "created_at": "2026-08-23T12:08:00+00:00",
+    "expires_at": "2026-08-23T23:08:00+00:00",
+    "action_type": "SOFTWARE_REGRESSION",
+    "parameters": {
+      "timeout_seconds": 1200
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "1216d0c304d9677a5faee617db5ba3a5de4a2147"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "Regression for rehearsal-only stale DUT fence cleanup. The change must keep generic lease/fence semantics unchanged, require explicit ACTIVATION_REHEARSAL with Production V2 disabled, refuse cleanup with a live AIVOIP producer or op.lock, and never delete capture epochs/evidence. V1 remains authoritative; Production V2 remains false."
+  },
+  "action_sha256": "3c04fc8a647fb5d42c690f4f2f0ef3796354a4eacd38db1fc003fb4281cab956",
+  "runner_id": "srv:257142",
+  "state": "SUCCEEDED",
+  "return_code": 0,
+  "verdict": null,
+  "error": null,
+  "finished_at": "2026-08-23T12:11:31.934720+00:00",
+  "stdout_sha256": "e142fd1a64dc60ad2c0a9b4a1e5b3c515521d5d0f00031b646444f3df70efe17",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "local_stdout": ".capture-v2-control/logs/RC51-REHEARSAL-STALE-FENCE-CLEANUP-SW-001/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/RC51-REHEARSAL-STALE-FENCE-CLEANUP-SW-001/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "fc49cd822a9744afaac38ec6d728c95ea980981a",
+      "expected_product_head": "1216d0c304d9677a5faee617db5ba3a5de4a2147"
+    },
+    "parsed_output": null
+  }
+}

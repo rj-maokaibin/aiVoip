@@ -1,0 +1,281 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "R7-02-APF3260M-SERVICE-ACTIVATION-ROLLBACK-RC54",
+    "sequence": 177,
+    "created_at": "2026-08-23T12:49:00+00:00",
+    "expires_at": "2026-08-23T23:49:00+00:00",
+    "action_type": "ACTIVATION_REHEARSAL",
+    "parameters": {
+      "timeout_seconds": 3600,
+      "sn": "G1U060H000384",
+      "host": "10.48.8.74",
+      "port": 10002,
+      "username": "root",
+      "platform_id": "mt7981",
+      "model": "APF3260-M",
+      "profile_id": "VOIP_GENERIC_FULL_CAPTURE",
+      "observation_seconds": 20
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "b3692cbf91b60f3d4d0135ab5422a745f73dd577"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "Guarded APF3260-M service-level activation/rollback rerun after RC54 software regression passed. ProductionPlatform now persists Phase-D Stage-1 CAPTURE_PATH_READY using the real R4 pre-OFFHOOK contract; missing idle business PCAP header alone cannot fail PCAP readiness. PASS still requires PRE_V1 -> V2_ACTIVE with path_ready=true, exactly one real DUT producer and durable segment -> serialized cleanup -> restored V1 business path with zero residual V2 producer -> R7 rollback gate PASS. Production V2 remains false and the original deployment env remains untouched."
+  },
+  "action_sha256": "9ef52c4a726a87b85b7ee6a4d168faedb208b7e5eeacef513c685390117da5d3",
+  "runner_id": "srv:257142",
+  "state": "FAILED",
+  "return_code": 1,
+  "verdict": "FAIL",
+  "error": null,
+  "finished_at": "2026-08-23T12:52:09.950489+00:00",
+  "stdout_sha256": "9e52504dfffa94c66ea65f72b2953999ce6a4c5950efeb5346533d4dbe1df275",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "local_stdout": ".capture-v2-control/logs/R7-02-APF3260M-SERVICE-ACTIVATION-ROLLBACK-RC54/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/R7-02-APF3260M-SERVICE-ACTIVATION-ROLLBACK-RC54/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "2c39a1b24f52d1e20460976b23fe144c3b7a95d0",
+      "expected_product_head": "b3692cbf91b60f3d4d0135ab5422a745f73dd577"
+    },
+    "parsed_output": {
+      "scope": "BOUNDED_SERVICE_LEVEL_ACTIVATION_REHEARSAL",
+      "production_v2_enabled": false,
+      "original_env_modified": false,
+      "project": "capture-v2-r7-rehearsal",
+      "device": {
+        "sn": "G1U060H000384",
+        "model": "APF3260-M",
+        "host": "10.48.8.74",
+        "port": 10002
+      },
+      "checks": [],
+      "pre_v1": {
+        "contract": {
+          "capture_engine_version": "V1",
+          "capture_v2_production_enabled": false,
+          "contract_ok": true,
+          "expected": "V1",
+          "reproduction_platform_mode": "real"
+        },
+        "session": {
+          "business_lock_status": null,
+          "capture": null,
+          "case_id": "09378fa1-74fa-429c-86eb-ec5ef56c35d7",
+          "cleanup_status": "NOT_REQUIRED",
+          "device_id": "424e537b-2036-4f0e-af1a-17d44b57215e",
+          "dut": {
+            "producer_count": 0,
+            "producers": []
+          },
+          "exists": true,
+          "session_id": "268e2f6b-e60c-4717-84ac-14a79bf8c0be",
+          "state": "CREATED",
+          "terminal_reason": null
+        }
+      },
+      "v2_active": {
+        "contract": {
+          "capture_engine_version": "V2",
+          "capture_v2_production_enabled": false,
+          "contract_ok": true,
+          "expected": "V2_REHEARSAL",
+          "reproduction_platform_mode": "real"
+        },
+        "initial": {
+          "business_lock_status": "ACTIVE",
+          "capture": {
+            "capture_session_id": "0497820c-0986-4e79-95ff-22af60693e59",
+            "cleanup_status": null,
+            "ended": false,
+            "epochs": [
+              {
+                "ended": false,
+                "id": "c1625b58-f3ab-492c-a006-3b5d35fdd11b",
+                "kernel_drops": null,
+                "producer_pid": 15669,
+                "state": "RUNNING"
+              }
+            ],
+            "evidence_durable": false,
+            "health_status": "HEALTHY",
+            "lease": {
+              "lease_epoch": 1,
+              "owner_worker_id": "reproduction-watch:268e2f6b-e60c-4717-84ac-14a79bf8c0be",
+              "state": "ACTIVE"
+            },
+            "path_ready": true,
+            "segments_by_state": {
+              "REMOTE_DELETED": 1
+            },
+            "state": "CAPTURE_PATH_READY"
+          },
+          "case_id": "09378fa1-74fa-429c-86eb-ec5ef56c35d7",
+          "cleanup_status": "REQUIRED",
+          "device_id": "424e537b-2036-4f0e-af1a-17d44b57215e",
+          "exists": true,
+          "session_id": "268e2f6b-e60c-4717-84ac-14a79bf8c0be",
+          "state": "WATCHING",
+          "terminal_reason": null
+        },
+        "stable": {
+          "business_lock_status": "ACTIVE",
+          "capture": {
+            "capture_session_id": "0497820c-0986-4e79-95ff-22af60693e59",
+            "cleanup_status": null,
+            "ended": false,
+            "epochs": [
+              {
+                "ended": false,
+                "id": "c1625b58-f3ab-492c-a006-3b5d35fdd11b",
+                "kernel_drops": null,
+                "producer_pid": 15669,
+                "state": "RUNNING"
+              }
+            ],
+            "evidence_durable": false,
+            "health_status": "HEALTHY",
+            "lease": {
+              "lease_epoch": 1,
+              "owner_worker_id": "reproduction-watch:268e2f6b-e60c-4717-84ac-14a79bf8c0be",
+              "state": "ACTIVE"
+            },
+            "path_ready": true,
+            "segments_by_state": {
+              "REMOTE_DELETED": 1
+            },
+            "state": "CAPTURE_PATH_READY"
+          },
+          "case_id": "09378fa1-74fa-429c-86eb-ec5ef56c35d7",
+          "cleanup_status": "REQUIRED",
+          "device_id": "424e537b-2036-4f0e-af1a-17d44b57215e",
+          "dut": {
+            "producer_count": 1,
+            "producers": [
+              {
+                "capture_epoch": "CAP_0497820c_0001_ff3e1210",
+                "interface": "br-lan_400",
+                "pid": 15669,
+                "session_id": null
+              }
+            ]
+          },
+          "exists": true,
+          "session_id": "268e2f6b-e60c-4717-84ac-14a79bf8c0be",
+          "state": "WATCHING",
+          "terminal_reason": null
+        }
+      },
+      "v2_cleanup": {
+        "db": {
+          "business_lock_status": "RELEASED",
+          "capture": {
+            "capture_session_id": "0497820c-0986-4e79-95ff-22af60693e59",
+            "cleanup_status": null,
+            "ended": false,
+            "epochs": [
+              {
+                "ended": true,
+                "id": "c1625b58-f3ab-492c-a006-3b5d35fdd11b",
+                "kernel_drops": 0,
+                "producer_pid": 15669,
+                "state": "ENDED"
+              }
+            ],
+            "evidence_durable": true,
+            "health_status": "HEALTHY",
+            "lease": {
+              "lease_epoch": 1,
+              "owner_worker_id": "reproduction-watch:268e2f6b-e60c-4717-84ac-14a79bf8c0be",
+              "state": "RELEASED"
+            },
+            "path_ready": true,
+            "segments_by_state": {
+              "REMOTE_DELETED": 2
+            },
+            "state": "CAPTURE_PATH_READY"
+          },
+          "case_id": "09378fa1-74fa-429c-86eb-ec5ef56c35d7",
+          "cleanup_status": "CLEANUP_VERIFIED",
+          "device_id": "424e537b-2036-4f0e-af1a-17d44b57215e",
+          "exists": true,
+          "session_id": "268e2f6b-e60c-4717-84ac-14a79bf8c0be",
+          "state": "CANCELLED",
+          "terminal_reason": "CANCEL_REQUESTED"
+        },
+        "final": {
+          "business_lock_status": "RELEASED",
+          "capture": {
+            "capture_session_id": "0497820c-0986-4e79-95ff-22af60693e59",
+            "cleanup_status": null,
+            "ended": false,
+            "epochs": [
+              {
+                "ended": true,
+                "id": "c1625b58-f3ab-492c-a006-3b5d35fdd11b",
+                "kernel_drops": 0,
+                "producer_pid": 15669,
+                "state": "ENDED"
+              }
+            ],
+            "evidence_durable": true,
+            "health_status": "HEALTHY",
+            "lease": {
+              "lease_epoch": 1,
+              "owner_worker_id": "reproduction-watch:268e2f6b-e60c-4717-84ac-14a79bf8c0be",
+              "state": "RELEASED"
+            },
+            "path_ready": true,
+            "segments_by_state": {
+              "REMOTE_DELETED": 2
+            },
+            "state": "CAPTURE_PATH_READY"
+          },
+          "case_id": "09378fa1-74fa-429c-86eb-ec5ef56c35d7",
+          "cleanup_status": "CLEANUP_VERIFIED",
+          "device_id": "424e537b-2036-4f0e-af1a-17d44b57215e",
+          "dut": {
+            "producer_count": 0,
+            "producers": []
+          },
+          "exists": true,
+          "session_id": "268e2f6b-e60c-4717-84ac-14a79bf8c0be",
+          "state": "CANCELLED",
+          "terminal_reason": "CANCEL_REQUESTED"
+        }
+      },
+      "verdict": "FAIL",
+      "reason": "SERVICE_LEVEL_REHEARSAL_EXCEPTION",
+      "failure_phase": "ROLLBACK_TO_V1",
+      "error": "RuntimeError:COMMAND_FAILED:/usr/bin/docker:3359d7c9-f645-4e6b-89d6-27f9cf8f5417:rc=1:  File \"/app/app/capture_v2/control/service_rehearsal_runtime.py\", line 311, in <module>\n    raise SystemExit(main())\n                     ^^^^^^\n  File \"/app/app/capture_v2/control/service_rehearsal_runtime.py\", line 299, in main\n    payload = enqueue_start(args)\n              ^^^^^^^^^^^^^^^^^^^\n  File \"/app/app/capture_v2/control/service_rehearsal_runtime.py\", line 134, in enqueue_start\n    stale_fence_cleanup = asyncio.run(_clear_rehearsal_fence(args.session_id))\n                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/asyncio/runners.py\", line 195, in run\n    return runner.run(main)\n           ^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/asyncio/runners.py\", line 118, in run\n    return self._loop.run_until_complete(task)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/asyncio/base_events.py\", line 691, in run_until_complete\n    return future.result()\n           ^^^^^^^^^^^^^^^\n  File \"/app/app/capture_v2/control/service_rehearsal_runtime.py\", line 123, in _clear_rehearsal_fence\n    return await clear_stale_fence_for_rehearsal(adapter)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/app/app/capture_v2/control/rehearsal_fence_cleanup.py\", line 80, in clear_stale_fence_for_rehearsal\n    selected = assert_selected_v2_live_capture_allowed()\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/app/app/capture_v2/runtime.py\", line 78, in assert_selected_v2_live_capture_allowed\n    artifact = assert_v2_activation_rehearsal_allowed()\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/app/app/capture_v2/runtime.py\", line 44, in assert_v2_activation_rehearsal_allowed\n    raise CaptureV2Error(\"CAPTURE_V2_NOT_SELECTED\")\napp.capture_v2.errors.CaptureV2Error: CAPTURE_V2_NOT_SELECTED",
+      "final_server_target_state": "PRESTATE_NO_REHEARSAL_CONTAINERS",
+      "final_authority_target": "V1",
+      "diagnostics": {
+        "compose_ps": "NAME      IMAGE     COMMAND   SERVICE   CREATED   STATUS    PORTS\n",
+        "logs_tail": {
+          "backend": "",
+          "postgres": "",
+          "redis": "",
+          "minio": "",
+          "reproduction-worker": "",
+          "reproduction-control-high-worker": "",
+          "reproduction-watch-worker": "",
+          "beat": ""
+        }
+      },
+      "guarded_rehearsal": true,
+      "host_port_publishing": "DISABLED_BY_COMPOSE_OVERRIDE",
+      "backend_health_wait_seconds": 120,
+      "final_rehearsal_project_empty": true
+    }
+  }
+}

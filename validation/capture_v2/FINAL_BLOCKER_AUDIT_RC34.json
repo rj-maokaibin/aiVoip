@@ -1,0 +1,77 @@
+{
+  "schema_version": "capture-v2-final-blocker-audit-v2",
+  "audit_id": "RC34-FINAL-BLOCKER-AUDIT",
+  "final_software_regression": {
+    "action_id": "RC34-R6-ABNORMAL-GOLDEN-FINAL-SW-001",
+    "sequence": 137,
+    "state": "SUCCEEDED",
+    "return_code": 0,
+    "expected_product_head": "3b69b1d0d0b6e01fd01ad3fd4beb635f47eb4be3"
+  },
+  "safety": {
+    "capture_engine_version": "V1",
+    "capture_v2_production_enabled": false,
+    "approved": false,
+    "pr_27_must_remain_draft": true,
+    "merge_or_cutover_authorized": false
+  },
+  "closed_gates": {
+    "R1_postgresql_lease_fencing": "PASS",
+    "R2_dual_platform_ownership_recovery": "PASS",
+    "R3_dual_platform_segment_transfer_ack": "PASS",
+    "R4_dual_platform_fresh_fxs": "PASS",
+    "R4_hook_flash": "PASS",
+    "R5_historical_real_golden_multi_plane": "PASS",
+    "R5_real_postgresql_coverage_ledger_runtime": "PASS",
+    "R5_live_real_call_coverage_complete": "PASS",
+    "R6_real_postgresql_evidence_first_runtime": "PASS",
+    "R6_fault_version_first_8000_abnormal_golden": "CAPTURED_WITH_HIGH_CONFIDENCE_LOCALIZATION_BOUNDARY",
+    "R7_dual_platform_validation_state_soak": "PASS"
+  },
+  "R6_abnormal_golden": {
+    "platform": "APF1250",
+    "expected_panel_target": "8000",
+    "observed_aim_fxs_digits": "000",
+    "finding": "FIRST_DIGIT_8_MISSING_BY_AIM_FXS_DTMF_EVENT_LAYER",
+    "finding_confidence": "HIGH",
+    "source_action": "R6-01-APF1250-FIRST-8000-LIVE-REUSE-RC32",
+    "immutable_collect_action": "R6-02-APF1250-8000-ABNORMAL-EVIDENCE-COLLECT-RC32",
+    "audit_file": "validation/capture_v2/R6_APF1250_FIRST_8000_ABNORMAL_GOLDEN_RC33.json",
+    "exact_component_not_proven": [
+      "panel event generation",
+      "SLIC/driver",
+      "libhardware",
+      "AIM"
+    ]
+  },
+  "coverage_defects_found_during_real_validation": [
+    {
+      "issue": "additive millisecond rounding could make fully covered PCM track one millisecond short",
+      "fix": "accumulate at microsecond precision and round once",
+      "regression": "RC32-COVERAGE-ADDITIVE-ROUNDING-SW-001:SUCCEEDED"
+    },
+    {
+      "issue": "historical epochs/non-durable segments outside the current required CoverageWindow could contaminate PCAP uncertainty",
+      "fix": "scope uncertainty to objects overlapping the current required window and normalize timezone comparisons",
+      "regression": "RC33-PCAP-WINDOW-SCOPE-SW-002:SUCCEEDED"
+    }
+  ],
+  "remaining_autonomous_non_physical_without_activation_authorization": [
+    "Optional product binding: materialize this specific abnormal Golden as EvidenceAsset rows/report manifest using a bounded validation invocation. The real PostgreSQL EvidenceAsset/report runtime is already independently PASS."
+  ],
+  "remaining_physical_handset": [
+    "Optional controlled <=100ms / approximately-20ms rebound calibration if required as a release gate",
+    "Another first-call reproduction only if lower-layer raw debug earlier than AIM/FXS is added and exact failing-component localization is required"
+  ],
+  "remaining_requires_explicit_activation_authorization": [
+    "actual V1/V2 shadow or V2_ACTIVE observation",
+    "REAL_DUT PRE_V1 -> V2_ACTIVE -> ROLLED_BACK_V1 rehearsal",
+    "prove V1 health restored after rollback",
+    "prove zero residual V2 producer after rollback",
+    "Production V2 enable",
+    "approved=true",
+    "PR ready / merge / cutover"
+  ],
+  "release_decision": "BLOCKED",
+  "reason": "Real activation/rollback/cutover remains explicitly unauthorized. Exact lower-layer first-digit-loss component localization is not yet proven."
+}

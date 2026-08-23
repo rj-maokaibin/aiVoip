@@ -1,0 +1,343 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "R5-01-APF3260M-LIVE-COVERAGE-RC28",
+    "sequence": 121,
+    "created_at": "2026-08-22T09:40:00+00:00",
+    "expires_at": "2026-08-22T21:40:00+00:00",
+    "action_type": "GATE_READINESS_FXS",
+    "parameters": {
+      "device_id": "c132f336-df1b-4285-b175-01d848f23b5d",
+      "model": "APF3260-M",
+      "host": "10.48.8.74",
+      "port": 10002,
+      "username": "root",
+      "platform_id": "mt7981",
+      "password_env": "DB:G1U060H000384",
+      "profile_root": "../profiles",
+      "profile_id": "voip-standard",
+      "object_root": "/tmp/voip-reproduction-objects",
+      "output_root": "/tmp/capture-v2-gates",
+      "repo_root": "..",
+      "reproduction_session_id": "AUTO_NEW",
+      "worker_id": "r5-01-apf3260m-live-coverage-rc28",
+      "gate_id": "R5-01-APF3260M-LIVE-COVERAGE-RC28",
+      "duration": 180,
+      "transport": "scp",
+      "timeout_seconds": 900
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "30dc0f8573e43a71bd4d0188dadeb77f61cf7af3"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "Real APF3260-M R5 validation-only call. Use real FXS + continuous PCAP + PCM RX/TX diag and the production D/E/F Coverage runtime; auto-persist/finalize CoverageWindow/Track/Interval. Production V2 remains disabled. A missing physical call is INCONCLUSIVE; incomplete real evidence after a valid call fails closed rather than being promoted to COMPLETE."
+  },
+  "action_sha256": "35832b784b04d59283b0569349d41f0bc10dd3c9b6538fd79f79ed90c67461da",
+  "runner_id": "srv:3456908",
+  "state": "INCONCLUSIVE",
+  "return_code": 2,
+  "verdict": "INCONCLUSIVE",
+  "error": null,
+  "finished_at": "2026-08-22T09:43:20.515965+00:00",
+  "stdout_sha256": "5d9aae9f7d48448e49a2d304e215ea2b5da4bec2c92a5df9813b0352ffa88d9b",
+  "stderr_sha256": "b8258e86248ce6f15dfea1a12afcd2ad3fde62ba6d3cd24536ffc8cb3bb61c48",
+  "local_stdout": ".capture-v2-control/logs/R5-01-APF3260M-LIVE-COVERAGE-RC28/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/R5-01-APF3260M-LIVE-COVERAGE-RC28/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "d135a2e8dd1d17c9f792797322b7dbbea9012e84",
+      "expected_product_head": "30dc0f8573e43a71bd4d0188dadeb77f61cf7af3"
+    },
+    "parsed_output": {
+      "checks": [
+        {
+          "details": {},
+          "expected": "READY",
+          "name": "stage1_ready_before_handset",
+          "observed": "READY",
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": true,
+          "name": "stage1_all_real_checks_ready",
+          "observed": {
+            "exactly_one_producer": true,
+            "fxs_ready": true,
+            "lease_active": true,
+            "pcap_ready": true,
+            "pcm_control_ready": true,
+            "server_store_ready": true,
+            "storage_guard_ready": true,
+            "transfer_ready": true,
+            "voice_context_ready": true,
+            "watchdog_ready": true
+          },
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": "OFFHOOK->DTMF->ONHOOK",
+          "name": "physical_offhook_dtmf_onhook_observed",
+          "observed": [
+            "OFFHOOK",
+            "OFFHOOK",
+            "DTMF",
+            "DTMF",
+            "DTMF",
+            "ONHOOK"
+          ],
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": ">0",
+          "name": "real_attempt_bound",
+          "observed": "666f7198-0a0c-4c0a-a04f-e45be417d788",
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": true,
+          "name": "capture_finalizer_durable",
+          "observed": true,
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": 0,
+          "name": "kernel_capture_drops_zero",
+          "observed": null,
+          "passed": false,
+          "verdict": "FAIL"
+        },
+        {
+          "details": {},
+          "expected": ">0",
+          "name": "real_pcm_rx_packets_observed",
+          "observed": 2036,
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": ">0",
+          "name": "real_pcm_tx_packets_observed",
+          "observed": 2036,
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": "COMPLETE+finalized_at",
+          "name": "coverage_window_auto_finalized_complete",
+          "observed": {},
+          "passed": false,
+          "verdict": "FAIL"
+        },
+        {
+          "details": {},
+          "expected": {
+            "FXS": "COMPLETE",
+            "PCAP": "COMPLETE",
+            "PCM_RX": "COMPLETE",
+            "PCM_TX": "COMPLETE"
+          },
+          "name": "coverage_required_tracks_complete",
+          "observed": {},
+          "passed": false,
+          "verdict": "FAIL"
+        },
+        {
+          "details": {},
+          "expected": {
+            "FXS": ">0",
+            "PCAP": ">0",
+            "PCM_RX": ">0",
+            "PCM_TX": ">0"
+          },
+          "name": "coverage_intervals_persisted",
+          "observed": {
+            "FXS": null,
+            "PCAP": null,
+            "PCM_RX": null,
+            "PCM_TX": null
+          },
+          "passed": false,
+          "verdict": "FAIL"
+        },
+        {
+          "details": {},
+          "expected": {
+            "off": 2,
+            "on": 2
+          },
+          "name": "pcm_control_symmetric",
+          "observed": {
+            "off": 2,
+            "on": 2
+          },
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": {
+            "off": 9,
+            "on": 9
+          },
+          "name": "aim_debug_control_symmetric",
+          "observed": {
+            "off": 9,
+            "on": 9
+          },
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": true,
+          "name": "producer_cleanup_exact_identity",
+          "observed": true,
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": true,
+          "name": "lease_cleanup_released",
+          "observed": true,
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": [],
+          "name": "cleanup_no_exception",
+          "observed": [],
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": [],
+          "name": "runtime_no_exception",
+          "observed": [
+            "DataError:(psycopg.errors.StringDataRightTruncation) value too long for type character varying(32)\n[SQL: INSERT INTO coverage_intervals (id, coverage_track_id, interval_start_ts, interval_end_ts, interval_type, source_kind, source_id, certainty, details) VALUES (%(id)s::VARCHAR, %(coverage_track_id)s::VARCHAR, %(interval_start_ts)s::TIMESTAMP WITH TIME ZONE, %(interval_end_ts)s::TIMESTAMP WITH TIME ZONE, %(interval_type)s::VARCHAR, %(source_kind)s::VARCHAR, %(source_id)s::VARCHAR, %(certainty)s::VARCHAR, %(details)s::JSON)]\n[parameters: {'id': 'd9691905-84d2-4288-84e9-70fc046dd215', 'coverage_track_id': '131b5b87-1aba-46a5-bc80-34d9930f7a8d', 'interval_start_ts': datetime.datetime(2026, 8, 22, 9, 42, 36, 213000, tzinfo=datetime.timezone.utc), 'interval_end_ts': datetime.datetime(2026, 8, 22, 9, 43, 16, 573000, tzinfo=datetime.timezone.utc), 'interval_type': 'COVERED', 'source_kind': 'REAL_AIM_FXS_MONITOR_AVAILABILITY', 'source_id': '20cd4f33-8671-45dc-8831-b13a0ec3789d', 'certainty': 'CONFIRMED', 'details': Json({'transcript_path': '/tmp/capture-v ... (159 chars))}]\n(Background on this error at: https://sqlalche.me/e/20/9h9h)"
+          ],
+          "passed": false,
+          "verdict": "FAIL"
+        }
+      ],
+      "created_at": "2026-08-22T09:43:20.146718+00:00",
+      "evidence_bundle": "/tmp/capture-v2-gates/20260822T094031Z_R5-01-APF3260M-LIVE-COVERAGE-RC28_c132f336-df1b-4285-b175-01d848f23b5d",
+      "facts": {
+        "capture_attempt_id": "666f7198-0a0c-4c0a-a04f-e45be417d788",
+        "capture_epoch_id": "d22d10a5-f748-47c8-bbf8-c39596b8deaa",
+        "capture_session_id": "20cd4f33-8671-45dc-8831-b13a0ec3789d",
+        "cleanup_errors": [],
+        "coverage_tracks": {},
+        "coverage_window": {},
+        "finalizer": {
+          "acked": 1,
+          "durable": true,
+          "kernel_drops": null,
+          "remote_deleted": 1,
+          "sealed": 1,
+          "transferred": 1
+        },
+        "fxs_monitor_end": "2026-08-22T17:43:18+08:00",
+        "fxs_monitor_start": "2026-08-22T17:40:35+08:00",
+        "lease_epoch": 64,
+        "observed_fxs_events": [
+          {
+            "digit": null,
+            "event": "OFFHOOK",
+            "line": 0,
+            "source_ts": "2026-08-22T17:42:46.213000+08:00",
+            "timestamp": "2026-08-22 17:42:46.213000"
+          },
+          {
+            "digit": null,
+            "event": "OFFHOOK",
+            "line": 0,
+            "source_ts": "2026-08-22T17:42:46.214008+08:00",
+            "timestamp": "2026-08-22 17:42:46.214008"
+          },
+          {
+            "digit": "3",
+            "event": "DTMF",
+            "line": 0,
+            "source_ts": "2026-08-22T17:42:47.053000+08:00",
+            "timestamp": "2026-08-22 17:42:47.053000"
+          },
+          {
+            "digit": "0",
+            "event": "DTMF",
+            "line": 0,
+            "source_ts": "2026-08-22T17:42:47.413000+08:00",
+            "timestamp": "2026-08-22 17:42:47.413000"
+          },
+          {
+            "digit": "1",
+            "event": "DTMF",
+            "line": 0,
+            "source_ts": "2026-08-22T17:42:47.773000+08:00",
+            "timestamp": "2026-08-22 17:42:47.773000"
+          },
+          {
+            "digit": null,
+            "event": "ONHOOK",
+            "line": 0,
+            "source_ts": "2026-08-22T17:43:06.573000+08:00",
+            "timestamp": "2026-08-22 17:43:06.573000"
+          }
+        ],
+        "pcm": {
+          "parsed_durable_pcap_files": 14,
+          "pcm_rx": {
+            "first_packet_ts": "2026-08-22T09:42:46.216508+00:00",
+            "groups": 1,
+            "last_packet_ts": "2026-08-22T09:43:06.566174+00:00",
+            "max_interpacket_gap_ms": 10.266,
+            "packet_count": 2036
+          },
+          "pcm_tx": {
+            "first_packet_ts": "2026-08-22T09:42:46.216000+00:00",
+            "groups": 1,
+            "last_packet_ts": "2026-08-22T09:43:06.566100+00:00",
+            "max_interpacket_gap_ms": 10.059,
+            "packet_count": 2036
+          }
+        },
+        "physical_sequence_complete": true,
+        "release_gate_effect": "R5_REAL_LIVE_COVERAGE_VALIDATION_ONLY_PRODUCTION_V2_DISABLED",
+        "runtime_errors": [
+          "DataError:(psycopg.errors.StringDataRightTruncation) value too long for type character varying(32)\n[SQL: INSERT INTO coverage_intervals (id, coverage_track_id, interval_start_ts, interval_end_ts, interval_type, source_kind, source_id, certainty, details) VALUES (%(id)s::VARCHAR, %(coverage_track_id)s::VARCHAR, %(interval_start_ts)s::TIMESTAMP WITH TIME ZONE, %(interval_end_ts)s::TIMESTAMP WITH TIME ZONE, %(interval_type)s::VARCHAR, %(source_kind)s::VARCHAR, %(source_id)s::VARCHAR, %(certainty)s::VARCHAR, %(details)s::JSON)]\n[parameters: {'id': 'd9691905-84d2-4288-84e9-70fc046dd215', 'coverage_track_id': '131b5b87-1aba-46a5-bc80-34d9930f7a8d', 'interval_start_ts': datetime.datetime(2026, 8, 22, 9, 42, 36, 213000, tzinfo=datetime.timezone.utc), 'interval_end_ts': datetime.datetime(2026, 8, 22, 9, 43, 16, 573000, tzinfo=datetime.timezone.utc), 'interval_type': 'COVERED', 'source_kind': 'REAL_AIM_FXS_MONITOR_AVAILABILITY', 'source_id': '20cd4f33-8671-45dc-8831-b13a0ec3789d', 'certainty': 'CONFIRMED', 'details': Json({'transcript_path': '/tmp/capture-v ... (159 chars))}]\n(Background on this error at: https://sqlalche.me/e/20/9h9h)"
+        ],
+        "transcript_path": "/tmp/capture-v2-gates/20260822T094031Z_R5-01-APF3260M-LIVE-COVERAGE-RC28_c132f336-df1b-4285-b175-01d848f23b5d/dut/aim_fxs_transcript.log",
+        "voice_context": {
+          "gateway_ip": "192.168.3.200",
+          "interface": "br-lan_400",
+          "voice_vlan_id": "400"
+        }
+      },
+      "gate_id": "R5-01-APF3260M-LIVE-COVERAGE-RC28",
+      "summary": "R5 real call -> durable evidence -> automatic Coverage Ledger COMPLETE",
+      "verdict": "INCONCLUSIVE"
+    }
+  }
+}

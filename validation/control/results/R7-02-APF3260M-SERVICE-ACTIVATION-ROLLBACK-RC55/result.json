@@ -1,0 +1,542 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "R7-02-APF3260M-SERVICE-ACTIVATION-ROLLBACK-RC55",
+    "sequence": 179,
+    "created_at": "2026-08-23T12:55:00+00:00",
+    "expires_at": "2026-08-23T23:55:00+00:00",
+    "action_type": "ACTIVATION_REHEARSAL",
+    "parameters": {
+      "timeout_seconds": 3600,
+      "sn": "G1U060H000384",
+      "host": "10.48.8.74",
+      "port": 10002,
+      "username": "root",
+      "platform_id": "mt7981",
+      "model": "APF3260-M",
+      "profile_id": "VOIP_GENERIC_FULL_CAPTURE",
+      "observation_seconds": 20
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "02f17a1d46cdf42e48e212b0047cb1bff79b9c3e"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "Final guarded APF3260-M service-level activation/rollback rerun after RC55 regression passed. RC54 already proved path_ready=true, stable exactly-one real V2 producer, durable REMOTE_DELETED segment, CLEANUP_VERIFIED, kernel drop 0, released lease and zero residual producer before rollback. This run additionally proves the fixed V1 rollback health start and the complete PRE_V1 -> V2_ACTIVE -> ROLLED_BACK_V1 R7 artifact. Production V2 remains false, original env remains untouched, and no production cutover is authorized."
+  },
+  "action_sha256": "e2dea00485243cad29ad410e58244fa5a1b86a2003cf85eaf1c5f48f2eef48ed",
+  "runner_id": "srv:257142",
+  "state": "SUCCEEDED",
+  "return_code": 0,
+  "verdict": "PASS",
+  "error": null,
+  "finished_at": "2026-08-23T12:58:35.453026+00:00",
+  "stdout_sha256": "8834eb48782a5ce1ce1e43bfb60efbbfad5837e8bc53a8fca72eb14668cd26c1",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "local_stdout": ".capture-v2-control/logs/R7-02-APF3260M-SERVICE-ACTIVATION-ROLLBACK-RC55/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/R7-02-APF3260M-SERVICE-ACTIVATION-ROLLBACK-RC55/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "4a148d4319f0dd7628c06e66ae1dd406888348b8",
+      "expected_product_head": "02f17a1d46cdf42e48e212b0047cb1bff79b9c3e"
+    },
+    "parsed_output": {
+      "scope": "BOUNDED_SERVICE_LEVEL_ACTIVATION_REHEARSAL",
+      "production_v2_enabled": false,
+      "original_env_modified": false,
+      "project": "capture-v2-r7-rehearsal",
+      "device": {
+        "sn": "G1U060H000384",
+        "model": "APF3260-M",
+        "host": "10.48.8.74",
+        "port": 10002
+      },
+      "checks": [
+        {
+          "name": "pre_v1_real_dut_no_v2_producer",
+          "passed": true
+        },
+        {
+          "name": "v2_rehearsal_real_service_authority",
+          "passed": true
+        },
+        {
+          "name": "v2_segments_durable",
+          "passed": true
+        },
+        {
+          "name": "v2_cleanup_verified",
+          "passed": true
+        },
+        {
+          "name": "rollback_v1_business_path",
+          "passed": true
+        },
+        {
+          "name": "rollback_no_v2_producer",
+          "passed": true
+        },
+        {
+          "name": "r7_gate",
+          "passed": true
+        }
+      ],
+      "pre_v1": {
+        "contract": {
+          "capture_engine_version": "V1",
+          "capture_v2_production_enabled": false,
+          "contract_ok": true,
+          "expected": "V1",
+          "reproduction_platform_mode": "real"
+        },
+        "session": {
+          "business_lock_status": null,
+          "capture": null,
+          "case_id": "73886fb2-f1a1-4ca9-a06e-fe1c1d00ca65",
+          "cleanup_status": "NOT_REQUIRED",
+          "device_id": "427fc234-fc04-454f-84e9-02118d00f5b8",
+          "dut": {
+            "producer_count": 0,
+            "producers": []
+          },
+          "exists": true,
+          "session_id": "2aa73baa-729a-4f1b-b6ec-06ac24aff734",
+          "state": "CREATED",
+          "terminal_reason": null
+        }
+      },
+      "v2_active": {
+        "contract": {
+          "capture_engine_version": "V2",
+          "capture_v2_production_enabled": false,
+          "contract_ok": true,
+          "expected": "V2_REHEARSAL",
+          "reproduction_platform_mode": "real"
+        },
+        "initial": {
+          "business_lock_status": "ACTIVE",
+          "capture": {
+            "capture_session_id": "f7bae2db-dde4-474b-b1cc-a1057a906b18",
+            "cleanup_status": null,
+            "ended": false,
+            "epochs": [
+              {
+                "ended": false,
+                "id": "ad85f68b-14bc-4883-a58e-1b44e1a2ba2b",
+                "kernel_drops": null,
+                "producer_pid": 26980,
+                "state": "RUNNING"
+              }
+            ],
+            "evidence_durable": false,
+            "health_status": "HEALTHY",
+            "lease": {
+              "lease_epoch": 1,
+              "owner_worker_id": "reproduction-watch:2aa73baa-729a-4f1b-b6ec-06ac24aff734",
+              "state": "ACTIVE"
+            },
+            "path_ready": true,
+            "segments_by_state": {
+              "REMOTE_DELETED": 1
+            },
+            "state": "CAPTURE_PATH_READY"
+          },
+          "case_id": "73886fb2-f1a1-4ca9-a06e-fe1c1d00ca65",
+          "cleanup_status": "REQUIRED",
+          "device_id": "427fc234-fc04-454f-84e9-02118d00f5b8",
+          "exists": true,
+          "session_id": "2aa73baa-729a-4f1b-b6ec-06ac24aff734",
+          "state": "WATCHING",
+          "terminal_reason": null
+        },
+        "stable": {
+          "business_lock_status": "ACTIVE",
+          "capture": {
+            "capture_session_id": "f7bae2db-dde4-474b-b1cc-a1057a906b18",
+            "cleanup_status": null,
+            "ended": false,
+            "epochs": [
+              {
+                "ended": false,
+                "id": "ad85f68b-14bc-4883-a58e-1b44e1a2ba2b",
+                "kernel_drops": null,
+                "producer_pid": 26980,
+                "state": "RUNNING"
+              }
+            ],
+            "evidence_durable": false,
+            "health_status": "HEALTHY",
+            "lease": {
+              "lease_epoch": 1,
+              "owner_worker_id": "reproduction-watch:2aa73baa-729a-4f1b-b6ec-06ac24aff734",
+              "state": "ACTIVE"
+            },
+            "path_ready": true,
+            "segments_by_state": {
+              "REMOTE_DELETED": 1
+            },
+            "state": "CAPTURE_PATH_READY"
+          },
+          "case_id": "73886fb2-f1a1-4ca9-a06e-fe1c1d00ca65",
+          "cleanup_status": "REQUIRED",
+          "device_id": "427fc234-fc04-454f-84e9-02118d00f5b8",
+          "dut": {
+            "producer_count": 1,
+            "producers": [
+              {
+                "capture_epoch": "CAP_f7bae2db_0001_81121f44",
+                "interface": "br-lan_400",
+                "pid": 26980,
+                "session_id": null
+              }
+            ]
+          },
+          "exists": true,
+          "session_id": "2aa73baa-729a-4f1b-b6ec-06ac24aff734",
+          "state": "WATCHING",
+          "terminal_reason": null
+        }
+      },
+      "v2_cleanup": {
+        "db": {
+          "business_lock_status": "RELEASED",
+          "capture": {
+            "capture_session_id": "f7bae2db-dde4-474b-b1cc-a1057a906b18",
+            "cleanup_status": null,
+            "ended": false,
+            "epochs": [
+              {
+                "ended": true,
+                "id": "ad85f68b-14bc-4883-a58e-1b44e1a2ba2b",
+                "kernel_drops": 0,
+                "producer_pid": 26980,
+                "state": "ENDED"
+              }
+            ],
+            "evidence_durable": true,
+            "health_status": "HEALTHY",
+            "lease": {
+              "lease_epoch": 1,
+              "owner_worker_id": "reproduction-watch:2aa73baa-729a-4f1b-b6ec-06ac24aff734",
+              "state": "RELEASED"
+            },
+            "path_ready": true,
+            "segments_by_state": {
+              "REMOTE_DELETED": 2
+            },
+            "state": "CAPTURE_PATH_READY"
+          },
+          "case_id": "73886fb2-f1a1-4ca9-a06e-fe1c1d00ca65",
+          "cleanup_status": "CLEANUP_VERIFIED",
+          "device_id": "427fc234-fc04-454f-84e9-02118d00f5b8",
+          "exists": true,
+          "session_id": "2aa73baa-729a-4f1b-b6ec-06ac24aff734",
+          "state": "CANCELLED",
+          "terminal_reason": "CANCEL_REQUESTED"
+        },
+        "final": {
+          "business_lock_status": "RELEASED",
+          "capture": {
+            "capture_session_id": "f7bae2db-dde4-474b-b1cc-a1057a906b18",
+            "cleanup_status": null,
+            "ended": false,
+            "epochs": [
+              {
+                "ended": true,
+                "id": "ad85f68b-14bc-4883-a58e-1b44e1a2ba2b",
+                "kernel_drops": 0,
+                "producer_pid": 26980,
+                "state": "ENDED"
+              }
+            ],
+            "evidence_durable": true,
+            "health_status": "HEALTHY",
+            "lease": {
+              "lease_epoch": 1,
+              "owner_worker_id": "reproduction-watch:2aa73baa-729a-4f1b-b6ec-06ac24aff734",
+              "state": "RELEASED"
+            },
+            "path_ready": true,
+            "segments_by_state": {
+              "REMOTE_DELETED": 2
+            },
+            "state": "CAPTURE_PATH_READY"
+          },
+          "case_id": "73886fb2-f1a1-4ca9-a06e-fe1c1d00ca65",
+          "cleanup_status": "CLEANUP_VERIFIED",
+          "device_id": "427fc234-fc04-454f-84e9-02118d00f5b8",
+          "dut": {
+            "producer_count": 0,
+            "producers": []
+          },
+          "exists": true,
+          "session_id": "2aa73baa-729a-4f1b-b6ec-06ac24aff734",
+          "state": "CANCELLED",
+          "terminal_reason": "CANCEL_REQUESTED"
+        }
+      },
+      "rolled_back_v1": {
+        "contract": {
+          "capture_engine_version": "V1",
+          "capture_v2_production_enabled": false,
+          "contract_ok": true,
+          "expected": "V1",
+          "reproduction_platform_mode": "real"
+        },
+        "v1_health_session": {
+          "business_lock_status": "RELEASED",
+          "capture": null,
+          "case_id": "73886fb2-f1a1-4ca9-a06e-fe1c1d00ca65",
+          "cleanup_status": "CLEANUP_VERIFIED",
+          "device_id": "427fc234-fc04-454f-84e9-02118d00f5b8",
+          "exists": true,
+          "session_id": "23b272b5-02be-4308-97f3-d322f3b6e861",
+          "state": "CANCELLED",
+          "terminal_reason": "CANCEL_REQUESTED"
+        },
+        "original_v2_session_probe": {
+          "business_lock_status": null,
+          "capture": {
+            "capture_session_id": "f7bae2db-dde4-474b-b1cc-a1057a906b18",
+            "cleanup_status": null,
+            "ended": false,
+            "epochs": [
+              {
+                "ended": true,
+                "id": "ad85f68b-14bc-4883-a58e-1b44e1a2ba2b",
+                "kernel_drops": 0,
+                "producer_pid": 26980,
+                "state": "ENDED"
+              }
+            ],
+            "evidence_durable": true,
+            "health_status": "HEALTHY",
+            "lease": {
+              "lease_epoch": 1,
+              "owner_worker_id": "reproduction-watch:2aa73baa-729a-4f1b-b6ec-06ac24aff734",
+              "state": "RELEASED"
+            },
+            "path_ready": true,
+            "segments_by_state": {
+              "REMOTE_DELETED": 2
+            },
+            "state": "CAPTURE_PATH_READY"
+          },
+          "case_id": "73886fb2-f1a1-4ca9-a06e-fe1c1d00ca65",
+          "cleanup_status": "CLEANUP_VERIFIED",
+          "device_id": "427fc234-fc04-454f-84e9-02118d00f5b8",
+          "dut": {
+            "producer_count": 0,
+            "producers": []
+          },
+          "exists": true,
+          "session_id": "2aa73baa-729a-4f1b-b6ec-06ac24aff734",
+          "state": "CANCELLED",
+          "terminal_reason": "CANCEL_REQUESTED"
+        }
+      },
+      "rollback_evidence": {
+        "schema_version": "capture-v2-r7-rollback-evidence-v2",
+        "observations": [
+          {
+            "phase": "PRE_V1",
+            "observed_at": "2026-08-23T12:55:15.297503+00:00",
+            "capture_engine_version": "V1",
+            "capture_v2_production_enabled": false,
+            "activation_mode": "V1",
+            "v1_healthy": true,
+            "v2_producer_count": 0,
+            "evidence_kind": "REAL_DUT",
+            "evidence_refs": [
+              "validation/control/results/R7-02-APF3260M-SERVICE-ACTIVATION-ROLLBACK-RC55/result.json#pre_v1"
+            ]
+          },
+          {
+            "phase": "V2_ACTIVE",
+            "observed_at": "2026-08-23T12:56:53.578336+00:00",
+            "capture_engine_version": "V2",
+            "capture_v2_production_enabled": false,
+            "activation_mode": "ACTIVATION_REHEARSAL",
+            "v1_healthy": true,
+            "v2_producer_count": 1,
+            "evidence_kind": "REAL_DUT",
+            "evidence_refs": [
+              "validation/control/results/R7-02-APF3260M-SERVICE-ACTIVATION-ROLLBACK-RC55/result.json#v2_active"
+            ]
+          },
+          {
+            "phase": "ROLLED_BACK_V1",
+            "observed_at": "2026-08-23T12:57:55.121593+00:00",
+            "capture_engine_version": "V1",
+            "capture_v2_production_enabled": false,
+            "activation_mode": "V1",
+            "v1_healthy": true,
+            "v2_producer_count": 0,
+            "evidence_kind": "REAL_DUT",
+            "evidence_refs": [
+              "validation/control/results/R7-02-APF3260M-SERVICE-ACTIVATION-ROLLBACK-RC55/result.json#rolled_back_v1"
+            ]
+          }
+        ]
+      },
+      "rollback_gate": {
+        "gate_id": "R7-ROLLBACK-REHEARSAL",
+        "verdict": "PASS",
+        "checks": [
+          {
+            "name": "pre_v1_authoritative",
+            "passed": true,
+            "expected": {
+              "capture_engine_version": "V1",
+              "production_v2": false,
+              "activation_mode": "V1"
+            },
+            "observed": {
+              "capture_engine_version": "V1",
+              "production_v2": false,
+              "activation_mode": "V1"
+            },
+            "details": {},
+            "verdict": "PASS"
+          },
+          {
+            "name": "pre_v1_healthy",
+            "passed": true,
+            "expected": true,
+            "observed": true,
+            "details": {},
+            "verdict": "PASS"
+          },
+          {
+            "name": "pre_no_v2_producer",
+            "passed": true,
+            "expected": 0,
+            "observed": 0,
+            "details": {},
+            "verdict": "PASS"
+          },
+          {
+            "name": "v2_phase_observed",
+            "passed": true,
+            "expected": "explicit ACTIVATION_REHEARSAL or PRODUCTION V2 authority",
+            "observed": {
+              "capture_engine_version": "V2",
+              "production_v2": false,
+              "activation_mode": "ACTIVATION_REHEARSAL"
+            },
+            "details": {
+              "rehearsal": true,
+              "production": false
+            },
+            "verdict": "PASS"
+          },
+          {
+            "name": "v2_producer_observed",
+            "passed": true,
+            "expected": ">=1",
+            "observed": 1,
+            "details": {},
+            "verdict": "PASS"
+          },
+          {
+            "name": "rollback_v1_authoritative",
+            "passed": true,
+            "expected": {
+              "capture_engine_version": "V1",
+              "production_v2": false,
+              "activation_mode": "V1"
+            },
+            "observed": {
+              "capture_engine_version": "V1",
+              "production_v2": false,
+              "activation_mode": "V1"
+            },
+            "details": {},
+            "verdict": "PASS"
+          },
+          {
+            "name": "rollback_v1_healthy",
+            "passed": true,
+            "expected": true,
+            "observed": true,
+            "details": {},
+            "verdict": "PASS"
+          },
+          {
+            "name": "rollback_no_v2_producer",
+            "passed": true,
+            "expected": 0,
+            "observed": 0,
+            "details": {},
+            "verdict": "PASS"
+          }
+        ],
+        "summary": "Real-DUT evidence proves bounded V2 authority activation, rollback, and V1 health restoration.",
+        "evidence_bundle": null,
+        "facts": {
+          "reason": "ROLLBACK_REHEARSAL_PROVEN",
+          "failed_checks": [],
+          "v2_activation_mode": "ACTIVATION_REHEARSAL",
+          "release_gate_scope": "PRE_CUTOVER_ACTIVATION_REHEARSAL",
+          "observations": [
+            {
+              "phase": "PRE_V1",
+              "observed_at": "2026-08-23T12:55:15.297503+00:00",
+              "capture_engine_version": "V1",
+              "capture_v2_production_enabled": false,
+              "activation_mode": "V1",
+              "v1_healthy": true,
+              "v2_producer_count": 0,
+              "evidence_kind": "REAL_DUT",
+              "evidence_refs": [
+                "validation/control/results/R7-02-APF3260M-SERVICE-ACTIVATION-ROLLBACK-RC55/result.json#pre_v1"
+              ]
+            },
+            {
+              "phase": "V2_ACTIVE",
+              "observed_at": "2026-08-23T12:56:53.578336+00:00",
+              "capture_engine_version": "V2",
+              "capture_v2_production_enabled": false,
+              "activation_mode": "ACTIVATION_REHEARSAL",
+              "v1_healthy": true,
+              "v2_producer_count": 1,
+              "evidence_kind": "REAL_DUT",
+              "evidence_refs": [
+                "validation/control/results/R7-02-APF3260M-SERVICE-ACTIVATION-ROLLBACK-RC55/result.json#v2_active"
+              ]
+            },
+            {
+              "phase": "ROLLED_BACK_V1",
+              "observed_at": "2026-08-23T12:57:55.121593+00:00",
+              "capture_engine_version": "V1",
+              "capture_v2_production_enabled": false,
+              "activation_mode": "V1",
+              "v1_healthy": true,
+              "v2_producer_count": 0,
+              "evidence_kind": "REAL_DUT",
+              "evidence_refs": [
+                "validation/control/results/R7-02-APF3260M-SERVICE-ACTIVATION-ROLLBACK-RC55/result.json#rolled_back_v1"
+              ]
+            }
+          ]
+        },
+        "created_at": "2026-08-23T12:57:55.625943+00:00"
+      },
+      "verdict": "PASS",
+      "reason": "SERVICE_LEVEL_ACTIVATION_REHEARSAL_PROVEN",
+      "final_server_target_state": "PRESTATE_NO_REHEARSAL_CONTAINERS",
+      "final_authority_target": "V1",
+      "guarded_rehearsal": true,
+      "host_port_publishing": "DISABLED_BY_COMPOSE_OVERRIDE",
+      "backend_health_wait_seconds": 120,
+      "final_rehearsal_project_empty": true
+    }
+  }
+}

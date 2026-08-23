@@ -1,0 +1,213 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "R2-03-APF1250-MULTIPLE-PRODUCERS-RC17",
+    "sequence": 79,
+    "created_at": "2026-08-22T01:28:00+00:00",
+    "expires_at": "2026-08-22T03:28:00+00:00",
+    "action_type": "GATE_OWNERSHIP",
+    "parameters": {
+      "device_id": "259f16e6-af9e-4dff-969b-2bb5eac43eb2",
+      "model": "APF1250",
+      "host": "10.48.8.74",
+      "port": 10001,
+      "username": "root",
+      "platform_id": "mt7621",
+      "password_env": "DB:G1V030E010214",
+      "profile_root": "../profiles",
+      "profile_id": "voip-standard",
+      "object_root": "/tmp/voip-reproduction-objects",
+      "output_root": "/tmp/capture-v2-gates",
+      "repo_root": "..",
+      "reproduction_session_id": "AUTO_NEW",
+      "worker_id": "r2-03-apf1250-rc17",
+      "gate_id": "R2-03-APF1250-MULTIPLE-PRODUCERS-RC17",
+      "timeout_seconds": 600
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "3636ee32045cfc9c7acfcdfa47e5e27f0ce15849"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "RC17 automated multiple-producer recovery Gate on APF1250. Gate injects only its own stale producer and must converge to one valid producer with exact identity recovery. No physical handset action."
+  },
+  "action_sha256": "e52fc59da2e2fe7cc93b405ac4ec5cf059f41da9c87b37941884e4c4fb428590",
+  "runner_id": "srv:3382405",
+  "state": "SUCCEEDED",
+  "return_code": 0,
+  "verdict": "PASS",
+  "error": null,
+  "finished_at": "2026-08-22T01:29:11.876741+00:00",
+  "stdout_sha256": "463b697398dcf48fff5a28b6d49a8f01edb3a59ad8be53a281b694b114d935b6",
+  "stderr_sha256": "b8258e86248ce6f15dfea1a12afcd2ad3fde62ba6d3cd24536ffc8cb3bb61c48",
+  "local_stdout": ".capture-v2-control/logs/R2-03-APF1250-MULTIPLE-PRODUCERS-RC17/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/R2-03-APF1250-MULTIPLE-PRODUCERS-RC17/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "220d34af5ab37dc63770bab6f008106272104330",
+      "expected_product_head": "3636ee32045cfc9c7acfcdfa47e5e27f0ce15849"
+    },
+    "parsed_output": {
+      "result": {
+        "checks": [
+          {
+            "details": {},
+            "expected": 1,
+            "name": "exactly_one_owned_producer",
+            "observed": 1,
+            "passed": true,
+            "verdict": "PASS"
+          },
+          {
+            "details": {},
+            "expected": 1,
+            "name": "one_running_epoch",
+            "observed": 1,
+            "passed": true,
+            "verdict": "PASS"
+          },
+          {
+            "details": {},
+            "expected": "one ACTIVE lease",
+            "name": "lease_active",
+            "observed": [
+              {
+                "lease_epoch": 62,
+                "state": "ACTIVE"
+              }
+            ],
+            "passed": true,
+            "verdict": "PASS"
+          },
+          {
+            "details": {},
+            "expected": 0,
+            "name": "no_unrecovered_gap",
+            "observed": 0,
+            "passed": true,
+            "verdict": "PASS"
+          },
+          {
+            "details": {},
+            "expected": 7327,
+            "name": "producer_pid_adopted",
+            "observed": 7327,
+            "passed": true,
+            "verdict": "PASS"
+          },
+          {
+            "details": {},
+            "expected": 229783,
+            "name": "producer_starttime_adopted",
+            "observed": 229783,
+            "passed": true,
+            "verdict": "PASS"
+          },
+          {
+            "details": {},
+            "expected": "4e032339-4791-4968-a395-8de2ff61d323",
+            "name": "capture_epoch_unchanged",
+            "observed": "4e032339-4791-4968-a395-8de2ff61d323",
+            "passed": true,
+            "verdict": "PASS"
+          },
+          {
+            "details": {},
+            "expected": "> before",
+            "name": "lease_epoch_increased",
+            "observed": 62,
+            "passed": true,
+            "verdict": "PASS"
+          },
+          {
+            "details": {},
+            "expected": "MULTIPLE_PRODUCERS",
+            "name": "multiple_producers_classified",
+            "observed": "MULTIPLE_PRODUCERS",
+            "passed": true,
+            "verdict": "PASS"
+          },
+          {
+            "details": {},
+            "expected": 2,
+            "name": "multiple_producers_precondition_exactly_two",
+            "observed": 2,
+            "passed": true,
+            "verdict": "PASS"
+          },
+          {
+            "details": {},
+            "expected": "<=2",
+            "name": "multiple_producers_never_third",
+            "observed": 2,
+            "passed": true,
+            "verdict": "PASS"
+          },
+          {
+            "details": {},
+            "expected": ">0 RECOVERY_CONFLICT_FOUND",
+            "name": "multiple_producers_conflict_event",
+            "observed": 1,
+            "passed": true,
+            "verdict": "PASS"
+          },
+          {
+            "details": {},
+            "expected": 1,
+            "name": "multiple_producers_final_single",
+            "observed": 1,
+            "passed": true,
+            "verdict": "PASS"
+          }
+        ],
+        "created_at": "2026-08-22T01:29:11.307932+00:00",
+        "evidence_bundle": "/tmp/capture-v2-gates/20260822T012910Z_R2-03-APF1250-MULTIPLE-PRODUCERS-RC17_259f16e6-af9e-4dff-969b-2bb5eac43eb2",
+        "facts": {
+          "after_capture_epoch_id": "4e032339-4791-4968-a395-8de2ff61d323",
+          "after_lease_epoch": 62,
+          "after_pid": 7327,
+          "after_starttime": 229783,
+          "before_capture_epoch_id": "4e032339-4791-4968-a395-8de2ff61d323",
+          "before_lease_epoch": 61,
+          "before_pid": 7327,
+          "before_starttime": 229783,
+          "capture_session_id": "e90c0c9b-07a6-4cdf-a05f-47911a0293ef",
+          "final_owned_count": 1,
+          "initial_owned_count": 2,
+          "max_owned_count": 2,
+          "recovery_classification": "MULTIPLE_PRODUCERS",
+          "recovery_status": "CONFLICT_RESOLVED",
+          "stale_pid": 7733
+        },
+        "gate_id": "R2-03-APF1250-MULTIPLE-PRODUCERS-RC17",
+        "summary": "Ownership/recovery invariant",
+        "verdict": "PASS"
+      },
+      "state": {
+        "after_capture_epoch_id": "4e032339-4791-4968-a395-8de2ff61d323",
+        "after_lease_epoch": 62,
+        "after_pid": 7327,
+        "after_starttime": 229783,
+        "before_capture_epoch_id": "4e032339-4791-4968-a395-8de2ff61d323",
+        "before_lease_epoch": 61,
+        "before_pid": 7327,
+        "before_starttime": 229783,
+        "capture_session_id": "e90c0c9b-07a6-4cdf-a05f-47911a0293ef",
+        "final_owned_count": 1,
+        "initial_owned_count": 2,
+        "max_owned_count": 2,
+        "recovery_classification": "MULTIPLE_PRODUCERS",
+        "recovery_status": "CONFLICT_RESOLVED",
+        "reproduction_session_id": "7604271a-6465-443f-89f5-12605ed1f27d",
+        "stale_pid": 7733
+      }
+    }
+  }
+}

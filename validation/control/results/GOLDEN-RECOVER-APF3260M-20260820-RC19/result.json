@@ -1,0 +1,106 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "GOLDEN-RECOVER-APF3260M-20260820-RC19",
+    "sequence": 93,
+    "created_at": "2026-08-22T02:32:00+00:00",
+    "expires_at": "2026-08-22T14:32:00+00:00",
+    "action_type": "GOLDEN_ARCHIVE_RECOVER",
+    "parameters": {
+      "device_id": "c132f336-df1b-4285-b175-01d848f23b5d",
+      "model": "APF3260-M",
+      "host": "10.48.8.74",
+      "port": 10002,
+      "username": "root",
+      "platform_id": "mt7981",
+      "password_env": "DB:G1U060H000384",
+      "archive_date": "20260820",
+      "timeout_seconds": 240
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "14a9219598d1634600ea5ca1492c94146b0b4d99"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "RC19 read-only recovery of the historical 2026-08-20 APF3260-M Golden archive from fixed /www then /tmp. No handset action, no PCM/FXS mutation, no arbitrary remote path."
+  },
+  "action_sha256": "29d89600861cb9a8db4e89c50102dc051bc26065e16635b52d048bcb498f180a",
+  "runner_id": "srv:3456908",
+  "state": "SUCCEEDED",
+  "return_code": 0,
+  "verdict": "PASS",
+  "error": null,
+  "finished_at": "2026-08-22T02:32:26.282039+00:00",
+  "stdout_sha256": "72904b40a77b20536ea81adecdfceb84b121ad77de031e2acd0c6c8453b90637",
+  "stderr_sha256": "b8258e86248ce6f15dfea1a12afcd2ad3fde62ba6d3cd24536ffc8cb3bb61c48",
+  "local_stdout": ".capture-v2-control/logs/GOLDEN-RECOVER-APF3260M-20260820-RC19/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/GOLDEN-RECOVER-APF3260M-20260820-RC19/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "6b9e5d0335ff3a8c944d7ce765eb1243f6d2e678",
+      "expected_product_head": "14a9219598d1634600ea5ca1492c94146b0b4d99"
+    },
+    "parsed_output": {
+      "verdict": "PASS",
+      "archive_name": "v21_golden_APF3260_20260820.tar.gz",
+      "source_root": "/www",
+      "local_path": "/tmp/capture-v2-golden-recovery/c132f336-df1b-4285-b175-01d848f23b5d/20260820/v21_golden_APF3260_20260820.tar.gz",
+      "size_bytes": 1760116,
+      "sha256": "fedcb67763eb7bf65fb00aed68b4e03073fae6e779e71de318d65f7ab7a6489a",
+      "inventory": {
+        "member_count": 20,
+        "pcap_count": 16,
+        "regular_file_bytes": 4162017,
+        "pcap_names": [
+          "v21_golden/capture_20260820_194859.pcap",
+          "v21_golden/capture_20260820_194854.pcap",
+          "v21_golden/capture_20260820_194849.pcap",
+          "v21_golden/capture_20260820_194844.pcap",
+          "v21_golden/capture_20260820_194839.pcap",
+          "v21_golden/capture_20260820_194834.pcap",
+          "v21_golden/capture_20260820_194829.pcap",
+          "v21_golden/capture_20260820_194824.pcap",
+          "v21_golden/capture_20260820_194819.pcap",
+          "v21_golden/capture_20260820_194814.pcap",
+          "v21_golden/capture_20260820_194809.pcap",
+          "v21_golden/capture_20260820_194804.pcap",
+          "v21_golden/capture_20260820_194759.pcap",
+          "v21_golden/capture_20260820_194754.pcap",
+          "v21_golden/capture_20260820_194718.pcap",
+          "v21_golden/capture_20260820_194638.pcap"
+        ],
+        "members": [
+          "v21_golden",
+          "v21_golden/capture_20260820_194859.pcap",
+          "v21_golden/capture_20260820_194854.pcap",
+          "v21_golden/capture_20260820_194849.pcap",
+          "v21_golden/capture_20260820_194844.pcap",
+          "v21_golden/capture_20260820_194839.pcap",
+          "v21_golden/capture_20260820_194834.pcap",
+          "v21_golden/capture_20260820_194829.pcap",
+          "v21_golden/capture_20260820_194824.pcap",
+          "v21_golden/capture_20260820_194819.pcap",
+          "v21_golden/capture_20260820_194814.pcap",
+          "v21_golden/capture_20260820_194809.pcap",
+          "v21_golden/capture_20260820_194804.pcap",
+          "v21_golden/capture_20260820_194759.pcap",
+          "v21_golden/capture_20260820_194754.pcap",
+          "v21_golden/capture_20260820_194718.pcap",
+          "v21_golden/tcpdump.pid",
+          "v21_golden/capture_20260820_194638.pcap",
+          "v21_golden/tcpdump.stderr",
+          "v21_golden/tcpdump.stdout"
+        ],
+        "members_truncated": false
+      },
+      "attempts": []
+    }
+  }
+}

@@ -1,0 +1,285 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "R4-01-APF3260M-FRESH-FXS-RC26",
+    "sequence": 116,
+    "created_at": "2026-08-22T09:16:30+00:00",
+    "expires_at": "2026-08-22T21:16:30+00:00",
+    "action_type": "GATE_READINESS_FXS",
+    "parameters": {
+      "device_id": "c132f336-df1b-4285-b175-01d848f23b5d",
+      "model": "APF3260-M",
+      "host": "10.48.8.74",
+      "port": 10002,
+      "username": "root",
+      "platform_id": "mt7981",
+      "password_env": "DB:G1U060H000384",
+      "profile_root": "../profiles",
+      "profile_id": "voip-standard",
+      "object_root": "/tmp/voip-reproduction-objects",
+      "output_root": "/tmp/capture-v2-gates",
+      "repo_root": "..",
+      "reproduction_session_id": "AUTO_NEW",
+      "worker_id": "r4-01-apf3260m-fresh-fxs-rc26",
+      "gate_id": "R4-01-APF3260M-FRESH-FXS-RC26",
+      "duration": 300,
+      "transport": "scp",
+      "timeout_seconds": 900
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "e49441e5efd1cd9e8171143dcacb8286a85fc614"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "Fresh APF3260-M physical FXS Gate. Arm real Capture V2 validation session and AIM FXS reader; consume only real OFFHOOK/DTMF/ONHOOK events. No simulated handset activity. V1 remains authoritative and Production V2 remains disabled. If the physical sequence is not observed within the window, return INCONCLUSIVE rather than product FAIL."
+  },
+  "action_sha256": "72ffca5a4908c9dcb6866e4b1878d975ef4e1c8c314ecfb0f599c4a4ed9ef600",
+  "runner_id": "srv:3456908",
+  "state": "SUCCEEDED",
+  "return_code": 0,
+  "verdict": "PASS",
+  "error": null,
+  "finished_at": "2026-08-22T09:17:25.455366+00:00",
+  "stdout_sha256": "4a5d72972ef80b434f7a4c2e84c1bc89fac3d63cd6bc22d5ce40dd5e06ca0ffa",
+  "stderr_sha256": "b8258e86248ce6f15dfea1a12afcd2ad3fde62ba6d3cd24536ffc8cb3bb61c48",
+  "local_stdout": ".capture-v2-control/logs/R4-01-APF3260M-FRESH-FXS-RC26/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/R4-01-APF3260M-FRESH-FXS-RC26/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "5d205d79105638bb394009bd75eeb98f2138277e",
+      "expected_product_head": "e49441e5efd1cd9e8171143dcacb8286a85fc614"
+    },
+    "parsed_output": {
+      "checks": [
+        {
+          "details": {},
+          "expected": 9,
+          "name": "full_debug_enable_prompt_acked",
+          "observed": 9,
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": 9,
+          "name": "full_debug_cleanup_prompt_acked",
+          "observed": 9,
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": "DUT date +%z",
+          "name": "device_source_timezone_observed",
+          "observed": "+0800",
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": "OFFHOOK->DTMF->ONHOOK",
+          "name": "physical_offhook_dtmf_onhook_observed",
+          "observed": [
+            "OFFHOOK",
+            "OFFHOOK",
+            "DTMF",
+            "DTMF",
+            "DTMF",
+            "DTMF",
+            "DTMF",
+            "DTMF",
+            "DTMF",
+            "DTMF",
+            "DTMF",
+            "DTMF",
+            "ONHOOK"
+          ],
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": {
+            "DTMF": ">0",
+            "OFFHOOK": ">0",
+            "ONHOOK": ">0"
+          },
+          "name": "raw_fxs_events_persisted",
+          "observed": {
+            "DTMF": 10,
+            "OFFHOOK": 2,
+            "ONHOOK": 1
+          },
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": ">0",
+          "name": "capture_attempt_created",
+          "observed": 1,
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": ">0 FXS_DTMF",
+          "name": "semantic_dtmf_bound",
+          "observed": 10,
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": ">0 ATTEMPT_ENDED",
+          "name": "attempt_end_semantic_recorded",
+          "observed": 1,
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": ">0 ENDED/NORMAL",
+          "name": "normal_attempt_ended",
+          "observed": 1,
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": null,
+          "name": "monitor_runtime_no_exception",
+          "observed": null,
+          "passed": true,
+          "verdict": "PASS"
+        }
+      ],
+      "created_at": "2026-08-22T09:17:25.099204+00:00",
+      "evidence_bundle": "/tmp/capture-v2-gates/20260822T091709Z_R4-01-APF3260M-FRESH-FXS-RC26_c132f336-df1b-4285-b175-01d848f23b5d",
+      "facts": {
+        "attempt_ended_event_count": 1,
+        "capture_attempt_count": 1,
+        "capture_epoch_id": "f5c73528-ceb7-4b6e-ab09-0289a4b9530a",
+        "capture_session_id": "4dd3a3c5-3acd-4496-b21d-c87f5113328e",
+        "debug_disable_acked": 9,
+        "debug_enable_acked": 9,
+        "device_timezone_offset": "+0800",
+        "device_timezone_proven": true,
+        "ended_normal_attempt_count": 1,
+        "lease_epoch": 61,
+        "monitor_error": null,
+        "observed_fxs_events": [
+          {
+            "digit": null,
+            "event": "OFFHOOK",
+            "line": 0,
+            "source_ts": "2026-08-22T17:17:09.674000+08:00",
+            "timestamp": "2026-08-22 17:17:09.674000"
+          },
+          {
+            "digit": null,
+            "event": "OFFHOOK",
+            "line": 0,
+            "source_ts": "2026-08-22T17:17:09.675000+08:00",
+            "timestamp": "2026-08-22 17:17:09.675000"
+          },
+          {
+            "digit": "1",
+            "event": "DTMF",
+            "line": 0,
+            "source_ts": "2026-08-22T17:17:10.534000+08:00",
+            "timestamp": "2026-08-22 17:17:10.534000"
+          },
+          {
+            "digit": "2",
+            "event": "DTMF",
+            "line": 0,
+            "source_ts": "2026-08-22T17:17:10.914000+08:00",
+            "timestamp": "2026-08-22 17:17:10.914000"
+          },
+          {
+            "digit": "3",
+            "event": "DTMF",
+            "line": 0,
+            "source_ts": "2026-08-22T17:17:11.234000+08:00",
+            "timestamp": "2026-08-22 17:17:11.234000"
+          },
+          {
+            "digit": "4",
+            "event": "DTMF",
+            "line": 0,
+            "source_ts": "2026-08-22T17:17:11.894000+08:00",
+            "timestamp": "2026-08-22 17:17:11.894000"
+          },
+          {
+            "digit": "5",
+            "event": "DTMF",
+            "line": 0,
+            "source_ts": "2026-08-22T17:17:12.174000+08:00",
+            "timestamp": "2026-08-22 17:17:12.174000"
+          },
+          {
+            "digit": "6",
+            "event": "DTMF",
+            "line": 0,
+            "source_ts": "2026-08-22T17:17:12.394000+08:00",
+            "timestamp": "2026-08-22 17:17:12.394000"
+          },
+          {
+            "digit": "7",
+            "event": "DTMF",
+            "line": 0,
+            "source_ts": "2026-08-22T17:17:12.714000+08:00",
+            "timestamp": "2026-08-22 17:17:12.714000"
+          },
+          {
+            "digit": "8",
+            "event": "DTMF",
+            "line": 0,
+            "source_ts": "2026-08-22T17:17:12.934000+08:00",
+            "timestamp": "2026-08-22 17:17:12.934000"
+          },
+          {
+            "digit": "9",
+            "event": "DTMF",
+            "line": 0,
+            "source_ts": "2026-08-22T17:17:13.154000+08:00",
+            "timestamp": "2026-08-22 17:17:13.154000"
+          },
+          {
+            "digit": "0",
+            "event": "DTMF",
+            "line": 0,
+            "source_ts": "2026-08-22T17:17:13.614000+08:00",
+            "timestamp": "2026-08-22 17:17:13.614000"
+          },
+          {
+            "digit": null,
+            "event": "ONHOOK",
+            "line": 0,
+            "source_ts": "2026-08-22T17:17:24.294000+08:00",
+            "timestamp": "2026-08-22 17:17:24.294000"
+          }
+        ],
+        "physical_sequence_complete": true,
+        "raw_event_counts": {
+          "dtmf": 10,
+          "offhook": 2,
+          "onhook": 1
+        },
+        "semantic_dtmf_count": 10,
+        "transcript_path": "/tmp/capture-v2-gates/20260822T091709Z_R4-01-APF3260M-FRESH-FXS-RC26_c132f336-df1b-4285-b175-01d848f23b5d/dut/aim_fxs_transcript.log"
+      },
+      "gate_id": "R4-01-APF3260M-FRESH-FXS-RC26",
+      "summary": "R4-01 Real FXS source-time and Attempt semantic binding",
+      "verdict": "PASS"
+    }
+  }
+}

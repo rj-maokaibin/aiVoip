@@ -1,0 +1,277 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "R5-01-APF3260M-LIVE-COVERAGE-RC30",
+    "sequence": 126,
+    "created_at": "2026-08-22T09:51:00+00:00",
+    "expires_at": "2026-08-22T21:51:00+00:00",
+    "action_type": "GATE_READINESS_FXS",
+    "parameters": {
+      "device_id": "c132f336-df1b-4285-b175-01d848f23b5d",
+      "model": "APF3260-M",
+      "host": "10.48.8.74",
+      "port": 10002,
+      "username": "root",
+      "platform_id": "mt7981",
+      "password_env": "DB:G1U060H000384",
+      "profile_root": "../profiles",
+      "profile_id": "voip-standard",
+      "object_root": "/tmp/voip-reproduction-objects",
+      "output_root": "/tmp/capture-v2-gates",
+      "repo_root": "..",
+      "reproduction_session_id": "AUTO_NEW",
+      "worker_id": "r5-01-apf3260m-live-coverage-rc30",
+      "gate_id": "R5-01-APF3260M-LIVE-COVERAGE-RC30",
+      "duration": 180,
+      "transport": "scp",
+      "timeout_seconds": 900
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "b156075c485c42709bd0a1e98ed3a34f700f7836"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "Second real APF3260-M R5 validation after fixing tcpdump kernel-drop evidence persistence, CoverageInterval source-kind DB contract, and PCM silence-vs-capture-availability semantics. Require real OFFHOOK/DTMF/ONHOOK, durable PCAP, kernel_drops=0, real UDP 40000/50000 packets, and PostgreSQL CoverageWindow/Track/Interval COMPLETE. Production V2 remains disabled."
+  },
+  "action_sha256": "3c7edb9140847f514e87652613970414f4daea4c893d5b6db6f75722cbe0ef7f",
+  "runner_id": "srv:3456908",
+  "state": "INCONCLUSIVE",
+  "return_code": 2,
+  "verdict": "INCONCLUSIVE",
+  "error": null,
+  "finished_at": "2026-08-22T09:54:34.026039+00:00",
+  "stdout_sha256": "596335b5b2ace26a22a40cf8e5436422eb60ff68d70608f7061bf10e2de4d1e2",
+  "stderr_sha256": "b8258e86248ce6f15dfea1a12afcd2ad3fde62ba6d3cd24536ffc8cb3bb61c48",
+  "local_stdout": ".capture-v2-control/logs/R5-01-APF3260M-LIVE-COVERAGE-RC30/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/R5-01-APF3260M-LIVE-COVERAGE-RC30/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "908f24b923c7eefb93aeb33eeba77401598794a2",
+      "expected_product_head": "b156075c485c42709bd0a1e98ed3a34f700f7836"
+    },
+    "parsed_output": {
+      "checks": [
+        {
+          "details": {},
+          "expected": "READY",
+          "name": "stage1_ready_before_handset",
+          "observed": "READY",
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": true,
+          "name": "stage1_all_real_checks_ready",
+          "observed": {
+            "exactly_one_producer": true,
+            "fxs_ready": true,
+            "lease_active": true,
+            "pcap_ready": true,
+            "pcm_control_ready": true,
+            "server_store_ready": true,
+            "storage_guard_ready": true,
+            "transfer_ready": true,
+            "voice_context_ready": true,
+            "watchdog_ready": true
+          },
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": "OFFHOOK->DTMF->ONHOOK",
+          "name": "physical_offhook_dtmf_onhook_observed",
+          "observed": [],
+          "passed": false,
+          "verdict": "FAIL"
+        },
+        {
+          "details": {},
+          "expected": ">0",
+          "name": "real_attempt_bound",
+          "observed": null,
+          "passed": false,
+          "verdict": "FAIL"
+        },
+        {
+          "details": {},
+          "expected": true,
+          "name": "capture_finalizer_durable",
+          "observed": null,
+          "passed": false,
+          "verdict": "FAIL"
+        },
+        {
+          "details": {},
+          "expected": 0,
+          "name": "kernel_capture_drops_zero",
+          "observed": null,
+          "passed": false,
+          "verdict": "FAIL"
+        },
+        {
+          "details": {},
+          "expected": ">0",
+          "name": "real_pcm_rx_packets_observed",
+          "observed": null,
+          "passed": false,
+          "verdict": "FAIL"
+        },
+        {
+          "details": {},
+          "expected": ">0",
+          "name": "real_pcm_tx_packets_observed",
+          "observed": null,
+          "passed": false,
+          "verdict": "FAIL"
+        },
+        {
+          "details": {},
+          "expected": "COMPLETE+finalized_at",
+          "name": "coverage_window_auto_finalized_complete",
+          "observed": {},
+          "passed": false,
+          "verdict": "FAIL"
+        },
+        {
+          "details": {},
+          "expected": {
+            "FXS": "COMPLETE",
+            "PCAP": "COMPLETE",
+            "PCM_RX": "COMPLETE",
+            "PCM_TX": "COMPLETE"
+          },
+          "name": "coverage_required_tracks_complete",
+          "observed": {},
+          "passed": false,
+          "verdict": "FAIL"
+        },
+        {
+          "details": {},
+          "expected": {
+            "FXS": ">0",
+            "PCAP": ">0",
+            "PCM_RX": ">0",
+            "PCM_TX": ">0"
+          },
+          "name": "coverage_intervals_persisted",
+          "observed": {
+            "FXS": null,
+            "PCAP": null,
+            "PCM_RX": null,
+            "PCM_TX": null
+          },
+          "passed": false,
+          "verdict": "FAIL"
+        },
+        {
+          "details": {},
+          "expected": {
+            "off": 2,
+            "on": 2
+          },
+          "name": "pcm_control_symmetric",
+          "observed": {
+            "off": 2,
+            "on": 2
+          },
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": {
+            "off": 9,
+            "on": 9
+          },
+          "name": "aim_debug_control_symmetric",
+          "observed": {
+            "off": 9,
+            "on": 9
+          },
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": true,
+          "name": "producer_cleanup_exact_identity",
+          "observed": true,
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": true,
+          "name": "lease_cleanup_released",
+          "observed": true,
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": [],
+          "name": "cleanup_no_exception",
+          "observed": [],
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": [],
+          "name": "runtime_no_exception",
+          "observed": [
+            "RuntimeError:R5_REAL_CALL_SEQUENCE_NOT_COMPLETED"
+          ],
+          "passed": false,
+          "verdict": "FAIL"
+        }
+      ],
+      "created_at": "2026-08-22T09:54:33.671760+00:00",
+      "evidence_bundle": "/tmp/capture-v2-gates/20260822T095128Z_R5-01-APF3260M-LIVE-COVERAGE-RC30_c132f336-df1b-4285-b175-01d848f23b5d",
+      "facts": {
+        "capture_attempt_id": null,
+        "capture_epoch_id": "64265bf9-01dd-4d35-9813-50a278215cab",
+        "capture_session_id": "182e09c8-cfa2-49b2-ad3a-8f9e470b616e",
+        "cleanup_errors": [],
+        "coverage_tracks": {},
+        "coverage_window": {},
+        "finalizer": {
+          "acked": null,
+          "durable": null,
+          "kernel_drops": null,
+          "remote_deleted": null,
+          "sealed": null,
+          "transferred": null
+        },
+        "fxs_monitor_end": null,
+        "fxs_monitor_start": "2026-08-22T17:51:33+08:00",
+        "lease_epoch": 66,
+        "observed_fxs_events": [],
+        "pcm": {},
+        "physical_sequence_complete": false,
+        "release_gate_effect": "R5_REAL_LIVE_COVERAGE_VALIDATION_ONLY_PRODUCTION_V2_DISABLED",
+        "runtime_errors": [
+          "RuntimeError:R5_REAL_CALL_SEQUENCE_NOT_COMPLETED"
+        ],
+        "transcript_path": "/tmp/capture-v2-gates/20260822T095128Z_R5-01-APF3260M-LIVE-COVERAGE-RC30_c132f336-df1b-4285-b175-01d848f23b5d/dut/aim_fxs_transcript.log",
+        "voice_context": {
+          "gateway_ip": "192.168.3.200",
+          "interface": "br-lan_400",
+          "voice_vlan_id": "400"
+        }
+      },
+      "gate_id": "R5-01-APF3260M-LIVE-COVERAGE-RC30",
+      "summary": "R5 real call -> durable evidence -> automatic Coverage Ledger COMPLETE",
+      "verdict": "INCONCLUSIVE"
+    }
+  }
+}

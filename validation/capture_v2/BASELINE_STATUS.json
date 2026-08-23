@@ -1,0 +1,40 @@
+{
+  "schema_version": "capture-v2-software-baseline-v1",
+  "capture_engine_version": "2.1.1",
+  "git_base": "a805e2dfefdc8ca62fae90bc403166bfeea61827",
+  "software": {
+    "a_foundation": "PASS",
+    "b_ownership": "PASS",
+    "c_reliable_segment_sftp_ack": "PASS_SOFTWARE",
+    "d_readiness_fxs": "PASS_SOFTWARE",
+    "e_coverage": "PASS_SOFTWARE",
+    "f_quality_report": "PASS_SOFTWARE",
+    "cutover_guard": "PASS",
+    "pytest": {"status": "PASS", "tests": 97},
+    "compileall": "PASS",
+    "sqlite_migration_upgrade": "PASS",
+    "sqlite_migration_downgrade": "PASS",
+    "postgresql_offline_ddl": "PASS",
+    "busybox_smoke": "PASS"
+  },
+  "production": {
+    "capture_engine_version_default": "V1",
+    "capture_v2_production_enabled": false,
+    "status": "BLOCKED_BY_REAL_GATES"
+  },
+  "deferred_real_gates": [
+    "POSTGRESQL_LEASE_CONCURRENCY",
+    "APF1250_OWNERSHIP_RECOVERY",
+    "APF3260M_OWNERSHIP_RECOVERY",
+    "REAL_DUT_SFTP",
+    "SEGMENT_ACK_FAILURE_INJECTION",
+    "READINESS_FXS_REAL_GATE",
+    "HOOK_THRESHOLD_CALIBRATION",
+    "COVERAGE_GOLDEN_RECONCILIATION",
+    "EVIDENCE_REPORT_E2E",
+    "V1_V2_SHADOW_COMPARE",
+    "LONG_RUN_RESOURCE_GATE",
+    "ROLLBACK_GATE",
+    "PRODUCTION_CUTOVER"
+  ]
+}

@@ -1,0 +1,44 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "RC52-REHEARSAL-GUARD-SELF-EXCLUSION-SW-001",
+    "sequence": 172,
+    "created_at": "2026-08-23T12:16:00+00:00",
+    "expires_at": "2026-08-23T23:16:00+00:00",
+    "action_type": "SOFTWARE_REGRESSION",
+    "parameters": {
+      "timeout_seconds": 1200
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "d71df4d54fb01f0df67934d57ad5f3170fcc2fd7"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "Regression after correcting the rehearsal DUT /proc producer race guard to exclude only the executing guard shell itself. All other process scans remain fail-closed; live op.lock and AIVOIP producers still block cleanup; generic production fencing remains unchanged. V1 remains authoritative and Production V2 remains false."
+  },
+  "action_sha256": "df366740da0e06a0149afbf40800ce4ec4ea0db60b06e04d6b0f7bfc3d427efb",
+  "runner_id": "srv:257142",
+  "state": "SUCCEEDED",
+  "return_code": 0,
+  "verdict": null,
+  "error": null,
+  "finished_at": "2026-08-23T12:15:14.794792+00:00",
+  "stdout_sha256": "1137b58b3469aa81d24ca52a60c81fe6def51e42f0a0af51500c57e483ddbfd5",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "local_stdout": ".capture-v2-control/logs/RC52-REHEARSAL-GUARD-SELF-EXCLUSION-SW-001/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/RC52-REHEARSAL-GUARD-SELF-EXCLUSION-SW-001/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "84982b2042ab8761ba2b83feec5d4ef842238c5b",
+      "expected_product_head": "d71df4d54fb01f0df67934d57ad5f3170fcc2fd7"
+    },
+    "parsed_output": null
+  }
+}

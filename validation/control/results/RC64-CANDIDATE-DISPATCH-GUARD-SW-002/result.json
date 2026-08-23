@@ -1,0 +1,44 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "RC64-CANDIDATE-DISPATCH-GUARD-SW-002",
+    "sequence": 195,
+    "created_at": "2026-08-23T14:08:00+00:00",
+    "expires_at": "2026-08-24T02:08:00+00:00",
+    "action_type": "SOFTWARE_REGRESSION",
+    "parameters": {
+      "timeout_seconds": 1800
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "4f151f45e89fe14ffdb92dd91c3cd548b9b55c8b"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "Repeat full Capture V2 regression after removing the stale hard-coded PR #37 candidate SHA from the legacy master-baseline dispatch unit test. The test now derives the audited SHA from gate_cli, preventing control-contract drift. V1 remains authoritative, Production V2 disabled, no DUT I/O and no cutover."
+  },
+  "action_sha256": "b6cb6ebdb7adb27898d78bf8eadf44414d927f3490b56d2dc930cd8d2895127f",
+  "runner_id": "srv:257142",
+  "state": "SUCCEEDED",
+  "return_code": 0,
+  "verdict": null,
+  "error": null,
+  "finished_at": "2026-08-23T14:05:40.913844+00:00",
+  "stdout_sha256": "20c44b938711839cbdce4b44106b7728aedb7e965e0dfbe01b0811bfacce4bab",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "local_stdout": ".capture-v2-control/logs/RC64-CANDIDATE-DISPATCH-GUARD-SW-002/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/RC64-CANDIDATE-DISPATCH-GUARD-SW-002/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "f434c5d284a8d82fc3ee4135a4eac60ff868bf7d",
+      "expected_product_head": "4f151f45e89fe14ffdb92dd91c3cd548b9b55c8b"
+    },
+    "parsed_output": null
+  }
+}

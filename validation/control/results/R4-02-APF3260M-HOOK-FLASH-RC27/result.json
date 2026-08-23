@@ -1,0 +1,295 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "R4-02-APF3260M-HOOK-FLASH-RC27",
+    "sequence": 118,
+    "created_at": "2026-08-22T09:21:00+00:00",
+    "expires_at": "2026-08-22T21:21:00+00:00",
+    "action_type": "GATE_READINESS_FXS",
+    "parameters": {
+      "device_id": "c132f336-df1b-4285-b175-01d848f23b5d",
+      "model": "APF3260-M",
+      "host": "10.48.8.74",
+      "port": 10002,
+      "username": "root",
+      "platform_id": "mt7981",
+      "password_env": "DB:G1U060H000384",
+      "profile_root": "../profiles",
+      "profile_id": "voip-standard",
+      "object_root": "/tmp/voip-reproduction-objects",
+      "output_root": "/tmp/capture-v2-gates",
+      "repo_root": "..",
+      "reproduction_session_id": "AUTO_NEW",
+      "worker_id": "r4-02-apf3260m-hook-flash-rc27",
+      "gate_id": "R4-02-APF3260M-HOOK-FLASH-RC27",
+      "duration": 300,
+      "transport": "scp",
+      "timeout_seconds": 900
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "0a95a50772f8aa5dd06a38acd58042a1655eef8e"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "Real APF3260-M Hook Flash validation. Accept only a physical 100..1000ms ONHOOK pulse during an active FXS Attempt; require FXS_HOOK_FLASH on the same Attempt, post-flash DTMF continuity, final ONHOOK source-time preservation, and no Attempt split. Out-of-window operator pulse is INCONCLUSIVE rather than product FAIL."
+  },
+  "action_sha256": "014c487adf7a56ac975fb8c421305772a364082766976e91fb57ec5a6ae20785",
+  "runner_id": "srv:3456908",
+  "state": "SUCCEEDED",
+  "return_code": 0,
+  "verdict": "PASS",
+  "error": null,
+  "finished_at": "2026-08-22T09:26:15.423109+00:00",
+  "stdout_sha256": "58dc6385f7b36c48804316360d08bbeb8568f06e8767ff32ab9da011195ea5dc",
+  "stderr_sha256": "b8258e86248ce6f15dfea1a12afcd2ad3fde62ba6d3cd24536ffc8cb3bb61c48",
+  "local_stdout": ".capture-v2-control/logs/R4-02-APF3260M-HOOK-FLASH-RC27/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/R4-02-APF3260M-HOOK-FLASH-RC27/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "df6079144644d3b3016c6747f4d43e4f8f711545",
+      "expected_product_head": "0a95a50772f8aa5dd06a38acd58042a1655eef8e"
+    },
+    "parsed_output": {
+      "checks": [
+        {
+          "details": {},
+          "expected": 9,
+          "name": "full_debug_enable_prompt_acked",
+          "observed": 9,
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": 9,
+          "name": "full_debug_cleanup_prompt_acked",
+          "observed": 9,
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": "DUT date +%z",
+          "name": "device_source_timezone_observed",
+          "observed": "+0800",
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": "100..1000ms",
+          "name": "physical_hook_flash_pulse_in_window",
+          "observed": [
+            {
+              "duration_ms": 599,
+              "offhook_source_ts": "2026-08-22T17:26:06.573000+08:00",
+              "onhook_source_ts": "2026-08-22T17:26:05.974000+08:00"
+            }
+          ],
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": ">0 FXS_HOOK_FLASH",
+          "name": "semantic_hook_flash_recorded",
+          "observed": 1,
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": "100..1000ms",
+          "name": "semantic_hook_flash_duration_in_window",
+          "observed": [
+            599
+          ],
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": 0,
+          "name": "hook_flash_not_glitch",
+          "observed": 0,
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": true,
+          "name": "same_attempt_across_flash",
+          "observed": {
+            "dtmf": [
+              "3eb98a27-bdf8-452a-9645-4b168b879ece"
+            ],
+            "ended": [
+              "3eb98a27-bdf8-452a-9645-4b168b879ece"
+            ],
+            "flash": [
+              "3eb98a27-bdf8-452a-9645-4b168b879ece"
+            ]
+          },
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": 1,
+          "name": "no_attempt_split",
+          "observed": 1,
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": true,
+          "name": "post_flash_business_evidence_observed",
+          "observed": true,
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": "2026-08-22T17:26:12.713000+08:00",
+          "name": "final_onhook_source_time_preserved",
+          "observed": [
+            "2026-08-22T09:26:12.713000+00:00"
+          ],
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": 1,
+          "name": "normal_attempt_ended",
+          "observed": 1,
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": null,
+          "name": "monitor_runtime_no_exception",
+          "observed": null,
+          "passed": true,
+          "verdict": "PASS"
+        }
+      ],
+      "created_at": "2026-08-22T09:26:15.059422+00:00",
+      "evidence_bundle": "/tmp/capture-v2-gates/20260822T092140Z_R4-02-APF3260M-HOOK-FLASH-RC27_c132f336-df1b-4285-b175-01d848f23b5d",
+      "facts": {
+        "capture_attempt_count": 1,
+        "capture_epoch_id": "1b131ebf-0e77-4dc9-a845-6d44d28623bd",
+        "capture_session_id": "5f308972-d92d-45a8-a288-e26370010916",
+        "device_timezone_offset": "+0800",
+        "final_onhook_source_ts": "2026-08-22T17:26:12.713000+08:00",
+        "hook_pulse_candidates": [
+          {
+            "duration_ms": 599,
+            "offhook_source_ts": "2026-08-22T17:26:06.573000+08:00",
+            "onhook_source_ts": "2026-08-22T17:26:05.974000+08:00"
+          }
+        ],
+        "lease_epoch": 62,
+        "monitor_error": null,
+        "observed_fxs_events": [
+          {
+            "digit": null,
+            "event": "OFFHOOK",
+            "line": 0,
+            "source_ts": "2026-08-22T17:26:02.773000+08:00",
+            "timestamp": "2026-08-22 17:26:02.773000"
+          },
+          {
+            "digit": null,
+            "event": "OFFHOOK",
+            "line": 0,
+            "source_ts": "2026-08-22T17:26:02.774008+08:00",
+            "timestamp": "2026-08-22 17:26:02.774008"
+          },
+          {
+            "digit": "1",
+            "event": "DTMF",
+            "line": 0,
+            "source_ts": "2026-08-22T17:26:04.093000+08:00",
+            "timestamp": "2026-08-22 17:26:04.093000"
+          },
+          {
+            "digit": null,
+            "event": "ONHOOK",
+            "line": 0,
+            "source_ts": "2026-08-22T17:26:05.974000+08:00",
+            "timestamp": "2026-08-22 17:26:05.974000"
+          },
+          {
+            "digit": null,
+            "event": "ONHOOK",
+            "line": 0,
+            "source_ts": "2026-08-22T17:26:05.974009+08:00",
+            "timestamp": "2026-08-22 17:26:05.974009"
+          },
+          {
+            "digit": null,
+            "event": "OFFHOOK",
+            "line": 0,
+            "source_ts": "2026-08-22T17:26:06.573000+08:00",
+            "timestamp": "2026-08-22 17:26:06.573000"
+          },
+          {
+            "digit": null,
+            "event": "OFFHOOK",
+            "line": 0,
+            "source_ts": "2026-08-22T17:26:06.574008+08:00",
+            "timestamp": "2026-08-22 17:26:06.574008"
+          },
+          {
+            "digit": "2",
+            "event": "DTMF",
+            "line": 0,
+            "source_ts": "2026-08-22T17:26:08.013000+08:00",
+            "timestamp": "2026-08-22 17:26:08.013000"
+          },
+          {
+            "digit": null,
+            "event": "ONHOOK",
+            "line": 0,
+            "source_ts": "2026-08-22T17:26:12.713000+08:00",
+            "timestamp": "2026-08-22 17:26:12.713000"
+          },
+          {
+            "digit": null,
+            "event": "ONHOOK",
+            "line": 0,
+            "source_ts": "2026-08-22T17:26:12.714008+08:00",
+            "timestamp": "2026-08-22 17:26:12.714008"
+          }
+        ],
+        "post_flash_dtmf_seen": true,
+        "semantic_glitch_count": 0,
+        "semantic_hook_flash_count": 1,
+        "semantic_hook_flash_durations_ms": [
+          599
+        ],
+        "transcript_path": "/tmp/capture-v2-gates/20260822T092140Z_R4-02-APF3260M-HOOK-FLASH-RC27_c132f336-df1b-4285-b175-01d848f23b5d/dut/aim_fxs_transcript.log",
+        "valid_hook_flash_candidates": [
+          {
+            "duration_ms": 599,
+            "offhook_source_ts": "2026-08-22T17:26:06.573000+08:00",
+            "onhook_source_ts": "2026-08-22T17:26:05.974000+08:00"
+          }
+        ]
+      },
+      "gate_id": "R4-02-APF3260M-HOOK-FLASH-RC27",
+      "summary": "R4 real Hook Flash source-time / same-Attempt boundary",
+      "verdict": "PASS"
+    }
+  }
+}

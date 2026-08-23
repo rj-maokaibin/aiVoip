@@ -1,0 +1,195 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "R3-12-APF3260M-DUT-REBOOT-RC12",
+    "sequence": 63,
+    "created_at": "2026-08-22T00:33:00+00:00",
+    "expires_at": "2026-08-22T03:33:00+00:00",
+    "action_type": "GATE_SEGMENT",
+    "parameters": {
+      "device_id": "c132f336-df1b-4285-b175-01d848f23b5d",
+      "model": "APF3260-M",
+      "host": "10.48.8.74",
+      "port": 10002,
+      "username": "root",
+      "platform_id": "mt7981",
+      "password_env": "DB:G1U060H000384",
+      "profile_root": "../profiles",
+      "profile_id": "voip-standard",
+      "object_root": "/tmp/voip-reproduction-objects",
+      "output_root": "/tmp/capture-v2-gates",
+      "repo_root": "..",
+      "reproduction_session_id": "AUTO_NEW",
+      "worker_id": "r3-12-apf3260m-rc12",
+      "gate_id": "R3-12-APF3260M-DUT-REBOOT-RC12",
+      "duration": 40,
+      "interval": 0.5,
+      "transport": "scp",
+      "timeout_seconds": 900
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "a2c95832fce5e776a21a0518773363306efefe7f"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "RC12 R3-12 APF3260-M real DUT reboot Segment Gate. Establish and drain pre-reboot CaptureEpoch, record boot_id, reboot DUT, reconnect, wait old lease expiry, require DUT_REBOOT recovery with a new CaptureEpoch and higher lease_epoch, close DUT_REBOOT_GAP/record reboot event, and prove at least one post-reboot segment completes durable store + ACK + exact remote delete with no Server/DUT double loss."
+  },
+  "action_sha256": "4574abba6174a407336dcea339afc499b3e713120133b47b69627e2a464f01af",
+  "runner_id": "srv:3382405",
+  "state": "FAILED",
+  "return_code": 2,
+  "verdict": "FAIL",
+  "error": null,
+  "finished_at": "2026-08-22T00:36:13.706817+00:00",
+  "stdout_sha256": "09db6b25a0e59b149f132ac626d322d5c7bf01c6d9189275613bd228db71fa47",
+  "stderr_sha256": "b8258e86248ce6f15dfea1a12afcd2ad3fde62ba6d3cd24536ffc8cb3bb61c48",
+  "local_stdout": ".capture-v2-control/logs/R3-12-APF3260M-DUT-REBOOT-RC12/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/R3-12-APF3260M-DUT-REBOOT-RC12/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "76d82b01bff7cfc3dadf8ee60b6b9f488163520c",
+      "expected_product_head": "a2c95832fce5e776a21a0518773363306efefe7f"
+    },
+    "parsed_output": {
+      "checks": [
+        {
+          "details": {},
+          "expected": ">0",
+          "name": "at_least_one_segment",
+          "observed": 0,
+          "passed": false,
+          "verdict": "FAIL"
+        },
+        {
+          "details": {},
+          "expected": ">0 REMOTE_DELETED",
+          "name": "at_least_one_full_chain",
+          "observed": 0,
+          "passed": false,
+          "verdict": "FAIL"
+        },
+        {
+          "details": {},
+          "expected": true,
+          "name": "server_store_observable",
+          "observed": [],
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": [],
+          "name": "no_server_and_dut_double_loss",
+          "observed": [],
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": [],
+          "name": "acked_segments_have_server_copy",
+          "observed": [],
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": true,
+          "name": "no_unacked_eviction",
+          "observed": null,
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": "new boot_id",
+          "name": "segment_reboot_boot_id_changed",
+          "observed": {
+            "new": "ccc7a806-f15f-4669-9669-ab16bf2ff5b4",
+            "old": "3a4ec4b7-473a-40fd-bcdb-ba0f53c49f06"
+          },
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": "DUT_REBOOT",
+          "name": "segment_reboot_classified",
+          "observed": "DUT_REBOOT",
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": "new CaptureEpoch",
+          "name": "segment_reboot_new_capture_epoch",
+          "observed": {
+            "after": "6727a053-d8eb-440e-b64a-666e62393489",
+            "before": "319b0fc1-141e-491c-ba61-7ea0c569532f"
+          },
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": "> before",
+          "name": "segment_reboot_lease_epoch_increased",
+          "observed": 46,
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": ">0 recovered DUT_REBOOT_GAP",
+          "name": "segment_reboot_gap_recorded_and_closed",
+          "observed": 1,
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": ">0 DUT_REBOOT_DETECTED",
+          "name": "segment_reboot_event_recorded",
+          "observed": 1,
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": ">0 post-reboot REMOTE_DELETED",
+          "name": "segment_reboot_post_epoch_transferred",
+          "observed": [],
+          "passed": false,
+          "verdict": "FAIL"
+        }
+      ],
+      "created_at": "2026-08-22T00:36:13.217185+00:00",
+      "evidence_bundle": "/tmp/capture-v2-gates/20260822T003612Z_R3-12-APF3260M-DUT-REBOOT-RC12_c132f336-df1b-4285-b175-01d848f23b5d",
+      "facts": {
+        "after_capture_epoch_id": "6727a053-d8eb-440e-b64a-666e62393489",
+        "after_lease_epoch": 46,
+        "after_pid": 19495,
+        "before_capture_epoch_id": "319b0fc1-141e-491c-ba61-7ea0c569532f",
+        "before_lease_epoch": 45,
+        "before_pid": 32177,
+        "capture_session_id": "11b13b2c-69f9-46e2-ae74-0c86fcf26691",
+        "new_boot_id": "ccc7a806-f15f-4669-9669-ab16bf2ff5b4",
+        "old_boot_id": "3a4ec4b7-473a-40fd-bcdb-ba0f53c49f06",
+        "post_reboot_cycles": 35,
+        "post_reboot_deleted": 0,
+        "recovery_classification": "DUT_REBOOT",
+        "recovery_status": "REPAIRED"
+      },
+      "gate_id": "R3-12-APF3260M-DUT-REBOOT-RC12",
+      "summary": "Reliable Segment / SFTP / ACK",
+      "verdict": "FAIL"
+    }
+  }
+}

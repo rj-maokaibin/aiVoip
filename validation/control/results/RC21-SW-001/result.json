@@ -1,0 +1,44 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "RC21-SW-001",
+    "sequence": 97,
+    "created_at": "2026-08-22T02:39:00+00:00",
+    "expires_at": "2026-08-22T14:39:00+00:00",
+    "action_type": "SOFTWARE_REGRESSION",
+    "parameters": {
+      "timeout_seconds": 1800
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "752a850b48928ea335963d9bba960c26bb53bca2"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "RC21 validation/tooling software regression after adding pure-Python SIP/RTP Golden fallback analysis. Production V2 remains disabled and V1 authority is mandatory."
+  },
+  "action_sha256": "84b38627e5569c947e980c366426b5e040fc4ff3ea51424746f988a9968723cd",
+  "runner_id": "srv:3456908",
+  "state": "SUCCEEDED",
+  "return_code": 0,
+  "verdict": null,
+  "error": null,
+  "finished_at": "2026-08-22T02:39:34.304862+00:00",
+  "stdout_sha256": "6365c902bd07bc473d7dc9fa519e681ec6c1eb149e23d15d988a9dd84b1bcc41",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "local_stdout": ".capture-v2-control/logs/RC21-SW-001/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/RC21-SW-001/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "70d7040becbe53b421a6bd1da9ee6153996568ad",
+      "expected_product_head": "752a850b48928ea335963d9bba960c26bb53bca2"
+    },
+    "parsed_output": null
+  }
+}

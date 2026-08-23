@@ -1,0 +1,73 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "R7-02-APF3260M-SERVICE-ACTIVATION-ROLLBACK-RC44",
+    "sequence": 157,
+    "created_at": "2026-08-23T10:12:00+00:00",
+    "expires_at": "2026-08-23T22:12:00+00:00",
+    "action_type": "ACTIVATION_REHEARSAL",
+    "parameters": {
+      "timeout_seconds": 3600,
+      "sn": "G1U060H000384",
+      "host": "10.48.8.74",
+      "port": 10002,
+      "username": "root",
+      "platform_id": "mt7981",
+      "model": "APF3260-M",
+      "profile_id": "VOIP_GENERIC_FULL_CAPTURE",
+      "observation_seconds": 20
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "0047463ab84f078f330a3b308e26086aeebcc4f2"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "Guarded APF3260-M service-level activation/rollback rehearsal using a Compose override with zero host port publishing. Original env remains untouched, Production V2 remains false, project is precleaned and unconditionally removed at exit. PASS requires real V2 authority/producer/durable segment, serialized cleanup, V1 restoration and zero residual V2 producer."
+  },
+  "action_sha256": "2b3ac1b1bd22b5d7f7130af9da7c6fb7609d50b08bc062c82d78549c46c8e51f",
+  "runner_id": "srv:257142",
+  "state": "INCONCLUSIVE",
+  "return_code": 2,
+  "verdict": "INCONCLUSIVE",
+  "error": null,
+  "finished_at": "2026-08-23T10:06:19.625847+00:00",
+  "stdout_sha256": "483833a7c8a4f2a2bb99af88013678f4076d07ca272c58d71bafbc86b9a92dca",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "local_stdout": ".capture-v2-control/logs/R7-02-APF3260M-SERVICE-ACTIVATION-ROLLBACK-RC44/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/R7-02-APF3260M-SERVICE-ACTIVATION-ROLLBACK-RC44/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "130e37dc9018fe70896c5d473cd5ecc8f0da0a27",
+      "expected_product_head": "0047463ab84f078f330a3b308e26086aeebcc4f2"
+    },
+    "parsed_output": {
+      "scope": "BOUNDED_SERVICE_LEVEL_ACTIVATION_REHEARSAL",
+      "production_v2_enabled": false,
+      "original_env_modified": false,
+      "project": "capture-v2-r7-rehearsal",
+      "device": {
+        "sn": "G1U060H000384",
+        "model": "APF3260-M",
+        "host": "10.48.8.74",
+        "port": 10002
+      },
+      "checks": [],
+      "verdict": "INCONCLUSIVE",
+      "reason": "SERVICE_LEVEL_REHEARSAL_EXCEPTION",
+      "failure_phase": "V1_BASELINE_BOOT",
+      "error": "RuntimeError:BACKEND_HEALTH_FAILED",
+      "final_server_target_state": "PRESTATE_NO_REHEARSAL_CONTAINERS",
+      "final_authority_target": "V1",
+      "guarded_rehearsal": true,
+      "host_port_publishing": "DISABLED_BY_COMPOSE_OVERRIDE",
+      "final_rehearsal_project_empty": true
+    }
+  }
+}

@@ -1,0 +1,138 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "RC69-PRODUCTION-DEPLOYMENT-PREFLIGHT-001",
+    "sequence": 200,
+    "created_at": "2026-08-23T15:29:00+00:00",
+    "expires_at": "2026-08-24T03:29:00+00:00",
+    "action_type": "DEPLOYMENT_PREFLIGHT",
+    "parameters": {
+      "timeout_seconds": 120
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "05bc82a1fcdd1baca2be1d756b3c0053dced8401"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "Explicit production cutover is authorized. Perform read-only deployment preflight while V1 remains authoritative and Production V2 remains disabled. Discover actual Compose project/runtime, verify required services, env-file presence, current V1 authority, and validation artifact mount readiness. No restart, no env mutation, no DUT access."
+  },
+  "action_sha256": "f9e17537a51f847c1c7605f2eb25e3c066e2184e057953e8974b5e2cb6a39297",
+  "runner_id": "srv:611900",
+  "state": "FAILED",
+  "return_code": 1,
+  "verdict": "FAIL",
+  "error": null,
+  "finished_at": "2026-08-23T15:30:58.970073+00:00",
+  "stdout_sha256": "090d06577a7091009d62ba917eb2a382bf43dc1ba98980769861ff3f82d2881a",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "local_stdout": ".capture-v2-control/logs/RC69-PRODUCTION-DEPLOYMENT-PREFLIGHT-001/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/RC69-PRODUCTION-DEPLOYMENT-PREFLIGHT-001/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "bb5ee71e77d61398004d92e9867e5d4f6a03f29d",
+      "expected_product_head": "05bc82a1fcdd1baca2be1d756b3c0053dced8401"
+    },
+    "parsed_output": {
+      "verdict": "FAIL",
+      "checks": [
+        {
+          "name": "compose_available",
+          "passed": true
+        },
+        {
+          "name": "env_file_present",
+          "passed": true
+        },
+        {
+          "name": "required_services_defined",
+          "passed": true,
+          "observed": {
+            "missing": []
+          }
+        },
+        {
+          "name": "docker_cli_available",
+          "passed": true
+        },
+        {
+          "name": "required_services_running",
+          "passed": false,
+          "observed": {
+            "not_running": [
+              "backend",
+              "reproduction-worker",
+              "reproduction-control-high-worker",
+              "reproduction-watch-worker",
+              "beat"
+            ]
+          }
+        },
+        {
+          "name": "runtime_v1_authoritative",
+          "passed": true,
+          "observed": {}
+        },
+        {
+          "name": "release_artifact_mount_current",
+          "passed": true,
+          "observed": {
+            "missing_mount": []
+          }
+        }
+      ],
+      "facts": {
+        "scope": "READ_ONLY_DEPLOYMENT_PREFLIGHT",
+        "repo_root": "/home/dev/workspace/aiVoip",
+        "mutations_performed": false,
+        "compose_version": "Docker Compose version 2.40.3+ds1-0ubuntu1~24.04.1",
+        "env_file": "/home/dev/workspace/aiVoip/.env",
+        "env_file_safe": {
+          "APP_ENV": "development",
+          "VOIP_DATA_ROOT": "/home/dev/.local/share/aiVoip",
+          "REPRODUCTION_PLATFORM_MODE": "real"
+        },
+        "defined_required_services": [
+          "backend",
+          "reproduction-worker",
+          "reproduction-control-high-worker",
+          "reproduction-watch-worker",
+          "beat"
+        ],
+        "discovered_compose_projects": {},
+        "selected_compose_project": null,
+        "project_selection_basis": null,
+        "containers": {
+          "backend": {
+            "present": false,
+            "running": false
+          },
+          "reproduction-worker": {
+            "present": false,
+            "running": false
+          },
+          "reproduction-control-high-worker": {
+            "present": false,
+            "running": false
+          },
+          "reproduction-watch-worker": {
+            "present": false,
+            "running": false
+          },
+          "beat": {
+            "present": false,
+            "running": false
+          }
+        },
+        "recreate_required_for_validation_mount": []
+      },
+      "reason": "DEPLOYMENT_PREFLIGHT_FAILED"
+    }
+  }
+}

@@ -1,0 +1,220 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "R3-05-APF1250-PERSISTED-BEFORE-ACK-RC8",
+    "sequence": 43,
+    "created_at": "2026-08-21T16:16:00+00:00",
+    "expires_at": "2026-08-21T18:16:00+00:00",
+    "action_type": "GATE_SEGMENT",
+    "parameters": {
+      "device_id": "259f16e6-af9e-4dff-969b-2bb5eac43eb2",
+      "model": "APF1250",
+      "host": "10.48.8.74",
+      "port": 10001,
+      "username": "root",
+      "platform_id": "mt7621",
+      "password_env": "DB:G1V030E010214",
+      "profile_root": "../profiles",
+      "profile_id": "voip-standard",
+      "object_root": "/tmp/voip-reproduction-objects",
+      "output_root": "/tmp/capture-v2-gates",
+      "repo_root": "..",
+      "reproduction_session_id": "2deb3ef0-c1d8-40c0-8faf-f024a21408eb",
+      "worker_id": "r3-05-apf1250-rc8",
+      "gate_id": "R3-05-APF1250-RC8",
+      "duration": 30,
+      "interval": 0.5,
+      "transport": "scp",
+      "fault_plan": "../validation/control/fault_plans/r3-persisted-before-ack-once.json",
+      "timeout_seconds": 600
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "c7d8e2412615c0904c799c2f698241d7990a7709"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "R3-05 RC8 APF1250. Simulate worker disappearance only after DB PERSISTED commit and before ACK; leave tcpdump alive, wait lease TTL, adopt same producer/capture epoch with a higher lease epoch, then finish the exact immutable segment."
+  },
+  "action_sha256": "85769da72992f4ad9f837e21b790cf0a349fddc7bb7a7189e29933832873a846",
+  "runner_id": "srv:3090258",
+  "state": "SUCCEEDED",
+  "return_code": 0,
+  "verdict": "PASS",
+  "error": null,
+  "finished_at": "2026-08-21T16:17:47.056155+00:00",
+  "stdout_sha256": "00d0febff2065c7b27c72b43fed41fef0a8fad24bc441ca5dc362e767c0e33ec",
+  "stderr_sha256": "b8258e86248ce6f15dfea1a12afcd2ad3fde62ba6d3cd24536ffc8cb3bb61c48",
+  "local_stdout": ".capture-v2-control/logs/R3-05-APF1250-PERSISTED-BEFORE-ACK-RC8/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/R3-05-APF1250-PERSISTED-BEFORE-ACK-RC8/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "6775ede91710c7906fcba3bdb0af514db518a033",
+      "expected_product_head": "c7d8e2412615c0904c799c2f698241d7990a7709"
+    },
+    "parsed_output": {
+      "checks": [
+        {
+          "details": {},
+          "expected": ">0",
+          "name": "at_least_one_segment",
+          "observed": 318,
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": ">0 REMOTE_DELETED",
+          "name": "at_least_one_full_chain",
+          "observed": 318,
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": true,
+          "name": "server_store_observable",
+          "observed": [],
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": [],
+          "name": "no_server_and_dut_double_loss",
+          "observed": [],
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": [],
+          "name": "acked_segments_have_server_copy",
+          "observed": [],
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": true,
+          "name": "no_unacked_eviction",
+          "observed": null,
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": ">0 fault segment",
+          "name": "persisted_before_ack_fault_segment_recorded",
+          "observed": "07b948c6-b9b5-4db0-9526-aac5d6b3d464",
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": "fault segment REMOTE_DELETED after persisted crash",
+          "name": "persisted_before_ack_crash_recovered",
+          "observed": {
+            "ack_pending_at": "2026-08-21T16:17:15.655173+00:00",
+            "acked_at": "2026-08-21T16:17:15.658112+00:00",
+            "capture_epoch_id": "6f4f97ce-37ae-4047-9e65-b4edd8aa7a0c",
+            "capture_session_id": "6cab6073-f331-4147-89d6-10f1a280493d",
+            "device_id": "259f16e6-af9e-4dff-969b-2bb5eac43eb2",
+            "discovered_at": "2026-08-21T16:16:51.913006+00:00",
+            "download_started_at": "2026-08-21T16:16:52.179541+00:00",
+            "downloaded_at": "2026-08-21T16:16:52.243019+00:00",
+            "first_packet_ts": "2026-08-21T15:29:23.856285+00:00",
+            "id": "07b948c6-b9b5-4db0-9526-aac5d6b3d464",
+            "last_error_code": null,
+            "last_error_detail": null,
+            "last_packet_ts": "2026-08-21T15:29:23.857085+00:00",
+            "lease_epoch_at_ack": 41,
+            "local_temp_path": null,
+            "packet_count": 5,
+            "pcap_valid": true,
+            "persisted_at": "2026-08-21T16:16:52.251205+00:00",
+            "remote_deleted_at": "2026-08-21T16:17:15.724603+00:00",
+            "remote_inode": 4940328,
+            "remote_mtime_epoch": 1787326164,
+            "remote_path": "/tmp/aivoip_capture/epochs/CAP_6cab6073_0001_336b22db/spool/seg_000000000221__capture_20260821_232924.pcap",
+            "remote_size": 370,
+            "retention_state": "ROLLING",
+            "segment_seq": 221,
+            "server_size": 370,
+            "sha256": "4bb130c8bf2cb18aaef519dde950caf706d2d1b99aeaf746e3f4dca651865a24",
+            "state": "REMOTE_DELETED",
+            "storage_key": "capture-v2/259f16e6-af9e-4dff-969b-2bb5eac43eb2/6f4f97ce-37ae-4047-9e65-b4edd8aa7a0c/seg_000000000221.pcap",
+            "transfer_attempts": 1,
+            "verified_at": "2026-08-21T16:16:52.246229+00:00",
+            "version": 8
+          },
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": {
+            "pid": 1926,
+            "starttime": 9936882
+          },
+          "name": "persisted_before_ack_same_producer",
+          "observed": {
+            "pid": 1926,
+            "starttime": 9936882
+          },
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": "6f4f97ce-37ae-4047-9e65-b4edd8aa7a0c",
+          "name": "persisted_before_ack_same_capture_epoch",
+          "observed": "6f4f97ce-37ae-4047-9e65-b4edd8aa7a0c",
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": "> before",
+          "name": "persisted_before_ack_lease_epoch_increased",
+          "observed": 41,
+          "passed": true,
+          "verdict": "PASS"
+        }
+      ],
+      "created_at": "2026-08-21T16:17:46.743413+00:00",
+      "evidence_bundle": "/tmp/capture-v2-gates/20260821T161745Z_R3-05-APF1250-RC8_259f16e6-af9e-4dff-969b-2bb5eac43eb2",
+      "facts": {
+        "acked": 98,
+        "after_capture_epoch_id": "6f4f97ce-37ae-4047-9e65-b4edd8aa7a0c",
+        "after_lease_epoch": 41,
+        "after_pid": 1926,
+        "after_starttime": 9936882,
+        "before_capture_epoch_id": "6f4f97ce-37ae-4047-9e65-b4edd8aa7a0c",
+        "before_lease_epoch": 40,
+        "before_pid": 1926,
+        "before_starttime": 9936882,
+        "capture_epoch_id": "6f4f97ce-37ae-4047-9e65-b4edd8aa7a0c",
+        "capture_session_id": "6cab6073-f331-4147-89d6-10f1a280493d",
+        "control_authority": "ACTIVE",
+        "cycles": 21,
+        "deleted": 98,
+        "errors": 0,
+        "fault_mode": "PERSISTED_BEFORE_ACK",
+        "fault_segment_id": "07b948c6-b9b5-4db0-9526-aac5d6b3d464",
+        "lease_epoch": 41,
+        "sealed": 2,
+        "transferred": 97
+      },
+      "gate_id": "R3-05-APF1250-RC8",
+      "summary": "Reliable Segment / SFTP / ACK",
+      "verdict": "PASS"
+    }
+  }
+}

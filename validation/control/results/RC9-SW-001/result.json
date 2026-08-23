@@ -1,0 +1,44 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "RC9-SW-001",
+    "sequence": 45,
+    "created_at": "2026-08-21T16:29:00+00:00",
+    "expires_at": "2026-08-21T18:29:00+00:00",
+    "action_type": "SOFTWARE_REGRESSION",
+    "parameters": {
+      "timeout_seconds": 1200
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "958dc06d2bb1f29df44a4166f463739b6534f68a"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "RC9 software regression for automated R2 legacy/multiple/fencing/reboot, R3 spool/reboot, strict evaluators, and control Git timeout/divergence recovery. Production V2 remains disabled."
+  },
+  "action_sha256": "8c81db6e3a1b1b9a8a5f1a82c02d592b5cc6371f460397e5fc81cba2f5b90805",
+  "runner_id": "srv:3090258",
+  "state": "SUCCEEDED",
+  "return_code": 0,
+  "verdict": null,
+  "error": null,
+  "finished_at": "2026-08-21T16:28:52.583961+00:00",
+  "stdout_sha256": "6642db2b7811cf968f7c1ca9c586e7910a27a29985b26b994ef1d436e7e32f75",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "local_stdout": ".capture-v2-control/logs/RC9-SW-001/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/RC9-SW-001/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "63307c0133ebf2e9c2ad702b1069b7c4a3b2fbc2",
+      "expected_product_head": "958dc06d2bb1f29df44a4166f463739b6534f68a"
+    },
+    "parsed_output": null
+  }
+}

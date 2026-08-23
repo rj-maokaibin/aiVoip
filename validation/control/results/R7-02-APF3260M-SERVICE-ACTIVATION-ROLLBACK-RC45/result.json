@@ -1,0 +1,86 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "R7-02-APF3260M-SERVICE-ACTIVATION-ROLLBACK-RC45",
+    "sequence": 159,
+    "created_at": "2026-08-23T10:18:00+00:00",
+    "expires_at": "2026-08-23T22:18:00+00:00",
+    "action_type": "ACTIVATION_REHEARSAL",
+    "parameters": {
+      "timeout_seconds": 3600,
+      "sn": "G1U060H000384",
+      "host": "10.48.8.74",
+      "port": 10002,
+      "username": "root",
+      "platform_id": "mt7981",
+      "model": "APF3260-M",
+      "profile_id": "VOIP_GENERIC_FULL_CAPTURE",
+      "observation_seconds": 20
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "4feb91604e426a518d0e040777ba243a3e775497"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "Retry guarded APF3260-M service-level activation/rollback rehearsal with sanitized Compose diagnostics retained before cleanup. Zero host port publishing; original env untouched; Production V2 remains false; final isolated project must be empty."
+  },
+  "action_sha256": "1887d26b58c74c4cec8aeaf2604a0c31c55e8a8d9ee57baaa61e7ed7563fb1e0",
+  "runner_id": "srv:257142",
+  "state": "INCONCLUSIVE",
+  "return_code": 2,
+  "verdict": "INCONCLUSIVE",
+  "error": null,
+  "finished_at": "2026-08-23T10:18:36.851018+00:00",
+  "stdout_sha256": "2138df24bc6ee64222532f1c2d3648c36aacfdcb96aa94a741e102489f7f5be2",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "local_stdout": ".capture-v2-control/logs/R7-02-APF3260M-SERVICE-ACTIVATION-ROLLBACK-RC45/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/R7-02-APF3260M-SERVICE-ACTIVATION-ROLLBACK-RC45/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "dab2c82d43ceca806cf61c42df5e174c9a4303a2",
+      "expected_product_head": "4feb91604e426a518d0e040777ba243a3e775497"
+    },
+    "parsed_output": {
+      "scope": "BOUNDED_SERVICE_LEVEL_ACTIVATION_REHEARSAL",
+      "production_v2_enabled": false,
+      "original_env_modified": false,
+      "project": "capture-v2-r7-rehearsal",
+      "device": {
+        "sn": "G1U060H000384",
+        "model": "APF3260-M",
+        "host": "10.48.8.74",
+        "port": 10002
+      },
+      "checks": [],
+      "verdict": "INCONCLUSIVE",
+      "reason": "SERVICE_LEVEL_REHEARSAL_EXCEPTION",
+      "failure_phase": "V1_BASELINE_BOOT",
+      "error": "RuntimeError:BACKEND_HEALTH_FAILED",
+      "final_server_target_state": "PRESTATE_NO_REHEARSAL_CONTAINERS",
+      "final_authority_target": "V1",
+      "diagnostics": {
+        "compose_ps": "NAME                                                         IMAGE                                                      COMMAND                  SERVICE                            CREATED         STATUS                   PORTS\ncapture-v2-r7-rehearsal-backend-1                            capture-v2-r7-rehearsal-backend                            \"sh -c 'ln -sfn /app…\"   backend                            8 seconds ago   Up 2 seconds             \ncapture-v2-r7-rehearsal-beat-1                               capture-v2-r7-rehearsal-beat                               \"celery -A app.worke…\"   beat                               8 seconds ago   Up 2 seconds             \ncapture-v2-r7-rehearsal-minio-1                              minio/minio:RELEASE.2025-04-22T22-12-26Z                   \"/usr/bin/docker-ent…\"   minio                              8 seconds ago   Up 7 seconds             9000/tcp\ncapture-v2-r7-rehearsal-postgres-1                           postgres:16                                                \"docker-entrypoint.s…\"   postgres                           8 seconds ago   Up 7 seconds (healthy)   5432/tcp\ncapture-v2-r7-rehearsal-redis-1                              redis:7-alpine                                             \"docker-entrypoint.s…\"   redis                              8 seconds ago   Up 7 seconds (healthy)   6379/tcp\ncapture-v2-r7-rehearsal-reproduction-control-high-worker-1   capture-v2-r7-rehearsal-reproduction-control-high-worker   \"sh -c 'ln -sfn /app…\"   reproduction-control-high-worker   8 seconds ago   Up 2 seconds             \ncapture-v2-r7-rehearsal-reproduction-watch-worker-1          capture-v2-r7-rehearsal-reproduction-watch-worker          \"sh -c 'ln -sfn /app…\"   reproduction-watch-worker          8 seconds ago   Up 2 seconds             \ncapture-v2-r7-rehearsal-reproduction-worker-1                capture-v2-r7-rehearsal-reproduction-worker                \"sh -c 'ln -sfn /app…\"   reproduction-worker                8 seconds ago   Up 2 seconds             \n",
+        "logs_tail": {
+          "backend": "backend-1  | INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.\nbackend-1  | INFO  [alembic.runtime.migration] Will assume transactional DDL.\n",
+          "postgres": "postgres-1  | \npostgres-1  | PostgreSQL Database directory appears to contain a database; Skipping initialization\npostgres-1  | \npostgres-1  | 2026-08-23 10:18:16.225 UTC [1] LOG:  starting PostgreSQL 16.14 (Debian 16.14-1.pgdg13+1) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit\npostgres-1  | 2026-08-23 10:18:16.226 UTC [1] LOG:  listening on IPv4 address \"0.0.0.0\", port 5432\npostgres-1  | 2026-08-23 10:18:16.226 UTC [1] LOG:  listening on IPv6 address \"::\", port 5432\npostgres-1  | 2026-08-23 10:18:16.228 UTC [1] LOG:  listening on Unix socket \"/var/run/postgresql/.s.PGSQL.5432\"\npostgres-1  | 2026-08-23 10:18:16.232 UTC [29] LOG:  database system was shut down at 2026-08-23 10:06:18 UTC\npostgres-1  | 2026-08-23 10:18:16.241 UTC [1] LOG:  database system is ready to accept connections\n",
+          "redis": "redis-1  | 1:C 23 Aug 2026 10:18:16.116 # WARNING Memory overcommit must be enabled! Without it, a background save or replication may fail under low memory condition. Being disabled, it can also cause failures without low memory condition, see https://github.com/jemalloc/jemalloc/issues/1328. To fix this issue add 'vm.overcommit_memory = 1' to /etc/sysctl.conf and then reboot or run the command 'sysctl vm.overcommit_memory=1' for this to take effect.\nredis-1  | 1:C 23 Aug 2026 10:18:16.117 * oO0OoO0OoO0Oo Redis is starting oO0OoO0OoO0Oo\nredis-1  | 1:C 23 Aug 2026 10:18:16.117 * Redis version=7.4.10, bits=64, commit=00000000, modified=0, pid=1, just started\nredis-1  | 1:C 23 Aug 2026 10:18:16.117 * Configuration loaded\nredis-1  | 1:M 23 Aug 2026 10:18:16.117 * Increased maximum number of open files to 10032 (it was originally set to 1024).\nredis-1  | 1:M 23 Aug 2026 10:18:16.117 * monotonic clock: POSIX clock_gettime\nredis-1  | 1:M 23 Aug 2026 10:18:16.119 * Running mode=standalone, port=6379.\nredis-1  | 1:M 23 Aug 2026 10:18:16.119 * Server initialized\nredis-1  | 1:M 23 Aug 2026 10:18:16.119 * Reading RDB base file on AOF loading...\nredis-1  | 1:M 23 Aug 2026 10:18:16.119 * Loading RDB produced by version 7.4.10\nredis-1  | 1:M 23 Aug 2026 10:18:16.119 * RDB age 863423 seconds\nredis-1  | 1:M 23 Aug 2026 10:18:16.119 * RDB memory usage when created 0.90 Mb\nredis-1  | 1:M 23 Aug 2026 10:18:16.119 * RDB is base AOF\nredis-1  | 1:M 23 Aug 2026 10:18:16.119 * Done loading RDB, keys loaded: 0, keys expired: 0.\nredis-1  | 1:M 23 Aug 2026 10:18:16.120 * DB loaded from base file appendonly.aof.1.base.rdb: 0.000 seconds\nredis-1  | 1:M 23 Aug 2026 10:18:16.692 * DB loaded from incr file appendonly.aof.1.incr.aof: 0.573 seconds\nredis-1  | 1:M 23 Aug 2026 10:18:16.692 * DB loaded from append only file: 0.573 seconds\nredis-1  | 1:M 23 Aug 2026 10:18:16.692 * Opening AOF incr file appendonly.aof.1.incr.aof on server start\nredis-1  | 1:M 23 Aug 2026 10:18:16.692 * Ready to accept connections tcp\n",
+          "minio": "minio-1  | MinIO Object Storage Server\nminio-1  | Copyright: 2015-2026 MinIO, Inc.\nminio-1  | License: GNU AGPLv3 - https://www.gnu.org/licenses/agpl-3.0.html\nminio-1  | Version: RELEASE.2025-04-22T22-12-26Z (go1.24.2 linux/amd64)\nminio-1  | \nminio-1  | API: http://172.19.0.3:9000  http://127.0.0.1:9000 \nminio-1  | WebUI: http://172.19.0.3:9001 http://127.0.0.1:9001  \nminio-1  | \nminio-1  | Docs: https://docs.min.io\nminio-1  | INFO: \nminio-1  |  You are running an older version of MinIO released 4 months before the latest release \nminio-1  |  Update: Run `mc admin update ALIAS` \nminio-1  | \nminio-1  | \n",
+          "reproduction-worker": "reproduction-worker-1  | [tasks]\nreproduction-worker-1  |   . attachment.align_field_media\nreproduction-worker-1  |   . attachment.analyze_field_audio\nreproduction-worker-1  |   . attachment.inspect_image\nreproduction-worker-1  |   . collector.collect_case\nreproduction-worker-1  |   . device.provision_from_feishu\nreproduction-worker-1  |   . diagnosis.resume_case\nreproduction-worker-1  |   . diagnosis.run\nreproduction-worker-1  |   . evidence.retention_sweep\nreproduction-worker-1  |   . evidence_report.refresh_case\nreproduction-worker-1  |   . feishu.ingest_attachments\nreproduction-worker-1  |   . feishu.ingest_follow_up\nreproduction-worker-1  |   . feishu.long_connection\nreproduction-worker-1  |   . feishu.project_evidence_report\nreproduction-worker-1  |   . feishu.reply_text\nreproduction-worker-1  |   . feishu.sync_case_card\nreproduction-worker-1  |   . feishu.sync_document_acl\nreproduction-worker-1  |   . fix_verification.schedule_reproduction\nreproduction-worker-1  |   . media.analyze_evidence\nreproduction-worker-1  |   . packet.analyze_evidence\nreproduction-worker-1  |   . pcm.analyze_evidence\nreproduction-worker-1  |   . reproduction.cancel\nreproduction-worker-1  |   . reproduction.reconcile\nreproduction-worker-1  |   . reproduction.start\nreproduction-worker-1  |   . reproduction.v2_cleanup\nreproduction-worker-1  |   . reproduction.watch_fxs_events\nreproduction-worker-1  | \nreproduction-worker-1  | [2026-08-23 10:18:24,581: INFO/MainProcess] Connected to redis://redis:6379/0\nreproduction-worker-1  | [2026-08-23 10:18:24,586: INFO/MainProcess] mingle: searching for neighbors\n",
+          "reproduction-control-high-worker": "reproduction-control-high-worker-1  | [tasks]\nreproduction-control-high-worker-1  |   . attachment.align_field_media\nreproduction-control-high-worker-1  |   . attachment.analyze_field_audio\nreproduction-control-high-worker-1  |   . attachment.inspect_image\nreproduction-control-high-worker-1  |   . collector.collect_case\nreproduction-control-high-worker-1  |   . device.provision_from_feishu\nreproduction-control-high-worker-1  |   . diagnosis.resume_case\nreproduction-control-high-worker-1  |   . diagnosis.run\nreproduction-control-high-worker-1  |   . evidence.retention_sweep\nreproduction-control-high-worker-1  |   . evidence_report.refresh_case\nreproduction-control-high-worker-1  |   . feishu.ingest_attachments\nreproduction-control-high-worker-1  |   . feishu.ingest_follow_up\nreproduction-control-high-worker-1  |   . feishu.long_connection\nreproduction-control-high-worker-1  |   . feishu.project_evidence_report\nreproduction-control-high-worker-1  |   . feishu.reply_text\nreproduction-control-high-worker-1  |   . feishu.sync_case_card\nreproduction-control-high-worker-1  |   . feishu.sync_document_acl\nreproduction-control-high-worker-1  |   . fix_verification.schedule_reproduction\nreproduction-control-high-worker-1  |   . media.analyze_evidence\nreproduction-control-high-worker-1  |   . packet.analyze_evidence\nreproduction-control-high-worker-1  |   . pcm.analyze_evidence\nreproduction-control-high-worker-1  |   . reproduction.cancel\nreproduction-control-high-worker-1  |   . reproduction.reconcile\nreproduction-control-high-worker-1  |   . reproduction.start\nreproduction-control-high-worker-1  |   . reproduction.v2_cleanup\nreproduction-control-high-worker-1  |   . reproduction.watch_fxs_events\nreproduction-control-high-worker-1  | \nreproduction-control-high-worker-1  | [2026-08-23 10:18:24,521: INFO/MainProcess] Connected to redis://redis:6379/0\nreproduction-control-high-worker-1  | [2026-08-23 10:18:24,524: INFO/MainProcess] mingle: searching for neighbors\n",
+          "reproduction-watch-worker": "reproduction-watch-worker-1  | [tasks]\nreproduction-watch-worker-1  |   . attachment.align_field_media\nreproduction-watch-worker-1  |   . attachment.analyze_field_audio\nreproduction-watch-worker-1  |   . attachment.inspect_image\nreproduction-watch-worker-1  |   . collector.collect_case\nreproduction-watch-worker-1  |   . device.provision_from_feishu\nreproduction-watch-worker-1  |   . diagnosis.resume_case\nreproduction-watch-worker-1  |   . diagnosis.run\nreproduction-watch-worker-1  |   . evidence.retention_sweep\nreproduction-watch-worker-1  |   . evidence_report.refresh_case\nreproduction-watch-worker-1  |   . feishu.ingest_attachments\nreproduction-watch-worker-1  |   . feishu.ingest_follow_up\nreproduction-watch-worker-1  |   . feishu.long_connection\nreproduction-watch-worker-1  |   . feishu.project_evidence_report\nreproduction-watch-worker-1  |   . feishu.reply_text\nreproduction-watch-worker-1  |   . feishu.sync_case_card\nreproduction-watch-worker-1  |   . feishu.sync_document_acl\nreproduction-watch-worker-1  |   . fix_verification.schedule_reproduction\nreproduction-watch-worker-1  |   . media.analyze_evidence\nreproduction-watch-worker-1  |   . packet.analyze_evidence\nreproduction-watch-worker-1  |   . pcm.analyze_evidence\nreproduction-watch-worker-1  |   . reproduction.cancel\nreproduction-watch-worker-1  |   . reproduction.reconcile\nreproduction-watch-worker-1  |   . reproduction.start\nreproduction-watch-worker-1  |   . reproduction.v2_cleanup\nreproduction-watch-worker-1  |   . reproduction.watch_fxs_events\nreproduction-watch-worker-1  | \nreproduction-watch-worker-1  | [2026-08-23 10:18:24,520: INFO/MainProcess] Connected to redis://redis:6379/0\nreproduction-watch-worker-1  | [2026-08-23 10:18:24,523: INFO/MainProcess] mingle: searching for neighbors\n",
+          "beat": "beat-1  | celery beat v5.5.3 (immunity) is starting.\nbeat-1  | __    -    ... __   -        _\nbeat-1  | LocalTime -> 2026-08-23 10:18:24\nbeat-1  | Configuration ->\nbeat-1  |     . broker -> redis://redis:6379/0\nbeat-1  |     . loader -> celery.loaders.app.AppLoader\nbeat-1  |     . scheduler -> celery.beat.PersistentScheduler\nbeat-1  |     . db -> celerybeat-schedule\nbeat-1  |     . logfile -> [stderr]@%INFO\nbeat-1  |     . maxinterval -> 5.00 minutes (300s)\nbeat-1  | [2026-08-23 10:18:24,419: INFO/MainProcess] beat: Starting...\n"
+        }
+      },
+      "guarded_rehearsal": true,
+      "host_port_publishing": "DISABLED_BY_COMPOSE_OVERRIDE",
+      "final_rehearsal_project_empty": true
+    }
+  }
+}

@@ -1,0 +1,205 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "R2-05B-APF1250-DUT-REBOOT-RC15-SALVAGE1",
+    "sequence": 69,
+    "created_at": "2026-08-22T00:58:00+00:00",
+    "expires_at": "2026-08-22T03:58:00+00:00",
+    "action_type": "GATE_OWNERSHIP",
+    "parameters": {
+      "device_id": "259f16e6-af9e-4dff-969b-2bb5eac43eb2",
+      "model": "APF1250",
+      "host": "10.48.8.74",
+      "port": 10001,
+      "username": "root",
+      "platform_id": "mt7621",
+      "password_env": "DB:G1V030E010214",
+      "profile_root": "../profiles",
+      "profile_id": "voip-standard",
+      "object_root": "/tmp/voip-reproduction-objects",
+      "output_root": "/tmp/capture-v2-gates",
+      "repo_root": "..",
+      "reproduction_session_id": "FROM_DEVICE_LEASE",
+      "worker_id": "r2-05b-apf1250-rc15-salvage1",
+      "gate_id": "R2-05B-APF1250-DUT-REBOOT-RC15",
+      "timeout_seconds": 600
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "81b440b28dbdcbfe0a77a7e0c6627b34ec68d82a"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "Resume the already-executed APF1250 reboot from sequence 66 without rebooting again. Resolve the exact ReproductionSession from the device-scoped CaptureLease, rebuild the missing pre-reboot checkpoint from durable CaptureSession/CaptureEpoch/CaptureLease state, require current boot_id differs from the persisted pre-reboot boot_id, then establish the same logical reproduction session and run the existing R2-05 deterministic checks: DUT_REBOOT classification, new CaptureEpoch, higher lease_epoch, recovered DUT_REBOOT_GAP, DUT_REBOOT_DETECTED event, and exactly one final owned producer."
+  },
+  "action_sha256": "fe6151f445d7be5469d111e247958c1bbeadf58a1a0249fc330c586aea6adcce",
+  "runner_id": "srv:3382405",
+  "state": "SUCCEEDED",
+  "return_code": 0,
+  "verdict": "PASS",
+  "error": null,
+  "finished_at": "2026-08-22T00:58:26.398383+00:00",
+  "stdout_sha256": "6572f879324e975f1c981e9f016eb31da0d326baef276add113cc900da303492",
+  "stderr_sha256": "b8258e86248ce6f15dfea1a12afcd2ad3fde62ba6d3cd24536ffc8cb3bb61c48",
+  "local_stdout": ".capture-v2-control/logs/R2-05B-APF1250-DUT-REBOOT-RC15-SALVAGE1/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/R2-05B-APF1250-DUT-REBOOT-RC15-SALVAGE1/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "2a4a3aa7b1988d50828a2508e3b77aaebb497cea",
+      "expected_product_head": "81b440b28dbdcbfe0a77a7e0c6627b34ec68d82a"
+    },
+    "parsed_output": {
+      "result": {
+        "checks": [
+          {
+            "details": {},
+            "expected": 1,
+            "name": "exactly_one_owned_producer",
+            "observed": 1,
+            "passed": true,
+            "verdict": "PASS"
+          },
+          {
+            "details": {},
+            "expected": 1,
+            "name": "one_running_epoch",
+            "observed": 1,
+            "passed": true,
+            "verdict": "PASS"
+          },
+          {
+            "details": {},
+            "expected": "one ACTIVE lease",
+            "name": "lease_active",
+            "observed": [
+              {
+                "lease_epoch": 51,
+                "state": "ACTIVE"
+              }
+            ],
+            "passed": true,
+            "verdict": "PASS"
+          },
+          {
+            "details": {},
+            "expected": 0,
+            "name": "no_unrecovered_gap",
+            "observed": 0,
+            "passed": true,
+            "verdict": "PASS"
+          },
+          {
+            "details": {},
+            "expected": "new boot_id",
+            "name": "dut_boot_id_changed",
+            "observed": {
+              "new": "4447688e-86f7-4641-a68d-b6a786360c9b",
+              "old": "88052410-6dda-4f1b-9b27-1cb2e28c7239"
+            },
+            "passed": true,
+            "verdict": "PASS"
+          },
+          {
+            "details": {},
+            "expected": "DUT_REBOOT",
+            "name": "dut_reboot_classified",
+            "observed": "DUT_REBOOT",
+            "passed": true,
+            "verdict": "PASS"
+          },
+          {
+            "details": {},
+            "expected": "new CaptureEpoch",
+            "name": "dut_reboot_new_capture_epoch",
+            "observed": {
+              "after": "cfd809fb-d563-4f66-973b-c3236c24b719",
+              "before": "65547267-f614-447e-a803-464868a04116"
+            },
+            "passed": true,
+            "verdict": "PASS"
+          },
+          {
+            "details": {},
+            "expected": "> before",
+            "name": "dut_reboot_lease_epoch_increased",
+            "observed": 51,
+            "passed": true,
+            "verdict": "PASS"
+          },
+          {
+            "details": {},
+            "expected": ">0 recovered DUT_REBOOT_GAP",
+            "name": "dut_reboot_gap_recorded_and_closed",
+            "observed": 1,
+            "passed": true,
+            "verdict": "PASS"
+          },
+          {
+            "details": {},
+            "expected": ">0 DUT_REBOOT_DETECTED",
+            "name": "dut_reboot_event_recorded",
+            "observed": 1,
+            "passed": true,
+            "verdict": "PASS"
+          },
+          {
+            "details": {},
+            "expected": 1,
+            "name": "dut_reboot_final_single_producer",
+            "observed": 1,
+            "passed": true,
+            "verdict": "PASS"
+          }
+        ],
+        "created_at": "2026-08-22T00:58:26.130564+00:00",
+        "evidence_bundle": "/tmp/capture-v2-gates/20260822T005825Z_R2-05B-APF1250-DUT-REBOOT-RC15_259f16e6-af9e-4dff-969b-2bb5eac43eb2",
+        "facts": {
+          "after_capture_epoch_id": "cfd809fb-d563-4f66-973b-c3236c24b719",
+          "after_lease_epoch": 51,
+          "after_pid": 24281,
+          "after_starttime": 45816,
+          "before_capture_epoch_id": "65547267-f614-447e-a803-464868a04116",
+          "before_lease_epoch": 50,
+          "before_pid": 20604,
+          "before_starttime": 187168,
+          "capture_session_id": "1dc956bf-92db-411b-961e-42152328044d",
+          "checkpoint_path": "/tmp/capture-v2-gates/reboot_checkpoints/d95dec51-66ef-4b25-8684-0591ecef979d.json",
+          "checkpoint_source": "capture_sessions+capture_epochs+capture_leases",
+          "final_owned_count": 1,
+          "new_boot_id": "4447688e-86f7-4641-a68d-b6a786360c9b",
+          "old_boot_id": "88052410-6dda-4f1b-9b27-1cb2e28c7239",
+          "recovery_classification": "DUT_REBOOT",
+          "recovery_status": "REPAIRED"
+        },
+        "gate_id": "R2-05B-APF1250-DUT-REBOOT-RC15",
+        "summary": "Ownership/recovery invariant",
+        "verdict": "PASS"
+      },
+      "state": {
+        "after_capture_epoch_id": "cfd809fb-d563-4f66-973b-c3236c24b719",
+        "after_lease_epoch": 51,
+        "after_pid": 24281,
+        "after_starttime": 45816,
+        "before_capture_epoch_id": "65547267-f614-447e-a803-464868a04116",
+        "before_lease_epoch": 50,
+        "before_pid": 20604,
+        "before_starttime": 187168,
+        "capture_session_id": "1dc956bf-92db-411b-961e-42152328044d",
+        "checkpoint_path": "/tmp/capture-v2-gates/reboot_checkpoints/d95dec51-66ef-4b25-8684-0591ecef979d.json",
+        "checkpoint_source": "capture_sessions+capture_epochs+capture_leases",
+        "final_owned_count": 1,
+        "new_boot_id": "4447688e-86f7-4641-a68d-b6a786360c9b",
+        "old_boot_id": "88052410-6dda-4f1b-9b27-1cb2e28c7239",
+        "recovery_classification": "DUT_REBOOT",
+        "recovery_status": "REPAIRED",
+        "reproduction_session_id": "d95dec51-66ef-4b25-8684-0591ecef979d"
+      }
+    }
+  }
+}

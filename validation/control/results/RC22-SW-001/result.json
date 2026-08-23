@@ -1,0 +1,44 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "RC22-SW-001",
+    "sequence": 100,
+    "created_at": "2026-08-22T03:04:00+00:00",
+    "expires_at": "2026-08-22T15:04:00+00:00",
+    "action_type": "SOFTWARE_REGRESSION",
+    "parameters": {
+      "timeout_seconds": 1800
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "54008de1dc050511134da6a39a4457f76547c46f"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "RC22 validation/tooling regression after adding historical Golden ground truth and real PostgreSQL Coverage Ledger validation-only self-test. V1 remains authoritative; Production V2 remains disabled."
+  },
+  "action_sha256": "907cba2585c98598f97096a4b126ede603d24beb0d7e6c7b9bd6ecff91278031",
+  "runner_id": "srv:3456908",
+  "state": "SUCCEEDED",
+  "return_code": 0,
+  "verdict": null,
+  "error": null,
+  "finished_at": "2026-08-22T03:09:14.294937+00:00",
+  "stdout_sha256": "682669c1d6d8f8964f933a4fb9b6cb526c9a7ca659ee550b99cda374a9f1d453",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "local_stdout": ".capture-v2-control/logs/RC22-SW-001/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/RC22-SW-001/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "e8b35ced25bb427c1305b229f49bf8003f4eec91",
+      "expected_product_head": "54008de1dc050511134da6a39a4457f76547c46f"
+    },
+    "parsed_output": null
+  }
+}

@@ -1,0 +1,44 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "RC42-ACTIVATION-SUDO-CONTROL-SW-001",
+    "sequence": 152,
+    "created_at": "2026-08-23T09:59:00+00:00",
+    "expires_at": "2026-08-23T21:59:00+00:00",
+    "action_type": "SOFTWARE_REGRESSION",
+    "parameters": {
+      "timeout_seconds": 1200
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "e0d40b08d2b0479df7944dc88d114e9be88a37e3"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "Regression after constraining ACTIVATION_REHEARSAL to a fixed audited module executed through sudo -n for Docker daemon access. No shell is exposed; V1 remains authoritative and Production V2 remains disabled."
+  },
+  "action_sha256": "1037d7da962320c2ee5d23f228e38aea6260ee56fea3d11d29b06c28f4ba7916",
+  "runner_id": "srv:257142",
+  "state": "SUCCEEDED",
+  "return_code": 0,
+  "verdict": null,
+  "error": null,
+  "finished_at": "2026-08-23T09:57:36.972647+00:00",
+  "stdout_sha256": "4dfd92dc50be143e1c839c84a81db9050f8c2527278515f035b65331f5061aed",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "local_stdout": ".capture-v2-control/logs/RC42-ACTIVATION-SUDO-CONTROL-SW-001/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/RC42-ACTIVATION-SUDO-CONTROL-SW-001/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "6a62c3f4c7885f6596d56dcc82dc34720caa06b9",
+      "expected_product_head": "e0d40b08d2b0479df7944dc88d114e9be88a37e3"
+    },
+    "parsed_output": null
+  }
+}

@@ -46,6 +46,20 @@ class Settings(BaseSettings):
     reproduction_capture_root: Path = Path("/tmp/voip-reproduction-capture")
     reproduction_object_root: Path = Path("/tmp/voip-reproduction-objects")
     reproduction_storage_mode: str = "local"
+    # Capture Engine V2 authority is introduced behind an explicit version flag.
+    # V1 remains the production default until V2.1 C/D complete reliable transfer
+    # and two-stage readiness. The lease values are bootstrap defaults only;
+    # each CaptureSession persists the resolved, versioned profile as authority.
+    capture_engine_version: str = "V1"
+    capture_v2_profile_id: str = "voip-standard"
+    capture_v2_worker_id: str = ""
+    capture_v2_lease_ttl_seconds: float = 30.0
+    capture_v2_lease_renew_seconds: float = 10.0
+    # Production V2 stays fail-closed until a machine-readable release artifact
+    # proves the deferred real-device/E2E/rollback gates. Software completion alone
+    # can never flip capture authority.
+    capture_v2_production_enabled: bool = False
+    capture_v2_release_gate_artifact: Path = Path("/app/validation/capture_v2_release_gate.json")
     reasoning_gateway_url: str = ""
     reasoning_gateway_token: str = ""
     reasoning_gateway_model: str = ""
@@ -130,6 +144,16 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     def model_post_init(self, __context) -> None:
+        capture_version = str(self.capture_engine_version or "V1").upper().strip()
+        if capture_version not in {"V1", "V2"}:
+            raise ValueError("CAPTURE_ENGINE_VERSION_INVALID")
+        self.capture_engine_version = capture_version
+        if float(self.capture_v2_lease_ttl_seconds) < 10.0:
+            raise ValueError("CAPTURE_V2_LEASE_TTL_INVALID")
+        if float(self.capture_v2_lease_renew_seconds) < 2.0:
+            raise ValueError("CAPTURE_V2_LEASE_RENEW_INVALID")
+        if float(self.capture_v2_lease_ttl_seconds) <= 2.0 * float(self.capture_v2_lease_renew_seconds):
+            raise ValueError("CAPTURE_V2_LEASE_TTL_TOO_SHORT")
         if str(self.ai_promotion_stage or "OFF").upper() != "OFF":
             self.ai_shadow_enabled = True
         semantic_mode = str(self.ai_semantic_router_mode or "SHADOW").upper()

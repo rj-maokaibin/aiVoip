@@ -1,0 +1,44 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "RC37-PRODUCTION-WIRING-SW-001",
+    "sequence": 143,
+    "created_at": "2026-08-23T09:05:00+00:00",
+    "expires_at": "2026-08-23T21:05:00+00:00",
+    "action_type": "SOFTWARE_REGRESSION",
+    "parameters": {
+      "timeout_seconds": 1200
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "49f81b51454bcf61acf7b64a0394ba72c6a9efa3"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "RC37 regression for Production V2 authority routing: fail-closed rehearsal gate, lazy watcher-owned V2 lease/producer, V2 segmented platform shim, finalizer-before-cleanup, and semantic-only legacy start path. V1 remains authoritative and Production V2 remains disabled during this regression."
+  },
+  "action_sha256": "9e0dc553e3e84b4986f4c58b8bfca0d0c56810f23e8151af685c3dbce293a453",
+  "runner_id": "srv:257142",
+  "state": "FAILED",
+  "return_code": 1,
+  "verdict": null,
+  "error": null,
+  "finished_at": "2026-08-23T09:02:27.035055+00:00",
+  "stdout_sha256": "5424c2a363af959388784977c262f83576b969f3ef529adccd4f728c501833e0",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "local_stdout": ".capture-v2-control/logs/RC37-PRODUCTION-WIRING-SW-001/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/RC37-PRODUCTION-WIRING-SW-001/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "cf26dc29ab33cd623107c83907ec8393183a82e3",
+      "expected_product_head": "49f81b51454bcf61acf7b64a0394ba72c6a9efa3"
+    },
+    "parsed_output": null
+  }
+}

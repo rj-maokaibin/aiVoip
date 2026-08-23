@@ -1,0 +1,44 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "RC11-SW-001",
+    "sequence": 58,
+    "created_at": "2026-08-22T00:28:00+00:00",
+    "expires_at": "2026-08-22T02:28:00+00:00",
+    "action_type": "SOFTWARE_REGRESSION",
+    "parameters": {
+      "timeout_seconds": 1800
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "37d131d291cf6efe44fb170f72450e1a83d0907c"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "RC11 software regression for validation-only Gate CLI fix: segment actions now resolve AUTO_NEW to a clean ReproductionSession before real-device execution. Includes direct regression test proving the resolved session id is passed to GateRunner. Capture Engine runtime paths remain unchanged; Production V2 stays disabled."
+  },
+  "action_sha256": "0dcb3325f7d98aefc9035351670a3112f12b7815fb16d0f2fc2bc61dc655f02b",
+  "runner_id": "srv:3382405",
+  "state": "SUCCEEDED",
+  "return_code": 0,
+  "verdict": null,
+  "error": null,
+  "finished_at": "2026-08-22T00:26:12.116351+00:00",
+  "stdout_sha256": "19d620968af9c24c8079e4230f48e6974233c34cf7cad659f43a12ca42f38cb4",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "local_stdout": ".capture-v2-control/logs/RC11-SW-001/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/RC11-SW-001/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "6cbc43d576a098adf3a7de723530deee2cdcc4a9",
+      "expected_product_head": "37d131d291cf6efe44fb170f72450e1a83d0907c"
+    },
+    "parsed_output": null
+  }
+}

@@ -1,0 +1,44 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "RC67-TSHARK-HOST-PIN-SW-001",
+    "sequence": 198,
+    "created_at": "2026-08-23T14:58:00+00:00",
+    "expires_at": "2026-08-24T02:58:00+00:00",
+    "action_type": "SOFTWARE_REGRESSION",
+    "parameters": {
+      "timeout_seconds": 1800
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "22656bd8a14e1815d52481dff6f26c8442057ae1"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "Run full Capture V2 software regression after pinning an executable host tshark candidate for isolated Golden gates and ignoring local-only .capture-v2-control runner state. This is validation-infrastructure only: V1 remains authoritative, Production V2 remains disabled, no DUT I/O, no merge, no cutover."
+  },
+  "action_sha256": "cba79c57f375fa073010eabe3830a926216bd1f7fd8d47a96a2a1b1a7555a0e6",
+  "runner_id": "srv:257142",
+  "state": "SUCCEEDED",
+  "return_code": 0,
+  "verdict": null,
+  "error": null,
+  "finished_at": "2026-08-23T15:00:13.074146+00:00",
+  "stdout_sha256": "079c486070830004ee55ef313e3c44ab6a7887901af16d773902f989d5c2b836",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "local_stdout": ".capture-v2-control/logs/RC67-TSHARK-HOST-PIN-SW-001/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/RC67-TSHARK-HOST-PIN-SW-001/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "cd81a6b145a3b21a5ca8ff98acfc496a097f8761",
+      "expected_product_head": "22656bd8a14e1815d52481dff6f26c8442057ae1"
+    },
+    "parsed_output": null
+  }
+}

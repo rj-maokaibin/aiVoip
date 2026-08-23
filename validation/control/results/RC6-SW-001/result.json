@@ -1,0 +1,44 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "RC6-SW-001",
+    "sequence": 18,
+    "created_at": "2026-08-21T13:39:00+00:00",
+    "expires_at": "2026-08-21T15:39:00+00:00",
+    "action_type": "SOFTWARE_REGRESSION",
+    "parameters": {
+      "timeout_seconds": 1800
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "7c92787c1abb9cc3ddeba2583c039178070ec180"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "RC6 software regression after making ProducerManager.stop_identity BusyBox-portable. Run all test_capture_v2_*.py before any further real-device validation. V1 remains authoritative and Production V2 stays disabled."
+  },
+  "action_sha256": "37205936a1c4601a76fbf724046238c82c03737957d516acdc219c47b500b1f9",
+  "runner_id": "srv:2933695",
+  "state": "SUCCEEDED",
+  "return_code": 0,
+  "verdict": null,
+  "error": null,
+  "finished_at": "2026-08-21T13:41:11.891806+00:00",
+  "stdout_sha256": "220ac89bf8b2c12ba860ca20b222fc7f71c73d26f377bd48d6933e53f83b4471",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "local_stdout": ".capture-v2-control/logs/RC6-SW-001/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/RC6-SW-001/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "faaf94a41854b7791d25ff5cfd925ca91ca6a318",
+      "expected_product_head": "7c92787c1abb9cc3ddeba2583c039178070ec180"
+    },
+    "parsed_output": null
+  }
+}

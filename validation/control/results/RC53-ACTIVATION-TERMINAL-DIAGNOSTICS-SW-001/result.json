@@ -1,0 +1,44 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "RC53-ACTIVATION-TERMINAL-DIAGNOSTICS-SW-001",
+    "sequence": 174,
+    "created_at": "2026-08-23T12:23:00+00:00",
+    "expires_at": "2026-08-23T23:23:00+00:00",
+    "action_type": "SOFTWARE_REGRESSION",
+    "parameters": {
+      "timeout_seconds": 1200
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "93fe8e5e25c7f13a64913daba144e939a5c2e4f8"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "Regression for diagnostic-only improvement after RC52 proved V2 producer and durable segment but the business session terminalized before the active gate. On status timeout, preserve authoritative DB terminal_reason, cleanup/capture/lease state, and latest ArmValidation evidence at the end of the bounded error. No activation semantics or production fencing are changed. V1 remains authoritative; Production V2 remains false."
+  },
+  "action_sha256": "2d3085be68b37053218fbbdce81131c8e7b09c871d3b85f174837ef6439511d7",
+  "runner_id": "srv:257142",
+  "state": "SUCCEEDED",
+  "return_code": 0,
+  "verdict": null,
+  "error": null,
+  "finished_at": "2026-08-23T12:23:29.029066+00:00",
+  "stdout_sha256": "8f5d2d2c363942975bc09343c6aeb56ca0cde7b7d50146034c79211e060428c4",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "local_stdout": ".capture-v2-control/logs/RC53-ACTIVATION-TERMINAL-DIAGNOSTICS-SW-001/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/RC53-ACTIVATION-TERMINAL-DIAGNOSTICS-SW-001/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "4f007d66365ec10596ada2cb0dc6b84efd8cc888",
+      "expected_product_head": "93fe8e5e25c7f13a64913daba144e939a5c2e4f8"
+    },
+    "parsed_output": null
+  }
+}

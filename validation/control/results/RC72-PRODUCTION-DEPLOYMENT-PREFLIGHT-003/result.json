@@ -1,0 +1,84 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "RC72-PRODUCTION-DEPLOYMENT-PREFLIGHT-003",
+    "sequence": 203,
+    "created_at": "2026-08-23T15:36:00+00:00",
+    "expires_at": "2026-08-24T03:36:00+00:00",
+    "action_type": "GATE_EVALUATE",
+    "parameters": {
+      "timeout_seconds": 300,
+      "bundle": "/home/dev/workspace/aiVoip/validation/capture_v2/PRODUCTION_CUTOVER_AUTHORIZATION_RC69.json",
+      "gate_id": "PRODUCTION-DEPLOYMENT-PREFLIGHT-RC72"
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "fe0ec5000e15d8ab832a92aebd4169d7c769781b"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "Retry guarded production deployment preflight using the exact absolute audited authorization path so bounded dispatch is unambiguous from the backend runner cwd. Fixed production env remains /etc/voip-ai/production.env. Read-only only; no env/container/DUT mutation."
+  },
+  "action_sha256": "1d908d46b6b452df6aed072fd5bb6afe2cc7e13b27a751f6715821d7717d8def",
+  "runner_id": "srv:257142",
+  "state": "SUCCEEDED",
+  "return_code": 0,
+  "verdict": "PASS",
+  "error": null,
+  "finished_at": "2026-08-23T15:35:41.623461+00:00",
+  "stdout_sha256": "3d709fcedb4ddc876a5fd05945b4d056409e715b070a9957da875c10fe495e40",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "local_stdout": ".capture-v2-control/logs/RC72-PRODUCTION-DEPLOYMENT-PREFLIGHT-003/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/RC72-PRODUCTION-DEPLOYMENT-PREFLIGHT-003/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "c942ffeb9a396756fd48d95b344e30816fd49b06",
+      "expected_product_head": "fe0ec5000e15d8ab832a92aebd4169d7c769781b"
+    },
+    "parsed_output": {
+      "scope": "GUARDED_PRODUCTION_DEPLOYMENT_PREFLIGHT",
+      "production_env": "/etc/voip-ai/production.env",
+      "mutations_performed": false,
+      "runtime_cutover_performed": false,
+      "authorization": {
+        "authorized": true,
+        "final_acceptance_action": "RC68-MASTER-FIX-CANDIDATE-INTEGRATION-005"
+      },
+      "release_gate": {
+        "approved": true,
+        "production_cutover_approved": true,
+        "capture_engine_version": "V1",
+        "production_v2_enabled": false
+      },
+      "deployment_preflight": {
+        "return_code": 0,
+        "stdout_tail": "      \"status\": \"PASS\",\n      \"category\": \"SECURITY\",\n      \"detail\": \"https://voip-ai.example.internal\",\n      \"blocks_deploy\": false,\n      \"blocks_release\": false\n    },\n    {\n      \"key\": \"BOOTSTRAP_CREDENTIALS\",\n      \"status\": \"PASS\",\n      \"category\": \"SECURITY\",\n      \"detail\": \"non-default bootstrap credentials configured\",\n      \"blocks_deploy\": false,\n      \"blocks_release\": false\n    },\n    {\n      \"key\": \"DATABASE_URL_MATCH\",\n      \"status\": \"PASS\",\n      \"category\": \"CONFIG\",\n      \"detail\": \"DATABASE_URL contains configured PostgreSQL credential\",\n      \"blocks_deploy\": false,\n      \"blocks_release\": false\n    },\n    {\n      \"key\": \"PRODUCTION_STORAGE_MODE\",\n      \"status\": \"PASS\",\n      \"category\": \"STORAGE\",\n      \"detail\": \"minio\",\n      \"blocks_deploy\": false,\n      \"blocks_release\": false\n    },\n    {\n      \"key\": \"CREDENTIAL_PROVIDER\",\n      \"status\": \"PASS\",\n      \"category\": \"SECURITY\",\n      \"detail\": \"API provider configured\",\n      \"blocks_deploy\": false,\n      \"blocks_release\": false\n    },\n    {\n[REDACTED_SENSITIVE_LINE]\n      \"status\": \"PASS\",\n[REDACTED_SENSITIVE_LINE]\n[REDACTED_SENSITIVE_LINE]\n      \"blocks_deploy\": false,\n      \"blocks_release\": false\n    },\n    {\n[REDACTED_SENSITIVE_LINE]\n      \"status\": \"PASS\",\n[REDACTED_SENSITIVE_LINE]\n[REDACTED_SENSITIVE_LINE]\n      \"blocks_deploy\": false,\n      \"blocks_release\": false\n    },\n    {\n[REDACTED_SENSITIVE_LINE]\n      \"status\": \"PASS\",\n[REDACTED_SENSITIVE_LINE]\n[REDACTED_SENSITIVE_LINE]\n      \"blocks_deploy\": false,\n      \"blocks_release\": false\n    },\n    {\n[REDACTED_SENSITIVE_LINE]\n      \"status\": \"PASS\",\n[REDACTED_SENSITIVE_LINE]\n[REDACTED_SENSITIVE_LINE]\n      \"blocks_deploy\": false,\n      \"blocks_release\": false\n    },\n    {\n[REDACTED_SENSITIVE_LINE]\n      \"status\": \"PASS\",\n[REDACTED_SENSITIVE_LINE]\n[REDACTED_SENSITIVE_LINE]\n      \"blocks_deploy\": false,\n      \"blocks_release\": false\n    },\n    {\n[REDACTED_SENSITIVE_LINE]\n      \"status\": \"PASS\",\n[REDACTED_SENSITIVE_LINE]\n[REDACTED_SENSITIVE_LINE]\n      \"blocks_deploy\": false,\n      \"blocks_release\": false\n    },\n    {\n      \"key\": \"FEISHU_LIVE_CONFIG\",\n      \"status\": \"PASS\",\n      \"category\": \"INTEGRATION\",\n      \"detail\": \"live target configured\",\n      \"blocks_deploy\": false,\n      \"blocks_release\": false\n    },\n    {\n      \"key\": \"EC02_REAL_PLATFORM\",\n      \"status\": \"BLOCKED\",\n      \"category\": \"PLATFORM\",\n      \"detail\": \"REPRODUCTION_PLATFORM_MODE=mock; EC-02 remains pending\",\n      \"blocks_deploy\": false,\n      \"blocks_release\": true\n    },\n    {\n      \"key\": \"FRONTEND_LOCKFILE\",\n      \"status\": \"PASS\",\n      \"category\": \"BUILD\",\n      \"detail\": \"source-controlled package-lock.json present\",\n      \"blocks_deploy\": false,\n      \"blocks_release\": false\n    },\n    {\n      \"key\": \"SOURCE_MANIFEST\",\n      \"status\": \"PASS\",\n      \"category\": \"BUILD\",\n      \"detail\": \"/home/dev/workspace/aiVoip/release/source_manifest.json\",\n      \"blocks_deploy\": false,\n      \"blocks_release\": false\n    }\n  ]\n}",
+        "stderr_tail": "",
+        "status": "PASS",
+        "deployment_status": "PASS",
+        "deploy_blocking_keys": []
+      },
+      "compose_config": {
+        "return_code": 0,
+        "required_services_present": [
+          "backend",
+          "beat",
+          "reproduction-control-high-worker",
+          "reproduction-watch-worker",
+          "reproduction-worker"
+        ],
+        "missing_required_services": [],
+        "stderr_tail": ""
+      },
+      "current_running_services": [],
+      "verdict": "PASS",
+      "reason": "PRODUCTION_DEPLOYMENT_PREFLIGHT_READY"
+    }
+  }
+}

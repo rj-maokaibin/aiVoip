@@ -1,0 +1,44 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "RC35-R7-VALIDATION-ROLLBACK-SW-001",
+    "sequence": 138,
+    "created_at": "2026-08-23T07:25:00+00:00",
+    "expires_at": "2026-08-23T19:25:00+00:00",
+    "action_type": "SOFTWARE_REGRESSION",
+    "parameters": {
+      "timeout_seconds": 1200
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "910f854de2a9431734b7143c843636530a92a340"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "Full regression for real-DUT validation-scope V2 authority rollback rehearsal. Production V2 remains disabled; this adds no production cutover bypass."
+  },
+  "action_sha256": "077fa690125a3f3d0b9f56da6200d14a973b8f12f11abe29e354c6f6f259c023",
+  "runner_id": "srv:231819",
+  "state": "SUCCEEDED",
+  "return_code": 0,
+  "verdict": null,
+  "error": null,
+  "finished_at": "2026-08-23T07:28:26.349026+00:00",
+  "stdout_sha256": "8988759e707e7aa6c7fcc832dfbafbd6c6be013c54823f6743a869c7ddfcba34",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "local_stdout": ".capture-v2-control/logs/RC35-R7-VALIDATION-ROLLBACK-SW-001/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/RC35-R7-VALIDATION-ROLLBACK-SW-001/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "a1fee81b8d91e65d462959ae8cdb11aebfaa1354",
+      "expected_product_head": "910f854de2a9431734b7143c843636530a92a340"
+    },
+    "parsed_output": null
+  }
+}

@@ -1,0 +1,44 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "RC14-SW-001",
+    "sequence": 67,
+    "created_at": "2026-08-22T00:55:00+00:00",
+    "expires_at": "2026-08-22T02:55:00+00:00",
+    "action_type": "SOFTWARE_REGRESSION",
+    "parameters": {
+      "timeout_seconds": 1800
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "35d69ea7a5c2fe4770cf8264904e12b50e0c7eae"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "RC14 validation-tooling software regression. Adds resumable two-phase APF1250 reboot Gate: stage A persists pre-reboot ownership/boot/lease/epoch evidence on the validation server and requests reboot without waiting for the EWEB tunnel; stage B resumes the same ReproductionSession after the tunnel is restored and performs the existing deterministic R2-05 evaluator. Capture Engine runtime paths are unchanged; V1 remains authoritative and Production V2 remains disabled."
+  },
+  "action_sha256": "675e0f8d5c52766efc72fcd62dfc16293188356af22b1672a52874855285a287",
+  "runner_id": "srv:3382405",
+  "state": "SUCCEEDED",
+  "return_code": 0,
+  "verdict": null,
+  "error": null,
+  "finished_at": "2026-08-22T00:55:14.474786+00:00",
+  "stdout_sha256": "467d314f302a7213dcea7576b8640e2611fcc11fc2dfff49950f34bb9969ce71",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "local_stdout": ".capture-v2-control/logs/RC14-SW-001/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/RC14-SW-001/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "a3670caec702a3111990d1d6d78258197c887421",
+      "expected_product_head": "35d69ea7a5c2fe4770cf8264904e12b50e0c7eae"
+    },
+    "parsed_output": null
+  }
+}

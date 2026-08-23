@@ -1,0 +1,255 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "R3-11-APF1250-PENDING-SPOOL-RESTART-RC15",
+    "sequence": 71,
+    "created_at": "2026-08-22T01:00:00+00:00",
+    "expires_at": "2026-08-22T03:00:00+00:00",
+    "action_type": "GATE_SEGMENT",
+    "parameters": {
+      "device_id": "259f16e6-af9e-4dff-969b-2bb5eac43eb2",
+      "model": "APF1250",
+      "host": "10.48.8.74",
+      "port": 10001,
+      "username": "root",
+      "platform_id": "mt7621",
+      "password_env": "DB:G1V030E010214",
+      "profile_root": "../profiles",
+      "profile_id": "voip-standard",
+      "object_root": "/tmp/voip-reproduction-objects",
+      "output_root": "/tmp/capture-v2-gates",
+      "repo_root": "..",
+      "reproduction_session_id": "AUTO_NEW",
+      "worker_id": "r3-11-apf1250-rc15",
+      "gate_id": "R3-11-APF1250-PENDING-SPOOL-RESTART-RC15",
+      "duration": 40,
+      "interval": 0.5,
+      "transport": "scp",
+      "timeout_seconds": 900
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "81b440b28dbdcbfe0a77a7e0c6627b34ec68d82a"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "RC15 APF1250 deterministic R3-11. Under first fenced authority with durable-store failure, inject four valid closed 24-byte PCAPs so production Sealer/Pump creates real immutable unacked DUT spool. Require CRITICAL UNACKED_BYTES_LIMIT pressure and all sampled backlog present on DUT, stop only worker lease renewal, wait TTL, then second authority must SAME_SESSION_ALIVE/ADOPT exact PID/starttime and CaptureEpoch with a higher lease, and recover every pre-restart backlog segment through durable ACK and exact remote delete without double loss."
+  },
+  "action_sha256": "b1f309b397a1d87e7035130a0add55b1ebdafdcdc0070d8850fc160a7e5ac8ab",
+  "runner_id": "srv:3382405",
+  "state": "SUCCEEDED",
+  "return_code": 0,
+  "verdict": "PASS",
+  "error": null,
+  "finished_at": "2026-08-22T01:01:32.253625+00:00",
+  "stdout_sha256": "6656e1a6737984850467082c09eec8ed1fe11596103882164599005afe45abb4",
+  "stderr_sha256": "b8258e86248ce6f15dfea1a12afcd2ad3fde62ba6d3cd24536ffc8cb3bb61c48",
+  "local_stdout": ".capture-v2-control/logs/R3-11-APF1250-PENDING-SPOOL-RESTART-RC15/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/R3-11-APF1250-PENDING-SPOOL-RESTART-RC15/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "633952593b9e1511dab55470e8f8fd98c1a0d99f",
+      "expected_product_head": "81b440b28dbdcbfe0a77a7e0c6627b34ec68d82a"
+    },
+    "parsed_output": {
+      "checks": [
+        {
+          "details": {},
+          "expected": ">0",
+          "name": "at_least_one_segment",
+          "observed": 6,
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": ">0 REMOTE_DELETED",
+          "name": "at_least_one_full_chain",
+          "observed": 6,
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": true,
+          "name": "server_store_observable",
+          "observed": [],
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": [],
+          "name": "no_server_and_dut_double_loss",
+          "observed": [],
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": [],
+          "name": "acked_segments_have_server_copy",
+          "observed": [],
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": true,
+          "name": "no_unacked_eviction",
+          "observed": null,
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": ">0 pending spool",
+          "name": "restart_backlog_created",
+          "observed": {
+            "bytes": 96,
+            "count": 4
+          },
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": "all sampled pending segments remain on DUT",
+          "name": "restart_backlog_remained_on_dut",
+          "observed": {
+            "exists": 4,
+            "sample": 4
+          },
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": "CRITICAL/UNACKED_BYTES_LIMIT",
+          "name": "restart_backlog_pressure_critical",
+          "observed": {
+            "reasons": [
+              "UNACKED_BYTES_LIMIT"
+            ],
+            "state": "CRITICAL"
+          },
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": {
+            "pid": 29525,
+            "starttime": 57119
+          },
+          "name": "restart_same_producer_adopted",
+          "observed": {
+            "pid": 29525,
+            "starttime": 57119
+          },
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": "8f85cc28-4ddb-47c2-affb-ce36988b9ab3",
+          "name": "restart_same_capture_epoch",
+          "observed": "8f85cc28-4ddb-47c2-affb-ce36988b9ab3",
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": "> before",
+          "name": "restart_lease_epoch_increased",
+          "observed": 54,
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": "SAME_SESSION_ALIVE",
+          "name": "restart_recovery_classified_same_session_alive",
+          "observed": "SAME_SESSION_ALIVE",
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": "ADOPTED",
+          "name": "restart_recovery_status_adopted",
+          "observed": "ADOPTED",
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": [
+            "d003639a-21b6-4f8b-b814-3a894a8e6714",
+            "f0ba3d32-7d29-49b0-bc99-14ff536065dd",
+            "4157fd06-ce58-4762-bfca-8e94c37227c7",
+            "ea2ca4cc-5c2e-432a-be05-47c8ac2e0f07"
+          ],
+          "name": "restart_exact_backlog_recovered",
+          "observed": [
+            "4157fd06-ce58-4762-bfca-8e94c37227c7",
+            "d003639a-21b6-4f8b-b814-3a894a8e6714",
+            "ea2ca4cc-5c2e-432a-be05-47c8ac2e0f07",
+            "f0ba3d32-7d29-49b0-bc99-14ff536065dd"
+          ],
+          "passed": true,
+          "verdict": "PASS"
+        }
+      ],
+      "created_at": "2026-08-22T01:01:31.927254+00:00",
+      "evidence_bundle": "/tmp/capture-v2-gates/20260822T010131Z_R3-11-APF1250-PENDING-SPOOL-RESTART-RC15_259f16e6-af9e-4dff-969b-2bb5eac43eb2",
+      "facts": {
+        "after_capture_epoch_id": "8f85cc28-4ddb-47c2-affb-ce36988b9ab3",
+        "after_cycles": 32,
+        "after_errors": 0,
+        "after_lease_epoch": 54,
+        "after_pid": 29525,
+        "after_starttime": 57119,
+        "backlog_remote_sample_exists": 4,
+        "backlog_sample_count": 4,
+        "backlog_segment_ids": [
+          "d003639a-21b6-4f8b-b814-3a894a8e6714",
+          "f0ba3d32-7d29-49b0-bc99-14ff536065dd",
+          "4157fd06-ce58-4762-bfca-8e94c37227c7",
+          "ea2ca4cc-5c2e-432a-be05-47c8ac2e0f07"
+        ],
+        "backlog_unacked_bytes": 96,
+        "backlog_unacked_count": 4,
+        "before_capture_epoch_id": "8f85cc28-4ddb-47c2-affb-ce36988b9ab3",
+        "before_cycles": 20,
+        "before_lease_epoch": 53,
+        "before_pid": 29525,
+        "before_starttime": 57119,
+        "capture_session_id": "fae66aac-367f-4f1c-a195-0fe09980f392",
+        "injected_backlog_count": 4,
+        "injected_closed_segment_count": 4,
+        "pressure_reasons": [
+          "UNACKED_BYTES_LIMIT"
+        ],
+        "pressure_state": "CRITICAL",
+        "recovered_backlog_ids": [
+          "d003639a-21b6-4f8b-b814-3a894a8e6714",
+          "f0ba3d32-7d29-49b0-bc99-14ff536065dd",
+          "4157fd06-ce58-4762-bfca-8e94c37227c7",
+          "ea2ca4cc-5c2e-432a-be05-47c8ac2e0f07"
+        ],
+        "recovery_classification": "SAME_SESSION_ALIVE",
+        "recovery_status": "ADOPTED"
+      },
+      "gate_id": "R3-11-APF1250-PENDING-SPOOL-RESTART-RC15",
+      "summary": "Reliable Segment / SFTP / ACK",
+      "verdict": "PASS"
+    }
+  }
+}

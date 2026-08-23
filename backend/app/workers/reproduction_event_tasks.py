@@ -8,6 +8,7 @@ from celery.utils.log import get_task_logger
 from sqlalchemy import select
 
 from app.collectors.asyncssh_adapter import DeviceCommandError, DeviceConnectionError
+from app.capture_v2.runtime import assert_v1_live_capture_allowed
 from app.contracts.enums import (
     CallVerdict, CaptureChannel, CaptureSegmentStatus, ChannelHealth, EvidenceCompleteness,
     EventType, ReproductionState, TimestampSource,
@@ -257,6 +258,10 @@ async def _watch(session_id: str, *, max_seconds: int | None = None) -> dict:
         if resolve_platform_mode() == 'mock':
             configured=int(((session.effective_profile_snapshot or {}).get('timeouts') or {}).get('watching_timeout_seconds') or 900)
             return await _watch_mock(db, session, device, int(max_seconds or configured))
+        # A stale queued V1 watcher must not become a second capture authority after
+        # CAPTURE_ENGINE_VERSION flips to V2. Fail closed before _watch_real_v11
+        # can construct/start the legacy segmented ring.
+        assert_v1_live_capture_allowed()
         return await _watch_real_v11(db, session, device, max_seconds)
     finally:
         db.close()

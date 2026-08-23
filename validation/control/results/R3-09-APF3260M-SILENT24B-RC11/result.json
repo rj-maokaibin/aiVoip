@@ -1,0 +1,221 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "R3-09-APF3260M-SILENT24B-RC11",
+    "sequence": 59,
+    "created_at": "2026-08-22T00:27:00+00:00",
+    "expires_at": "2026-08-22T02:27:00+00:00",
+    "action_type": "GATE_SEGMENT",
+    "parameters": {
+      "device_id": "c132f336-df1b-4285-b175-01d848f23b5d",
+      "model": "APF3260-M",
+      "host": "10.48.8.74",
+      "port": 10002,
+      "username": "root",
+      "platform_id": "mt7981",
+      "password_env": "DB:G1U060H000384",
+      "profile_root": "../profiles",
+      "profile_id": "voip-standard",
+      "object_root": "/tmp/voip-reproduction-objects",
+      "output_root": "/tmp/capture-v2-gates",
+      "repo_root": "..",
+      "reproduction_session_id": "AUTO_NEW",
+      "worker_id": "r3-09-apf3260m-rc11",
+      "gate_id": "R3-09-APF3260M-SILENT24B-RC11",
+      "duration": 20,
+      "interval": 0.5,
+      "transport": "scp",
+      "timeout_seconds": 600
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "37d131d291cf6efe44fb170f72450e1a83d0907c"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "RC11 R3-09 retry on APF3260-M using AUTO_NEW clean validation session. Under the active fenced CaptureEpoch inject exactly one 24-byte classic-PCAP global-header-only file, then require real seal + SCP + validation + durable store + DB + ACK + exact DUT delete, preserving size=24, pcap_valid=true, packet_count=0 and no server/DUT double loss."
+  },
+  "action_sha256": "b7939904c93a87dd6c65a5f138747c16ceeb46b39f0a19873a2493e580fbd3af",
+  "runner_id": "srv:3382405",
+  "state": "SUCCEEDED",
+  "return_code": 0,
+  "verdict": "PASS",
+  "error": null,
+  "finished_at": "2026-08-22T00:27:09.063515+00:00",
+  "stdout_sha256": "6a5c9715f7806b00f5db46a7b2a85938432369efc620865cc2269be4b2ebbbf7",
+  "stderr_sha256": "b8258e86248ce6f15dfea1a12afcd2ad3fde62ba6d3cd24536ffc8cb3bb61c48",
+  "local_stdout": ".capture-v2-control/logs/R3-09-APF3260M-SILENT24B-RC11/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/R3-09-APF3260M-SILENT24B-RC11/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "0ce648f242bd9e653ad033d927d79558bd03516c",
+      "expected_product_head": "37d131d291cf6efe44fb170f72450e1a83d0907c"
+    },
+    "parsed_output": {
+      "checks": [
+        {
+          "details": {},
+          "expected": ">0",
+          "name": "at_least_one_segment",
+          "observed": 1,
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": ">0 REMOTE_DELETED",
+          "name": "at_least_one_full_chain",
+          "observed": 1,
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": true,
+          "name": "server_store_observable",
+          "observed": [],
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": [],
+          "name": "no_server_and_dut_double_loss",
+          "observed": [],
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": [],
+          "name": "acked_segments_have_server_copy",
+          "observed": [],
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": true,
+          "name": "no_unacked_eviction",
+          "observed": null,
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": 1,
+          "name": "silent_24b_exactly_one_segment",
+          "observed": 1,
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": {
+            "remote_size": 24,
+            "server_size": 24
+          },
+          "name": "silent_24b_size_preserved",
+          "observed": {
+            "remote_size": 24,
+            "server_size": 24
+          },
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": {
+            "packet_count": 0,
+            "pcap_valid": true
+          },
+          "name": "silent_24b_valid_zero_packet_pcap",
+          "observed": {
+            "packet_count": 0,
+            "pcap_valid": true
+          },
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": "PERSISTED->ACKED->REMOTE_DELETED",
+          "name": "silent_24b_full_ack_delete_chain",
+          "observed": {
+            "ack_pending_at": "2026-08-22T00:26:48.236182+00:00",
+            "acked_at": "2026-08-22T00:26:48.238286+00:00",
+            "capture_epoch_id": "b4a3ec6a-3809-4103-b833-3c28a7ccdc3b",
+            "capture_session_id": "f7e4bc72-7f46-4da1-b72b-4a2f976e5eeb",
+            "device_id": "c132f336-df1b-4285-b175-01d848f23b5d",
+            "discovered_at": "2026-08-22T00:26:48.133742+00:00",
+            "download_started_at": "2026-08-22T00:26:48.171061+00:00",
+            "downloaded_at": "2026-08-22T00:26:48.225145+00:00",
+            "first_packet_ts": null,
+            "id": "1dbc907a-1456-4a2e-83ca-3e23c33e143b",
+            "last_error_code": null,
+            "last_error_detail": null,
+            "last_packet_ts": null,
+            "lease_epoch_at_ack": 40,
+            "local_temp_path": null,
+            "packet_count": 0,
+            "pcap_valid": true,
+            "persisted_at": "2026-08-22T00:26:48.232769+00:00",
+            "remote_deleted_at": "2026-08-22T00:26:48.282286+00:00",
+            "remote_inode": 99710,
+            "remote_mtime_epoch": 1787358407,
+            "remote_path": "/tmp/aivoip_capture/epochs/CAP_f7e4bc72_0001_28f2f9ea/spool/seg_000000000001__gate_silent_24b_5b46b22957.pcap",
+            "remote_size": 24,
+            "retention_state": "ROLLING",
+            "segment_seq": 1,
+            "server_size": 24,
+            "sha256": "acc530668c8bc60b2d229281130b1899bfc81d70fdada5c34b3236c628f739c8",
+            "state": "REMOTE_DELETED",
+            "storage_key": "capture-v2/c132f336-df1b-4285-b175-01d848f23b5d/b4a3ec6a-3809-4103-b833-3c28a7ccdc3b/seg_000000000001.pcap",
+            "transfer_attempts": 1,
+            "verified_at": "2026-08-22T00:26:48.228105+00:00",
+            "version": 8
+          },
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": true,
+          "name": "silent_24b_server_copy_durable",
+          "observed": true,
+          "passed": true,
+          "verdict": "PASS"
+        }
+      ],
+      "created_at": "2026-08-22T00:27:08.733068+00:00",
+      "evidence_bundle": "/tmp/capture-v2-gates/20260822T002708Z_R3-09-APF3260M-SILENT24B-RC11_c132f336-df1b-4285-b175-01d848f23b5d",
+      "facts": {
+        "capture_epoch_id": "b4a3ec6a-3809-4103-b833-3c28a7ccdc3b",
+        "capture_session_id": "f7e4bc72-7f46-4da1-b72b-4a2f976e5eeb",
+        "cycles": 36,
+        "errors": 0,
+        "lease_epoch": 40,
+        "silent_acked_at": true,
+        "silent_marker": "gate_silent_24b_5b46b22957",
+        "silent_match_count": 1,
+        "silent_packet_count": 0,
+        "silent_pcap_valid": true,
+        "silent_persisted_at": true,
+        "silent_remote_deleted_at": true,
+        "silent_remote_size": 24,
+        "silent_segment_id": "1dbc907a-1456-4a2e-83ca-3e23c33e143b",
+        "silent_server_size": 24,
+        "silent_state": "REMOTE_DELETED"
+      },
+      "gate_id": "R3-09-APF3260M-SILENT24B-RC11",
+      "summary": "Reliable Segment / SFTP / ACK",
+      "verdict": "PASS"
+    }
+  }
+}

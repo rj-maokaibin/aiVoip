@@ -1,0 +1,44 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "RC43-GUARDED-REHEARSAL-PORT-ISOLATION-SW-001",
+    "sequence": 154,
+    "created_at": "2026-08-23T10:05:00+00:00",
+    "expires_at": "2026-08-23T22:05:00+00:00",
+    "action_type": "SOFTWARE_REGRESSION",
+    "parameters": {
+      "timeout_seconds": 1200
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "62c4618ce4a1812fe253cbb107606f960b7ac9ed"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "Regression after guarded rehearsal wrapper, unconditional isolated-project cleanup, dedicated backend/MinIO host ports, and configurable MinIO console binding. V1 remains authoritative; Production V2 remains disabled."
+  },
+  "action_sha256": "2b448a5392d7f04eaee7466e019bf10f32d3d4d76a4621e7c91ba84ba4fe6dc1",
+  "runner_id": "srv:257142",
+  "state": "SUCCEEDED",
+  "return_code": 0,
+  "verdict": null,
+  "error": null,
+  "finished_at": "2026-08-23T10:02:18.776030+00:00",
+  "stdout_sha256": "04530e79451c0d2174996530e3a46282f444b6613d0e0d696248af0ef1a50980",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "local_stdout": ".capture-v2-control/logs/RC43-GUARDED-REHEARSAL-PORT-ISOLATION-SW-001/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/RC43-GUARDED-REHEARSAL-PORT-ISOLATION-SW-001/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "d965601e970a58c32ac19c361f68b6e2c2445dbc",
+      "expected_product_head": "62c4618ce4a1812fe253cbb107606f960b7ac9ed"
+    },
+    "parsed_output": null
+  }
+}

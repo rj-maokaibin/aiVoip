@@ -1,0 +1,301 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "R4-00-APF1250-IDLE-READY-RC24",
+    "sequence": 107,
+    "created_at": "2026-08-22T03:24:00+00:00",
+    "expires_at": "2026-08-22T15:24:00+00:00",
+    "action_type": "GATE_READINESS_FXS",
+    "parameters": {
+      "device_id": "259f16e6-af9e-4dff-969b-2bb5eac43eb2",
+      "model": "APF1250",
+      "host": "10.48.8.74",
+      "port": 10001,
+      "username": "root",
+      "platform_id": "mt7621",
+      "password_env": "DB:G1V030E010214",
+      "profile_root": "../profiles",
+      "profile_id": "voip-standard",
+      "object_root": "/tmp/voip-reproduction-objects",
+      "output_root": "/tmp/capture-v2-gates",
+      "repo_root": "..",
+      "reproduction_session_id": "AUTO_NEW",
+      "worker_id": "r4-00-apf1250-idle-rc24",
+      "gate_id": "R4-00-APF1250-IDLE-READY-RC24",
+      "duration": 12,
+      "transport": "scp",
+      "timeout_seconds": 600
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "9395bb97ebd8cdaafc700c0701482a960a514bf5"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "Corrected pre-OFFHOOK R4-00 on APF1250. Readiness uses armed producer/epoch, independent durable-store fsync probe and real SCP probe; idle business segment presence is supporting only. No handset action."
+  },
+  "action_sha256": "fc01ab353becb0587df222f1b1db447c92cd413127723abec80ef9f3107a5534",
+  "runner_id": "srv:3456908",
+  "state": "SUCCEEDED",
+  "return_code": 0,
+  "verdict": "PASS",
+  "error": null,
+  "finished_at": "2026-08-22T03:24:15.665372+00:00",
+  "stdout_sha256": "88ca4ef8dae9eb2847441d8e0653475fbda9bbb1d57008094a1ce94211a44aec",
+  "stderr_sha256": "b8258e86248ce6f15dfea1a12afcd2ad3fde62ba6d3cd24536ffc8cb3bb61c48",
+  "local_stdout": ".capture-v2-control/logs/R4-00-APF1250-IDLE-READY-RC24/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/R4-00-APF1250-IDLE-READY-RC24/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "d292fe647fe56ac99e18ec40d868577282af072b",
+      "expected_product_head": "9395bb97ebd8cdaafc700c0701482a960a514bf5"
+    },
+    "parsed_output": {
+      "checks": [
+        {
+          "details": {},
+          "expected": [],
+          "name": "preflight_runtime_no_exception",
+          "observed": [],
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": true,
+          "name": "stage1_all_real_checks_ready",
+          "observed": {
+            "exactly_one_producer": true,
+            "fxs_ready": true,
+            "lease_active": true,
+            "pcap_ready": true,
+            "pcm_control_ready": true,
+            "server_store_ready": true,
+            "storage_guard_ready": true,
+            "transfer_ready": true,
+            "voice_context_ready": true,
+            "watchdog_ready": true
+          },
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": "READY",
+          "name": "stage1_persisted_ready",
+          "observed": "READY",
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": true,
+          "name": "watchdog_healthy_on_real_inputs",
+          "observed": [],
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": "SERVER_STORE_UNHEALTHY",
+          "name": "watchdog_fail_closed_revoke",
+          "observed": [
+            "SERVER_STORE_UNHEALTHY"
+          ],
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": "READY",
+          "name": "readiness_recovered_after_revoke",
+          "observed": "READY",
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": "...REVOKED...READY",
+          "name": "readiness_db_contains_revoke_and_ready",
+          "observed": [
+            "READY",
+            "REVOKED",
+            "READY"
+          ],
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": true,
+          "name": "pcap_armed_before_offhook",
+          "observed": {
+            "active_dir_exists": true,
+            "pcap_ready": true
+          },
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": true,
+          "name": "server_store_preflight_probe",
+          "observed": {
+            "error": null,
+            "ok": true
+          },
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": true,
+          "name": "scp_transfer_preflight_probe",
+          "observed": {
+            "bytes": 259,
+            "error": null,
+            "ok": true
+          },
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": 0,
+          "name": "segment_pipeline_zero_errors",
+          "observed": 0,
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": {
+            "off": 2,
+            "on": 2
+          },
+          "name": "pcm_control_symmetric",
+          "observed": {
+            "off": 2,
+            "on": 2
+          },
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": {
+            "off": 9,
+            "on": 9
+          },
+          "name": "aim_debug_control_symmetric",
+          "observed": {
+            "off": 9,
+            "on": 9
+          },
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": true,
+          "name": "producer_cleanup_exact_identity",
+          "observed": true,
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": true,
+          "name": "lease_cleanup_released",
+          "observed": true,
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": [],
+          "name": "cleanup_no_exception",
+          "observed": [],
+          "passed": true,
+          "verdict": "PASS"
+        }
+      ],
+      "created_at": "2026-08-22T03:24:15.139988+00:00",
+      "evidence_bundle": "/tmp/capture-v2-gates/20260822T032401Z_R4-00-APF1250-IDLE-READY-RC24_259f16e6-af9e-4dff-969b-2bb5eac43eb2",
+      "facts": {
+        "capture_epoch_id": "f85330fb-b1a1-4c59-9efe-a609ce89298a",
+        "capture_session_id": "da6b60ad-964b-487c-904e-cddcd69a88b3",
+        "cleanup": {
+          "errors": [],
+          "lease_released": true,
+          "producer_gone": true
+        },
+        "controls": {
+          "debug_disable_acked": 9,
+          "debug_enable_acked": 9,
+          "pcm_disable_acked": 2,
+          "pcm_enable_acked": 2
+        },
+        "cycles": 21,
+        "exit_stats": {
+          "packets_captured": null,
+          "packets_dropped_kernel": null,
+          "packets_received": null
+        },
+        "pipeline": {
+          "errors": 0
+        },
+        "pre_offhook_probes": {
+          "pcap_active_dir_exists": true,
+          "scp_transfer_probe_bytes": 259,
+          "scp_transfer_probe_error": null,
+          "scp_transfer_probe_ok": true,
+          "server_store_probe_error": null,
+          "server_store_probe_ok": true
+        },
+        "readiness_statuses": [
+          "READY",
+          "REVOKED",
+          "READY"
+        ],
+        "release_gate_effect": "R4_NON_PHYSICAL_PREFLIGHT_ONLY_NOT_PHYSICAL_FXS_PASS",
+        "runtime_errors": [],
+        "stage1_checks": {
+          "exactly_one_producer": true,
+          "fxs_ready": true,
+          "lease_active": true,
+          "pcap_ready": true,
+          "pcm_control_ready": true,
+          "server_store_ready": true,
+          "storage_guard_ready": true,
+          "transfer_ready": true,
+          "voice_context_ready": true,
+          "watchdog_ready": true
+        },
+        "supporting_idle_segment_evidence": {
+          "acked": 0,
+          "deleted": 0,
+          "full_chain_count": 0,
+          "note": "supporting only; idle pre-OFFHOOK readiness does not require business packets",
+          "segment_count": 0,
+          "store_verified_ids": [],
+          "transferred": 0
+        },
+        "voice_context": {
+          "gateway_ip": "192.168.3.200",
+          "interface": "br-lan_400",
+          "voice_vlan_id": "400"
+        }
+      },
+      "gate_id": "R4-00-APF1250-IDLE-READY-RC24",
+      "summary": "R4-00 no-handset real-DUT pre-OFFHOOK readiness/watchdog preflight",
+      "verdict": "PASS"
+    }
+  }
+}

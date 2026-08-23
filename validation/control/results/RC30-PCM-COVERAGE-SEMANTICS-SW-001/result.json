@@ -1,0 +1,44 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "RC30-PCM-COVERAGE-SEMANTICS-SW-001",
+    "sequence": 124,
+    "created_at": "2026-08-22T09:49:00+00:00",
+    "expires_at": "2026-08-22T21:49:00+00:00",
+    "action_type": "SOFTWARE_REGRESSION",
+    "parameters": {
+      "timeout_seconds": 1800
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "b156075c485c42709bd0a1e98ed3a34f700f7836"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "Regression after R5 validation PCM coverage semantics fix: control-ready interval proves capture availability while actual UDP 40000/50000 packets prove the PCM data path; silence alone is not a gap. Production V2 remains disabled."
+  },
+  "action_sha256": "af04fbddc242487a63813cf7dc587cc27782b2e32b68669409eaf4b69687a307",
+  "runner_id": "srv:3456908",
+  "state": "SUCCEEDED",
+  "return_code": 0,
+  "verdict": null,
+  "error": null,
+  "finished_at": "2026-08-22T09:49:22.631946+00:00",
+  "stdout_sha256": "ebed330ec881c7fe21c76aebb21df02bf047dcebb2845378f6a82b88cb7b0812",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "local_stdout": ".capture-v2-control/logs/RC30-PCM-COVERAGE-SEMANTICS-SW-001/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/RC30-PCM-COVERAGE-SEMANTICS-SW-001/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "1543a571110aeb9d1a8c19c5ae3157d55208beca",
+      "expected_product_head": "b156075c485c42709bd0a1e98ed3a34f700f7836"
+    },
+    "parsed_output": null
+  }
+}

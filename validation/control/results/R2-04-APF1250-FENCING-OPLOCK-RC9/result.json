@@ -1,0 +1,211 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "R2-04-APF1250-FENCING-OPLOCK-RC9",
+    "sequence": 50,
+    "created_at": "2026-08-21T16:33:20+00:00",
+    "expires_at": "2026-08-21T18:33:20+00:00",
+    "action_type": "GATE_OWNERSHIP",
+    "parameters": {
+      "device_id": "259f16e6-af9e-4dff-969b-2bb5eac43eb2",
+      "model": "APF1250",
+      "host": "10.48.8.74",
+      "port": 10001,
+      "username": "root",
+      "platform_id": "mt7621",
+      "password_env": "DB:G1V030E010214",
+      "profile_root": "../profiles",
+      "profile_id": "voip-standard",
+      "object_root": "/tmp/voip-reproduction-objects",
+      "output_root": "/tmp/capture-v2-gates",
+      "repo_root": "..",
+      "reproduction_session_id": "AUTO_NEW",
+      "worker_id": "r2-04-apf1250-rc9",
+      "gate_id": "R2-04-APF1250-RC9",
+      "timeout_seconds": 600
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "958dc06d2bb1f29df44a4166f463739b6534f68a"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "RC9 automated DUT fencing/op.lock Gate on APF1250. Publish a higher lease epoch, require stale STOP and stale destructive mutation to return LEASE_FENCED without changing the DUT, then prove a dead-owner operation lock is safely reclaimed by the current authority."
+  },
+  "action_sha256": "1bebcb998237c1a8b2ed235ee38a9e4144740f0935d52effc4db2db56fccf23c",
+  "runner_id": "srv:3090258",
+  "state": "SUCCEEDED",
+  "return_code": 0,
+  "verdict": "PASS",
+  "error": null,
+  "finished_at": "2026-08-21T16:34:18.020017+00:00",
+  "stdout_sha256": "4aedd42653c509c5dfa30f87e4b571d1733c9c31eb26cd687917d5b1af363fc8",
+  "stderr_sha256": "b8258e86248ce6f15dfea1a12afcd2ad3fde62ba6d3cd24536ffc8cb3bb61c48",
+  "local_stdout": ".capture-v2-control/logs/R2-04-APF1250-FENCING-OPLOCK-RC9/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/R2-04-APF1250-FENCING-OPLOCK-RC9/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "3899abcc217d05c24e2a71dfa6f156831747b8c7",
+      "expected_product_head": "958dc06d2bb1f29df44a4166f463739b6534f68a"
+    },
+    "parsed_output": {
+      "result": {
+        "checks": [
+          {
+            "details": {},
+            "expected": 1,
+            "name": "exactly_one_owned_producer",
+            "observed": 1,
+            "passed": true,
+            "verdict": "PASS"
+          },
+          {
+            "details": {},
+            "expected": 1,
+            "name": "one_running_epoch",
+            "observed": 1,
+            "passed": true,
+            "verdict": "PASS"
+          },
+          {
+            "details": {},
+            "expected": "one ACTIVE lease",
+            "name": "lease_active",
+            "observed": [
+              {
+                "lease_epoch": 47,
+                "state": "ACTIVE"
+              }
+            ],
+            "passed": true,
+            "verdict": "PASS"
+          },
+          {
+            "details": {},
+            "expected": 0,
+            "name": "no_unrecovered_gap",
+            "observed": 0,
+            "passed": true,
+            "verdict": "PASS"
+          },
+          {
+            "details": {},
+            "expected": 25864,
+            "name": "producer_pid_adopted",
+            "observed": 25864,
+            "passed": true,
+            "verdict": "PASS"
+          },
+          {
+            "details": {},
+            "expected": 10968518,
+            "name": "producer_starttime_adopted",
+            "observed": 10968518,
+            "passed": true,
+            "verdict": "PASS"
+          },
+          {
+            "details": {},
+            "expected": "c7e94826-906e-4784-9d3d-fdf829743861",
+            "name": "capture_epoch_unchanged",
+            "observed": "c7e94826-906e-4784-9d3d-fdf829743861",
+            "passed": true,
+            "verdict": "PASS"
+          },
+          {
+            "details": {},
+            "expected": "> before",
+            "name": "lease_epoch_increased",
+            "observed": 47,
+            "passed": true,
+            "verdict": "PASS"
+          },
+          {
+            "details": {},
+            "expected": "LEASE_FENCED",
+            "name": "stale_stop_fenced",
+            "observed": "LEASE_FENCED",
+            "passed": true,
+            "verdict": "PASS"
+          },
+          {
+            "details": {},
+            "expected": "LEASE_FENCED",
+            "name": "stale_destructive_mutation_fenced",
+            "observed": "LEASE_FENCED",
+            "passed": true,
+            "verdict": "PASS"
+          },
+          {
+            "details": {},
+            "expected": true,
+            "name": "stale_delete_did_not_mutate",
+            "observed": true,
+            "passed": true,
+            "verdict": "PASS"
+          },
+          {
+            "details": {},
+            "expected": true,
+            "name": "dead_op_lock_recovered",
+            "observed": true,
+            "passed": true,
+            "verdict": "PASS"
+          },
+          {
+            "details": {},
+            "expected": 1,
+            "name": "fencing_final_single_producer",
+            "observed": 1,
+            "passed": true,
+            "verdict": "PASS"
+          }
+        ],
+        "created_at": "2026-08-21T16:34:17.606015+00:00",
+        "evidence_bundle": "/tmp/capture-v2-gates/20260821T163416Z_R2-04-APF1250-RC9_259f16e6-af9e-4dff-969b-2bb5eac43eb2",
+        "facts": {
+          "after_capture_epoch_id": "c7e94826-906e-4784-9d3d-fdf829743861",
+          "after_lease_epoch": 47,
+          "after_pid": 25864,
+          "after_starttime": 10968518,
+          "before_capture_epoch_id": "c7e94826-906e-4784-9d3d-fdf829743861",
+          "before_lease_epoch": 46,
+          "before_pid": 25864,
+          "before_starttime": 10968518,
+          "capture_session_id": "e4e07531-0ba8-4d38-82f4-b8be33a9d7e6",
+          "final_owned_count": 1,
+          "op_lock_recovered": true,
+          "stale_delete_code": "LEASE_FENCED",
+          "stale_delete_sentinel_survived": true,
+          "stale_stop_code": "LEASE_FENCED"
+        },
+        "gate_id": "R2-04-APF1250-RC9",
+        "summary": "Ownership/recovery invariant",
+        "verdict": "PASS"
+      },
+      "state": {
+        "after_capture_epoch_id": "c7e94826-906e-4784-9d3d-fdf829743861",
+        "after_lease_epoch": 47,
+        "after_pid": 25864,
+        "after_starttime": 10968518,
+        "before_capture_epoch_id": "c7e94826-906e-4784-9d3d-fdf829743861",
+        "before_lease_epoch": 46,
+        "before_pid": 25864,
+        "before_starttime": 10968518,
+        "capture_session_id": "e4e07531-0ba8-4d38-82f4-b8be33a9d7e6",
+        "final_owned_count": 1,
+        "op_lock_recovered": true,
+        "reproduction_session_id": "6990824c-c196-4b83-9d15-25b36e36c0f0",
+        "stale_delete_code": "LEASE_FENCED",
+        "stale_delete_sentinel_survived": true,
+        "stale_stop_code": "LEASE_FENCED"
+      }
+    }
+  }
+}

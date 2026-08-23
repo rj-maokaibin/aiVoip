@@ -1,0 +1,44 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "RC3-SW-001",
+    "sequence": 4,
+    "created_at": "2026-08-21T08:37:30+00:00",
+    "expires_at": "2026-08-21T10:37:30+00:00",
+    "action_type": "SOFTWARE_REGRESSION",
+    "parameters": {
+      "timeout_seconds": 1800
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "00fa975d6a2fd250394f6344b35eddddea6eb11c"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "RC3 software regression after fixing generated-control porcelain path handling and adding the R1 stale-fencing Gate. Must pass before R1-02 executes."
+  },
+  "action_sha256": "70fb2e3d040700bc743e7e46939d11e2ffec1d080112505e468542fb8c0ba339",
+  "runner_id": "srv:2909160",
+  "state": "SUCCEEDED",
+  "return_code": 0,
+  "verdict": null,
+  "error": null,
+  "finished_at": "2026-08-21T08:41:45.355606+00:00",
+  "stdout_sha256": "32ef7f96c78de6a6130e8bcb9f79872eb1072257db5bc3f46e3b5fb336b2e44f",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "local_stdout": ".capture-v2-control/logs/RC3-SW-001/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/RC3-SW-001/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "48742f56f6cba0bd3af51fcde0028e57ab58e3af",
+      "expected_product_head": "00fa975d6a2fd250394f6344b35eddddea6eb11c"
+    },
+    "parsed_output": null
+  }
+}

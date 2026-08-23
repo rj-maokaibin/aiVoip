@@ -132,10 +132,12 @@ def test_reconcile_triggers_for_terminal_sessions(monkeypatch):
         _seed_session(db, state='WATCHING', cleanup_status='REQUIRED', case_no='C-3', sn='SN-3')
         monkeypatch.setattr('app.workers.diagnosis_tasks.run_diagnosis.apply_async',
                             lambda args, queue=None: None, raising=False)
-        # RecoveryReconciler needs real DB plumbing; stub it out.
+        # RecoveryReconciler needs real DB plumbing; stub it out. Keep the fake
+        # signature aligned with the production reconciler because Capture V2
+        # excludes V2-owned sessions from legacy recovery/cleanup reconciliation.
         class FakeReconciler:
-            def reconcile_expired_leases(self, db): return 0
-            def retry_failed_cleanups(self, db): return 0
+            def reconcile_expired_leases(self, db, exclude_session_ids=None): return 0
+            def retry_failed_cleanups(self, db, exclude_session_ids=None): return 0
         monkeypatch.setattr('app.workers.reproduction_tasks.RecoveryReconciler', FakeReconciler)
         result = reconcile_reproduction()
         # Only the terminal + cleanup-verified sessions are scanned (C-1, C-2);

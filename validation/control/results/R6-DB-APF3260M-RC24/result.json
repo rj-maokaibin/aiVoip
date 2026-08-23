@@ -1,0 +1,463 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "R6-DB-APF3260M-RC24",
+    "sequence": 110,
+    "created_at": "2026-08-22T03:26:00+00:00",
+    "expires_at": "2026-08-22T15:26:00+00:00",
+    "action_type": "GOLDEN_ARCHIVE_RECOVER",
+    "parameters": {
+      "device_id": "c132f336-df1b-4285-b175-01d848f23b5d",
+      "model": "APF3260-M",
+      "host": "10.48.8.74",
+      "port": 10002,
+      "username": "root",
+      "platform_id": "mt7981",
+      "password_env": "DB:G1U060H000384",
+      "archive_date": "20260820",
+      "timeout_seconds": 900
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "9395bb97ebd8cdaafc700c0701482a960a514bf5"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "APF3260-M historical Golden re-read plus real PostgreSQL R6 evidence-first EvidenceAsset/report self-test. Missing required FXS evidence must force insufficient conclusion/confidence; fully selected PCAP+FXS may retain only the bounded test conclusion. Validation rows cleaned up. No handset action."
+  },
+  "action_sha256": "366824473b7b3cb5e86bd9dd45703da9ed5716f916448e897984f4796d3b08de",
+  "runner_id": "srv:3456908",
+  "state": "SUCCEEDED",
+  "return_code": 0,
+  "verdict": "PASS",
+  "error": null,
+  "finished_at": "2026-08-22T03:27:11.210489+00:00",
+  "stdout_sha256": "29f303d6840ec65b6182abc987fcdeebee3ffdfc17858f90a476d58e460226d0",
+  "stderr_sha256": "b8258e86248ce6f15dfea1a12afcd2ad3fde62ba6d3cd24536ffc8cb3bb61c48",
+  "local_stdout": ".capture-v2-control/logs/R6-DB-APF3260M-RC24/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/R6-DB-APF3260M-RC24/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "a074165149fe56afde6a2546c98c0d4d6b4a70c0",
+      "expected_product_head": "9395bb97ebd8cdaafc700c0701482a960a514bf5"
+    },
+    "parsed_output": {
+      "verdict": "PASS",
+      "archive_name": "v21_golden_APF3260_20260820.tar.gz",
+      "source_root": "/www",
+      "local_path": "/tmp/capture-v2-golden-recovery/c132f336-df1b-4285-b175-01d848f23b5d/20260820/v21_golden_APF3260_20260820.tar.gz",
+      "size_bytes": 1760116,
+      "sha256": "fedcb67763eb7bf65fb00aed68b4e03073fae6e779e71de318d65f7ab7a6489a",
+      "inventory": {
+        "member_count": 20,
+        "pcap_count": 16,
+        "regular_file_bytes": 4162017,
+        "pcap_names": [
+          "v21_golden/capture_20260820_194859.pcap",
+          "v21_golden/capture_20260820_194854.pcap",
+          "v21_golden/capture_20260820_194849.pcap",
+          "v21_golden/capture_20260820_194844.pcap",
+          "v21_golden/capture_20260820_194839.pcap",
+          "v21_golden/capture_20260820_194834.pcap",
+          "v21_golden/capture_20260820_194829.pcap",
+          "v21_golden/capture_20260820_194824.pcap",
+          "v21_golden/capture_20260820_194819.pcap",
+          "v21_golden/capture_20260820_194814.pcap",
+          "v21_golden/capture_20260820_194809.pcap",
+          "v21_golden/capture_20260820_194804.pcap",
+          "v21_golden/capture_20260820_194759.pcap",
+          "v21_golden/capture_20260820_194754.pcap",
+          "v21_golden/capture_20260820_194718.pcap",
+          "v21_golden/capture_20260820_194638.pcap"
+        ],
+        "members": [
+          "v21_golden",
+          "v21_golden/capture_20260820_194859.pcap",
+          "v21_golden/capture_20260820_194854.pcap",
+          "v21_golden/capture_20260820_194849.pcap",
+          "v21_golden/capture_20260820_194844.pcap",
+          "v21_golden/capture_20260820_194839.pcap",
+          "v21_golden/capture_20260820_194834.pcap",
+          "v21_golden/capture_20260820_194829.pcap",
+          "v21_golden/capture_20260820_194824.pcap",
+          "v21_golden/capture_20260820_194819.pcap",
+          "v21_golden/capture_20260820_194814.pcap",
+          "v21_golden/capture_20260820_194809.pcap",
+          "v21_golden/capture_20260820_194804.pcap",
+          "v21_golden/capture_20260820_194759.pcap",
+          "v21_golden/capture_20260820_194754.pcap",
+          "v21_golden/capture_20260820_194718.pcap",
+          "v21_golden/tcpdump.pid",
+          "v21_golden/capture_20260820_194638.pcap",
+          "v21_golden/tcpdump.stderr",
+          "v21_golden/tcpdump.stdout"
+        ],
+        "members_truncated": false
+      },
+      "attempts": [],
+      "analysis": {
+        "verdict": "PASS",
+        "reason": "GOLDEN_ARCHIVE_ANALYSIS_COMPLETED",
+        "release_gate_effect": "EVIDENCE_ONLY_NOT_R5_PASS",
+        "archive": {
+          "name": "v21_golden_APF3260_20260820.tar.gz",
+          "local_path": "/tmp/capture-v2-golden-recovery/c132f336-df1b-4285-b175-01d848f23b5d/20260820/v21_golden_APF3260_20260820.tar.gz",
+          "size_bytes": 1760116,
+          "sha256": "fedcb67763eb7bf65fb00aed68b4e03073fae6e779e71de318d65f7ab7a6489a",
+          "inventory": {
+            "member_count": 20,
+            "pcap_count": 16,
+            "regular_file_bytes": 4162017,
+            "pcap_names": [
+              "v21_golden/capture_20260820_194859.pcap",
+              "v21_golden/capture_20260820_194854.pcap",
+              "v21_golden/capture_20260820_194849.pcap",
+              "v21_golden/capture_20260820_194844.pcap",
+              "v21_golden/capture_20260820_194839.pcap",
+              "v21_golden/capture_20260820_194834.pcap",
+              "v21_golden/capture_20260820_194829.pcap",
+              "v21_golden/capture_20260820_194824.pcap",
+              "v21_golden/capture_20260820_194819.pcap",
+              "v21_golden/capture_20260820_194814.pcap",
+              "v21_golden/capture_20260820_194809.pcap",
+              "v21_golden/capture_20260820_194804.pcap",
+              "v21_golden/capture_20260820_194759.pcap",
+              "v21_golden/capture_20260820_194754.pcap",
+              "v21_golden/capture_20260820_194718.pcap",
+              "v21_golden/capture_20260820_194638.pcap"
+            ],
+            "members": [
+              "v21_golden",
+              "v21_golden/capture_20260820_194859.pcap",
+              "v21_golden/capture_20260820_194854.pcap",
+              "v21_golden/capture_20260820_194849.pcap",
+              "v21_golden/capture_20260820_194844.pcap",
+              "v21_golden/capture_20260820_194839.pcap",
+              "v21_golden/capture_20260820_194834.pcap",
+              "v21_golden/capture_20260820_194829.pcap",
+              "v21_golden/capture_20260820_194824.pcap",
+              "v21_golden/capture_20260820_194819.pcap",
+              "v21_golden/capture_20260820_194814.pcap",
+              "v21_golden/capture_20260820_194809.pcap",
+              "v21_golden/capture_20260820_194804.pcap",
+              "v21_golden/capture_20260820_194759.pcap",
+              "v21_golden/capture_20260820_194754.pcap",
+              "v21_golden/capture_20260820_194718.pcap",
+              "v21_golden/tcpdump.pid",
+              "v21_golden/capture_20260820_194638.pcap",
+              "v21_golden/tcpdump.stderr",
+              "v21_golden/tcpdump.stdout"
+            ],
+            "members_truncated": false
+          }
+        },
+        "analysis_dir": "/tmp/capture-v2-golden-analysis/c132f336-df1b-4285-b175-01d848f23b5d/20260820/fedcb67763eb7bf6",
+        "tcpdump": {
+          "packets_captured": 18766,
+          "packets_received_by_filter": 18766,
+          "packets_dropped_by_kernel": 0
+        },
+        "pcm": {
+          "40000": {
+            "packet_count": 6535,
+            "payload_bytes": 1045600,
+            "first_source_time": 1787226474.279713,
+            "last_source_time": 1787226539.700544,
+            "flows": {
+              "192.168.150.12:53331->192.168.3.200:40000": 6535
+            }
+          },
+          "50000": {
+            "packet_count": 6535,
+            "payload_bytes": 1045600,
+            "first_source_time": 1787226474.27922,
+            "last_source_time": 1787226539.700468,
+            "flows": {
+              "192.168.150.12:50265->192.168.3.200:50000": 6535
+            }
+          }
+        },
+        "voip": {
+          "tshark_version": null,
+          "packet_count": 0,
+          "sip_packet_count": 0,
+          "sip_methods": {},
+          "sip_status_codes": {},
+          "call_ids": {},
+          "sdp_media_ports": {},
+          "rtp_packet_count": 0,
+          "rtp_stream_count": 0,
+          "rtp_estimated_missing_packets": 0,
+          "rtp_cross_segment_missing_packets": 0,
+          "rtp_backward_or_reordered_events": 0,
+          "rtp_streams": [],
+          "first_source_time": null,
+          "last_source_time": null
+        },
+        "analysis_errors": {
+          "tshark": [
+            {
+              "segment": "<environment>",
+              "error": "TShark binary not found: tshark"
+            }
+          ],
+          "udp_reader": []
+        },
+        "evidence_checks": {
+          "tcpdump_kernel_drop_known": true,
+          "tcpdump_kernel_drop_zero": true,
+          "sip_present": false,
+          "sip_call_id_present": false,
+          "rtp_present": false,
+          "rtp_estimated_missing_zero": null,
+          "rtp_cross_segment_missing_zero": null,
+          "pcm_40000_present": true,
+          "pcm_50000_present": true,
+          "tshark_complete": false,
+          "classic_pcap_udp_reader_complete": true
+        },
+        "archive_evidence_complete": false,
+        "remaining_release_gap": "FXS_GROUND_TRUTH_RECONCILIATION_REQUIRED"
+      },
+      "fallback_analysis": {
+        "verdict": "PASS",
+        "reason": "GOLDEN_ARCHIVE_FALLBACK_ANALYSIS_COMPLETED",
+        "release_gate_effect": "EVIDENCE_ONLY_NOT_R5_PASS",
+        "parser": "PURE_PYTHON_CLASSIC_PCAP",
+        "limitations": [
+          "Ethernet/VLAN + IPv4 + UDP only",
+          "plaintext SIP/UDP only; SIP/TCP/TLS is not covered",
+          "RTP is accepted only after per-segment continuity heuristics with >=20 packets",
+          "no RTCP or full SDP semantic reconstruction in fallback mode"
+        ],
+        "archive": {
+          "name": "v21_golden_APF3260_20260820.tar.gz",
+          "sha256": "fedcb67763eb7bf65fb00aed68b4e03073fae6e779e71de318d65f7ab7a6489a",
+          "pcap_count": 16
+        },
+        "sip": {
+          "packet_count": 7,
+          "methods": {
+            "INVITE": 1,
+            "ACK": 1,
+            "BYE": 1
+          },
+          "status_codes": {
+            "200": 2,
+            "100": 1,
+            "180": 1
+          },
+          "call_ids": {
+            "a60034e880383135@192.168.3.200": 7
+          },
+          "request_targets": {
+            "sip:301@192.168.3.200:5060;user=phone": 2,
+            "sip:301@192.168.3.200;user=phone": 1
+          },
+          "sdp_audio_ports": {
+            "10000": 1,
+            "14140": 1
+          },
+          "info_signals": [],
+          "first_source_time": 1787226481.195291,
+          "last_source_time": 1787226539.717222
+        },
+        "rtp": {
+          "packet_count": 5577,
+          "stream_count": 2,
+          "estimated_missing_packets": 0,
+          "cross_segment_missing_packets": 0,
+          "backward_or_reordered_events": 0,
+          "first_source_time": 1787226483.916477,
+          "last_source_time": 1787226539.767143,
+          "streams": [
+            {
+              "src_ip": "192.168.150.12",
+              "src_port": 10000,
+              "dst_ip": "192.168.3.200",
+              "dst_port": 14140,
+              "ssrc": 0,
+              "payload_type": 0,
+              "packet_count": 2787,
+              "estimated_missing_packets": 0,
+              "duplicate_sequence_events": 0,
+              "backward_or_reordered_events": 0,
+              "cross_segment_transitions": 11,
+              "cross_segment_missing_packets": 0,
+              "max_forward_gap": 0
+            },
+            {
+              "src_ip": "192.168.3.200",
+              "src_port": 14140,
+              "dst_ip": "192.168.150.12",
+              "dst_port": 10000,
+              "ssrc": 3998299770,
+              "payload_type": 0,
+              "packet_count": 2790,
+              "estimated_missing_packets": 0,
+              "duplicate_sequence_events": 0,
+              "backward_or_reordered_events": 0,
+              "cross_segment_transitions": 11,
+              "cross_segment_missing_packets": 0,
+              "max_forward_gap": 0
+            }
+          ]
+        },
+        "errors": {
+          "udp": [],
+          "rtp": []
+        },
+        "evidence_checks": {
+          "sip_udp_present": true,
+          "sip_call_id_present": true,
+          "rtp_present": true,
+          "rtp_estimated_missing_zero": true,
+          "rtp_cross_segment_missing_zero": true,
+          "reader_complete": true
+        }
+      },
+      "coverage_db_validation": {
+        "verdict": "PASS",
+        "reason": "REAL_POSTGRES_COVERAGE_LEDGER_SELF_TEST_COMPLETED",
+        "release_gate_effect": "VALIDATES_LEDGER_RUNTIME_ONLY_NOT_ONLINE_R5_PASS",
+        "checks": {
+          "idempotent_create_same_window": true,
+          "pcap_complete": true,
+          "pcm_rx_complete": true,
+          "pcm_tx_complete": true,
+          "first_finalize_complete": true,
+          "recalculation_is_partial": true,
+          "recalculation_invalidates_finalization": true,
+          "second_finalize_partial": true,
+          "restored_track_complete": true,
+          "third_finalize_complete": true,
+          "idempotency_conflict_fails_closed": true,
+          "three_required_tracks_persisted": true,
+          "intervals_persisted": true,
+          "final_row_complete": true,
+          "cleanup_window_removed": true,
+          "cleanup_tracks_cascade_removed": true,
+          "cleanup_intervals_cascade_removed": true
+        },
+        "snapshot_before_cleanup": {
+          "window_id": "fcbe71f1-a0cc-433e-b643-e8d72b26d5f6",
+          "capture_session_fk_anchor": "757156ae-70f3-49e5-9a6b-02493ab9fbec",
+          "window_status": "COMPLETE",
+          "finalized_at_present": true,
+          "track_count": 3,
+          "track_statuses": {
+            "PCM_RX": "COMPLETE",
+            "PCM_TX": "COMPLETE",
+            "PCAP": "COMPLETE"
+          },
+          "interval_count": 3,
+          "dialect": "postgresql"
+        },
+        "cleanup_verified": true
+      },
+      "report_db_validation": {
+        "verdict": "PASS",
+        "reason": "REAL_POSTGRES_EVIDENCE_FIRST_SELF_TEST_COMPLETED",
+        "release_gate_effect": "VALIDATES_EVIDENCE_FIRST_DB_RUNTIME_ONLY_NOT_ABNORMAL_E2E_PASS",
+        "checks": {
+          "evidence_asset_idempotent_create": true,
+          "evidence_asset_idempotency_conflict_fails_closed": true,
+          "missing_required_evidence_is_unsupported": true,
+          "missing_required_evidence_forces_insufficient_conclusion": true,
+          "missing_required_evidence_forces_insufficient_confidence": true,
+          "missing_fxs_is_explicit": true,
+          "requested_root_cause_not_leaked_as_conclusion": true,
+          "complete_required_evidence_is_supported": true,
+          "supported_conclusion_preserved": true,
+          "supported_confidence_preserved": true,
+          "supported_missing_evidence_empty": true,
+          "supported_evidence_count_exact": true,
+          "validation_assets_persisted_in_real_db": true,
+          "validation_assets_cleanup_verified": true
+        },
+        "snapshot_before_cleanup": {
+          "dialect": "postgresql",
+          "capture_session_fk_anchor": "757156ae-70f3-49e5-9a6b-02493ab9fbec",
+          "created_asset_ids": [
+            "f313bb9e-0429-4bda-85bd-d24b95e58c7d",
+            "48d655a8-09b8-42cd-8b75-04f139ea6ce0"
+          ],
+          "insufficient_finding": {
+            "finding_id": "validation-insufficient-77da1e6ca283",
+            "title": "first digit loss root cause",
+            "conclusion": "EVIDENCE_INSUFFICIENT_FOR_CONCLUSION",
+            "requested_conclusion": "DSP_DTMF_EVENT_LOST",
+            "confidence": "INSUFFICIENT",
+            "supported": false,
+            "missing_evidence_types": [
+              "FXS"
+            ],
+            "why": [
+              "validation-only: deliberately omit required FXS evidence"
+            ],
+            "evidence": [
+              {
+                "asset_id": "f313bb9e-0429-4bda-85bd-d24b95e58c7d",
+                "type": "PCAP",
+                "title": "validation PCAP evidence",
+                "description": "validation-only evidence-first DB self-test",
+                "storage_key": "validation-only/77da1e6ca283/pcap",
+                "source_refs": [
+                  "validation:77da1e6ca283:pcap"
+                ],
+                "start_ts": "2026-08-22T03:27:10.937011+00:00",
+                "end_ts": "2026-08-22T03:27:11.937011+00:00"
+              }
+            ]
+          },
+          "supported_finding": {
+            "finding_id": "validation-supported-77da1e6ca283",
+            "title": "bounded supported finding",
+            "conclusion": "TEST_SUPPORTED_CONCLUSION",
+            "requested_conclusion": "TEST_SUPPORTED_CONCLUSION",
+            "confidence": "HIGH",
+            "supported": true,
+            "missing_evidence_types": [],
+            "why": [
+              "validation-only: both required evidence types are selected"
+            ],
+            "evidence": [
+              {
+                "asset_id": "f313bb9e-0429-4bda-85bd-d24b95e58c7d",
+                "type": "PCAP",
+                "title": "validation PCAP evidence",
+                "description": "validation-only evidence-first DB self-test",
+                "storage_key": "validation-only/77da1e6ca283/pcap",
+                "source_refs": [
+                  "validation:77da1e6ca283:pcap"
+                ],
+                "start_ts": "2026-08-22T03:27:10.937011+00:00",
+                "end_ts": "2026-08-22T03:27:11.937011+00:00"
+              },
+              {
+                "asset_id": "48d655a8-09b8-42cd-8b75-04f139ea6ce0",
+                "type": "FXS",
+                "title": "validation FXS evidence",
+                "description": "validation-only evidence-first DB self-test",
+                "storage_key": "validation-only/77da1e6ca283/fxs",
+                "source_refs": [
+                  "validation:77da1e6ca283:fxs"
+                ],
+                "start_ts": "2026-08-22T03:27:10.937011+00:00",
+                "end_ts": "2026-08-22T03:27:11.937011+00:00"
+              }
+            ]
+          },
+          "persisted_asset_count": 2
+        },
+        "cleanup_verified": true
+      }
+    }
+  }
+}

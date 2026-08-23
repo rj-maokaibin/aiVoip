@@ -1,0 +1,10 @@
+{
+  "sftp_fail_before_get_count": 0,
+  "sftp_fail_after_get_count": 0,
+  "persist_fail_count": 100000,
+  "metadata": {
+    "gate": "R3-10",
+    "mode": "SPOOL_BACKLOG_THEN_RECOVER",
+    "purpose": "Temporarily block durable server persistence long enough to create real sealed/unacked DUT backlog, prove SpoolPressure becomes CRITICAL without evicting unacked evidence, then restore persistence and drain the exact backlog."
+  }
+}

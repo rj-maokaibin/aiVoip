@@ -1,0 +1,141 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "R3-07-APF1250-REMOTE-DELETE-FAIL-RC7",
+    "sequence": 38,
+    "created_at": "2026-08-21T15:25:50+00:00",
+    "expires_at": "2026-08-21T17:25:50+00:00",
+    "action_type": "GATE_SEGMENT",
+    "parameters": {
+      "device_id": "259f16e6-af9e-4dff-969b-2bb5eac43eb2",
+      "model": "APF1250",
+      "host": "10.48.8.74",
+      "port": 10001,
+      "username": "root",
+      "platform_id": "mt7621",
+      "password_env": "DB:G1V030E010214",
+      "profile_root": "../profiles",
+      "profile_id": "voip-standard",
+      "object_root": "/tmp/voip-reproduction-objects",
+      "output_root": "/tmp/capture-v2-gates",
+      "repo_root": "..",
+      "reproduction_session_id": "2deb3ef0-c1d8-40c0-8faf-f024a21408eb",
+      "worker_id": "r3-07-apf1250-rc7",
+      "gate_id": "R3-07-APF1250-RC7",
+      "duration": 30,
+      "interval": 0.5,
+      "transport": "scp",
+      "fault_plan": "../validation/control/fault_plans/r3-remote-delete-fail-once.json",
+      "timeout_seconds": 600
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "d4fa41626a967980b2a2418070612a31a3195319"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "RC7 R3-07 on APF1250. Fail the first fenced immutable-segment remote DELETE before mutation. Preserve ACKED durable evidence and retry to REMOTE_DELETED with no double loss."
+  },
+  "action_sha256": "31d61c944907ebecc117705eaa5cf231b42385149a86a033be920681e5e0355c",
+  "runner_id": "srv:3090258",
+  "state": "SUCCEEDED",
+  "return_code": 0,
+  "verdict": "PASS",
+  "error": null,
+  "finished_at": "2026-08-21T15:27:15.003440+00:00",
+  "stdout_sha256": "a868824044288100df9281508879655bed8e9c64d936106fc061f8f1ffc1dd2b",
+  "stderr_sha256": "b8258e86248ce6f15dfea1a12afcd2ad3fde62ba6d3cd24536ffc8cb3bb61c48",
+  "local_stdout": ".capture-v2-control/logs/R3-07-APF1250-REMOTE-DELETE-FAIL-RC7/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/R3-07-APF1250-REMOTE-DELETE-FAIL-RC7/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "5d3a7cb2dcd0bc58426efc365f7b5005a70d88d0",
+      "expected_product_head": "d4fa41626a967980b2a2418070612a31a3195319"
+    },
+    "parsed_output": {
+      "checks": [
+        {
+          "details": {},
+          "expected": ">0",
+          "name": "at_least_one_segment",
+          "observed": 215,
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": ">0 REMOTE_DELETED",
+          "name": "at_least_one_full_chain",
+          "observed": 215,
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": true,
+          "name": "server_store_observable",
+          "observed": [],
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": [],
+          "name": "no_server_and_dut_double_loss",
+          "observed": [],
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": [],
+          "name": "acked_segments_have_server_copy",
+          "observed": [],
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": true,
+          "name": "no_unacked_eviction",
+          "observed": null,
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": ">0 recovered delete-failure segment",
+          "name": "remote_delete_failure_retried",
+          "observed": [
+            "9b0d494d-b9b8-4b4f-96d7-1c83dc91d789"
+          ],
+          "passed": true,
+          "verdict": "PASS"
+        }
+      ],
+      "created_at": "2026-08-21T15:27:14.633088+00:00",
+      "evidence_bundle": "/tmp/capture-v2-gates/20260821T152713Z_R3-07-APF1250-RC7_259f16e6-af9e-4dff-969b-2bb5eac43eb2",
+      "facts": {
+        "acked": 7,
+        "capture_epoch_id": "6f4f97ce-37ae-4047-9e65-b4edd8aa7a0c",
+        "capture_session_id": "6cab6073-f331-4147-89d6-10f1a280493d",
+        "control_authority": "ACTIVE",
+        "cycles": 48,
+        "deleted": 6,
+        "errors": 0,
+        "lease_epoch": 38,
+        "sealed": 6,
+        "transferred": 6
+      },
+      "gate_id": "R3-07-APF1250-RC7",
+      "summary": "Reliable Segment / SFTP / ACK",
+      "verdict": "PASS"
+    }
+  }
+}

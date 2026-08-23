@@ -1,0 +1,44 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "RC45-REHEARSAL-DIAGNOSTICS-SW-001",
+    "sequence": 158,
+    "created_at": "2026-08-23T10:15:00+00:00",
+    "expires_at": "2026-08-23T22:15:00+00:00",
+    "action_type": "SOFTWARE_REGRESSION",
+    "parameters": {
+      "timeout_seconds": 1200
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "4feb91604e426a518d0e040777ba243a3e775497"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "Regression after adding sanitized Compose service diagnostics to guarded service-level activation rehearsal. V1 remains authoritative and Production V2 remains disabled. On PASS, retry APF3260-M rehearsal immediately."
+  },
+  "action_sha256": "a29df5f7fbbbaa10f0c8ef953485b8ab03e2020bd78b90e6c5d58d8bacfd8351",
+  "runner_id": "srv:257142",
+  "state": "SUCCEEDED",
+  "return_code": 0,
+  "verdict": null,
+  "error": null,
+  "finished_at": "2026-08-23T10:17:25.492972+00:00",
+  "stdout_sha256": "89f9f0f1b5f286c68b01a1eff09e6c8d235a3a7ee648192428aa5c6e87f53e01",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "local_stdout": ".capture-v2-control/logs/RC45-REHEARSAL-DIAGNOSTICS-SW-001/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/RC45-REHEARSAL-DIAGNOSTICS-SW-001/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "6ba688a06c84c45d280cf3da29fb6ea5cb689ff0",
+      "expected_product_head": "4feb91604e426a518d0e040777ba243a3e775497"
+    },
+    "parsed_output": null
+  }
+}

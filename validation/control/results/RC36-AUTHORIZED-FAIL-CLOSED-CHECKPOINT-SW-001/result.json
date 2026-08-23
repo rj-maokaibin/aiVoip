@@ -1,0 +1,44 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "RC36-AUTHORIZED-FAIL-CLOSED-CHECKPOINT-SW-001",
+    "sequence": 142,
+    "created_at": "2026-08-23T08:12:00+00:00",
+    "expires_at": "2026-08-23T20:12:00+00:00",
+    "action_type": "SOFTWARE_REGRESSION",
+    "parameters": {
+      "timeout_seconds": 1200
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "4c83ceb1f33b22af3b4fa62fa693122a9494ca84"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "Freeze the explicitly authorized but still fail-closed checkpoint before production V2 runtime wiring. Release artifact records approved=true while rollback_gate_passed=false; V1 remains authoritative and Production V2 remains disabled."
+  },
+  "action_sha256": "518ea67c7cd843cb21201f548828e9ceae5729414695d576f4ab3dbe0cae3341",
+  "runner_id": "srv:257142",
+  "state": "SUCCEEDED",
+  "return_code": 0,
+  "verdict": null,
+  "error": null,
+  "finished_at": "2026-08-23T08:14:43.732218+00:00",
+  "stdout_sha256": "f14bf8ec27d601eeae5e0a46cf4d839bd2e8ed1596f2d4de4c22a34a89b0a0fe",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "local_stdout": ".capture-v2-control/logs/RC36-AUTHORIZED-FAIL-CLOSED-CHECKPOINT-SW-001/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/RC36-AUTHORIZED-FAIL-CLOSED-CHECKPOINT-SW-001/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "6e2ace78d44a1abf73209e1750f3773fd62bfbca",
+      "expected_product_head": "4c83ceb1f33b22af3b4fa62fa693122a9494ca84"
+    },
+    "parsed_output": null
+  }
+}

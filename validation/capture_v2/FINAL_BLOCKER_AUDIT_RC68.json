@@ -1,0 +1,49 @@
+{
+  "schema_version": "capture-v2-final-blocker-audit-v1",
+  "audit_id": "FINAL_BLOCKER_AUDIT_RC68",
+  "technical_release_validation": "PASS",
+  "production_cutover_approved": false,
+  "capture_engine_version": "V1",
+  "capture_v2_production_enabled": false,
+  "pr_27_must_remain_draft": true,
+  "mandatory_gates": {
+    "R1_POSTGRESQL_LEASE_FENCING": "PASS",
+    "R2_OWNERSHIP_RECOVERY": "PASS",
+    "R3_SEGMENT_TRANSFER_ACK": "PASS",
+    "R4_READINESS_FXS": "PASS",
+    "R5_COVERAGE": "PASS",
+    "R6_EVIDENCE_FIRST_REPORT_E2E": "PASS_WITH_LOCALIZATION_BOUNDARY",
+    "R7_SERVICE_ACTIVATION_ROLLBACK": "PASS",
+    "MASTER_FIX_CANDIDATE_PLUS_CAPTURE_V2_FULL_ACCEPTANCE": "PASS"
+  },
+  "master_integration": {
+    "action": "RC68-MASTER-FIX-CANDIDATE-INTEGRATION-005",
+    "sequence": 199,
+    "candidate_sha": "391486c7a70f8e36c088dcb512397044a552c78c",
+    "required_master_ancestor": "e8d108a228b151b7711bfe6048c3f39e94b57783",
+    "merge_conflicts": [],
+    "capture_v2_regression": {"status": "PASS", "tests_passed": 225},
+    "frozen_contracts": "PASS",
+    "full_software_acceptance": "PASS",
+    "tshark_binary": "/usr/bin/tshark",
+    "real_offline_golden_001": {"status": "PASS", "passed": true, "checks_passed": 142, "checks_total": 142},
+    "branch_mutation": false,
+    "merge_commit_created": false,
+    "production_mutation": false,
+    "dut_mutation": false
+  },
+  "remaining_non_production_optional": [
+    "Controlled <=100ms rebound calibration if elevated to a release criterion",
+    "Another physical first-call fault reproduction with lower-layer debug earlier than AIM/FXS if exact component localization is required"
+  ],
+  "remaining_blocker": {
+    "type": "EXPLICIT_PRODUCTION_AUTHORIZATION_ONLY",
+    "required_before_cutover": [
+      "Explicit production cutover approval",
+      "Set CAPTURE_ENGINE_VERSION=V2",
+      "Set CAPTURE_V2_PRODUCTION_ENABLED=true",
+      "Mark PR #27 ready / merge only under that approval",
+      "Execute production cutover under the approved plan"
+    ]
+  }
+}

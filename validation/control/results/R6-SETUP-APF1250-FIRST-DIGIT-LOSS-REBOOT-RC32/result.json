@@ -1,0 +1,197 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "R6-SETUP-APF1250-FIRST-DIGIT-LOSS-REBOOT-RC32",
+    "sequence": 130,
+    "created_at": "2026-08-23T06:28:30+00:00",
+    "expires_at": "2026-08-23T18:28:30+00:00",
+    "action_type": "GATE_OWNERSHIP",
+    "parameters": {
+      "device_id": "259f16e6-af9e-4dff-969b-2bb5eac43eb2",
+      "model": "APF1250",
+      "host": "10.48.8.74",
+      "port": 10001,
+      "username": "root",
+      "platform_id": "mt7621",
+      "password_env": "DB:G1V030E010214",
+      "profile_root": "../profiles",
+      "profile_id": "voip-standard",
+      "object_root": "/tmp/voip-reproduction-objects",
+      "output_root": "/tmp/capture-v2-gates",
+      "repo_root": "..",
+      "reproduction_session_id": "AUTO_NEW",
+      "worker_id": "r6-apf1250-first-digit-loss-reboot-rc32",
+      "gate_id": "R2-05-APF1250-DUT-REBOOT-RC13",
+      "timeout_seconds": 900
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "86f7d7c01bdfe613e149f2e048cc7beb9538fd97"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "R6 setup only. Reboot APF1250 to establish a genuine post-boot first-dial condition for the first-digit-loss Product E2E. Do not perform handset actions during reboot/recovery. After tunnel/recovery is proven, a separate real FXS/PCAP/PCM evidence Gate will be armed before the operator performs the first dial. Production V2 remains disabled and V1 remains authoritative."
+  },
+  "action_sha256": "ada7d725c139202dfc9d8440fb573a0a566556b6428a3ad1161bff50ec53fd9f",
+  "runner_id": "srv:3456908",
+  "state": "SUCCEEDED",
+  "return_code": 0,
+  "verdict": "PASS",
+  "error": null,
+  "finished_at": "2026-08-23T06:31:53.840867+00:00",
+  "stdout_sha256": "56a029c27b9a7fa4a7bb8e19a7bd6c4b6b8eee271c61ec676ae1526410754c97",
+  "stderr_sha256": "b8258e86248ce6f15dfea1a12afcd2ad3fde62ba6d3cd24536ffc8cb3bb61c48",
+  "local_stdout": ".capture-v2-control/logs/R6-SETUP-APF1250-FIRST-DIGIT-LOSS-REBOOT-RC32/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/R6-SETUP-APF1250-FIRST-DIGIT-LOSS-REBOOT-RC32/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "90f1f009de5b9ce77fbb7bd5213e84cf3b506736",
+      "expected_product_head": "86f7d7c01bdfe613e149f2e048cc7beb9538fd97"
+    },
+    "parsed_output": {
+      "result": {
+        "checks": [
+          {
+            "details": {},
+            "expected": 1,
+            "name": "exactly_one_owned_producer",
+            "observed": 1,
+            "passed": true,
+            "verdict": "PASS"
+          },
+          {
+            "details": {},
+            "expected": 1,
+            "name": "one_running_epoch",
+            "observed": 1,
+            "passed": true,
+            "verdict": "PASS"
+          },
+          {
+            "details": {},
+            "expected": "one ACTIVE lease",
+            "name": "lease_active",
+            "observed": [
+              {
+                "lease_epoch": 74,
+                "state": "ACTIVE"
+              }
+            ],
+            "passed": true,
+            "verdict": "PASS"
+          },
+          {
+            "details": {},
+            "expected": 0,
+            "name": "no_unrecovered_gap",
+            "observed": 0,
+            "passed": true,
+            "verdict": "PASS"
+          },
+          {
+            "details": {},
+            "expected": "new boot_id",
+            "name": "dut_boot_id_changed",
+            "observed": {
+              "new": "d9dae583-2186-4185-b9c9-77207bb772ef",
+              "old": "4447688e-86f7-4641-a68d-b6a786360c9b"
+            },
+            "passed": true,
+            "verdict": "PASS"
+          },
+          {
+            "details": {},
+            "expected": "DUT_REBOOT",
+            "name": "dut_reboot_classified",
+            "observed": "DUT_REBOOT",
+            "passed": true,
+            "verdict": "PASS"
+          },
+          {
+            "details": {},
+            "expected": "new CaptureEpoch",
+            "name": "dut_reboot_new_capture_epoch",
+            "observed": {
+              "after": "dabd3b99-c7da-4752-a9b6-106cb4547903",
+              "before": "e2f33e73-b3e0-491c-a0dd-6440d14dcc28"
+            },
+            "passed": true,
+            "verdict": "PASS"
+          },
+          {
+            "details": {},
+            "expected": "> before",
+            "name": "dut_reboot_lease_epoch_increased",
+            "observed": 74,
+            "passed": true,
+            "verdict": "PASS"
+          },
+          {
+            "details": {},
+            "expected": ">0 recovered DUT_REBOOT_GAP",
+            "name": "dut_reboot_gap_recorded_and_closed",
+            "observed": 1,
+            "passed": true,
+            "verdict": "PASS"
+          },
+          {
+            "details": {},
+            "expected": ">0 DUT_REBOOT_DETECTED",
+            "name": "dut_reboot_event_recorded",
+            "observed": 1,
+            "passed": true,
+            "verdict": "PASS"
+          },
+          {
+            "details": {},
+            "expected": 1,
+            "name": "dut_reboot_final_single_producer",
+            "observed": 1,
+            "passed": true,
+            "verdict": "PASS"
+          }
+        ],
+        "created_at": "2026-08-23T06:31:53.503875+00:00",
+        "evidence_bundle": "/tmp/capture-v2-gates/20260823T063151Z_R2-05-APF1250-DUT-REBOOT-RC13_259f16e6-af9e-4dff-969b-2bb5eac43eb2",
+        "facts": {
+          "after_capture_epoch_id": "dabd3b99-c7da-4752-a9b6-106cb4547903",
+          "after_lease_epoch": 74,
+          "after_pid": 16208,
+          "before_capture_epoch_id": "e2f33e73-b3e0-491c-a0dd-6440d14dcc28",
+          "before_lease_epoch": 73,
+          "before_pid": 6109,
+          "capture_session_id": "21aab150-2aa0-4fba-aff9-8c5a68ae653f",
+          "final_owned_count": 1,
+          "new_boot_id": "d9dae583-2186-4185-b9c9-77207bb772ef",
+          "old_boot_id": "4447688e-86f7-4641-a68d-b6a786360c9b",
+          "recovery_classification": "DUT_REBOOT",
+          "recovery_status": "REPAIRED"
+        },
+        "gate_id": "R2-05-APF1250-DUT-REBOOT-RC13",
+        "summary": "Ownership/recovery invariant",
+        "verdict": "PASS"
+      },
+      "state": {
+        "after_capture_epoch_id": "dabd3b99-c7da-4752-a9b6-106cb4547903",
+        "after_lease_epoch": 74,
+        "after_pid": 16208,
+        "before_capture_epoch_id": "e2f33e73-b3e0-491c-a0dd-6440d14dcc28",
+        "before_lease_epoch": 73,
+        "before_pid": 6109,
+        "capture_session_id": "21aab150-2aa0-4fba-aff9-8c5a68ae653f",
+        "final_owned_count": 1,
+        "new_boot_id": "d9dae583-2186-4185-b9c9-77207bb772ef",
+        "old_boot_id": "4447688e-86f7-4641-a68d-b6a786360c9b",
+        "recovery_classification": "DUT_REBOOT",
+        "recovery_status": "REPAIRED",
+        "reproduction_session_id": "828e07c6-600a-4605-ab66-aa975c8029d1"
+      }
+    }
+  }
+}

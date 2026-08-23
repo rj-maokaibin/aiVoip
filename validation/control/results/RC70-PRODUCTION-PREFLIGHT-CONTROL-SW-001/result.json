@@ -1,0 +1,44 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "RC70-PRODUCTION-PREFLIGHT-CONTROL-SW-001",
+    "sequence": 201,
+    "created_at": "2026-08-23T15:34:00+00:00",
+    "expires_at": "2026-08-24T03:34:00+00:00",
+    "action_type": "SOFTWARE_REGRESSION",
+    "parameters": {
+      "timeout_seconds": 1800
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "fe0ec5000e15d8ab832a92aebd4169d7c769781b"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "Run full Capture V2 software regression after adding the audited production deployment preflight wrapper and bounded dispatch. V1 remains authoritative and Production V2 remains disabled; no DUT or production mutation."
+  },
+  "action_sha256": "deb585a589f7e3a5ac36143bdc1d4b39bfca51b896795e8871abe9f4c29e744d",
+  "runner_id": "srv:257142",
+  "state": "SUCCEEDED",
+  "return_code": 0,
+  "verdict": null,
+  "error": null,
+  "finished_at": "2026-08-23T15:34:30.962621+00:00",
+  "stdout_sha256": "00729e86cb86fb46d08b3d0f8ac239e9077928cf6d1ef2f44cae2bb267ee9df8",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "local_stdout": ".capture-v2-control/logs/RC70-PRODUCTION-PREFLIGHT-CONTROL-SW-001/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/RC70-PRODUCTION-PREFLIGHT-CONTROL-SW-001/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "e8f30c5b78970e27b2ea66cfc88864ed202e9fc4",
+      "expected_product_head": "fe0ec5000e15d8ab832a92aebd4169d7c769781b"
+    },
+    "parsed_output": null
+  }
+}

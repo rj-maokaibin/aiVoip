@@ -1,0 +1,44 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "RC39-ACTIVATION-REHEARSAL-LATEST-HEAD-SW-001",
+    "sequence": 147,
+    "created_at": "2026-08-23T09:40:00+00:00",
+    "expires_at": "2026-08-23T21:40:00+00:00",
+    "action_type": "SOFTWARE_REGRESSION",
+    "parameters": {
+      "timeout_seconds": 1200
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "f0acf52041ed303edea6983873dc4a8d2cfd166a"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "RC39 freezes the latest product HEAD after activation-rehearsal evidence-model changes. V1 remains authoritative and Production V2 remains disabled. On PASS, proceed directly to deployment preflight and bounded real service-level activation rehearsal."
+  },
+  "action_sha256": "3b5e03cca7d340877deae95b477b27e73f6e62e05315ce210b4fcef7024970ea",
+  "runner_id": "srv:257142",
+  "state": "SUCCEEDED",
+  "return_code": 0,
+  "verdict": null,
+  "error": null,
+  "finished_at": "2026-08-23T09:41:43.607810+00:00",
+  "stdout_sha256": "701c4f08ebf69c23a65f746f3db5af3e457e1a3b8c8f34c6923b37eb3042a6af",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "local_stdout": ".capture-v2-control/logs/RC39-ACTIVATION-REHEARSAL-LATEST-HEAD-SW-001/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/RC39-ACTIVATION-REHEARSAL-LATEST-HEAD-SW-001/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "12a9869067cadced0c6d28902b0b09e47a6d4c5c",
+      "expected_product_head": "f0acf52041ed303edea6983873dc4a8d2cfd166a"
+    },
+    "parsed_output": null
+  }
+}

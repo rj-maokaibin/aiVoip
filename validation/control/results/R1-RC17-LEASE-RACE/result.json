@@ -1,0 +1,120 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "R1-RC17-LEASE-RACE",
+    "sequence": 75,
+    "created_at": "2026-08-22T01:23:00+00:00",
+    "expires_at": "2026-08-22T03:23:00+00:00",
+    "action_type": "GATE_LEASE_RACE",
+    "parameters": {
+      "device_id": "259f16e6-af9e-4dff-969b-2bb5eac43eb2",
+      "capture_session_a": "8113cb2a-6067-4a9d-b73e-287a60b09bd6",
+      "capture_session_b": "d141aea6-06f8-4650-84e0-ff5d1b52d1f8",
+      "worker_a": "rc17-r1-a",
+      "worker_b": "rc17-r1-b",
+      "gate_id": "R1-01-RC17",
+      "profile_root": "../profiles",
+      "profile_id": "voip-standard",
+      "object_root": "/tmp/voip-reproduction-objects",
+      "output_root": "/tmp/capture-v2-gates",
+      "repo_root": "..",
+      "timeout_seconds": 300
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "3636ee32045cfc9c7acfcdfa47e5e27f0ce15849"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "RC17 PostgreSQL lease concurrency revalidation on clean immutable product/tooling head. No DUT SSH or physical handset action. Require exactly one winner and one LEASE_BUSY loser."
+  },
+  "action_sha256": "254c05fc284c1cd9ae3a0fb3bb411e44eee1cc6e2298962762542446c220e87a",
+  "runner_id": "srv:3382405",
+  "state": "SUCCEEDED",
+  "return_code": 0,
+  "verdict": "PASS",
+  "error": null,
+  "finished_at": "2026-08-22T01:23:45.773374+00:00",
+  "stdout_sha256": "81554917eb350916d988044c0a581a7599779b8a974e1663b41205630fd7d931",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "local_stdout": ".capture-v2-control/logs/R1-RC17-LEASE-RACE/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/R1-RC17-LEASE-RACE/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "573de70de0fcbc66aff881ca262e4f3c917e1379",
+      "expected_product_head": "3636ee32045cfc9c7acfcdfa47e5e27f0ce15849"
+    },
+    "parsed_output": {
+      "checks": [
+        {
+          "details": {},
+          "expected": 1,
+          "name": "exactly_one_winner",
+          "observed": 1,
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": 1,
+          "name": "exactly_one_loser",
+          "observed": 1,
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": "LEASE_BUSY",
+          "name": "loser_is_lease_busy",
+          "observed": "LEASE_BUSY",
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": 1,
+          "name": "single_lease_row",
+          "observed": 1,
+          "passed": true,
+          "verdict": "PASS"
+        }
+      ],
+      "created_at": "2026-08-22T01:23:45.399168+00:00",
+      "evidence_bundle": "/tmp/capture-v2-gates/20260822T012345Z_R1-01-RC17_259f16e6-af9e-4dff-969b-2bb5eac43eb2",
+      "facts": {
+        "loser_code": "LEASE_BUSY",
+        "loser_count": 1,
+        "results": [
+          {
+            "code": "LEASE_BUSY",
+            "details": {
+              "device_id": "259f16e6-af9e-4dff-969b-2bb5eac43eb2",
+              "expires_at": "2026-08-22T01:24:15.252129+00:00",
+              "lease_epoch": 56,
+              "owner_worker_id": "rc17-r1-b"
+            },
+            "ok": false,
+            "session": "8113cb2a-6067-4a9d-b73e-287a60b09bd6",
+            "worker": "rc17-r1-a"
+          },
+          {
+            "lease_epoch": 56,
+            "ok": true,
+            "session": "d141aea6-06f8-4650-84e0-ff5d1b52d1f8",
+            "worker": "rc17-r1-b"
+          }
+        ],
+        "winner_count": 1
+      },
+      "gate_id": "R1-01-RC17",
+      "summary": "PostgreSQL lease race",
+      "verdict": "PASS"
+    }
+  }
+}

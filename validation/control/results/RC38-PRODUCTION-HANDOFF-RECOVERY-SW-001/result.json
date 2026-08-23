@@ -1,0 +1,44 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "RC38-PRODUCTION-HANDOFF-RECOVERY-SW-001",
+    "sequence": 146,
+    "created_at": "2026-08-23T09:28:00+00:00",
+    "expires_at": "2026-08-23T21:28:00+00:00",
+    "action_type": "SOFTWARE_REGRESSION",
+    "parameters": {
+      "timeout_seconds": 1200
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "702d8cd879b35fd2a62469cb0d3ba69bc64fb5db"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "RC38 regression for pre-WATCHING V2 producer readiness, start-to-watcher controller handoff, serialized V2 cancel/recovery cleanup, legacy recovery exclusion, and release artifact runtime mounts. V1 remains authoritative and Production V2 stays disabled."
+  },
+  "action_sha256": "78c959be76656c0a129cb5e592056e294bc02091ea9ae380b2895c1740ed3922",
+  "runner_id": "srv:257142",
+  "state": "SUCCEEDED",
+  "return_code": 0,
+  "verdict": null,
+  "error": null,
+  "finished_at": "2026-08-23T09:14:58.101650+00:00",
+  "stdout_sha256": "5e8abe987aed480667989816d3f3eed8f353429621f3191da8d6c6f64f1d28ba",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "local_stdout": ".capture-v2-control/logs/RC38-PRODUCTION-HANDOFF-RECOVERY-SW-001/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/RC38-PRODUCTION-HANDOFF-RECOVERY-SW-001/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "b9215a24d0f104196effe0762bd5faaa5c0cc66d",
+      "expected_product_head": "702d8cd879b35fd2a62469cb0d3ba69bc64fb5db"
+    },
+    "parsed_output": null
+  }
+}

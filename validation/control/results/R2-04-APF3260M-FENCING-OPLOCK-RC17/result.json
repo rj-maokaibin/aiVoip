@@ -1,0 +1,211 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "R2-04-APF3260M-FENCING-OPLOCK-RC17",
+    "sequence": 82,
+    "created_at": "2026-08-22T01:31:00+00:00",
+    "expires_at": "2026-08-22T03:31:00+00:00",
+    "action_type": "GATE_OWNERSHIP",
+    "parameters": {
+      "device_id": "c132f336-df1b-4285-b175-01d848f23b5d",
+      "model": "APF3260-M",
+      "host": "10.48.8.74",
+      "port": 10002,
+      "username": "root",
+      "platform_id": "mt7981",
+      "password_env": "DB:G1U060H000384",
+      "profile_root": "../profiles",
+      "profile_id": "voip-standard",
+      "object_root": "/tmp/voip-reproduction-objects",
+      "output_root": "/tmp/capture-v2-gates",
+      "repo_root": "..",
+      "reproduction_session_id": "AUTO_NEW",
+      "worker_id": "r2-04-apf3260m-rc17",
+      "gate_id": "R2-04-APF3260M-FENCING-OPLOCK-RC17",
+      "timeout_seconds": 600
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "3636ee32045cfc9c7acfcdfa47e5e27f0ce15849"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "RC17 automated stale-token fencing and dead op.lock recovery on APF3260-M. Stale STOP/destructive mutation must be fenced and sentinel preserved; current authority must safely reclaim dead op.lock. No physical handset action."
+  },
+  "action_sha256": "b03384e8231757035ad4d8e5c4b7eea60143ee8ce26fbdbebb45bdf9e2c04c59",
+  "runner_id": "srv:3382405",
+  "state": "SUCCEEDED",
+  "return_code": 0,
+  "verdict": "PASS",
+  "error": null,
+  "finished_at": "2026-08-22T01:31:52.612105+00:00",
+  "stdout_sha256": "a1b830aaf7ce687a7df9744a015521f88073991030cca529828a0f74cbec73ec",
+  "stderr_sha256": "b8258e86248ce6f15dfea1a12afcd2ad3fde62ba6d3cd24536ffc8cb3bb61c48",
+  "local_stdout": ".capture-v2-control/logs/R2-04-APF3260M-FENCING-OPLOCK-RC17/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/R2-04-APF3260M-FENCING-OPLOCK-RC17/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "1ca80f1b0794f56be0cc84a635ec87dba027183a",
+      "expected_product_head": "3636ee32045cfc9c7acfcdfa47e5e27f0ce15849"
+    },
+    "parsed_output": {
+      "result": {
+        "checks": [
+          {
+            "details": {},
+            "expected": 1,
+            "name": "exactly_one_owned_producer",
+            "observed": 1,
+            "passed": true,
+            "verdict": "PASS"
+          },
+          {
+            "details": {},
+            "expected": 1,
+            "name": "one_running_epoch",
+            "observed": 1,
+            "passed": true,
+            "verdict": "PASS"
+          },
+          {
+            "details": {},
+            "expected": "one ACTIVE lease",
+            "name": "lease_active",
+            "observed": [
+              {
+                "lease_epoch": 54,
+                "state": "ACTIVE"
+              }
+            ],
+            "passed": true,
+            "verdict": "PASS"
+          },
+          {
+            "details": {},
+            "expected": 0,
+            "name": "no_unrecovered_gap",
+            "observed": 0,
+            "passed": true,
+            "verdict": "PASS"
+          },
+          {
+            "details": {},
+            "expected": 23792,
+            "name": "producer_pid_adopted",
+            "observed": 23792,
+            "passed": true,
+            "verdict": "PASS"
+          },
+          {
+            "details": {},
+            "expected": 311781,
+            "name": "producer_starttime_adopted",
+            "observed": 311781,
+            "passed": true,
+            "verdict": "PASS"
+          },
+          {
+            "details": {},
+            "expected": "c92ce8ee-444b-4a5a-a9a8-e0e0ca469a18",
+            "name": "capture_epoch_unchanged",
+            "observed": "c92ce8ee-444b-4a5a-a9a8-e0e0ca469a18",
+            "passed": true,
+            "verdict": "PASS"
+          },
+          {
+            "details": {},
+            "expected": "> before",
+            "name": "lease_epoch_increased",
+            "observed": 54,
+            "passed": true,
+            "verdict": "PASS"
+          },
+          {
+            "details": {},
+            "expected": "LEASE_FENCED",
+            "name": "stale_stop_fenced",
+            "observed": "LEASE_FENCED",
+            "passed": true,
+            "verdict": "PASS"
+          },
+          {
+            "details": {},
+            "expected": "LEASE_FENCED",
+            "name": "stale_destructive_mutation_fenced",
+            "observed": "LEASE_FENCED",
+            "passed": true,
+            "verdict": "PASS"
+          },
+          {
+            "details": {},
+            "expected": true,
+            "name": "stale_delete_did_not_mutate",
+            "observed": true,
+            "passed": true,
+            "verdict": "PASS"
+          },
+          {
+            "details": {},
+            "expected": true,
+            "name": "dead_op_lock_recovered",
+            "observed": true,
+            "passed": true,
+            "verdict": "PASS"
+          },
+          {
+            "details": {},
+            "expected": 1,
+            "name": "fencing_final_single_producer",
+            "observed": 1,
+            "passed": true,
+            "verdict": "PASS"
+          }
+        ],
+        "created_at": "2026-08-22T01:31:52.317383+00:00",
+        "evidence_bundle": "/tmp/capture-v2-gates/20260822T013151Z_R2-04-APF3260M-FENCING-OPLOCK-RC17_c132f336-df1b-4285-b175-01d848f23b5d",
+        "facts": {
+          "after_capture_epoch_id": "c92ce8ee-444b-4a5a-a9a8-e0e0ca469a18",
+          "after_lease_epoch": 54,
+          "after_pid": 23792,
+          "after_starttime": 311781,
+          "before_capture_epoch_id": "c92ce8ee-444b-4a5a-a9a8-e0e0ca469a18",
+          "before_lease_epoch": 53,
+          "before_pid": 23792,
+          "before_starttime": 311781,
+          "capture_session_id": "978fa2e4-9b99-414e-8c9e-4f50d014d634",
+          "final_owned_count": 1,
+          "op_lock_recovered": true,
+          "stale_delete_code": "LEASE_FENCED",
+          "stale_delete_sentinel_survived": true,
+          "stale_stop_code": "LEASE_FENCED"
+        },
+        "gate_id": "R2-04-APF3260M-FENCING-OPLOCK-RC17",
+        "summary": "Ownership/recovery invariant",
+        "verdict": "PASS"
+      },
+      "state": {
+        "after_capture_epoch_id": "c92ce8ee-444b-4a5a-a9a8-e0e0ca469a18",
+        "after_lease_epoch": 54,
+        "after_pid": 23792,
+        "after_starttime": 311781,
+        "before_capture_epoch_id": "c92ce8ee-444b-4a5a-a9a8-e0e0ca469a18",
+        "before_lease_epoch": 53,
+        "before_pid": 23792,
+        "before_starttime": 311781,
+        "capture_session_id": "978fa2e4-9b99-414e-8c9e-4f50d014d634",
+        "final_owned_count": 1,
+        "op_lock_recovered": true,
+        "reproduction_session_id": "b97d36c1-36af-43c5-a817-7b5509456316",
+        "stale_delete_code": "LEASE_FENCED",
+        "stale_delete_sentinel_survived": true,
+        "stale_stop_code": "LEASE_FENCED"
+      }
+    }
+  }
+}

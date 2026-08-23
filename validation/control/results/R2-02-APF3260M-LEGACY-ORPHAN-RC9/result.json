@@ -1,0 +1,186 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "R2-02-APF3260M-LEGACY-ORPHAN-RC9",
+    "sequence": 47,
+    "created_at": "2026-08-21T16:31:00+00:00",
+    "expires_at": "2026-08-21T18:31:00+00:00",
+    "action_type": "GATE_OWNERSHIP",
+    "parameters": {
+      "device_id": "c132f336-df1b-4285-b175-01d848f23b5d",
+      "model": "APF3260-M",
+      "host": "10.48.8.74",
+      "port": 10002,
+      "username": "root",
+      "platform_id": "mt7981",
+      "password_env": "DB:G1U060H000384",
+      "profile_root": "../profiles",
+      "profile_id": "voip-standard",
+      "object_root": "/tmp/voip-reproduction-objects",
+      "output_root": "/tmp/capture-v2-gates",
+      "repo_root": "..",
+      "reproduction_session_id": "AUTO_NEW",
+      "worker_id": "r2-02-apf3260m-rc9",
+      "gate_id": "R2-02-APF3260M-RC9",
+      "timeout_seconds": 600
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "958dc06d2bb1f29df44a4166f463739b6534f68a"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "RC9 automated Legacy Orphan Gate on APF3260-M. Gate creates and exactly cleans its own legacy producer precondition; recovery must observe orphan, stop it by exact PID/starttime, record and close the continuity gap, and end with one V2 producer."
+  },
+  "action_sha256": "9825c47784dd010d94b89553f6a8caf578b9d865ba321d8b05762010e41fa6c9",
+  "runner_id": "srv:3090258",
+  "state": "SUCCEEDED",
+  "return_code": 0,
+  "verdict": "PASS",
+  "error": null,
+  "finished_at": "2026-08-21T16:31:08.203778+00:00",
+  "stdout_sha256": "d07ae2dbed4178b1f36e6056469c0d29089753ebe81335d461009b515e9af5bf",
+  "stderr_sha256": "b8258e86248ce6f15dfea1a12afcd2ad3fde62ba6d3cd24536ffc8cb3bb61c48",
+  "local_stdout": ".capture-v2-control/logs/R2-02-APF3260M-LEGACY-ORPHAN-RC9/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/R2-02-APF3260M-LEGACY-ORPHAN-RC9/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "34b1ee44375e3ab9501a97af31352055d0648ad0",
+      "expected_product_head": "958dc06d2bb1f29df44a4166f463739b6534f68a"
+    },
+    "parsed_output": {
+      "result": {
+        "checks": [
+          {
+            "details": {},
+            "expected": 1,
+            "name": "exactly_one_owned_producer",
+            "observed": 1,
+            "passed": true,
+            "verdict": "PASS"
+          },
+          {
+            "details": {},
+            "expected": 1,
+            "name": "one_running_epoch",
+            "observed": 1,
+            "passed": true,
+            "verdict": "PASS"
+          },
+          {
+            "details": {},
+            "expected": "one ACTIVE lease",
+            "name": "lease_active",
+            "observed": [
+              {
+                "lease_epoch": 32,
+                "state": "ACTIVE"
+              }
+            ],
+            "passed": true,
+            "verdict": "PASS"
+          },
+          {
+            "details": {},
+            "expected": 0,
+            "name": "no_unrecovered_gap",
+            "observed": 0,
+            "passed": true,
+            "verdict": "PASS"
+          },
+          {
+            "details": {},
+            "expected": "OLD_SESSION_ALIVE",
+            "name": "legacy_orphan_classified",
+            "observed": "OLD_SESSION_ALIVE",
+            "passed": true,
+            "verdict": "PASS"
+          },
+          {
+            "details": {},
+            "expected": ">0 RECOVERY_ORPHAN_FOUND legacy=true",
+            "name": "legacy_orphan_event_recorded",
+            "observed": 1,
+            "passed": true,
+            "verdict": "PASS"
+          },
+          {
+            "details": {},
+            "expected": ">0 exact legacy PRODUCER_STOPPED",
+            "name": "legacy_orphan_stopped_exact_identity",
+            "observed": 1,
+            "passed": true,
+            "verdict": "PASS"
+          },
+          {
+            "details": {},
+            "expected": ">0 recovered PCAP_PRODUCER_GAP",
+            "name": "legacy_orphan_gap_recorded_and_closed",
+            "observed": 1,
+            "passed": true,
+            "verdict": "PASS"
+          },
+          {
+            "details": {},
+            "expected": "new CaptureEpoch",
+            "name": "legacy_orphan_new_epoch",
+            "observed": {
+              "after": "4dc20959-96d0-45c0-9b3f-108d867f6c2c",
+              "before": "bc96ed7d-30f5-4d4b-8ddb-cd3047a4a360"
+            },
+            "passed": true,
+            "verdict": "PASS"
+          },
+          {
+            "details": {},
+            "expected": 1,
+            "name": "legacy_orphan_final_single_producer",
+            "observed": 1,
+            "passed": true,
+            "verdict": "PASS"
+          }
+        ],
+        "created_at": "2026-08-21T16:31:07.851333+00:00",
+        "evidence_bundle": "/tmp/capture-v2-gates/20260821T163107Z_R2-02-APF3260M-RC9_c132f336-df1b-4285-b175-01d848f23b5d",
+        "facts": {
+          "after_capture_epoch_id": "4dc20959-96d0-45c0-9b3f-108d867f6c2c",
+          "after_lease_epoch": 32,
+          "before_capture_epoch_id": "bc96ed7d-30f5-4d4b-8ddb-cd3047a4a360",
+          "before_lease_epoch": 31,
+          "capture_session_id": "38892f9c-af02-4bf8-9a19-e96af3fa0952",
+          "final_owned_count": 1,
+          "final_pid": 17263,
+          "initial_owned_count": 1,
+          "legacy_pid": 16353,
+          "legacy_starttime": 10371615,
+          "recovery_classification": "OLD_SESSION_ALIVE",
+          "recovery_status": "REPAIRED"
+        },
+        "gate_id": "R2-02-APF3260M-RC9",
+        "summary": "Ownership/recovery invariant",
+        "verdict": "PASS"
+      },
+      "state": {
+        "after_capture_epoch_id": "4dc20959-96d0-45c0-9b3f-108d867f6c2c",
+        "after_lease_epoch": 32,
+        "before_capture_epoch_id": "bc96ed7d-30f5-4d4b-8ddb-cd3047a4a360",
+        "before_lease_epoch": 31,
+        "capture_session_id": "38892f9c-af02-4bf8-9a19-e96af3fa0952",
+        "final_owned_count": 1,
+        "final_pid": 17263,
+        "initial_owned_count": 1,
+        "legacy_pid": 16353,
+        "legacy_starttime": 10371615,
+        "recovery_classification": "OLD_SESSION_ALIVE",
+        "recovery_status": "REPAIRED",
+        "reproduction_session_id": "4c18721d-a401-44ee-8ea5-13376803de82"
+      }
+    }
+  }
+}

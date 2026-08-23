@@ -1,0 +1,3 @@
+#!/bin/sh
+set -eu
+exec python -m app.capture_v2.gate_cli "$@"

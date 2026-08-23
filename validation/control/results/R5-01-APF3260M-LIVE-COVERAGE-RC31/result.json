@@ -1,0 +1,425 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "R5-01-APF3260M-LIVE-COVERAGE-RC31",
+    "sequence": 127,
+    "created_at": "2026-08-23T06:19:00+00:00",
+    "expires_at": "2026-08-23T18:19:00+00:00",
+    "action_type": "GATE_READINESS_FXS",
+    "parameters": {
+      "device_id": "c132f336-df1b-4285-b175-01d848f23b5d",
+      "model": "APF3260-M",
+      "host": "10.48.8.74",
+      "port": 10002,
+      "username": "root",
+      "platform_id": "mt7981",
+      "password_env": "DB:G1U060H000384",
+      "profile_root": "../profiles",
+      "profile_id": "voip-standard",
+      "object_root": "/tmp/voip-reproduction-objects",
+      "output_root": "/tmp/capture-v2-gates",
+      "repo_root": "..",
+      "reproduction_session_id": "AUTO_NEW",
+      "worker_id": "r5-01-apf3260m-live-coverage-rc31",
+      "gate_id": "R5-01-APF3260M-LIVE-COVERAGE-RC31",
+      "duration": 180,
+      "transport": "scp",
+      "timeout_seconds": 900
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "b156075c485c42709bd0a1e98ed3a34f700f7836"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "Fresh real APF3260-M R5 validation resumed with operator at handset. Require Stage-1 READY before handset, real OFFHOOK/DTMF/ONHOOK, durable PCAP, explicit kernel_drops=0, real UDP 40000/50000 media proof, capture-availability coverage semantics for silent pre/post periods, and PostgreSQL CoverageWindow/Track/Interval COMPLETE. Production V2 remains disabled and V1 remains authoritative."
+  },
+  "action_sha256": "8948b52ca1ba410980505af94d8f8b06f3431c0114c2c067c935593a38b56575",
+  "runner_id": "srv:3456908",
+  "state": "FAILED",
+  "return_code": 2,
+  "verdict": "FAIL",
+  "error": null,
+  "finished_at": "2026-08-23T06:22:10.539892+00:00",
+  "stdout_sha256": "57be48ef0e84b013419ad90dfa1b9bc268527d7b9f481d87e03e078dca48de96",
+  "stderr_sha256": "b8258e86248ce6f15dfea1a12afcd2ad3fde62ba6d3cd24536ffc8cb3bb61c48",
+  "local_stdout": ".capture-v2-control/logs/R5-01-APF3260M-LIVE-COVERAGE-RC31/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/R5-01-APF3260M-LIVE-COVERAGE-RC31/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "6c607db9c2c7177a1dc3101571aeff6671ee9710",
+      "expected_product_head": "b156075c485c42709bd0a1e98ed3a34f700f7836"
+    },
+    "parsed_output": {
+      "checks": [
+        {
+          "details": {},
+          "expected": "READY",
+          "name": "stage1_ready_before_handset",
+          "observed": "READY",
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": true,
+          "name": "stage1_all_real_checks_ready",
+          "observed": {
+            "exactly_one_producer": true,
+            "fxs_ready": true,
+            "lease_active": true,
+            "pcap_ready": true,
+            "pcm_control_ready": true,
+            "server_store_ready": true,
+            "storage_guard_ready": true,
+            "transfer_ready": true,
+            "voice_context_ready": true,
+            "watchdog_ready": true
+          },
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": "OFFHOOK->DTMF->ONHOOK",
+          "name": "physical_offhook_dtmf_onhook_observed",
+          "observed": [
+            "OFFHOOK",
+            "OFFHOOK",
+            "DTMF",
+            "DTMF",
+            "DTMF",
+            "ONHOOK"
+          ],
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": ">0",
+          "name": "real_attempt_bound",
+          "observed": "8ea759fe-138d-42a9-b5e9-e0eb2a0d0d3d",
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": true,
+          "name": "capture_finalizer_durable",
+          "observed": true,
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": 0,
+          "name": "kernel_capture_drops_zero",
+          "observed": 0,
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": ">0",
+          "name": "real_pcm_rx_packets_observed",
+          "observed": 2164,
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": ">0",
+          "name": "real_pcm_tx_packets_observed",
+          "observed": 2164,
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": "COMPLETE+finalized_at",
+          "name": "coverage_window_auto_finalized_complete",
+          "observed": {
+            "finalized_at": "2026-08-23T06:22:09.382458+00:00",
+            "id": "1a51976d-d4b4-411a-b759-00611132559d",
+            "required_end_ts": "2026-08-23T06:22:07.114000+00:00",
+            "required_start_ts": "2026-08-23T06:21:25.473000+00:00",
+            "status": "PARTIAL"
+          },
+          "passed": false,
+          "verdict": "FAIL"
+        },
+        {
+          "details": {},
+          "expected": {
+            "FXS": "COMPLETE",
+            "PCAP": "COMPLETE",
+            "PCM_RX": "COMPLETE",
+            "PCM_TX": "COMPLETE"
+          },
+          "name": "coverage_required_tracks_complete",
+          "observed": {
+            "FXS": {
+              "covered_ms": 41641,
+              "gap_ms": 0,
+              "interval_count": 1,
+              "required_ms": 41641,
+              "requirement": "REQUIRED",
+              "status": "COMPLETE",
+              "unknown_ms": 0
+            },
+            "PCAP": {
+              "covered_ms": 41641,
+              "gap_ms": 0,
+              "interval_count": 1,
+              "required_ms": 41641,
+              "requirement": "REQUIRED",
+              "status": "COMPLETE",
+              "unknown_ms": 0
+            },
+            "PCM_RX": {
+              "covered_ms": 41641,
+              "gap_ms": 0,
+              "interval_count": 3,
+              "required_ms": 41641,
+              "requirement": "CONDITIONAL_REQUIRED",
+              "status": "COMPLETE",
+              "unknown_ms": 0
+            },
+            "PCM_TX": {
+              "covered_ms": 41640,
+              "gap_ms": 0,
+              "interval_count": 3,
+              "required_ms": 41641,
+              "requirement": "CONDITIONAL_REQUIRED",
+              "status": "PARTIAL",
+              "unknown_ms": 0
+            }
+          },
+          "passed": false,
+          "verdict": "FAIL"
+        },
+        {
+          "details": {},
+          "expected": {
+            "FXS": ">0",
+            "PCAP": ">0",
+            "PCM_RX": ">0",
+            "PCM_TX": ">0"
+          },
+          "name": "coverage_intervals_persisted",
+          "observed": {
+            "FXS": 1,
+            "PCAP": 1,
+            "PCM_RX": 3,
+            "PCM_TX": 3
+          },
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": {
+            "off": 2,
+            "on": 2
+          },
+          "name": "pcm_control_symmetric",
+          "observed": {
+            "off": 2,
+            "on": 2
+          },
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": {
+            "off": 9,
+            "on": 9
+          },
+          "name": "aim_debug_control_symmetric",
+          "observed": {
+            "off": 9,
+            "on": 9
+          },
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": true,
+          "name": "producer_cleanup_exact_identity",
+          "observed": true,
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": true,
+          "name": "lease_cleanup_released",
+          "observed": true,
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": [],
+          "name": "cleanup_no_exception",
+          "observed": [],
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": [],
+          "name": "runtime_no_exception",
+          "observed": [],
+          "passed": true,
+          "verdict": "PASS"
+        }
+      ],
+      "created_at": "2026-08-23T06:22:10.150046+00:00",
+      "evidence_bundle": "/tmp/capture-v2-gates/20260823T062027Z_R5-01-APF3260M-LIVE-COVERAGE-RC31_c132f336-df1b-4285-b175-01d848f23b5d",
+      "facts": {
+        "capture_attempt_id": "8ea759fe-138d-42a9-b5e9-e0eb2a0d0d3d",
+        "capture_epoch_id": "c2e3a166-67e9-49df-bd2a-11f7866823ba",
+        "capture_session_id": "c00f3711-fe9e-4c8f-8b8e-4e45bf876fc0",
+        "cleanup_errors": [],
+        "coverage_tracks": {
+          "FXS": {
+            "covered_ms": 41641,
+            "gap_ms": 0,
+            "interval_count": 1,
+            "required_ms": 41641,
+            "requirement": "REQUIRED",
+            "status": "COMPLETE",
+            "unknown_ms": 0
+          },
+          "PCAP": {
+            "covered_ms": 41641,
+            "gap_ms": 0,
+            "interval_count": 1,
+            "required_ms": 41641,
+            "requirement": "REQUIRED",
+            "status": "COMPLETE",
+            "unknown_ms": 0
+          },
+          "PCM_RX": {
+            "covered_ms": 41641,
+            "gap_ms": 0,
+            "interval_count": 3,
+            "required_ms": 41641,
+            "requirement": "CONDITIONAL_REQUIRED",
+            "status": "COMPLETE",
+            "unknown_ms": 0
+          },
+          "PCM_TX": {
+            "covered_ms": 41640,
+            "gap_ms": 0,
+            "interval_count": 3,
+            "required_ms": 41641,
+            "requirement": "CONDITIONAL_REQUIRED",
+            "status": "PARTIAL",
+            "unknown_ms": 0
+          }
+        },
+        "coverage_window": {
+          "finalized_at": "2026-08-23T06:22:09.382458+00:00",
+          "id": "1a51976d-d4b4-411a-b759-00611132559d",
+          "required_end_ts": "2026-08-23T06:22:07.114000+00:00",
+          "required_start_ts": "2026-08-23T06:21:25.473000+00:00",
+          "status": "PARTIAL"
+        },
+        "finalizer": {
+          "acked": 1,
+          "durable": true,
+          "kernel_drops": 0,
+          "remote_deleted": 1,
+          "sealed": 1,
+          "transferred": 1
+        },
+        "fxs_monitor_end": "2026-08-23T14:22:08+08:00",
+        "fxs_monitor_start": "2026-08-23T14:20:32+08:00",
+        "lease_epoch": 67,
+        "observed_fxs_events": [
+          {
+            "digit": null,
+            "event": "OFFHOOK",
+            "line": 0,
+            "source_ts": "2026-08-23T14:21:35.473000+08:00",
+            "timestamp": "2026-08-23 14:21:35.473000"
+          },
+          {
+            "digit": null,
+            "event": "OFFHOOK",
+            "line": 0,
+            "source_ts": "2026-08-23T14:21:35.474008+08:00",
+            "timestamp": "2026-08-23 14:21:35.474008"
+          },
+          {
+            "digit": "3",
+            "event": "DTMF",
+            "line": 0,
+            "source_ts": "2026-08-23T14:21:36.353000+08:00",
+            "timestamp": "2026-08-23 14:21:36.353000"
+          },
+          {
+            "digit": "0",
+            "event": "DTMF",
+            "line": 0,
+            "source_ts": "2026-08-23T14:21:36.713000+08:00",
+            "timestamp": "2026-08-23 14:21:36.713000"
+          },
+          {
+            "digit": "1",
+            "event": "DTMF",
+            "line": 0,
+            "source_ts": "2026-08-23T14:21:37.073000+08:00",
+            "timestamp": "2026-08-23 14:21:37.073000"
+          },
+          {
+            "digit": null,
+            "event": "ONHOOK",
+            "line": 0,
+            "source_ts": "2026-08-23T14:21:57.114000+08:00",
+            "timestamp": "2026-08-23 14:21:57.114000"
+          }
+        ],
+        "pcm": {
+          "parsed_durable_pcap_files": 8,
+          "pcm_rx": {
+            "first_packet_ts": "2026-08-23T06:21:35.478431+00:00",
+            "groups": 1,
+            "last_packet_ts": "2026-08-23T06:21:57.107937+00:00",
+            "max_interpacket_gap_ms": 10.304,
+            "packet_count": 2164
+          },
+          "pcm_tx": {
+            "first_packet_ts": "2026-08-23T06:21:35.478408+00:00",
+            "groups": 1,
+            "last_packet_ts": "2026-08-23T06:21:57.107865+00:00",
+            "max_interpacket_gap_ms": 10.06,
+            "packet_count": 2164
+          }
+        },
+        "physical_sequence_complete": true,
+        "release_gate_effect": "R5_REAL_LIVE_COVERAGE_VALIDATION_ONLY_PRODUCTION_V2_DISABLED",
+        "runtime_errors": [],
+        "transcript_path": "/tmp/capture-v2-gates/20260823T062027Z_R5-01-APF3260M-LIVE-COVERAGE-RC31_c132f336-df1b-4285-b175-01d848f23b5d/dut/aim_fxs_transcript.log",
+        "voice_context": {
+          "gateway_ip": "192.168.3.200",
+          "interface": "br-lan_400",
+          "voice_vlan_id": "400"
+        }
+      },
+      "gate_id": "R5-01-APF3260M-LIVE-COVERAGE-RC31",
+      "summary": "R5 real call -> durable evidence -> automatic Coverage Ledger COMPLETE",
+      "verdict": "FAIL"
+    }
+  }
+}

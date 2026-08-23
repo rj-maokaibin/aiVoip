@@ -1,0 +1,44 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "RC61-INTEGRATION-TEST-COMPAT-SW-001",
+    "sequence": 192,
+    "created_at": "2026-08-23T14:02:00+00:00",
+    "expires_at": "2026-08-24T02:02:00+00:00",
+    "action_type": "SOFTWARE_REGRESSION",
+    "parameters": {
+      "timeout_seconds": 1800
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "20c87b75e7c1c19e9449f41d17fc8341627c7493"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "Full Capture V2 software regression after aligning the legacy reproduction auto-diagnosis FakeReconciler test double with the production exclude_session_ids contract exposed by RC60. Test-only change; V1 remains authoritative, Production V2 remains disabled, no DUT I/O and no cutover."
+  },
+  "action_sha256": "aba09cb5deafd1f7bf208f6ac5eeb43c2e955712939c8638d001dd1a5f5a3130",
+  "runner_id": "srv:257142",
+  "state": "SUCCEEDED",
+  "return_code": 0,
+  "verdict": null,
+  "error": null,
+  "finished_at": "2026-08-23T14:02:35.317661+00:00",
+  "stdout_sha256": "d1ff4d966290ea0bad854d1111ad40aa03ac4b234f57d28eb8ca765e7e2a1ee4",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "local_stdout": ".capture-v2-control/logs/RC61-INTEGRATION-TEST-COMPAT-SW-001/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/RC61-INTEGRATION-TEST-COMPAT-SW-001/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "f76a6e77a07225b0a9eeef94a581c3ea22b9fa9e",
+      "expected_product_head": "20c87b75e7c1c19e9449f41d17fc8341627c7493"
+    },
+    "parsed_output": null
+  }
+}

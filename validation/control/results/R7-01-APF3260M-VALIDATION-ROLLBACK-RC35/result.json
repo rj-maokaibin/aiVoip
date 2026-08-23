@@ -1,0 +1,213 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "R7-01-APF3260M-VALIDATION-ROLLBACK-RC35",
+    "sequence": 141,
+    "created_at": "2026-08-23T07:57:00+00:00",
+    "expires_at": "2026-08-23T19:57:00+00:00",
+    "action_type": "GATE_READINESS_FXS",
+    "parameters": {
+      "device_id": "c132f336-df1b-4285-b175-01d848f23b5d",
+      "model": "APF3260-M",
+      "host": "10.48.8.74",
+      "port": 10002,
+      "username": "root",
+      "platform_id": "mt7981",
+      "password_env": "DB:G1U060H000384",
+      "profile_root": "../profiles",
+      "profile_id": "voip-standard",
+      "object_root": "/tmp/voip-reproduction-objects",
+      "output_root": "/tmp/capture-v2-gates",
+      "repo_root": "..",
+      "reproduction_session_id": "AUTO_NEW",
+      "worker_id": "r7-apf3260m-validation-rollback-rc35",
+      "gate_id": "R7-01-APF3260M-VALIDATION-ROLLBACK-RC35",
+      "duration": 60,
+      "transport": "scp",
+      "timeout_seconds": 1200
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "910f854de2a9431734b7143c843636530a92a340"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "Real-DUT APF3260-M validation-scope rollback rehearsal: run fenced V2 producer/lease/segment pipeline for 60 seconds, then prove exact cleanup and V1 configuration authority restoration. Production V2 remains disabled throughout; no handset action required."
+  },
+  "action_sha256": "3c3ff9e24403c718c7518648f3d48a2852cf03ad97603bb76565dcd2e0a02088",
+  "runner_id": "srv:257142",
+  "state": "SUCCEEDED",
+  "return_code": 0,
+  "verdict": "PASS",
+  "error": null,
+  "finished_at": "2026-08-23T08:06:40.977784+00:00",
+  "stdout_sha256": "cda287a7d947464c7e1508520276411a8e6f3115dbcbdaaa97c018efa5fb4f45",
+  "stderr_sha256": "b8258e86248ce6f15dfea1a12afcd2ad3fde62ba6d3cd24536ffc8cb3bb61c48",
+  "local_stdout": ".capture-v2-control/logs/R7-01-APF3260M-VALIDATION-ROLLBACK-RC35/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/R7-01-APF3260M-VALIDATION-ROLLBACK-RC35/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "182fa3a5538a4529e9eef2df2937b4b477787136",
+      "expected_product_head": "910f854de2a9431734b7143c843636530a92a340"
+    },
+    "parsed_output": {
+      "checks": [
+        {
+          "details": {},
+          "expected": {
+            "mode": "V1",
+            "production_v2": false,
+            "version": "V1"
+          },
+          "name": "pre_v1_config_authority",
+          "observed": {
+            "mode": "V1",
+            "production_v2": false,
+            "version": "V1"
+          },
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": {
+            "exact": 1,
+            "owned": 1
+          },
+          "name": "validation_v2_real_single_producer",
+          "observed": {
+            "exact": 1,
+            "owned": 1
+          },
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": true,
+          "name": "validation_v2_real_active_lease",
+          "observed": true,
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": ">0",
+          "name": "validation_v2_real_segments_observed",
+          "observed": 1,
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": ">0",
+          "name": "validation_v2_real_durable_segment_observed",
+          "observed": 1,
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": [],
+          "name": "validation_v2_runtime_no_exception",
+          "observed": [],
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": true,
+          "name": "rollback_exact_producer_removed",
+          "observed": true,
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": true,
+          "name": "rollback_lease_released",
+          "observed": true,
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": [],
+          "name": "rollback_no_unresolved_gap",
+          "observed": [],
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": [],
+          "name": "rollback_cleanup_no_exception",
+          "observed": [],
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": {
+            "mode": "V1",
+            "production_v2": false,
+            "version": "V1"
+          },
+          "name": "post_v1_config_authority_restored",
+          "observed": {
+            "mode": "V1",
+            "production_v2": false,
+            "version": "V1"
+          },
+          "passed": true,
+          "verdict": "PASS"
+        }
+      ],
+      "created_at": "2026-08-23T08:06:40.645986+00:00",
+      "evidence_bundle": "/tmp/capture-v2-gates/20260823T080539Z_R7-01-APF3260M-VALIDATION-ROLLBACK-RC35_c132f336-df1b-4285-b175-01d848f23b5d",
+      "facts": {
+        "capture_epoch_id": "9c26019d-d4df-4226-ac87-95f06a727a46",
+        "capture_session_id": "dc439f80-7c0c-48ef-9489-ef99f80ebfb8",
+        "limitations": [
+          "Production V2 was never enabled",
+          "This proves real-DUT validation authority rollback mechanics, not production service cutover",
+          "PR ready/merge/cutover still require separate explicit authorization"
+        ],
+        "post": {
+          "authority_mode": "V1",
+          "capture_engine_version": "V1",
+          "capture_v2_production_enabled": false
+        },
+        "pre": {
+          "authority_mode": "V1",
+          "capture_engine_version": "V1",
+          "capture_v2_production_enabled": false
+        },
+        "release_gate_effect": "PROVES_REAL_DUT_V2_VALIDATION_AUTHORITY_ROLLBACK_MECHANICS_NOT_PRODUCTION_CUTOVER",
+        "rollback": {
+          "cleanup_errors": [],
+          "lease_released": true,
+          "producer_gone": true,
+          "unresolved_gaps": []
+        },
+        "scope": "VALIDATION_REHEARSAL_ONLY",
+        "validation_v2_active": {
+          "durable_segment_count": 1,
+          "exact_producer_count": 1,
+          "lease_active": true,
+          "owned_count": 1,
+          "segment_count": 1
+        }
+      },
+      "gate_id": "R7-01-APF3260M-VALIDATION-ROLLBACK-RC35",
+      "summary": "R7 real-DUT validation-scope V2 authority rollback rehearsal",
+      "verdict": "PASS"
+    }
+  }
+}

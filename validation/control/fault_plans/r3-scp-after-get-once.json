@@ -1,0 +1,9 @@
+{
+  "sftp_fail_before_get_count": 0,
+  "sftp_fail_after_get_count": 1,
+  "persist_fail_count": 0,
+  "metadata": {
+    "gate": "R3-02B",
+    "purpose": "Inject exactly one lost transfer response after successful SCP GET; verify observe/retry behavior remains durable and idempotent."
+  }
+}

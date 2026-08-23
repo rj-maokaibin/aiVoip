@@ -1,0 +1,44 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "RC23-SW-001",
+    "sequence": 103,
+    "created_at": "2026-08-22T03:15:00+00:00",
+    "expires_at": "2026-08-22T15:15:00+00:00",
+    "action_type": "SOFTWARE_REGRESSION",
+    "parameters": {
+      "timeout_seconds": 1800
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "7e91e68e3664ba3b3100b7f33bff17498216fd55"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "RC23 validation/tooling regression after adding R4-00 no-handset real-DUT readiness/watchdog preflight. V1 remains authoritative and Production V2 remains disabled."
+  },
+  "action_sha256": "5b1c6eddb8df480255433d398e54db71556e8934311bb47a73557a9861cc04c2",
+  "runner_id": "srv:3456908",
+  "state": "SUCCEEDED",
+  "return_code": 0,
+  "verdict": null,
+  "error": null,
+  "finished_at": "2026-08-22T03:15:14.839388+00:00",
+  "stdout_sha256": "3f3f87a1d32f467259f2d74b14f2f0cc3bedbd86b3960d95c4d37bc8939829ea",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "local_stdout": ".capture-v2-control/logs/RC23-SW-001/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/RC23-SW-001/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "3e48d6a9d8787811c38993bce6be0b0df57deb1e",
+      "expected_product_head": "7e91e68e3664ba3b3100b7f33bff17498216fd55"
+    },
+    "parsed_output": null
+  }
+}

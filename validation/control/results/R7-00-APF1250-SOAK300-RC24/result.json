@@ -1,0 +1,395 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "R7-00-APF1250-SOAK300-RC24",
+    "sequence": 111,
+    "created_at": "2026-08-22T03:27:00+00:00",
+    "expires_at": "2026-08-22T15:27:00+00:00",
+    "action_type": "GATE_READINESS_FXS",
+    "parameters": {
+      "device_id": "259f16e6-af9e-4dff-969b-2bb5eac43eb2",
+      "model": "APF1250",
+      "host": "10.48.8.74",
+      "port": 10001,
+      "username": "root",
+      "platform_id": "mt7621",
+      "password_env": "DB:G1V030E010214",
+      "profile_root": "../profiles",
+      "profile_id": "voip-standard",
+      "object_root": "/tmp/voip-reproduction-objects",
+      "output_root": "/tmp/capture-v2-gates",
+      "repo_root": "..",
+      "reproduction_session_id": "AUTO_NEW",
+      "worker_id": "r7-00-apf1250-soak300-rc24",
+      "gate_id": "R7-00-APF1250-SOAK300-RC24",
+      "duration": 300,
+      "transport": "scp",
+      "timeout_seconds": 900
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "9395bb97ebd8cdaafc700c0701482a960a514bf5"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "300-second APF1250 validation-state supporting soak. Production V2 remains disabled. Periodically prove active lease/exact single producer/no critical pressure/pump stability, require any observed ACKED evidence to be server durable, no unresolved capture gap, then exact producer+lease cleanup. Supporting R7 evidence only; not production shadow or rollback."
+  },
+  "action_sha256": "da525007e41bbf0e4140cd399dde32e68a37a93b5eaec6f45285aaa7b18bf11b",
+  "runner_id": "srv:3456908",
+  "state": "SUCCEEDED",
+  "return_code": 0,
+  "verdict": "PASS",
+  "error": null,
+  "finished_at": "2026-08-22T03:33:24.916306+00:00",
+  "stdout_sha256": "94c2ee5af1b554f4819b0e01c0ce4e1336be794113aa879c460fc714788977c4",
+  "stderr_sha256": "b8258e86248ce6f15dfea1a12afcd2ad3fde62ba6d3cd24536ffc8cb3bb61c48",
+  "local_stdout": ".capture-v2-control/logs/R7-00-APF1250-SOAK300-RC24/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/R7-00-APF1250-SOAK300-RC24/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "80bd61c1ce15be94f130c2754508d16850dd5b90",
+      "expected_product_head": "9395bb97ebd8cdaafc700c0701482a960a514bf5"
+    },
+    "parsed_output": {
+      "checks": [
+        {
+          "details": {},
+          "expected": [],
+          "name": "soak_runtime_no_exception",
+          "observed": [],
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": ">=285.0s",
+          "name": "soak_elapsed_full_window",
+          "observed": 314.475,
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": ">=2",
+          "name": "soak_has_repeated_samples",
+          "observed": 20,
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": [],
+          "name": "lease_authority_stayed_active",
+          "observed": [],
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": [],
+          "name": "exact_single_producer_throughout",
+          "observed": [],
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": 0,
+          "name": "pump_zero_errors",
+          "observed": 0,
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": [],
+          "name": "no_critical_spool_pressure",
+          "observed": [],
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": [],
+          "name": "no_unresolved_capture_gap",
+          "observed": [],
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": [],
+          "name": "observed_segments_not_non_durable",
+          "observed": [],
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": "all ACKED/REMOTE_DELETED verified",
+          "name": "observed_acked_segments_server_durable",
+          "observed": [
+            "103e9292-4214-4017-b148-ced8b4505362",
+            "f22ad052-0a71-4946-bef1-236e1fdc053b",
+            "bf8d888c-ffe3-402b-beb1-d6bed5f00d86",
+            "3644a8d9-e459-4585-8eaa-5131267cbda2",
+            "e9f4e8a0-4aa0-4dcb-922e-3a10ec5083ec",
+            "83da1125-a1b9-4c2c-83c8-10157c72978c",
+            "de3c24cf-3f1a-4bf8-83f3-527a2d2e6d26",
+            "16dc6c45-f230-4991-a087-d1a7a09ff445",
+            "4c963536-1bcc-425e-9309-377acebc47ca",
+            "09b56711-3505-4852-8c43-28b69ce56cde"
+          ],
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": true,
+          "name": "producer_cleanup_exact_identity",
+          "observed": true,
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": true,
+          "name": "lease_cleanup_released",
+          "observed": true,
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": [],
+          "name": "cleanup_no_exception",
+          "observed": [],
+          "passed": true,
+          "verdict": "PASS"
+        }
+      ],
+      "created_at": "2026-08-22T03:33:24.588649+00:00",
+      "evidence_bundle": "/tmp/capture-v2-gates/20260822T032809Z_R7-00-APF1250-SOAK300-RC24_259f16e6-af9e-4dff-969b-2bb5eac43eb2",
+      "facts": {
+        "capture_epoch_id": "0126f6ff-cde7-4a92-a4a6-5caedbf730a7",
+        "capture_session_id": "ef0390f5-243d-41a8-b903-525212923037",
+        "cleanup": {
+          "errors": [],
+          "lease_released": true,
+          "producer_gone": true
+        },
+        "duration_requested_seconds": 300.0,
+        "elapsed_seconds": 314.4752282940317,
+        "exit_stats": {
+          "packets_captured": null,
+          "packets_dropped_kernel": null,
+          "packets_received": null
+        },
+        "gaps": {
+          "count": 0,
+          "unresolved": []
+        },
+        "limitations": [
+          "Production V2 remained disabled",
+          "This is validation-state soak evidence, not V1/V2 shadow equivalence",
+          "This does not execute V2_ACTIVE -> ROLLED_BACK_V1"
+        ],
+        "pipeline": {
+          "acked": 10,
+          "cycles": 513,
+          "deleted": 10,
+          "errors": 0,
+          "non_durable": [],
+          "sealed": 10,
+          "segment_count": 10,
+          "transferred": 10,
+          "verified_segment_ids": [
+            "103e9292-4214-4017-b148-ced8b4505362",
+            "f22ad052-0a71-4946-bef1-236e1fdc053b",
+            "bf8d888c-ffe3-402b-beb1-d6bed5f00d86",
+            "3644a8d9-e459-4585-8eaa-5131267cbda2",
+            "e9f4e8a0-4aa0-4dcb-922e-3a10ec5083ec",
+            "83da1125-a1b9-4c2c-83c8-10157c72978c",
+            "de3c24cf-3f1a-4bf8-83f3-527a2d2e6d26",
+            "16dc6c45-f230-4991-a087-d1a7a09ff445",
+            "4c963536-1bcc-425e-9309-377acebc47ca",
+            "09b56711-3505-4852-8c43-28b69ce56cde"
+          ]
+        },
+        "release_gate_effect": "R7_SUPPORTING_VALIDATION_SOAK_ONLY_NOT_SHADOW_OR_ROLLBACK_PASS",
+        "sample_count": 20,
+        "samples": [
+          {
+            "control_authority": "ACTIVE",
+            "exact_producer_count": 1,
+            "lease_epoch": 70,
+            "owned_count": 1,
+            "pressure_reasons": [],
+            "pressure_state": "NORMAL"
+          },
+          {
+            "control_authority": "ACTIVE",
+            "exact_producer_count": 1,
+            "lease_epoch": 70,
+            "owned_count": 1,
+            "pressure_reasons": [],
+            "pressure_state": "NORMAL"
+          },
+          {
+            "control_authority": "ACTIVE",
+            "exact_producer_count": 1,
+            "lease_epoch": 70,
+            "owned_count": 1,
+            "pressure_reasons": [],
+            "pressure_state": "NORMAL"
+          },
+          {
+            "control_authority": "ACTIVE",
+            "exact_producer_count": 1,
+            "lease_epoch": 70,
+            "owned_count": 1,
+            "pressure_reasons": [],
+            "pressure_state": "NORMAL"
+          },
+          {
+            "control_authority": "ACTIVE",
+            "exact_producer_count": 1,
+            "lease_epoch": 70,
+            "owned_count": 1,
+            "pressure_reasons": [],
+            "pressure_state": "NORMAL"
+          },
+          {
+            "control_authority": "ACTIVE",
+            "exact_producer_count": 1,
+            "lease_epoch": 70,
+            "owned_count": 1,
+            "pressure_reasons": [],
+            "pressure_state": "NORMAL"
+          },
+          {
+            "control_authority": "ACTIVE",
+            "exact_producer_count": 1,
+            "lease_epoch": 70,
+            "owned_count": 1,
+            "pressure_reasons": [],
+            "pressure_state": "NORMAL"
+          },
+          {
+            "control_authority": "ACTIVE",
+            "exact_producer_count": 1,
+            "lease_epoch": 70,
+            "owned_count": 1,
+            "pressure_reasons": [],
+            "pressure_state": "NORMAL"
+          },
+          {
+            "control_authority": "ACTIVE",
+            "exact_producer_count": 1,
+            "lease_epoch": 70,
+            "owned_count": 1,
+            "pressure_reasons": [],
+            "pressure_state": "NORMAL"
+          },
+          {
+            "control_authority": "ACTIVE",
+            "exact_producer_count": 1,
+            "lease_epoch": 70,
+            "owned_count": 1,
+            "pressure_reasons": [],
+            "pressure_state": "NORMAL"
+          },
+          {
+            "control_authority": "ACTIVE",
+            "exact_producer_count": 1,
+            "lease_epoch": 70,
+            "owned_count": 1,
+            "pressure_reasons": [],
+            "pressure_state": "NORMAL"
+          },
+          {
+            "control_authority": "ACTIVE",
+            "exact_producer_count": 1,
+            "lease_epoch": 70,
+            "owned_count": 1,
+            "pressure_reasons": [],
+            "pressure_state": "NORMAL"
+          },
+          {
+            "control_authority": "ACTIVE",
+            "exact_producer_count": 1,
+            "lease_epoch": 70,
+            "owned_count": 1,
+            "pressure_reasons": [],
+            "pressure_state": "NORMAL"
+          },
+          {
+            "control_authority": "ACTIVE",
+            "exact_producer_count": 1,
+            "lease_epoch": 70,
+            "owned_count": 1,
+            "pressure_reasons": [],
+            "pressure_state": "NORMAL"
+          },
+          {
+            "control_authority": "ACTIVE",
+            "exact_producer_count": 1,
+            "lease_epoch": 70,
+            "owned_count": 1,
+            "pressure_reasons": [],
+            "pressure_state": "NORMAL"
+          },
+          {
+            "control_authority": "ACTIVE",
+            "exact_producer_count": 1,
+            "lease_epoch": 70,
+            "owned_count": 1,
+            "pressure_reasons": [],
+            "pressure_state": "NORMAL"
+          },
+          {
+            "control_authority": "ACTIVE",
+            "exact_producer_count": 1,
+            "lease_epoch": 70,
+            "owned_count": 1,
+            "pressure_reasons": [],
+            "pressure_state": "NORMAL"
+          },
+          {
+            "control_authority": "ACTIVE",
+            "exact_producer_count": 1,
+            "lease_epoch": 70,
+            "owned_count": 1,
+            "pressure_reasons": [],
+            "pressure_state": "NORMAL"
+          },
+          {
+            "control_authority": "ACTIVE",
+            "exact_producer_count": 1,
+            "lease_epoch": 70,
+            "owned_count": 1,
+            "pressure_reasons": [],
+            "pressure_state": "NORMAL"
+          },
+          {
+            "control_authority": "ACTIVE",
+            "exact_producer_count": 1,
+            "lease_epoch": 70,
+            "owned_count": 1,
+            "pressure_reasons": [],
+            "pressure_state": "NORMAL"
+          }
+        ]
+      },
+      "gate_id": "R7-00-APF1250-SOAK300-RC24",
+      "summary": "R7 validation-state supporting soak (Production V2 remains disabled)",
+      "verdict": "PASS"
+    }
+  }
+}

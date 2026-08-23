@@ -1,0 +1,44 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "RC19-SW-001",
+    "sequence": 91,
+    "created_at": "2026-08-22T02:24:00+00:00",
+    "expires_at": "2026-08-22T04:24:00+00:00",
+    "action_type": "SOFTWARE_REGRESSION",
+    "parameters": {
+      "timeout_seconds": 1800
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "14a9219598d1634600ea5ca1492c94146b0b4d99"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "RC19 validation/tooling software regression after stale-runner remediation, historical real-FXS replay fixtures, and fail-closed R7 rollback evidence validator. Production Capture runtime is not enabled; V1 authority and Production V2 OFF are mandatory."
+  },
+  "action_sha256": "f3db5794dfd64cac8869b73d79a2133a9ce11d78c05abd15802ad7ae007becf8",
+  "runner_id": "srv:3382405",
+  "state": "SUCCEEDED",
+  "return_code": 0,
+  "verdict": null,
+  "error": null,
+  "finished_at": "2026-08-22T02:21:49.630074+00:00",
+  "stdout_sha256": "b6d98686056b6c67ae37e001707a4dd5f24e3f41b303f6ce34acd0e4c90e1b48",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "local_stdout": ".capture-v2-control/logs/RC19-SW-001/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/RC19-SW-001/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "b4060d11b59dbf5e068721eabe654b7da8e20e4f",
+      "expected_product_head": "14a9219598d1634600ea5ca1492c94146b0b4d99"
+    },
+    "parsed_output": null
+  }
+}

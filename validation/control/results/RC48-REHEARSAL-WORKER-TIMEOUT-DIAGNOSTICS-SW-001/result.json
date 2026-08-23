@@ -1,0 +1,44 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "RC48-REHEARSAL-WORKER-TIMEOUT-DIAGNOSTICS-SW-001",
+    "sequence": 164,
+    "created_at": "2026-08-23T10:28:00+00:00",
+    "expires_at": "2026-08-23T22:28:00+00:00",
+    "action_type": "SOFTWARE_REGRESSION",
+    "parameters": {
+      "timeout_seconds": 1200
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "449c4ceece0349027d245357b3c2bb8721adae8d"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "Regression after preserving reproduction-worker/control-high/watch/backend logs at service-rehearsal status timeout before failsafe cleanup. V1 remains authoritative and Production V2 remains disabled."
+  },
+  "action_sha256": "d2a24d6c81ccc3d7a026df13fa703154f5ac0598cf6c7be13c80687906e8e9af",
+  "runner_id": "srv:257142",
+  "state": "SUCCEEDED",
+  "return_code": 0,
+  "verdict": null,
+  "error": null,
+  "finished_at": "2026-08-23T10:29:48.597456+00:00",
+  "stdout_sha256": "312fc9800ec46c74a72b80b1ac326820901c1304b4696b5b8c3d11f90db07a3c",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "local_stdout": ".capture-v2-control/logs/RC48-REHEARSAL-WORKER-TIMEOUT-DIAGNOSTICS-SW-001/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/RC48-REHEARSAL-WORKER-TIMEOUT-DIAGNOSTICS-SW-001/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "76c7f5d7e7f488543643336bc20232ab7bcd3bee",
+      "expected_product_head": "449c4ceece0349027d245357b3c2bb8721adae8d"
+    },
+    "parsed_output": null
+  }
+}

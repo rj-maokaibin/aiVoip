@@ -1,0 +1,44 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "RC57-R6-GUARDED-DATA-RUNTIME-SW-002",
+    "sequence": 184,
+    "created_at": "2026-08-23T13:36:00+00:00",
+    "expires_at": "2026-08-23T23:36:00+00:00",
+    "action_type": "SOFTWARE_REGRESSION",
+    "parameters": {
+      "timeout_seconds": 1800
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "927787df5e3f830a74c7f3d178d39121b6ae81f4"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "Rerun the full Capture V2 software regression after updating the R6 bounded-dispatch unit test to monkeypatch the new guarded materializer entrypoint. Product logic is unchanged. V1 remains authoritative, Production V2 remains disabled, and this regression performs no DUT I/O or product materialization."
+  },
+  "action_sha256": "02ffefb623b3e9088b3d09f04a96ae6b76bbd02a36bf2c2e26a19f2ac8b8c8ab",
+  "runner_id": "srv:257142",
+  "state": "SUCCEEDED",
+  "return_code": 0,
+  "verdict": null,
+  "error": null,
+  "finished_at": "2026-08-23T13:35:45.721885+00:00",
+  "stdout_sha256": "5232ce41a4543187da9ad9a05f84b29d05a1b23b843044838e844710aa112b78",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "local_stdout": ".capture-v2-control/logs/RC57-R6-GUARDED-DATA-RUNTIME-SW-002/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/RC57-R6-GUARDED-DATA-RUNTIME-SW-002/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "6fa1a824afc2891efb6d09645f89a71e56c48045",
+      "expected_product_head": "927787df5e3f830a74c7f3d178d39121b6ae81f4"
+    },
+    "parsed_output": null
+  }
+}

@@ -1,0 +1,44 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "RC60-MASTER-FIX-CANDIDATE-SW-001",
+    "sequence": 190,
+    "created_at": "2026-08-23T13:55:00+00:00",
+    "expires_at": "2026-08-24T00:55:00+00:00",
+    "action_type": "SOFTWARE_REGRESSION",
+    "parameters": {
+      "timeout_seconds": 1800
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "a3a042b3b69c1354f4911a58494c82c17f047f8b"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "Full Capture V2 software regression for the audited PR #37 candidate integration simulator. The simulator accepts only candidate c962c0d174099bae1afc8db55067402b36717487 on the fixed master-frozen-v2-contract branch, verifies audited master e8d108a as its ancestor, uses a detached temporary worktree, and creates no merge commit. This software regression performs no candidate integration run, no DUT I/O, and no production activation."
+  },
+  "action_sha256": "cd87f694fcff5cd93fe54d588bd4b3f13d048f5d4ef60c99b1822e6b6b0a6141",
+  "runner_id": "srv:257142",
+  "state": "SUCCEEDED",
+  "return_code": 0,
+  "verdict": null,
+  "error": null,
+  "finished_at": "2026-08-23T13:53:01.502494+00:00",
+  "stdout_sha256": "9a3180fe6c0f9686f2acc90fdfbe05008ba5db4f0b15fdb9044d8a9aca4009cd",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "local_stdout": ".capture-v2-control/logs/RC60-MASTER-FIX-CANDIDATE-SW-001/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/RC60-MASTER-FIX-CANDIDATE-SW-001/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "237c1ccec5a7571321c8db033f8f570be0cae176",
+      "expected_product_head": "a3a042b3b69c1354f4911a58494c82c17f047f8b"
+    },
+    "parsed_output": null
+  }
+}

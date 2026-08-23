@@ -1,0 +1,376 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "GOLDEN-FALLBACK-APF1250-20260820-RC21",
+    "sequence": 98,
+    "created_at": "2026-08-22T02:40:00+00:00",
+    "expires_at": "2026-08-22T14:40:00+00:00",
+    "action_type": "GOLDEN_ARCHIVE_RECOVER",
+    "parameters": {
+      "device_id": "259f16e6-af9e-4dff-969b-2bb5eac43eb2",
+      "model": "APF1250",
+      "host": "10.48.8.74",
+      "port": 10001,
+      "username": "root",
+      "platform_id": "mt7621",
+      "password_env": "DB:G1V030E010214",
+      "archive_date": "20260820",
+      "timeout_seconds": 900
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "752a850b48928ea335963d9bba960c26bb53bca2"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "Read-only historical APF1250 Golden recovery with primary analyzer plus pure-Python SIP/RTP fallback. Evidence-only; never upgrades R5 without FXS reconciliation."
+  },
+  "action_sha256": "7e66b205da48e4b04e076ccad025593444a44abd702d40bfa4de734d6ad4316e",
+  "runner_id": "srv:3456908",
+  "state": "SUCCEEDED",
+  "return_code": 0,
+  "verdict": "PASS",
+  "error": null,
+  "finished_at": "2026-08-22T02:40:24.128995+00:00",
+  "stdout_sha256": "343b97e6880ccf9c6f258be2f406d9afe62afbe2e485f89095f0af34b9c21491",
+  "stderr_sha256": "b8258e86248ce6f15dfea1a12afcd2ad3fde62ba6d3cd24536ffc8cb3bb61c48",
+  "local_stdout": ".capture-v2-control/logs/GOLDEN-FALLBACK-APF1250-20260820-RC21/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/GOLDEN-FALLBACK-APF1250-20260820-RC21/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "01efd18e399f19f3f066f2a4639ddc47bf77fc72",
+      "expected_product_head": "752a850b48928ea335963d9bba960c26bb53bca2"
+    },
+    "parsed_output": {
+      "verdict": "PASS",
+      "archive_name": "v21_golden_APF1250_20260820.tar.gz",
+      "source_root": "/www",
+      "local_path": "/tmp/capture-v2-golden-recovery/259f16e6-af9e-4dff-969b-2bb5eac43eb2/20260820/v21_golden_APF1250_20260820.tar.gz",
+      "size_bytes": 1631012,
+      "sha256": "67ec0e64980a9c816f3cb5b494143f0410bb685e4177e7ffe89ba83d06abf9ad",
+      "inventory": {
+        "member_count": 26,
+        "pcap_count": 22,
+        "regular_file_bytes": 4359565,
+        "pcap_names": [
+          "v21_golden/capture_20260820_182250.pcap",
+          "v21_golden/capture_20260820_182245.pcap",
+          "v21_golden/capture_20260820_182229.pcap",
+          "v21_golden/capture_20260820_182224.pcap",
+          "v21_golden/capture_20260820_182219.pcap",
+          "v21_golden/capture_20260820_182214.pcap",
+          "v21_golden/capture_20260820_182209.pcap",
+          "v21_golden/capture_20260820_182204.pcap",
+          "v21_golden/capture_20260820_182159.pcap",
+          "v21_golden/capture_20260820_182154.pcap",
+          "v21_golden/capture_20260820_182149.pcap",
+          "v21_golden/capture_20260820_182144.pcap",
+          "v21_golden/capture_20260820_182139.pcap",
+          "v21_golden/capture_20260820_182134.pcap",
+          "v21_golden/capture_20260820_182129.pcap",
+          "v21_golden/capture_20260820_182123.pcap",
+          "v21_golden/capture_20260820_182117.pcap",
+          "v21_golden/capture_20260820_182036.pcap",
+          "v21_golden/capture_20260820_182017.pcap",
+          "v21_golden/capture_20260820_181923.pcap",
+          "v21_golden/capture_20260820_181918.pcap",
+          "v21_golden/capture_20260820_181903.pcap"
+        ],
+        "members": [
+          "v21_golden",
+          "v21_golden/capture_20260820_182250.pcap",
+          "v21_golden/capture_20260820_182245.pcap",
+          "v21_golden/capture_20260820_182229.pcap",
+          "v21_golden/capture_20260820_182224.pcap",
+          "v21_golden/capture_20260820_182219.pcap",
+          "v21_golden/capture_20260820_182214.pcap",
+          "v21_golden/capture_20260820_182209.pcap",
+          "v21_golden/capture_20260820_182204.pcap",
+          "v21_golden/capture_20260820_182159.pcap",
+          "v21_golden/capture_20260820_182154.pcap",
+          "v21_golden/capture_20260820_182149.pcap",
+          "v21_golden/capture_20260820_182144.pcap",
+          "v21_golden/capture_20260820_182139.pcap",
+          "v21_golden/capture_20260820_182134.pcap",
+          "v21_golden/capture_20260820_182129.pcap",
+          "v21_golden/capture_20260820_182123.pcap",
+          "v21_golden/capture_20260820_182117.pcap",
+          "v21_golden/capture_20260820_182036.pcap",
+          "v21_golden/capture_20260820_182017.pcap",
+          "v21_golden/capture_20260820_181923.pcap",
+          "v21_golden/capture_20260820_181918.pcap",
+          "v21_golden/tcpdump.pid",
+          "v21_golden/capture_20260820_181903.pcap",
+          "v21_golden/tcpdump.stderr",
+          "v21_golden/tcpdump.stdout"
+        ],
+        "members_truncated": false
+      },
+      "attempts": [],
+      "analysis": {
+        "verdict": "PASS",
+        "reason": "GOLDEN_ARCHIVE_ANALYSIS_COMPLETED",
+        "release_gate_effect": "EVIDENCE_ONLY_NOT_R5_PASS",
+        "archive": {
+          "name": "v21_golden_APF1250_20260820.tar.gz",
+          "local_path": "/tmp/capture-v2-golden-recovery/259f16e6-af9e-4dff-969b-2bb5eac43eb2/20260820/v21_golden_APF1250_20260820.tar.gz",
+          "size_bytes": 1631012,
+          "sha256": "67ec0e64980a9c816f3cb5b494143f0410bb685e4177e7ffe89ba83d06abf9ad",
+          "inventory": {
+            "member_count": 26,
+            "pcap_count": 22,
+            "regular_file_bytes": 4359565,
+            "pcap_names": [
+              "v21_golden/capture_20260820_182250.pcap",
+              "v21_golden/capture_20260820_182245.pcap",
+              "v21_golden/capture_20260820_182229.pcap",
+              "v21_golden/capture_20260820_182224.pcap",
+              "v21_golden/capture_20260820_182219.pcap",
+              "v21_golden/capture_20260820_182214.pcap",
+              "v21_golden/capture_20260820_182209.pcap",
+              "v21_golden/capture_20260820_182204.pcap",
+              "v21_golden/capture_20260820_182159.pcap",
+              "v21_golden/capture_20260820_182154.pcap",
+              "v21_golden/capture_20260820_182149.pcap",
+              "v21_golden/capture_20260820_182144.pcap",
+              "v21_golden/capture_20260820_182139.pcap",
+              "v21_golden/capture_20260820_182134.pcap",
+              "v21_golden/capture_20260820_182129.pcap",
+              "v21_golden/capture_20260820_182123.pcap",
+              "v21_golden/capture_20260820_182117.pcap",
+              "v21_golden/capture_20260820_182036.pcap",
+              "v21_golden/capture_20260820_182017.pcap",
+              "v21_golden/capture_20260820_181923.pcap",
+              "v21_golden/capture_20260820_181918.pcap",
+              "v21_golden/capture_20260820_181903.pcap"
+            ],
+            "members": [
+              "v21_golden",
+              "v21_golden/capture_20260820_182250.pcap",
+              "v21_golden/capture_20260820_182245.pcap",
+              "v21_golden/capture_20260820_182229.pcap",
+              "v21_golden/capture_20260820_182224.pcap",
+              "v21_golden/capture_20260820_182219.pcap",
+              "v21_golden/capture_20260820_182214.pcap",
+              "v21_golden/capture_20260820_182209.pcap",
+              "v21_golden/capture_20260820_182204.pcap",
+              "v21_golden/capture_20260820_182159.pcap",
+              "v21_golden/capture_20260820_182154.pcap",
+              "v21_golden/capture_20260820_182149.pcap",
+              "v21_golden/capture_20260820_182144.pcap",
+              "v21_golden/capture_20260820_182139.pcap",
+              "v21_golden/capture_20260820_182134.pcap",
+              "v21_golden/capture_20260820_182129.pcap",
+              "v21_golden/capture_20260820_182123.pcap",
+              "v21_golden/capture_20260820_182117.pcap",
+              "v21_golden/capture_20260820_182036.pcap",
+              "v21_golden/capture_20260820_182017.pcap",
+              "v21_golden/capture_20260820_181923.pcap",
+              "v21_golden/capture_20260820_181918.pcap",
+              "v21_golden/tcpdump.pid",
+              "v21_golden/capture_20260820_181903.pcap",
+              "v21_golden/tcpdump.stderr",
+              "v21_golden/tcpdump.stdout"
+            ],
+            "members_truncated": false
+          }
+        },
+        "analysis_dir": "/tmp/capture-v2-golden-analysis/259f16e6-af9e-4dff-969b-2bb5eac43eb2/20260820/67ec0e64980a9c81",
+        "tcpdump": {
+          "packets_captured": 19547,
+          "packets_received_by_filter": 19547,
+          "packets_dropped_by_kernel": 0
+        },
+        "pcm": {
+          "40000": {
+            "packet_count": 5851,
+            "payload_bytes": 936160,
+            "first_source_time": 1787221289.278693,
+            "last_source_time": 1787221347.778746,
+            "flows": {
+              "192.168.150.10:46164->192.168.3.200:40000": 5851
+            }
+          },
+          "50000": {
+            "packet_count": 5851,
+            "payload_bytes": 936160,
+            "first_source_time": 1787221289.278953,
+            "last_source_time": 1787221347.781886,
+            "flows": {
+              "192.168.150.10:48846->192.168.3.200:50000": 5851
+            }
+          }
+        },
+        "voip": {
+          "tshark_version": null,
+          "packet_count": 0,
+          "sip_packet_count": 0,
+          "sip_methods": {},
+          "sip_status_codes": {},
+          "call_ids": {},
+          "sdp_media_ports": {},
+          "rtp_packet_count": 0,
+          "rtp_stream_count": 0,
+          "rtp_estimated_missing_packets": 0,
+          "rtp_cross_segment_missing_packets": 0,
+          "rtp_backward_or_reordered_events": 0,
+          "rtp_streams": [],
+          "first_source_time": null,
+          "last_source_time": null
+        },
+        "analysis_errors": {
+          "tshark": [
+            {
+              "segment": "<environment>",
+              "error": "TShark binary not found: tshark"
+            }
+          ],
+          "udp_reader": []
+        },
+        "evidence_checks": {
+          "tcpdump_kernel_drop_known": true,
+          "tcpdump_kernel_drop_zero": true,
+          "sip_present": false,
+          "sip_call_id_present": false,
+          "rtp_present": false,
+          "rtp_estimated_missing_zero": null,
+          "rtp_cross_segment_missing_zero": null,
+          "pcm_40000_present": true,
+          "pcm_50000_present": true,
+          "tshark_complete": false,
+          "classic_pcap_udp_reader_complete": true
+        },
+        "archive_evidence_complete": false,
+        "remaining_release_gap": "FXS_GROUND_TRUTH_RECONCILIATION_REQUIRED"
+      },
+      "fallback_analysis": {
+        "verdict": "PASS",
+        "reason": "GOLDEN_ARCHIVE_FALLBACK_ANALYSIS_COMPLETED",
+        "release_gate_effect": "EVIDENCE_ONLY_NOT_R5_PASS",
+        "parser": "PURE_PYTHON_CLASSIC_PCAP",
+        "limitations": [
+          "Ethernet/VLAN + IPv4 + UDP only",
+          "plaintext SIP/UDP only; SIP/TCP/TLS is not covered",
+          "RTP is accepted only after per-segment continuity heuristics with >=20 packets",
+          "no RTCP or full SDP semantic reconstruction in fallback mode"
+        ],
+        "archive": {
+          "name": "v21_golden_APF1250_20260820.tar.gz",
+          "sha256": "67ec0e64980a9c816f3cb5b494143f0410bb685e4177e7ffe89ba83d06abf9ad",
+          "pcap_count": 22
+        },
+        "sip": {
+          "packet_count": 18,
+          "methods": {
+            "INVITE": 2,
+            "ACK": 2,
+            "BYE": 2,
+            "REGISTER": 2
+          },
+          "status_codes": {
+            "200": 5,
+            "401": 3,
+            "100": 1,
+            "180": 1
+          },
+          "call_ids": {
+            "00f369305edc6849@192.168.3.200": 7,
+            "00f37cd8452d70bd": 4,
+            "26e7dfdf088fb93d65919b56-1787221571889-0x1067e594-2875d8158357@192.168.3.200": 3,
+            "010f2cd874d72329": 2,
+            "b00b9dc037e19bed": 2
+          },
+          "request_targets": {
+            "sip:301@192.168.150.7:5060": 2,
+            "sip:301@192.168.3.200:5060;user=phone": 2,
+            "sip:192.168.3.200": 2,
+            "sip:301@192.168.3.200;user=phone": 1,
+            "sip:301@192.168.150.7:5060;transport=UDP;user=phone": 1
+          },
+          "sdp_audio_ports": {
+            "10000": 1,
+            "14068": 1,
+            "14062": 1
+          },
+          "info_signals": [],
+          "first_source_time": 1787221236.071522,
+          "last_source_time": 1787221364.788992
+        },
+        "rtp": {
+          "packet_count": 7734,
+          "stream_count": 3,
+          "estimated_missing_packets": 0,
+          "cross_segment_missing_packets": 0,
+          "backward_or_reordered_events": 0,
+          "first_source_time": 1787221296.233765,
+          "last_source_time": 1787221347.814226,
+          "streams": [
+            {
+              "src_ip": "192.168.150.10",
+              "src_port": 10000,
+              "dst_ip": "192.168.3.200",
+              "dst_port": 14062,
+              "ssrc": 1361694314,
+              "payload_type": 0,
+              "packet_count": 2577,
+              "estimated_missing_packets": 0,
+              "duplicate_sequence_events": 0,
+              "backward_or_reordered_events": 0,
+              "cross_segment_transitions": 10,
+              "cross_segment_missing_packets": 0,
+              "max_forward_gap": 0
+            },
+            {
+              "src_ip": "192.168.3.200",
+              "src_port": 14062,
+              "dst_ip": "192.168.150.10",
+              "dst_port": 10000,
+              "ssrc": 2273096708,
+              "payload_type": 0,
+              "packet_count": 2580,
+              "estimated_missing_packets": 0,
+              "duplicate_sequence_events": 0,
+              "backward_or_reordered_events": 0,
+              "cross_segment_transitions": 10,
+              "cross_segment_missing_packets": 0,
+              "max_forward_gap": 0
+            },
+            {
+              "src_ip": "192.168.3.200",
+              "src_port": 14068,
+              "dst_ip": "192.168.150.7",
+              "dst_port": 10000,
+              "ssrc": 1361694314,
+              "payload_type": 0,
+              "packet_count": 2577,
+              "estimated_missing_packets": 0,
+              "duplicate_sequence_events": 0,
+              "backward_or_reordered_events": 0,
+              "cross_segment_transitions": 10,
+              "cross_segment_missing_packets": 0,
+              "max_forward_gap": 0
+            }
+          ]
+        },
+        "errors": {
+          "udp": [],
+          "rtp": []
+        },
+        "evidence_checks": {
+          "sip_udp_present": true,
+          "sip_call_id_present": true,
+          "rtp_present": true,
+          "rtp_estimated_missing_zero": true,
+          "rtp_cross_segment_missing_zero": true,
+          "reader_complete": true
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,44 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "RC5-SW-001",
+    "sequence": 10,
+    "created_at": "2026-08-21T12:56:00+00:00",
+    "expires_at": "2026-08-21T14:56:00+00:00",
+    "action_type": "SOFTWARE_REGRESSION",
+    "parameters": {
+      "timeout_seconds": 1800
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "068c8586947e426b7924442839cd35c751618aa4"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "RC5 regression after adding structured unexpected-error reporting to Gate CLI. No production cutover; V1 remains authority."
+  },
+  "action_sha256": "05197d9f3b228b03a4ff87370762c2bec2795addbb4616a33ebf4a0d00dcbbb0",
+  "runner_id": "srv:2933695",
+  "state": "SUCCEEDED",
+  "return_code": 0,
+  "verdict": null,
+  "error": null,
+  "finished_at": "2026-08-21T12:57:08.506407+00:00",
+  "stdout_sha256": "92a3015ef0e0f7fbad74a1960889fc3e14686d73a400cc9d93fea839d1382ee7",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "local_stdout": ".capture-v2-control/logs/RC5-SW-001/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/RC5-SW-001/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "8f661912e0c86642fb69c2be4b52d3f89b5211bd",
+      "expected_product_head": "068c8586947e426b7924442839cd35c751618aa4"
+    },
+    "parsed_output": null
+  }
+}

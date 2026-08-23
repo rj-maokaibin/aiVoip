@@ -1,0 +1,46 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "RC57-R6-GUARDED-DATA-RUNTIME-SW-001",
+    "sequence": 183,
+    "created_at": "2026-08-23T13:33:00+00:00",
+    "expires_at": "2026-08-23T23:33:00+00:00",
+    "action_type": "SOFTWARE_REGRESSION",
+    "parameters": {
+      "timeout_seconds": 1800
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "4ec450d0f2b84e72c30a43fa4003124a7740ca23"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "Full Capture V2 software regression for the guarded R6 product-materialization data runtime. The new wrapper may start only a temporary PostgreSQL Compose service against the existing persistent validation bind mount when no PostgreSQL container is running, rewrites DATABASE_URL only in the child process, forces V1 authority and Production V2 disabled, then removes the temporary project to restore the original absent-container prestate. No DUT I/O and no product materialization is performed by this software-regression action."
+  },
+  "action_sha256": "1bba304f23402efb743e0b4885bb2ec9914db95510915d265a1ddfd3715fa237",
+  "runner_id": "srv:257142",
+  "state": "FAILED",
+  "return_code": 1,
+  "verdict": null,
+  "error": null,
+  "finished_at": "2026-08-23T13:34:49.633532+00:00",
+  "stdout_sha256": "16ea677bb3e0b4e5927cc31c787283b58aa9a8165982fdd383aede5219342d4d",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "local_stdout": ".capture-v2-control/logs/RC57-R6-GUARDED-DATA-RUNTIME-SW-001/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/RC57-R6-GUARDED-DATA-RUNTIME-SW-001/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "8a569322d2aef5de6f28f2b05250bf6d3ea6a452",
+      "expected_product_head": "4ec450d0f2b84e72c30a43fa4003124a7740ca23"
+    },
+    "parsed_output": null,
+    "failure_stdout_tail": "........................................................................ [ 33%]\n........................................................................ [ 67%]\n.............F.......................................................    [100%]\n=================================== FAILURES ===================================\n___________ test_gate_cli_bounded_r6_dispatch_only_for_exact_golden ____________\n\nmonkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x71c8dd2ee6c0>\ntmp_path = PosixPath('/tmp/pytest-of-dev/pytest-430/test_gate_cli_bounded_r6_dispa0')\n\n    def test_gate_cli_bounded_r6_dispatch_only_for_exact_golden(monkeypatch, tmp_path):\n        repo = tmp_path / \"repo\"\n        module = repo / \"backend/app/capture_v2/gate_cli.py\"\n        golden = repo / \"validation/capture_v2/R6_APF1250_FIRST_8000_ABNORMAL_GOLDEN_RC33.json\"\n        module.parent.mkdir(parents=True)\n        golden.parent.mkdir(parents=True)\n        module.write_text(\"# marker\\n\")\n        golden.write_text(\"{}\\n\")\n    \n        class FakePath(Path):\n            _flavour = type(Path())._flavour\n    \n        calls = []\n    \n        def fake_materialize(argv):\n            calls.append(argv)\n            return 0\n    \n        monkeypatch.setattr(gate_cli, \"__file__\", str(module))\n        monkeypatch.setattr(r6_report_materialize, \"main\", fake_materialize)\n    \n        rc = gate_cli._bounded_r6_materialization([\n            \"evaluate\",\n            \"--bundle\", str(golden),\n            \"--gate-id\", \"R6-PRODUCT-REPORT-MATERIALIZE-RC56\",\n        ])\n>       assert rc == 0\nE       assert 2 == 0\n\ntests/test_capture_v2_r6_report_materialize.py:36: AssertionError\n----------------------------- Captured stdout call -----------------------------\n{\n  \"verdict\": \"INCONCLUSIVE\",\n  \"reason\": \"DEPLOYMENT_ENV_FILE_NOT_FOUND\"\n}\n=============================== warnings summary ===============================\n../.venv-release-gate/lib/python3.12/site-packages/_pytest/cacheprovider.py:475\n  /home/dev/workspace/aiVoip/.venv-release-gate/lib/python3.12/site-packages/_pytest/cacheprovider.py:475: PytestCacheWarning: cache could not write path /home/dev/workspace/aiVoip/backend/.pytest_cache/v/cache/nodeids: [Errno 13] Permission denied: '/home/dev/workspace/aiVoip/backend/.pytest_cache/v/cache/nodeids'\n    config.cache.set(\"cache/nodeids\", sorted(self.cached_nodeids))\n\n../.venv-release-gate/lib/python3.12/site-packages/_pytest/cacheprovider.py:429\n  /home/dev/workspace/aiVoip/.venv-release-gate/lib/python3.12/site-packages/_pytest/cacheprovider.py:429: PytestCacheWarning: cache could not write path /home/dev/workspace/aiVoip/backend/.pytest_cache/v/cache/lastfailed: [Errno 13] Permission denied: '/home/dev/workspace/aiVoip/backend/.pytest_cache/v/cache/lastfailed'\n    config.cache.set(\"cache/lastfailed\", self.lastfailed)\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n=========================== short test summary info ============================\nFAILED tests/test_capture_v2_r6_report_materialize.py::test_gate_cli_bounded_r6_dispatch_only_for_exact_golden\n1 failed, 212 passed, 2 warnings in 7.71s",
+    "failure_stderr_tail": ""
+  }
+}

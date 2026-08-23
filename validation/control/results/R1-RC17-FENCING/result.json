@@ -1,0 +1,128 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "R1-RC17-FENCING",
+    "sequence": 76,
+    "created_at": "2026-08-22T01:24:30+00:00",
+    "expires_at": "2026-08-22T03:24:30+00:00",
+    "action_type": "GATE_LEASE_FENCING",
+    "parameters": {
+      "device_id": "259f16e6-af9e-4dff-969b-2bb5eac43eb2",
+      "capture_session_a": "8113cb2a-6067-4a9d-b73e-287a60b09bd6",
+      "capture_session_b": "d141aea6-06f8-4650-84e0-ff5d1b52d1f8",
+      "worker_a": "rc17-r1-stale-a",
+      "worker_b": "rc17-r1-new-b",
+      "gate_id": "R1-02-RC17",
+      "ttl_seconds": 10,
+      "object_root": "/tmp/voip-reproduction-objects",
+      "output_root": "/tmp/capture-v2-gates",
+      "repo_root": "..",
+      "timeout_seconds": 180
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "3636ee32045cfc9c7acfcdfa47e5e27f0ce15849"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "RC17 PostgreSQL expired takeover and stale-token fencing. No DUT SSH or physical handset action. Require lease_epoch increment plus stale renew/validate/release all LEASE_FENCED."
+  },
+  "action_sha256": "cc3758c4a33108a2ee656938bee48913956031158c69839505b171e5bdfbd8e0",
+  "runner_id": "srv:3382405",
+  "state": "SUCCEEDED",
+  "return_code": 0,
+  "verdict": "PASS",
+  "error": null,
+  "finished_at": "2026-08-22T01:25:10.292355+00:00",
+  "stdout_sha256": "97b124cec7d5d647f38640e82b256e11c09d35484e306aafdf7fb6cfb6197177",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "local_stdout": ".capture-v2-control/logs/R1-RC17-FENCING/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/R1-RC17-FENCING/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "2720ffe8a43be7363bcacb064998171d0894bbb7",
+      "expected_product_head": "3636ee32045cfc9c7acfcdfa47e5e27f0ce15849"
+    },
+    "parsed_output": {
+      "checks": [
+        {
+          "details": {},
+          "expected": 58,
+          "name": "takeover_increments_epoch",
+          "observed": 58,
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": "LEASE_FENCED",
+          "name": "stale_renew_fenced",
+          "observed": "LEASE_FENCED",
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": "LEASE_FENCED",
+          "name": "stale_validate_fenced",
+          "observed": "LEASE_FENCED",
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": "LEASE_FENCED",
+          "name": "stale_release_fenced",
+          "observed": "LEASE_FENCED",
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": {
+            "capture_session_id": "d141aea6-06f8-4650-84e0-ff5d1b52d1f8",
+            "lease_epoch": 58,
+            "owner_worker_id": "rc17-r1-new-b",
+            "state": "ACTIVE"
+          },
+          "name": "new_owner_remains_active",
+          "observed": {
+            "capture_session_id": "d141aea6-06f8-4650-84e0-ff5d1b52d1f8",
+            "device_id": "259f16e6-af9e-4dff-969b-2bb5eac43eb2",
+            "lease_epoch": 58,
+            "owner_worker_id": "rc17-r1-new-b",
+            "state": "ACTIVE"
+          },
+          "passed": true,
+          "verdict": "PASS"
+        }
+      ],
+      "created_at": "2026-08-22T01:25:10.083528+00:00",
+      "evidence_bundle": "/tmp/capture-v2-gates/20260822T012510Z_R1-02-RC17_259f16e6-af9e-4dff-969b-2bb5eac43eb2",
+      "facts": {
+        "after_lease_epoch": 58,
+        "before_lease_epoch": 57,
+        "current_lease": {
+          "capture_session_id": "d141aea6-06f8-4650-84e0-ff5d1b52d1f8",
+          "device_id": "259f16e6-af9e-4dff-969b-2bb5eac43eb2",
+          "lease_epoch": 58,
+          "owner_worker_id": "rc17-r1-new-b",
+          "state": "ACTIVE"
+        },
+        "stale_release_code": "LEASE_FENCED",
+        "stale_renew_code": "LEASE_FENCED",
+        "stale_validate_code": "LEASE_FENCED",
+        "ttl_seconds": 10.0
+      },
+      "gate_id": "R1-02-RC17",
+      "summary": "PostgreSQL expired takeover and stale-token fencing",
+      "verdict": "PASS"
+    }
+  }
+}

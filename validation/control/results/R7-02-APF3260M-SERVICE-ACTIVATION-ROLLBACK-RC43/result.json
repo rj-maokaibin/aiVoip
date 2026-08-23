@@ -1,0 +1,76 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "R7-02-APF3260M-SERVICE-ACTIVATION-ROLLBACK-RC43",
+    "sequence": 155,
+    "created_at": "2026-08-23T10:07:00+00:00",
+    "expires_at": "2026-08-23T22:07:00+00:00",
+    "action_type": "ACTIVATION_REHEARSAL",
+    "parameters": {
+      "timeout_seconds": 3600,
+      "sn": "G1U060H000384",
+      "host": "10.48.8.74",
+      "port": 10002,
+      "username": "root",
+      "platform_id": "mt7981",
+      "model": "APF3260-M",
+      "profile_id": "VOIP_GENERIC_FULL_CAPTURE",
+      "observation_seconds": 20
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "62c4618ce4a1812fe253cbb107606f960b7ac9ed"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "Guarded bounded APF3260-M real service-level activation/rollback rehearsal. Precleans and finally removes the isolated rehearsal Compose project, uses dedicated localhost host ports, original env remains untouched, Production V2 remains false, and R7 PASS requires real-DUT PRE_V1 -> explicit ACTIVATION_REHEARSAL V2 with exactly one producer/durable segment -> serialized cleanup -> V1 business path restored with zero residual V2 producer."
+  },
+  "action_sha256": "8b7465c24f9843a3ee4160df0869b613db7fc242e58ca6d225422d8e7c7831e7",
+  "runner_id": "srv:257142",
+  "state": "INCONCLUSIVE",
+  "return_code": 2,
+  "verdict": "INCONCLUSIVE",
+  "error": null,
+  "finished_at": "2026-08-23T10:03:15.217316+00:00",
+  "stdout_sha256": "cc3b97e65e2096741c43fb292d54b0fe060ace7caa4baee985184e01386640ad",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "local_stdout": ".capture-v2-control/logs/R7-02-APF3260M-SERVICE-ACTIVATION-ROLLBACK-RC43/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/R7-02-APF3260M-SERVICE-ACTIVATION-ROLLBACK-RC43/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "3ed19e39b98f9ef0310649925ec7361609adcb5c",
+      "expected_product_head": "62c4618ce4a1812fe253cbb107606f960b7ac9ed"
+    },
+    "parsed_output": {
+      "scope": "BOUNDED_SERVICE_LEVEL_ACTIVATION_REHEARSAL",
+      "production_v2_enabled": false,
+      "original_env_modified": false,
+      "project": "capture-v2-r7-rehearsal",
+      "device": {
+        "sn": "G1U060H000384",
+        "model": "APF3260-M",
+        "host": "10.48.8.74",
+        "port": 10002
+      },
+      "checks": [],
+      "verdict": "INCONCLUSIVE",
+      "reason": "SERVICE_LEVEL_REHEARSAL_EXCEPTION",
+      "failure_phase": "V1_BASELINE_BOOT",
+      "error": "RuntimeError:COMMAND_FAILED:/usr/bin/docker:beat:rc=1: Container capture-v2-r7-rehearsal-postgres-1  Waiting\n Container capture-v2-r7-rehearsal-redis-1  Waiting\n Container capture-v2-r7-rehearsal-redis-1  Waiting\n Container capture-v2-r7-rehearsal-postgres-1  Waiting\n Container capture-v2-r7-rehearsal-postgres-1  Waiting\n Container capture-v2-r7-rehearsal-redis-1  Waiting\n Container capture-v2-r7-rehearsal-postgres-1  Waiting\n Container capture-v2-r7-rehearsal-postgres-1  Waiting\n Container capture-v2-r7-rehearsal-redis-1  Waiting\n Container capture-v2-r7-rehearsal-redis-1  Waiting\n Container capture-v2-r7-rehearsal-redis-1  Healthy\n Container capture-v2-r7-rehearsal-redis-1  Healthy\n Container capture-v2-r7-rehearsal-redis-1  Healthy\n Container capture-v2-r7-rehearsal-redis-1  Healthy\n Container capture-v2-r7-rehearsal-redis-1  Healthy\n Container capture-v2-r7-rehearsal-postgres-1  Healthy\n Container capture-v2-r7-rehearsal-beat-1  Starting\n Container capture-v2-r7-rehearsal-postgres-1  Healthy\n Container capture-v2-r7-rehearsal-postgres-1  Healthy\n Container capture-v2-r7-rehearsal-reproduction-worker-1  Starting\n Container capture-v2-r7-rehearsal-reproduction-watch-worker-1  Starting\n Container capture-v2-r7-rehearsal-postgres-1  Healthy\n Container capture-v2-r7-rehearsal-backend-1  Starting\n Container capture-v2-r7-rehearsal-postgres-1  Healthy\n Container capture-v2-r7-rehearsal-reproduction-control-high-worker-1  Starting\n Container capture-v2-r7-rehearsal-beat-1  Started\n Container capture-v2-r7-rehearsal-reproduction-control-high-worker-1  Started\n Container capture-v2-r7-rehearsal-reproduction-watch-worker-1  Started\n Container capture-v2-r7-rehearsal-reproduction-worker-1  Started\nError response from daemon: failed to set up container networking: driver failed programming external connectivity on endpoint capture-v2-r7-rehearsal-backend-1 (01d8481ff8b1130825aa91034c044dbf54ec42ab46a0bacb03e3289d682a576e): Bind for 127.0.0.1:18000 failed: port is already allocated",
+      "final_server_target_state": "PRESTATE_NO_REHEARSAL_CONTAINERS",
+      "final_authority_target": "V1",
+      "guarded_rehearsal": true,
+      "host_ports": {
+        "backend": "127.0.0.1:18000",
+        "minio_console": "127.0.0.1:19001"
+      },
+      "final_rehearsal_project_empty": true
+    }
+  }
+}

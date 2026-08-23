@@ -41,3 +41,12 @@ frontend/tsconfig.tsbuildinfo
 /.reproduction-c3-e2e.json
 /.reproduction-evidence-e2e.json
 /.reproduction-mock-e2e.json
+/validation/phase_f3_deployment_preflight.json
+/validation/production_runtime_result.json
+
+# Capture V2.1.1 real-gate validation evidence (local only, never committed)
+validation_results/
+Capture_V2.1.1_Real_Gates_Evidence_*.tgz
+/.capture-v2-control/
+# Local systemd/tmux runner helper generated on the validation host only.
+validation/capture_v2/run_control_runner.sh

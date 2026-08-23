@@ -1,0 +1,127 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "R2-APF1250-ESTABLISH-RC6",
+    "sequence": 19,
+    "created_at": "2026-08-21T13:42:00+00:00",
+    "expires_at": "2026-08-21T15:42:00+00:00",
+    "action_type": "GATE_OWNERSHIP",
+    "parameters": {
+      "device_id": "259f16e6-af9e-4dff-969b-2bb5eac43eb2",
+      "model": "APF1250",
+      "host": "47.104.22.0",
+      "port": 63111,
+      "username": "root",
+      "platform_id": "mt7621",
+      "password_env": "DB:G1V030E010214",
+      "profile_root": "../profiles",
+      "profile_id": "voip-standard",
+      "object_root": "/tmp/voip-reproduction-objects",
+      "output_root": "/tmp/capture-v2-gates",
+      "repo_root": "..",
+      "reproduction_session_id": "AUTO_NEW",
+      "worker_id": "r2-apf1250-rc6-a",
+      "gate_id": "R2-01-ESTABLISH-RC6",
+      "state_file": "/tmp/capture-v2-control/r2-apf1250-rc6-before.json",
+      "hold_seconds": 35,
+      "timeout_seconds": 360
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "7c92787c1abb9cc3ddeba2583c039178070ec180"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "Fresh RC6 APF1250 R2 establish on refreshed tunnel after BusyBox-portable producer-stop fix. Create a new validation ReproductionSession, establish exactly one Capture Authority/producer, persist before-state, and hold 35s so the lease naturally expires before adopt. Secret remains local via DB:<SN>; Production V2 stays disabled."
+  },
+  "action_sha256": "d31756aa3eea6e92e9c90dab45a014c52e3415caa24c475e70e4b58f37732323",
+  "runner_id": "srv:2933695",
+  "state": "SUCCEEDED",
+  "return_code": 0,
+  "verdict": "PASS",
+  "error": null,
+  "finished_at": "2026-08-21T13:42:57.725844+00:00",
+  "stdout_sha256": "2748ff5c9c45b47af10433f837c8ce21badf9cdf445461882d11923ac4110008",
+  "stderr_sha256": "b8258e86248ce6f15dfea1a12afcd2ad3fde62ba6d3cd24536ffc8cb3bb61c48",
+  "local_stdout": ".capture-v2-control/logs/R2-APF1250-ESTABLISH-RC6/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/R2-APF1250-ESTABLISH-RC6/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "88034178b4c5234123d098d4d76c4896d65ab100",
+      "expected_product_head": "7c92787c1abb9cc3ddeba2583c039178070ec180"
+    },
+    "parsed_output": {
+      "result": {
+        "checks": [
+          {
+            "details": {},
+            "expected": 1,
+            "name": "exactly_one_owned_producer",
+            "observed": 1,
+            "passed": true,
+            "verdict": "PASS"
+          },
+          {
+            "details": {},
+            "expected": 1,
+            "name": "one_running_epoch",
+            "observed": 1,
+            "passed": true,
+            "verdict": "PASS"
+          },
+          {
+            "details": {},
+            "expected": "one ACTIVE lease",
+            "name": "lease_active",
+            "observed": [
+              {
+                "lease_epoch": 30,
+                "state": "ACTIVE"
+              }
+            ],
+            "passed": true,
+            "verdict": "PASS"
+          },
+          {
+            "details": {},
+            "expected": 0,
+            "name": "no_unrecovered_gap",
+            "observed": 0,
+            "passed": true,
+            "verdict": "PASS"
+          }
+        ],
+        "created_at": "2026-08-21T13:42:22.371986+00:00",
+        "evidence_bundle": "/tmp/capture-v2-gates/20260821T134218Z_R2-01-ESTABLISH-RC6_259f16e6-af9e-4dff-969b-2bb5eac43eb2",
+        "facts": {
+          "capture_epoch_id": "6f4f97ce-37ae-4047-9e65-b4edd8aa7a0c",
+          "capture_epoch_token": "CAP_6cab6073_0001_336b22db",
+          "capture_session_id": "6cab6073-f331-4147-89d6-10f1a280493d",
+          "lease_epoch": 30,
+          "producer_pid": 1926,
+          "producer_starttime": 9936882,
+          "recovery_status": "CLEAN"
+        },
+        "gate_id": "R2-01-ESTABLISH-RC6",
+        "summary": "Ownership/recovery invariant",
+        "verdict": "PASS"
+      },
+      "state": {
+        "capture_epoch_id": "6f4f97ce-37ae-4047-9e65-b4edd8aa7a0c",
+        "capture_epoch_token": "CAP_6cab6073_0001_336b22db",
+        "capture_session_id": "6cab6073-f331-4147-89d6-10f1a280493d",
+        "lease_epoch": 30,
+        "producer_pid": 1926,
+        "producer_starttime": 9936882,
+        "recovery_status": "CLEAN",
+        "reproduction_session_id": "2deb3ef0-c1d8-40c0-8faf-f024a21408eb"
+      }
+    }
+  }
+}

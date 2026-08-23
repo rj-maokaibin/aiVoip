@@ -1,0 +1,70 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "R7-02-APF3260M-SERVICE-ACTIVATION-ROLLBACK-RC42",
+    "sequence": 153,
+    "created_at": "2026-08-23T10:01:00+00:00",
+    "expires_at": "2026-08-23T22:01:00+00:00",
+    "action_type": "ACTIVATION_REHEARSAL",
+    "parameters": {
+      "timeout_seconds": 3600,
+      "sn": "G1U060H000384",
+      "host": "10.48.8.74",
+      "port": 10002,
+      "username": "root",
+      "platform_id": "mt7981",
+      "model": "APF3260-M",
+      "profile_id": "VOIP_GENERIC_FULL_CAPTURE",
+      "observation_seconds": 20
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "e0d40b08d2b0479df7944dc88d114e9be88a37e3"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "Retry bounded APF3260-M real service-level activation/rollback rehearsal using only the fixed audited activation module through sudo -n for Docker daemon access. Original env is never modified; Production V2 remains false; finally restores V1 and removes the isolated rehearsal Compose project."
+  },
+  "action_sha256": "9ef4b55d7824f67e05e1f6c3d01bdc91a75e0fc7afda72be106f94bde695c17b",
+  "runner_id": "srv:257142",
+  "state": "INCONCLUSIVE",
+  "return_code": 2,
+  "verdict": "INCONCLUSIVE",
+  "error": null,
+  "finished_at": "2026-08-23T09:58:28.093465+00:00",
+  "stdout_sha256": "820b562de41c348501734ad7ad508578bcdc86134aee47034278ce14013a10e3",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "local_stdout": ".capture-v2-control/logs/R7-02-APF3260M-SERVICE-ACTIVATION-ROLLBACK-RC42/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/R7-02-APF3260M-SERVICE-ACTIVATION-ROLLBACK-RC42/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "e40d9f1b7e6cdca26b4d5bf84d4b17aec89e2ddb",
+      "expected_product_head": "e0d40b08d2b0479df7944dc88d114e9be88a37e3"
+    },
+    "parsed_output": {
+      "scope": "BOUNDED_SERVICE_LEVEL_ACTIVATION_REHEARSAL",
+      "production_v2_enabled": false,
+      "original_env_modified": false,
+      "project": "capture-v2-r7-rehearsal",
+      "device": {
+        "sn": "G1U060H000384",
+        "model": "APF3260-M",
+        "host": "10.48.8.74",
+        "port": 10002
+      },
+      "checks": [],
+      "verdict": "INCONCLUSIVE",
+      "reason": "SERVICE_LEVEL_REHEARSAL_EXCEPTION",
+      "failure_phase": "V1_BASELINE_BOOT",
+      "error": "RuntimeError:COMMAND_FAILED:/usr/bin/docker:beat:rc=1: capture-v2-r7-rehearsal-reproduction-worker  Built\n capture-v2-r7-rehearsal-reproduction-control-high-worker  Built\n capture-v2-r7-rehearsal-reproduction-watch-worker  Built\n capture-v2-r7-rehearsal-beat  Built\n capture-v2-r7-rehearsal-backend  Built\n Network capture-v2-r7-rehearsal_default  Creating\n Network capture-v2-r7-rehearsal_default  Created\n Container capture-v2-r7-rehearsal-postgres-1  Creating\n Container capture-v2-r7-rehearsal-minio-1  Creating\n Container capture-v2-r7-rehearsal-redis-1  Creating\n Container capture-v2-r7-rehearsal-redis-1  Created\n Container capture-v2-r7-rehearsal-minio-1  Created\n Container capture-v2-r7-rehearsal-postgres-1  Created\n Container capture-v2-r7-rehearsal-beat-1  Creating\n Container capture-v2-r7-rehearsal-reproduction-worker-1  Creating\n Container capture-v2-r7-rehearsal-backend-1  Creating\n Container capture-v2-r7-rehearsal-reproduction-control-high-worker-1  Creating\n Container capture-v2-r7-rehearsal-reproduction-watch-worker-1  Creating\n Container capture-v2-r7-rehearsal-reproduction-control-high-worker-1  Created\n Container capture-v2-r7-rehearsal-beat-1  Created\n Container capture-v2-r7-rehearsal-reproduction-worker-1  Created\n Container capture-v2-r7-rehearsal-backend-1  Created\n Container capture-v2-r7-rehearsal-reproduction-watch-worker-1  Created\n Container capture-v2-r7-rehearsal-redis-1  Starting\n Container capture-v2-r7-rehearsal-postgres-1  Starting\n Container capture-v2-r7-rehearsal-minio-1  Starting\n Container capture-v2-r7-rehearsal-redis-1  Started\n Container capture-v2-r7-rehearsal-postgres-1  Started\nError response from daemon: failed to set up container networking: driver failed programming external connectivity on endpoint capture-v2-r7-rehearsal-minio-1 (f3c931d1ccf4f67063c9db81a14d2d9623b8bc935b69c4684f80d5db2095bfdd): Bind for :::9001 failed: port is already allocated",
+      "final_server_target_state": "PRESTATE_NO_REHEARSAL_CONTAINERS",
+      "final_authority_target": "V1"
+    }
+  }
+}

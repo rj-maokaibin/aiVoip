@@ -1,0 +1,44 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "RC47-REHEARSAL-ASYNC-PRODUCER-PROBE-SW-001",
+    "sequence": 162,
+    "created_at": "2026-08-23T10:22:00+00:00",
+    "expires_at": "2026-08-23T22:22:00+00:00",
+    "action_type": "SOFTWARE_REGRESSION",
+    "parameters": {
+      "timeout_seconds": 1200
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "9d7faa8c68d6984e376be4a8e7a025c5d555e2c9"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "Regression after removing nested asyncio.run from service-rehearsal DUT producer status probe. V1 remains authoritative and Production V2 remains disabled. On PASS, retry APF3260-M rehearsal immediately."
+  },
+  "action_sha256": "61b73493fb37cf5f69baf24cac16743b673bb62960f91242f483fe49706a0b7e",
+  "runner_id": "srv:257142",
+  "state": "SUCCEEDED",
+  "return_code": 0,
+  "verdict": null,
+  "error": null,
+  "finished_at": "2026-08-23T10:22:39.908410+00:00",
+  "stdout_sha256": "656a62d015247fadead8d814685ac49bfc19e7fb2e2e619906f622319fe6bf7a",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "local_stdout": ".capture-v2-control/logs/RC47-REHEARSAL-ASYNC-PRODUCER-PROBE-SW-001/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/RC47-REHEARSAL-ASYNC-PRODUCER-PROBE-SW-001/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "49669f9d5a2e56df0af0042086e85a4b90138445",
+      "expected_product_head": "9d7faa8c68d6984e376be4a8e7a025c5d555e2c9"
+    },
+    "parsed_output": null
+  }
+}

@@ -1,0 +1,127 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "R2-01A-APF1250-CONTROLLER-LOSS-RC17",
+    "sequence": 83,
+    "created_at": "2026-08-22T01:32:00+00:00",
+    "expires_at": "2026-08-22T03:32:00+00:00",
+    "action_type": "GATE_OWNERSHIP",
+    "parameters": {
+      "device_id": "259f16e6-af9e-4dff-969b-2bb5eac43eb2",
+      "model": "APF1250",
+      "host": "10.48.8.74",
+      "port": 10001,
+      "username": "root",
+      "platform_id": "mt7621",
+      "password_env": "DB:G1V030E010214",
+      "profile_root": "../profiles",
+      "profile_id": "voip-standard",
+      "object_root": "/tmp/voip-reproduction-objects",
+      "output_root": "/tmp/capture-v2-gates",
+      "repo_root": "..",
+      "reproduction_session_id": "AUTO_NEW",
+      "worker_id": "r2-01-apf1250-before-rc17",
+      "gate_id": "R2-SETUP-APF1250-CONTROLLER-LOSS-RC17",
+      "state_file": "/tmp/capture-v2-control/r2-01-apf1250-rc17-before.json",
+      "hold_seconds": 31.5,
+      "timeout_seconds": 180
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "3636ee32045cfc9c7acfcdfa47e5e27f0ce15849"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "R2-01 Stage A on APF1250: establish real ownership, persist exact producer/starttime/CaptureEpoch/lease state outside repo, then intentionally stop controller renewal and hold beyond TTL without stopping producer. This models controller loss, not an OS-crash claim. No physical handset action."
+  },
+  "action_sha256": "0995360116fc19777f6b8cae321e0ab821902dff2ba7956264861202f53b0cb4",
+  "runner_id": "srv:3382405",
+  "state": "SUCCEEDED",
+  "return_code": 0,
+  "verdict": "PASS",
+  "error": null,
+  "finished_at": "2026-08-22T01:33:24.940603+00:00",
+  "stdout_sha256": "90c79227c40f09201d81a4584759ed699a88bc180e40874a2eebbb88bc2fda45",
+  "stderr_sha256": "b8258e86248ce6f15dfea1a12afcd2ad3fde62ba6d3cd24536ffc8cb3bb61c48",
+  "local_stdout": ".capture-v2-control/logs/R2-01A-APF1250-CONTROLLER-LOSS-RC17/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/R2-01A-APF1250-CONTROLLER-LOSS-RC17/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "45eb7e0cb07d876298c5bb9596eed55b65a1a611",
+      "expected_product_head": "3636ee32045cfc9c7acfcdfa47e5e27f0ce15849"
+    },
+    "parsed_output": {
+      "result": {
+        "checks": [
+          {
+            "details": {},
+            "expected": 1,
+            "name": "exactly_one_owned_producer",
+            "observed": 1,
+            "passed": true,
+            "verdict": "PASS"
+          },
+          {
+            "details": {},
+            "expected": 1,
+            "name": "one_running_epoch",
+            "observed": 1,
+            "passed": true,
+            "verdict": "PASS"
+          },
+          {
+            "details": {},
+            "expected": "one ACTIVE lease",
+            "name": "lease_active",
+            "observed": [
+              {
+                "lease_epoch": 65,
+                "state": "ACTIVE"
+              }
+            ],
+            "passed": true,
+            "verdict": "PASS"
+          },
+          {
+            "details": {},
+            "expected": 0,
+            "name": "no_unrecovered_gap",
+            "observed": 0,
+            "passed": true,
+            "verdict": "PASS"
+          }
+        ],
+        "created_at": "2026-08-22T01:32:53.128093+00:00",
+        "evidence_bundle": "/tmp/capture-v2-gates/20260822T013252Z_R2-SETUP-APF1250-CONTROLLER-LOSS-RC17_259f16e6-af9e-4dff-969b-2bb5eac43eb2",
+        "facts": {
+          "capture_epoch_id": "eeb7e433-5fc5-4f33-967d-eb84b13a83c8",
+          "capture_epoch_token": "CAP_e02c86a4_0001_01e49b40",
+          "capture_session_id": "e02c86a4-a5c0-4fb6-bd23-92c1ed9c4b2f",
+          "lease_epoch": 65,
+          "producer_pid": 16956,
+          "producer_starttime": 252544,
+          "recovery_status": "REPAIRED"
+        },
+        "gate_id": "R2-SETUP-APF1250-CONTROLLER-LOSS-RC17",
+        "summary": "Ownership/recovery invariant",
+        "verdict": "PASS"
+      },
+      "state": {
+        "capture_epoch_id": "eeb7e433-5fc5-4f33-967d-eb84b13a83c8",
+        "capture_epoch_token": "CAP_e02c86a4_0001_01e49b40",
+        "capture_session_id": "e02c86a4-a5c0-4fb6-bd23-92c1ed9c4b2f",
+        "lease_epoch": 65,
+        "producer_pid": 16956,
+        "producer_starttime": 252544,
+        "recovery_status": "REPAIRED",
+        "reproduction_session_id": "7a1b17c4-eeca-4250-a816-6c4901b3dec4"
+      }
+    }
+  }
+}

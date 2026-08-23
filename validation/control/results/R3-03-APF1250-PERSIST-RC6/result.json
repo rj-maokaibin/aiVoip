@@ -1,0 +1,131 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "R3-03-APF1250-PERSIST-RC6",
+    "sequence": 31,
+    "created_at": "2026-08-21T15:07:00+00:00",
+    "expires_at": "2026-08-21T17:07:00+00:00",
+    "action_type": "GATE_SEGMENT",
+    "parameters": {
+      "device_id": "259f16e6-af9e-4dff-969b-2bb5eac43eb2",
+      "model": "APF1250",
+      "host": "10.48.8.74",
+      "port": 10001,
+      "username": "root",
+      "platform_id": "mt7621",
+      "password_env": "DB:G1V030E010214",
+      "profile_root": "../profiles",
+      "profile_id": "voip-standard",
+      "object_root": "/tmp/voip-reproduction-objects",
+      "output_root": "/tmp/capture-v2-gates",
+      "repo_root": "..",
+      "reproduction_session_id": "2deb3ef0-c1d8-40c0-8faf-f024a21408eb",
+      "worker_id": "r3-03-apf1250-rc6",
+      "gate_id": "R3-03-APF1250-RC6",
+      "duration": 30,
+      "interval": 0.5,
+      "transport": "scp",
+      "fault_plan": "../validation/control/fault_plans/r3-server-persist-fail-once.json",
+      "timeout_seconds": 600
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "7c92787c1abb9cc3ddeba2583c039178070ec180"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "APF1250 RC6 R3-03 one-shot server persist failure recovery using latest LAN SSH mapping 10.48.8.74:10001. Must retain durable evidence before ACK/delete and prove no server+DUT double loss. Keep V1 authoritative and Production V2 disabled."
+  },
+  "action_sha256": "a94e41eeac617b8c8e1008bccfe1821c1328600d382a45b09bd1797103efc80e",
+  "runner_id": "srv:3090258",
+  "state": "SUCCEEDED",
+  "return_code": 0,
+  "verdict": "PASS",
+  "error": null,
+  "finished_at": "2026-08-21T15:09:03.548165+00:00",
+  "stdout_sha256": "f5cfb27a2d465541a7eb5cf3ac94ec73d6a6df2a35582452cd084eac6006eff7",
+  "stderr_sha256": "b8258e86248ce6f15dfea1a12afcd2ad3fde62ba6d3cd24536ffc8cb3bb61c48",
+  "local_stdout": ".capture-v2-control/logs/R3-03-APF1250-PERSIST-RC6/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/R3-03-APF1250-PERSIST-RC6/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "a8e815b27365d79187eb93c2e07c886cb3e9b542",
+      "expected_product_head": "7c92787c1abb9cc3ddeba2583c039178070ec180"
+    },
+    "parsed_output": {
+      "checks": [
+        {
+          "details": {},
+          "expected": ">0",
+          "name": "at_least_one_segment",
+          "observed": 178,
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": ">0 REMOTE_DELETED",
+          "name": "at_least_one_full_chain",
+          "observed": 178,
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": true,
+          "name": "server_store_observable",
+          "observed": [],
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": [],
+          "name": "no_server_and_dut_double_loss",
+          "observed": [],
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": [],
+          "name": "acked_segments_have_server_copy",
+          "observed": [],
+          "passed": true,
+          "verdict": "PASS"
+        },
+        {
+          "details": {},
+          "expected": true,
+          "name": "no_unacked_eviction",
+          "observed": null,
+          "passed": true,
+          "verdict": "PASS"
+        }
+      ],
+      "created_at": "2026-08-21T15:09:03.231429+00:00",
+      "evidence_bundle": "/tmp/capture-v2-gates/20260821T150902Z_R3-03-APF1250-RC6_259f16e6-af9e-4dff-969b-2bb5eac43eb2",
+      "facts": {
+        "acked": 60,
+        "capture_epoch_id": "6f4f97ce-37ae-4047-9e65-b4edd8aa7a0c",
+        "capture_session_id": "6cab6073-f331-4147-89d6-10f1a280493d",
+        "control_authority": "ACTIVE",
+        "cycles": 26,
+        "deleted": 60,
+        "errors": 1,
+        "lease_epoch": 34,
+        "sealed": 59,
+        "transferred": 60
+      },
+      "gate_id": "R3-03-APF1250-RC6",
+      "summary": "Reliable Segment / SFTP / ACK",
+      "verdict": "PASS"
+    }
+  }
+}
