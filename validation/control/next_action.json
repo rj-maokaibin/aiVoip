@@ -1,12 +1,14 @@
 {
   "schema_version": "capture-v2-remote-action-v1",
-  "action_id": "RC57-R6-GUARDED-DATA-RUNTIME-SW-002",
-  "sequence": 184,
-  "created_at": "2026-08-23T13:36:00+00:00",
-  "expires_at": "2026-08-23T23:36:00+00:00",
-  "action_type": "SOFTWARE_REGRESSION",
+  "action_id": "R6-03-APF1250-8000-PRODUCT-REPORT-MATERIALIZE-RC57",
+  "sequence": 185,
+  "created_at": "2026-08-23T13:37:00+00:00",
+  "expires_at": "2026-08-23T23:37:00+00:00",
+  "action_type": "GATE_EVALUATE",
   "parameters": {
-    "timeout_seconds": 1800
+    "timeout_seconds": 900,
+    "bundle": "../validation/capture_v2/R6_APF1250_FIRST_8000_ABNORMAL_GOLDEN_RC33.json",
+    "gate_id": "R6-PRODUCT-REPORT-MATERIALIZE-RC56"
   },
   "safety": {
     "require_clean_git": true,
@@ -17,5 +19,5 @@
     "expected_head": "927787df5e3f830a74c7f3d178d39121b6ae81f4"
   },
   "requested_by": "ChatGPT-remote-validation-controller",
-  "note": "Rerun the full Capture V2 software regression after updating the R6 bounded-dispatch unit test to monkeypatch the new guarded materializer entrypoint. Product logic is unchanged. V1 remains authoritative, Production V2 remains disabled, and this regression performs no DUT I/O or product materialization."
+  "note": "Bounded non-DUT product binding for immutable RC33 APF1250 first-8000 abnormal Golden using the guarded persistent PostgreSQL runtime. If no PostgreSQL container is running, start only the temporary capture-v2-r6-materialize postgres project against the existing VOIP_DATA_ROOT/postgres bind mount; verify the Golden and persisted DB evidence, recalculate stale PCAP CoverageWindow with current fixed logic, require COMPLETE coverage, zero kernel drops, exact raw FXS digits 000, and verified durable server PCAP bytes; then idempotently create real EvidenceAsset rows, QualitySnapshot and evidence-first report. Finally remove the temporary project and prove the absent-container prestate is restored. No DUT I/O, no Production V2 activation, no backend/worker startup, and no synthetic evidence."
 }
