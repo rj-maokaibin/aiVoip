@@ -1,14 +1,14 @@
 {
   "schema_version": "capture-v2-remote-action-v1",
-  "action_id": "RC79-PRODUCTION-CUTOVER-001",
-  "sequence": 210,
-  "created_at": "2026-08-23T16:10:00+00:00",
-  "expires_at": "2026-08-24T04:10:00+00:00",
+  "action_id": "RC80-PRODUCTION-CUTOVER-002",
+  "sequence": 211,
+  "created_at": "2026-08-23T16:12:00+00:00",
+  "expires_at": "2026-08-24T04:12:00+00:00",
   "action_type": "GATE_EVALUATE",
   "parameters": {
-    "timeout_seconds": 9000,
+    "timeout_seconds": 7200,
     "bundle": "/home/dev/workspace/aiVoip/validation/capture_v2/PRODUCTION_CUTOVER_AUTHORIZATION_RC69.json",
-    "gate_id": "PRODUCTION-CUTOVER-RC79"
+    "gate_id": "PRODUCTION-CUTOVER-RC80"
   },
   "safety": {
     "require_clean_git": true,
@@ -19,5 +19,5 @@
     "expected_head": "77f4e620b987be2d19d1e4b1ad66b6352d6c1be2"
   },
   "requested_by": "ChatGPT-remote-validation-controller",
-  "note": "Execute the explicitly authorized guarded production cutover after PR #37 and PR #27 are merged and RC78 final acceptance PASS. Require exact audited authorization, validated feature head merged to master, pre-state V1/Production V2=false, production env backup, strict release preflight, switch REPRODUCTION_PLATFORM_MODE=real + CAPTURE_ENGINE_VERSION=V2 + CAPTURE_V2_PRODUCTION_ENABLED=true, full production deploy including reproduction control-high/watch/beat, runtime verification, V2 authority verification, and automatic rollback to the exact pre-cutover runtime/env on any failed postcheck. No DUT mutation is part of this deployment action."
+  "note": "Retry the explicitly authorized guarded production cutover after RC79 was rejected before execution solely because timeout_seconds exceeded the control policy maximum. Use the policy maximum 7200 seconds. Require validated feature head merged to master, pre-state V1/Production V2=false, production env backup, strict release preflight, switch to real + V2 + production enabled, full production deploy including reproduction control-high/watch/beat, runtime authority and queue verification, and automatic rollback to the exact pre-cutover env/runtime on any failed postcheck. No DUT mutation is part of this deployment action."
 }
