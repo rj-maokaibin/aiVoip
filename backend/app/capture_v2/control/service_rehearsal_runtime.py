@@ -125,13 +125,35 @@ async def _clear_rehearsal_fence(session_id: str) -> dict:
         await adapter.disconnect()
 
 
+def _prepare_start_fence_state(session_id: str) -> dict:
+    """Reset stale DUT fence metadata only for the explicit V2 rehearsal phase.
+
+    The same enqueue-start command is reused after rollback to prove the V1 business
+    path.  V1 is not allowed to call the V2 rehearsal authorization guard, and it
+    does not need the isolated-PostgreSQL fence reset because no V2 producer is
+    being established.  Any selected V2 mode still goes through the strict helper,
+    which independently rejects Production V2 and non-rehearsal activation.
+    """
+    from app.core.config import settings
+
+    engine = str(settings.capture_engine_version or "V1").upper().strip()
+    if engine == "V1":
+        return {
+            "cleared": False,
+            "scope": "V1_ROLLBACK_HEALTH_SKIP",
+            "reason": "CAPTURE_V2_NOT_SELECTED",
+        }
+    if engine != "V2":
+        raise RuntimeError(f"REHEARSAL_START_ENGINE_INVALID:{engine}")
+    return asyncio.run(_clear_rehearsal_fence(session_id))
+
+
 def enqueue_start(args) -> dict:
     # The isolated rehearsal PostgreSQL project starts with a fresh lease sequence,
-    # while the DUT /tmp fence survives between validation runs.  Clear only that
-    # stale rehearsal fence after the dedicated helper proves: explicit activation
-    # rehearsal mode, Production V2 disabled, no AIVOIP producer, and no live op.lock.
-    # Generic production fencing remains unchanged and monotonic.
-    stale_fence_cleanup = asyncio.run(_clear_rehearsal_fence(args.session_id))
+    # while the DUT /tmp fence survives between validation runs. Clear only during
+    # the selected V2 rehearsal phase; the post-rollback V1 health start must not
+    # call a V2 authorization guard at all.
+    stale_fence_cleanup = _prepare_start_fence_state(args.session_id)
 
     from app.workers.reproduction_tasks import start_reproduction
     result = start_reproduction.apply_async(args=[args.session_id], queue="reproduction-control")
