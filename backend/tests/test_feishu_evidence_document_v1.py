@@ -99,5 +99,5 @@ def test_feishu_card_surfaces_explicit_audio_unavailable_reason_instead_of_omitt
              "findings":[finding],"call":{},"multi_call_summary":{},"ab_comparison":[],"normal_and_exclusion_evidence":[],"schema_version":"preliminary-evidence-report-v1","composer_version":"evidence-brief-composer-v2"}
 
     blocks,_,plan=service._core_blocks(report,payload);text=[_block_text(x) for x in blocks]
-    assert any("异常音频：UNAVAILABLE" in x and "NO_MATCHING_ANOMALY_AUDIO_CLIP" in x for x in text)
+    assert any("异常音频：暂不可用" in x and "NO_MATCHING_ANOMALY_AUDIO_CLIP" in x for x in text)
     assert {x["artifact_id"] for x in plan}=={"img-1"}
