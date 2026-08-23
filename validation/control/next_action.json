@@ -1,9 +1,9 @@
 {
   "schema_version": "capture-v2-remote-action-v1",
-  "action_id": "RC81-PRODUCTION-CUTOVER-HOTFIX-SW-001",
-  "sequence": 212,
-  "created_at": "2026-08-23T16:21:00+00:00",
-  "expires_at": "2026-08-24T04:21:00+00:00",
+  "action_id": "RC82-PRODUCTION-CUTOVER-HOTFIX-SW-002",
+  "sequence": 213,
+  "created_at": "2026-08-23T16:24:00+00:00",
+  "expires_at": "2026-08-24T04:24:00+00:00",
   "action_type": "SOFTWARE_REGRESSION",
   "parameters": {
     "timeout_seconds": 1800
@@ -14,8 +14,8 @@
     "require_v2_disabled": true,
     "allow_worker_kill": false,
     "allow_server_quarantine": false,
-    "expected_head": "8860cacc1dc9e9085954510af2417dbe013789d9"
+    "expected_head": "c44b7e31625847f9ec60e695378033354267c4fd"
   },
   "requested_by": "ChatGPT-remote-validation-controller",
-  "note": "Validate the exact master-merged production cutover legacy-env compatibility hotfix after syncing only its three files to the control branch. Missing legacy V2 keys may resolve to application defaults V1/false/false; explicit unsafe values remain fail-closed. No production or DUT mutation."
+  "note": "Re-run the full Capture V2 software regression after the legacy production-env compatibility hotfix and its updated static cutover contract test are both merged to master and mirrored exactly into the control branch. Require fail-closed explicit-value behavior and all prior Capture V2 tests. No production or DUT mutation."
 }
