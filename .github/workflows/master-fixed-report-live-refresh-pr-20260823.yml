@@ -22,7 +22,7 @@ jobs:
       DOCUMENT_ID: SN6DdJX16oisLQxnPjzcwLwfnLb
       TARGET_OPEN_ID: ou_67bee3c2e462a7f8939093bd8e697a96
       PRODUCT_CODE_SHA: 82f78c60161198b008c7853c569c836855b4a770
-      ACCEPTANCE_MASTER_SHA: 5e6ea24c39dff285129bb5d130b61185aa180ff1
+      ACCEPTANCE_MASTER_SHA: 4f80f2b937433ed126f1e23ec86684b9da7607b3
       ACCEPTANCE_EVIDENCE_CARD_BLOB: ca1d37461a786f6fb8d525515fcf5c67e9a339ee
 
     steps:
@@ -135,7 +135,9 @@ jobs:
           grep -q 'feishu-evidence-living-document-v2' backend/tests/test_feishu_living_document_v1.py
           grep -q 'test_fr014_missing_optional_debug_preserves_complete_report' backend/tests/test_prd_spec_v1_alignment.py
           grep -q 'expected_platform_status' backend/tests/test_phase_f1_release_readiness.py
-          grep -q "monkeypatch.setattr(reproduction_event_tasks, 'SessionLocal'" backend/tests/test_reproduction_event_tasks.py
+          grep -q "monkeypatch.setattr(reproduction_tasks, 'SessionLocal'" backend/tests/test_reproduction_event_tasks.py
+          grep -q 'wrapped.quarantine_root = tmp_path' backend/tests/test_capture_v2_gate_faults.py
+          grep -q 'target = tmp_path / "seg-after.pcap"' backend/tests/test_capture_v2_scp_transport.py
           ! grep -q '下方旧版内容保留作为历史记录，若有冲突以本修订版为准' scripts/fixed_master_live_refresh_20260823.py
           echo "VALIDATED_ACCEPTANCE_SNAPSHOT=$FIXED_MASTER_HEAD via $MASTER_SYNC_MODE"
 
