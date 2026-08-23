@@ -12,3 +12,4 @@ real acceptance: Evidence Card V1 compatibility + Canonical V2 full gates + real
 real acceptance retry: preserve frozen Evidence Card V1 PCM_RX measurement labels
 real acceptance retry: interrupted Call keeps NOT_FULLY_REVIEWABLE semantics
 real acceptance retry: preserve offline reconstructed Call heading inside D112 section 4
+real acceptance retry: preserve exact offline no-fabrication wording
