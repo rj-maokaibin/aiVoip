@@ -1,12 +1,12 @@
 {
   "schema_version": "capture-v2-remote-action-v1",
-  "action_id": "RC40-DEPLOYMENT-PREFLIGHT-002",
-  "sequence": 149,
-  "created_at": "2026-08-23T09:47:00+00:00",
-  "expires_at": "2026-08-23T21:47:00+00:00",
-  "action_type": "DEPLOYMENT_PREFLIGHT",
+  "action_id": "RC41-SERVICE-ACTIVATION-CONTROL-SW-001",
+  "sequence": 150,
+  "created_at": "2026-08-23T09:50:00+00:00",
+  "expires_at": "2026-08-23T21:50:00+00:00",
+  "action_type": "SOFTWARE_REGRESSION",
   "parameters": {
-    "timeout_seconds": 120
+    "timeout_seconds": 1200
   },
   "safety": {
     "require_clean_git": true,
@@ -14,8 +14,8 @@
     "require_v2_disabled": true,
     "allow_worker_kill": false,
     "allow_server_quarantine": false,
-    "expected_head": "c5c9d82444b0070db0fde9869a7c7a3a7f131410"
+    "expected_head": "81609ed1279911ddeadf0d6b9efa6763afcb454d"
   },
   "requested_by": "ChatGPT-remote-validation-controller",
-  "note": "Second read-only deployment preflight. Discover non-default Compose projects from Docker labels, identify the actual running reproduction stack, verify sanitized V1 authority, and report whether containers need recreation for the new /app/validation mount. No mutation or restart."
+  "note": "Regression after registering the bounded ACTIVATION_REHEARSAL control action and service-level rehearsal helpers. V1 remains authoritative and Production V2 remains disabled. On PASS, immediately run APF3260-M real service-level V2 activation/rollback rehearsal."
 }
