@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 from app.capture_v2.gate.models import GateVerdict
 from app.capture_v2.gate.r7_rollback import (
     R7RollbackRehearsalGate,
+    RollbackActivationMode,
     RollbackEvidenceKind,
     RollbackObservation,
     RollbackPhase,
@@ -21,14 +22,24 @@ def _obs(
     enabled: bool,
     v1_healthy: bool,
     v2_count: int,
+    mode: RollbackActivationMode | None = None,
     kind: RollbackEvidenceKind = RollbackEvidenceKind.REAL_DUT,
     ref: str | None = None,
 ) -> RollbackObservation:
+    if mode is None:
+        mode = (
+            RollbackActivationMode.V1
+            if engine == "V1"
+            else RollbackActivationMode.PRODUCTION
+            if enabled
+            else RollbackActivationMode.ACTIVATION_REHEARSAL
+        )
     return RollbackObservation(
         phase=phase,
         observed_at=BASE + timedelta(seconds=seconds),
         capture_engine_version=engine,
         capture_v2_production_enabled=enabled,
+        activation_mode=mode,
         v1_healthy=v1_healthy,
         v2_producer_count=v2_count,
         evidence_kind=kind,
@@ -39,7 +50,11 @@ def _obs(
 def _valid_real_rehearsal():
     return (
         _obs(RollbackPhase.PRE_V1, 0, engine="V1", enabled=False, v1_healthy=True, v2_count=0),
-        _obs(RollbackPhase.V2_ACTIVE, 10, engine="V2", enabled=True, v1_healthy=True, v2_count=1),
+        _obs(
+            RollbackPhase.V2_ACTIVE, 10,
+            engine="V2", enabled=False, v1_healthy=True, v2_count=1,
+            mode=RollbackActivationMode.ACTIVATION_REHEARSAL,
+        ),
         _obs(RollbackPhase.ROLLED_BACK_V1, 20, engine="V1", enabled=False, v1_healthy=True, v2_count=0),
     )
 
@@ -64,7 +79,8 @@ def test_simulated_rehearsal_can_never_pass_release_gate():
         RollbackPhase.V2_ACTIVE,
         10,
         engine="V2",
-        enabled=True,
+        enabled=False,
+        mode=RollbackActivationMode.ACTIVATION_REHEARSAL,
         v1_healthy=True,
         v2_count=1,
         kind=RollbackEvidenceKind.SIMULATED,
@@ -76,7 +92,11 @@ def test_simulated_rehearsal_can_never_pass_release_gate():
 
 def test_nonchronological_evidence_is_inconclusive():
     pre, _, rolled = _valid_real_rehearsal()
-    v2 = _obs(RollbackPhase.V2_ACTIVE, 30, engine="V2", enabled=True, v1_healthy=True, v2_count=1)
+    v2 = _obs(
+        RollbackPhase.V2_ACTIVE, 30,
+        engine="V2", enabled=False, v1_healthy=True, v2_count=1,
+        mode=RollbackActivationMode.ACTIVATION_REHEARSAL,
+    )
     result = R7RollbackRehearsalGate.evaluate((pre, v2, rolled))
     assert result.verdict == GateVerdict.INCONCLUSIVE
     assert result.facts["reason"] == "ROLLBACK_EVIDENCE_TIME_ORDER_INVALID"
@@ -84,7 +104,11 @@ def test_nonchronological_evidence_is_inconclusive():
 
 def test_reused_evidence_ref_is_inconclusive():
     pre = _obs(RollbackPhase.PRE_V1, 0, engine="V1", enabled=False, v1_healthy=True, v2_count=0, ref="same")
-    v2 = _obs(RollbackPhase.V2_ACTIVE, 10, engine="V2", enabled=True, v1_healthy=True, v2_count=1, ref="same")
+    v2 = _obs(
+        RollbackPhase.V2_ACTIVE, 10,
+        engine="V2", enabled=False, v1_healthy=True, v2_count=1,
+        mode=RollbackActivationMode.ACTIVATION_REHEARSAL, ref="same",
+    )
     rolled = _obs(RollbackPhase.ROLLED_BACK_V1, 20, engine="V1", enabled=False, v1_healthy=True, v2_count=0)
     result = R7RollbackRehearsalGate.evaluate((pre, v2, rolled))
     assert result.verdict == GateVerdict.INCONCLUSIVE
@@ -121,12 +145,36 @@ def test_real_observation_with_v2_producer_left_after_rollback_fails():
     assert "rollback_no_v2_producer" in result.facts["failed_checks"]
 
 
-def test_structurally_valid_real_dut_fixture_exercises_validator_pass_path_only():
-    # Unit-test coverage only. This fixture is not evidence that a real
-    # rollback rehearsal occurred and must never be used as a release artifact.
+def test_explicit_real_dut_activation_rehearsal_passes_pre_cutover_gate():
     result = R7RollbackRehearsalGate.evaluate(_valid_real_rehearsal())
     assert result.verdict == GateVerdict.PASS
     assert result.facts["reason"] == "ROLLBACK_REHEARSAL_PROVEN"
+    assert result.facts["v2_activation_mode"] == "ACTIVATION_REHEARSAL"
+    assert result.facts["release_gate_scope"] == "PRE_CUTOVER_ACTIVATION_REHEARSAL"
+
+
+def test_explicit_production_v2_observation_is_still_valid_if_available():
+    pre, _, rolled = _valid_real_rehearsal()
+    v2 = _obs(
+        RollbackPhase.V2_ACTIVE, 10,
+        engine="V2", enabled=True, v1_healthy=True, v2_count=1,
+        mode=RollbackActivationMode.PRODUCTION,
+    )
+    result = R7RollbackRehearsalGate.evaluate((pre, v2, rolled))
+    assert result.verdict == GateVerdict.PASS
+    assert result.facts["release_gate_scope"] == "PRODUCTION_ROLLBACK_OBSERVATION"
+
+
+def test_ambiguous_v2_without_explicit_rehearsal_mode_fails():
+    pre, _, rolled = _valid_real_rehearsal()
+    v2 = _obs(
+        RollbackPhase.V2_ACTIVE, 10,
+        engine="V2", enabled=False, v1_healthy=True, v2_count=1,
+        mode=RollbackActivationMode.V1,
+    )
+    result = R7RollbackRehearsalGate.evaluate((pre, v2, rolled))
+    assert result.verdict == GateVerdict.FAIL
+    assert "v2_phase_observed" in result.facts["failed_checks"]
 
 
 def test_dict_schema_requires_timezone():
@@ -135,6 +183,7 @@ def test_dict_schema_requires_timezone():
         "observed_at": "2026-08-22T10:00:00",
         "capture_engine_version": "V1",
         "capture_v2_production_enabled": False,
+        "activation_mode": "V1",
         "v1_healthy": True,
         "v2_producer_count": 0,
         "evidence_kind": "REAL_DUT",
@@ -142,6 +191,14 @@ def test_dict_schema_requires_timezone():
     },))
     assert result.verdict == GateVerdict.INCONCLUSIVE
     assert result.facts["reason"] == "ROLLBACK_OBSERVED_AT_TZ_REQUIRED"
+
+
+def test_dict_schema_requires_explicit_activation_mode():
+    raw = _artifact_from(_valid_real_rehearsal())
+    del raw["observations"][1]["activation_mode"]
+    result = R7RollbackRehearsalGate.evaluate_artifact(raw)
+    assert result.verdict == GateVerdict.INCONCLUSIVE
+    assert result.facts["reason"] == "ROLLBACK_ACTIVATION_MODE_REQUIRED"
 
 
 def test_dict_schema_rejects_string_booleans_fail_closed():
