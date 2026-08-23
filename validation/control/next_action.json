@@ -1,9 +1,9 @@
 {
   "schema_version": "capture-v2-remote-action-v1",
-  "action_id": "RC38-PRODUCTION-HANDOFF-RECOVERY-SW-001",
-  "sequence": 146,
-  "created_at": "2026-08-23T09:28:00+00:00",
-  "expires_at": "2026-08-23T21:28:00+00:00",
+  "action_id": "RC39-ACTIVATION-REHEARSAL-LATEST-HEAD-SW-001",
+  "sequence": 147,
+  "created_at": "2026-08-23T09:40:00+00:00",
+  "expires_at": "2026-08-23T21:40:00+00:00",
   "action_type": "SOFTWARE_REGRESSION",
   "parameters": {
     "timeout_seconds": 1200
@@ -14,8 +14,8 @@
     "require_v2_disabled": true,
     "allow_worker_kill": false,
     "allow_server_quarantine": false,
-    "expected_head": "702d8cd879b35fd2a62469cb0d3ba69bc64fb5db"
+    "expected_head": "f0acf52041ed303edea6983873dc4a8d2cfd166a"
   },
   "requested_by": "ChatGPT-remote-validation-controller",
-  "note": "RC38 regression for pre-WATCHING V2 producer readiness, start-to-watcher controller handoff, serialized V2 cancel/recovery cleanup, legacy recovery exclusion, and release artifact runtime mounts. V1 remains authoritative and Production V2 stays disabled."
+  "note": "RC39 freezes the latest product HEAD after activation-rehearsal evidence-model changes. V1 remains authoritative and Production V2 remains disabled. On PASS, proceed directly to deployment preflight and bounded real service-level activation rehearsal."
 }
