@@ -1,0 +1,70 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "R7-02-APF3260M-SERVICE-ACTIVATION-ROLLBACK-RC41",
+    "sequence": 151,
+    "created_at": "2026-08-23T09:56:00+00:00",
+    "expires_at": "2026-08-23T21:56:00+00:00",
+    "action_type": "ACTIVATION_REHEARSAL",
+    "parameters": {
+      "timeout_seconds": 3600,
+      "sn": "G1U060H000384",
+      "host": "10.48.8.74",
+      "port": 10002,
+      "username": "root",
+      "platform_id": "mt7981",
+      "model": "APF3260-M",
+      "profile_id": "VOIP_GENERIC_FULL_CAPTURE",
+      "observation_seconds": 20
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "81609ed1279911ddeadf0d6b9efa6763afcb454d"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "Bounded real service-level pre-cutover activation rehearsal on APF3260-M. Independent Compose project and protected temporary env overlays only. Production V2 remains false. Prove PRE_V1 -> explicit V2 ACTIVATION_REHEARSAL with exactly one real DUT producer and durable segments -> serialized cleanup -> V1 restored with zero residual V2 producer. Finally restore validation server to its original no-application-container prestate."
+  },
+  "action_sha256": "96c5479d5b1a0aaec186db10ff3b91df31a3e6bf8280326bab0bfa10e0ebeb71",
+  "runner_id": "srv:257142",
+  "state": "INCONCLUSIVE",
+  "return_code": 2,
+  "verdict": "INCONCLUSIVE",
+  "error": null,
+  "finished_at": "2026-08-23T09:55:42.905051+00:00",
+  "stdout_sha256": "956aa7b6034caa08e166732c82c78cdeca5ba0de037aaf176ff969697dec81c4",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "local_stdout": ".capture-v2-control/logs/R7-02-APF3260M-SERVICE-ACTIVATION-ROLLBACK-RC41/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/R7-02-APF3260M-SERVICE-ACTIVATION-ROLLBACK-RC41/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "475c4ce7f05617eb98e03fe8f232fbac77276a40",
+      "expected_product_head": "81609ed1279911ddeadf0d6b9efa6763afcb454d"
+    },
+    "parsed_output": {
+      "scope": "BOUNDED_SERVICE_LEVEL_ACTIVATION_REHEARSAL",
+      "production_v2_enabled": false,
+      "original_env_modified": false,
+      "project": "capture-v2-r7-rehearsal",
+      "device": {
+        "sn": "G1U060H000384",
+        "model": "APF3260-M",
+        "host": "10.48.8.74",
+        "port": 10002
+      },
+      "checks": [],
+      "verdict": "INCONCLUSIVE",
+      "reason": "SERVICE_LEVEL_REHEARSAL_EXCEPTION",
+      "failure_phase": "V1_BASELINE_BOOT",
+      "error": "RuntimeError:COMMAND_FAILED:/usr/bin/docker:beat:rc=1:unable to get image 'capture-v2-r7-rehearsal-beat': permission denied while trying to connect to the Docker daemon socket at unix:///var/run/docker.sock: Get \"http://%2Fvar%2Frun%2Fdocker.sock/v1.51/images/capture-v2-r7-rehearsal-beat/json\": dial unix /var/run/docker.sock: connect: permission denied",
+      "final_server_target_state": "PRESTATE_NO_REHEARSAL_CONTAINERS",
+      "final_authority_target": "V1"
+    }
+  }
+}
