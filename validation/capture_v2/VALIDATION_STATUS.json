@@ -1,15 +1,15 @@
 {
-  "schema_version": "capture-v2-real-gates-validation-v4",
+  "schema_version": "capture-v2-real-gates-validation-v5",
   "production_v2_enabled": false,
   "capture_engine_authority": "V1",
   "approved": false,
   "merge_ready": false,
   "latest_software_regression": {
-    "action_id": "RC34-R6-ABNORMAL-GOLDEN-FINAL-SW-001",
-    "sequence": 137,
+    "action_id": "RC55-ROLLBACK-V1-START-SW-001",
+    "sequence": 178,
     "state": "SUCCEEDED",
     "return_code": 0,
-    "expected_product_head": "3b69b1d0d0b6e01fd01ad3fd4beb635f47eb4be3"
+    "expected_product_head": "02f17a1d46cdf42e48e212b0047cb1bff79b9c3e"
   },
   "evidence_audit": {
     "R1_POSTGRESQL_LEASE_FENCING": {
@@ -98,17 +98,29 @@
       ]
     },
     "R7_SHADOW_LONGRUN_ROLLBACK": {
-      "status": "PARTIAL_EXPLICIT_AUTHORIZATION_ONLY",
+      "status": "PASS",
       "validation_state_soak": {
         "status": "PASS",
         "APF1250": "R7-00-APF1250-SOAK300-RC24:PASS",
         "APF3260-M": "R7-00-APF3260M-SOAK300-RC24:PASS"
       },
-      "remaining": [
-        "REQUIRES_EXPLICIT_ACTIVATION_AUTHORIZATION: actual V1/V2 shadow or V2_ACTIVE observation",
-        "REQUIRES_EXPLICIT_ACTIVATION_AUTHORIZATION: REAL_DUT PRE_V1 -> V2_ACTIVE -> ROLLED_BACK_V1 rehearsal",
-        "REQUIRES_EXPLICIT_ACTIVATION_AUTHORIZATION: prove V1 health restored and zero residual V2 producer after rollback"
-      ]
+      "real_service_activation_rollback": {
+        "action": "R7-02-APF3260M-SERVICE-ACTIVATION-ROLLBACK-RC55",
+        "status": "PASS",
+        "pre_v1_no_v2_producer": true,
+        "v2_path_ready": true,
+        "v2_business_state": "WATCHING",
+        "stable_v2_producer_count": 1,
+        "durable_segment": true,
+        "cleanup_verified": true,
+        "kernel_capture_drops": 0,
+        "lease_released": true,
+        "post_cleanup_v2_producer_count": 0,
+        "v1_health_restored": true,
+        "post_rollback_v2_producer_count": 0,
+        "r7_rollback_gate": "PASS"
+      },
+      "remaining": []
     }
   },
   "non_physical_unprivileged_remaining": [
@@ -119,20 +131,20 @@
       "optional <=100ms rebound calibration if this is required as a release gate",
       "another fault first-call reproduction only if lower-layer raw debug earlier than AIM/FXS is added to localize the exact failing component"
     ],
-    "explicit_activation_authorization": [
-      "V2_ACTIVE / real shadow observation",
-      "real V2 -> V1 rollback rehearsal",
-      "Production V2 enable",
-      "approved=true",
+    "production_cutover": [
+      "explicit production cutover approval",
+      "CAPTURE_ENGINE_VERSION=V2",
+      "CAPTURE_V2_PRODUCTION_ENABLED=true",
       "PR ready/merge/cutover"
     ]
   },
   "production_cutover": {
-    "status": "BLOCKED",
+    "status": "BLOCKED_PENDING_EXPLICIT_APPROVAL",
     "capture_engine_version": "V1",
     "capture_v2_production_enabled": false,
     "approved": false,
-    "pr_must_remain_draft": true
+    "pr_must_remain_draft": true,
+    "technical_gates_passed": true
   },
-  "next_required_step": "R6_REPORT_MATERIALIZATION_OR_EXPLICIT_V2_ACTIVATION_AUTHORIZATION"
+  "next_required_step": "R6_REPORT_MATERIALIZATION_OR_EXPLICIT_PRODUCTION_CUTOVER_APPROVAL"
 }
