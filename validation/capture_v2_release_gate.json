@@ -7,8 +7,15 @@
   "coverage_gate_passed": true,
   "e2e_gate_passed": true,
   "rollback_gate_passed": true,
-  "approved": false,
-  "production_cutover_approved": false,
+  "approved": true,
+  "production_cutover_approved": true,
+  "production_cutover_authorization": {
+    "authorized": true,
+    "recorded_at": "2026-08-23T15:27:00+00:00",
+    "source": "explicit_user_instruction",
+    "instruction": "进入生产切换",
+    "scope": "AUTHORIZE_PRODUCTION_CUTOVER_SEQUENCE_WITH_FAIL_CLOSED_PREFLIGHT_AND_ROLLBACK"
+  },
   "activation_rehearsal_authorization": {
     "authorized": true,
     "scope": "AUTHORIZED_TO_BEGIN_REAL_ACTIVATION_VALIDATION_AND_CUTOVER_SEQUENCE",
@@ -18,9 +25,10 @@
   },
   "production_v2_enabled": false,
   "capture_engine_version": "V1",
-  "release_decision": "TECHNICAL_GATES_PASS_PRODUCTION_CUTOVER_APPROVAL_REQUIRED",
+  "release_decision": "PRODUCTION_CUTOVER_AUTHORIZED_PREFLIGHT_PENDING",
   "evidence": {
-    "software_regression": "validation/control/results/RC55-ROLLBACK-V1-START-SW-001/result.json",
+    "software_regression": "validation/control/results/RC67-TSHARK-HOST-PIN-SW-001/result.json",
+    "final_master_integration": "validation/control/results/RC68-MASTER-FIX-CANDIDATE-INTEGRATION-005/result.json",
     "ownership_recovery": [
       "validation/control/results/R2-01B-APF1250-CONTROLLER-LOSS-ADOPT-RC17/result.json",
       "validation/control/results/R2-01B-APF3260M-CONTROLLER-LOSS-ADOPT-RC17/result.json"
@@ -43,9 +51,9 @@
     "real_service_activation_rollback": "validation/control/results/R7-02-APF3260M-SERVICE-ACTIVATION-ROLLBACK-RC55/result.json"
   },
   "blocking_reasons": [
-    "EXPLICIT_PRODUCTION_CUTOVER_APPROVAL_REQUIRED",
-    "CAPTURE_ENGINE_VERSION_REMAINS_V1",
-    "CAPTURE_V2_PRODUCTION_ENABLED_REMAINS_FALSE",
-    "PR_27_REMAINS_DRAFT"
+    "DEPLOYMENT_PREFLIGHT_PENDING",
+    "CAPTURE_ENGINE_VERSION_REMAINS_V1_UNTIL_CUTOVER_EXECUTION",
+    "CAPTURE_V2_PRODUCTION_ENABLED_REMAINS_FALSE_UNTIL_CUTOVER_EXECUTION",
+    "PR_27_READY_MERGE_PENDING"
   ]
 }
