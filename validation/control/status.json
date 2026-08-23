@@ -1,86 +1,27 @@
 {
   "schema_version": "capture-v2-remote-status-v1",
-  "action_id": "R7-02-APF3260M-SERVICE-ACTIVATION-ROLLBACK-RC50",
-  "sequence": 169,
-  "action_type": "ACTIVATION_REHEARSAL",
-  "state": "INCONCLUSIVE",
+  "action_id": "RC51-REHEARSAL-STALE-FENCE-CLEANUP-SW-001",
+  "sequence": 170,
+  "action_type": "SOFTWARE_REGRESSION",
+  "state": "SUCCEEDED",
   "runner_id": "srv:257142",
-  "action_sha256": "e4c190f465227c8639dad7386a2b48b8138bcaa74aac4181b0014b07189bb111",
-  "updated_at": "2026-08-23T11:13:41.514773+00:00",
+  "action_sha256": "3c04fc8a647fb5d42c690f4f2f0ef3796354a4eacd38db1fc003fb4281cab956",
+  "updated_at": "2026-08-23T12:11:31.934720+00:00",
   "started_at": null,
-  "finished_at": "2026-08-23T11:13:41.514773+00:00",
-  "return_code": 2,
-  "verdict": "INCONCLUSIVE",
-  "result_path": "validation/control/results/R7-02-APF3260M-SERVICE-ACTIVATION-ROLLBACK-RC50/result.json",
-  "stdout_sha256": "f1e4ebc5837f5cbe9f30041355056ab3698b2b3be3e58a41e2c11ab5cc9fd7f6",
+  "finished_at": "2026-08-23T12:11:31.934720+00:00",
+  "return_code": 0,
+  "verdict": null,
+  "result_path": "validation/control/results/RC51-REHEARSAL-STALE-FENCE-CLEANUP-SW-001/result.json",
+  "stdout_sha256": "e142fd1a64dc60ad2c0a9b4a1e5b3c515521d5d0f00031b646444f3df70efe17",
   "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "error": null,
   "detail": {
     "safety": {
       "capture_engine_version": "V1",
       "capture_v2_production_enabled": "false",
-      "git_head": "3f7b40f37d0830ff4ac57b9e535925b4ac9b28ba",
-      "expected_product_head": "fd46c7ece2e7ec89ef8bd7415a5ca9fc15821c06"
+      "git_head": "fc49cd822a9744afaac38ec6d728c95ea980981a",
+      "expected_product_head": "1216d0c304d9677a5faee617db5ba3a5de4a2147"
     },
-    "parsed_output": {
-      "scope": "BOUNDED_SERVICE_LEVEL_ACTIVATION_REHEARSAL",
-      "production_v2_enabled": false,
-      "original_env_modified": false,
-      "project": "capture-v2-r7-rehearsal",
-      "device": {
-        "sn": "G1U060H000384",
-        "model": "APF3260-M",
-        "host": "10.48.8.74",
-        "port": 10002
-      },
-      "checks": [],
-      "pre_v1": {
-        "contract": {
-          "capture_engine_version": "V1",
-          "capture_v2_production_enabled": false,
-          "contract_ok": true,
-          "expected": "V1",
-          "reproduction_platform_mode": "real"
-        },
-        "session": {
-          "business_lock_status": null,
-          "capture": null,
-          "case_id": "3cb1ffa4-5c7c-4a3e-9f13-70e0a429cf84",
-          "cleanup_status": "NOT_REQUIRED",
-          "device_id": "f26c3edb-47df-4719-a8e1-55a7be0230a8",
-          "dut": {
-            "producer_count": 0,
-            "producers": []
-          },
-          "exists": true,
-          "session_id": "6a671028-c567-4996-883e-3fe5328988be",
-          "state": "CREATED",
-          "terminal_reason": null
-        }
-      },
-      "verdict": "INCONCLUSIVE",
-      "reason": "SERVICE_LEVEL_REHEARSAL_EXCEPTION",
-      "failure_phase": "V2_REHEARSAL_ACTIVATION",
-      "error": "RuntimeError:[reproduction-worker]\nreproduction-worker-1  |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nreproduction-worker-1  |   File \"/app/app/capture_v2/production_platform.py\", line 234, in arm\nreproduction-worker-1  |     self._ensure_capture_v2(device)\nreproduction-worker-1  |   File \"/app/app/capture_v2/production_platform.py\", line 141, in _ensure_capture_v2\nreproduction-worker-1  |     self._capture_bridge.run(self._connect_capture_v2())\nreproduction-worker-1  |   File \"/app/app/reproduction/real_platform.py\", line 84, in run\nreproduction-worker-1  |     return fut.result()\nreproduction-worker-1  |            ^^^^^^^^^^^^\nreproduction-worker-1  |   File \"/usr/local/lib/python3.12/concurrent/futures/_base.py\", line 456, in result\nreproduction-worker-1  |     return self.__get_result()\nreproduction-worker-1  |            ^^^^^^^^^^^^^^^^^^^\nreproduction-worker-1  |   File \"/usr/local/lib/python3.12/concurrent/futures/_base.py\", line 401, in __get_result\nreproduction-worker-1  |     raise self._exception\nreproduction-worker-1  |   File \"/app/app/capture_v2/production_platform.py\", line 121, in _connect_capture_v2\nreproduction-worker-1  |     session = await CaptureV2CBridge(\nreproduction-worker-1  |               ^^^^^^^^^^^^^^^^^^^^^^^\nreproduction-worker-1  |   File \"/app/app/capture_v2/c_bridge.py\", line 253, in establish\nreproduction-worker-1  |     bootstrap = await ab.establish(\nreproduction-worker-1  |                 ^^^^^^^^^^^^^^^^^^^\nreproduction-worker-1  |   File \"/app/app/capture_v2/bridge.py\", line 111, in establish\nreproduction-worker-1  |     ownership = await supervisor.establish_ownership(\nreproduction-worker-1  |                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nreproduction-worker-1  |   File \"/app/app/capture_v2/supervisor.py\", line 230, in establish_ownership\nreproduction-worker-1  |     await self.mutator.publish_fence(token, boot_id=boot_id)\nreproduction-worker-1  |   File \"/app/app/capture_v2/transport/mutator.py\", line 85, in publish_fence\nreproduction-worker-1  |     await self._run_once(script, operation_id=operation_id)\nreproduction-worker-1  |   File \"/app/app/capture_v2/transport/mutator.py\", line 43, in _run_once\nreproduction-worker-1  |     raise CaptureV2Error(\"LEASE_FENCED\", details={\"operation_id\": operation_id})\nreproduction-worker-1  | app.capture_v2.errors.CaptureV2Error: LEASE_FENCED",
-      "final_server_target_state": "PRESTATE_NO_REHEARSAL_CONTAINERS",
-      "final_authority_target": "V1",
-      "diagnostics": {
-        "compose_ps": "NAME      IMAGE     COMMAND   SERVICE   CREATED   STATUS    PORTS\n",
-        "logs_tail": {
-          "backend": "",
-          "postgres": "",
-          "redis": "",
-          "minio": "",
-          "reproduction-worker": "",
-          "reproduction-control-high-worker": "",
-          "reproduction-watch-worker": "",
-          "beat": ""
-        }
-      },
-      "guarded_rehearsal": true,
-      "host_port_publishing": "DISABLED_BY_COMPOSE_OVERRIDE",
-      "backend_health_wait_seconds": 120,
-      "final_rehearsal_project_empty": true
-    }
+    "parsed_output": null
   }
 }
