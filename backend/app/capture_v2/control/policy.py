@@ -139,6 +139,53 @@ class ControlPolicy:
                 result_kind="gate-cli",
             )
 
+        if action.action_type == ControlActionType.ACTIVATION_REHEARSAL:
+            allowed = {
+                "timeout_seconds", "sn", "host", "port", "username", "platform_id",
+                "model", "profile_id", "observation_seconds",
+            }
+            unknown = set(p) - allowed
+            if unknown:
+                raise ControlPolicyError("ACTIVATION_REHEARSAL_PARAMETERS_NOT_ALLOWED:" + ",".join(sorted(unknown)))
+            self._required(p, "sn", "host", "port", "username", "platform_id", "model")
+            model = str(p.get("model"))
+            if model not in {"APF1250", "APF3260-M"}:
+                raise ControlPolicyError("ACTIVATION_REHEARSAL_MODEL_NOT_ALLOWED")
+            profile = str(p.get("profile_id") or "VOIP_GENERIC_FULL_CAPTURE")
+            if profile != "VOIP_GENERIC_FULL_CAPTURE":
+                raise ControlPolicyError("ACTIVATION_REHEARSAL_PROFILE_NOT_ALLOWED")
+            try:
+                port = int(p.get("port"))
+            except (TypeError, ValueError) as exc:
+                raise ControlPolicyError("ACTIVATION_REHEARSAL_PORT_INVALID") from exc
+            if port < 1 or port > 65535:
+                raise ControlPolicyError("ACTIVATION_REHEARSAL_PORT_INVALID")
+            observation = float(p.get("observation_seconds", 20.0))
+            if observation < 5.0 or observation > 60.0:
+                raise ControlPolicyError("ACTIVATION_REHEARSAL_OBSERVATION_OUT_OF_RANGE")
+            if timeout > 3600.0:
+                raise ControlPolicyError("ACTIVATION_REHEARSAL_TIMEOUT_OUT_OF_RANGE")
+            argv = [
+                sys.executable, "-m", "app.capture_v2.control.activation_rehearsal",
+                "--repo-root", str(self.repo_root),
+                "--action-id", action.action_id,
+                "--sn", str(p["sn"]),
+                "--host", str(p["host"]),
+                "--port", str(port),
+                "--username", str(p["username"]),
+                "--platform-id", str(p["platform_id"]),
+                "--model", model,
+                "--profile-id", profile,
+                "--observation-seconds", str(observation),
+            ]
+            return PreparedCommand(
+                argv=argv,
+                cwd=self.backend_root,
+                timeout_seconds=timeout,
+                env=env,
+                result_kind="gate-cli",
+            )
+
         base = [sys.executable, "-m", "app.capture_v2.gate_cli"]
         common_device = ["device_id", "model", "host"]
 
