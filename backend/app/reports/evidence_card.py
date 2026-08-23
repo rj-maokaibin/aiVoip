@@ -263,21 +263,100 @@ def _default_next_action(ftype: str) -> str:
     }.get(ftype, "复核该 Finding 的代表时间窗、原始 Evidence 和相邻层对照，再决定是否进入确定性 Diagnosis/A-B/Fix Verification。")
 
 
+def _legacy_v1_card(finding: dict) -> dict:
+    card = finding.get("evidence_card") or {}
+    return card if str(card.get("version") or "") == EVIDENCE_CARD_VERSION else {}
+
+
+def _legacy_rows(value: Any) -> list[dict]:
+    return [dict(item) for item in (value or []) if isinstance(item, dict)]
+
+
+def _resolve_time_display(finding: dict, call: dict | None, legacy_card: dict) -> tuple[dict, str]:
+    canonical = _time_display(finding, call)
+    legacy = dict(legacy_card.get("time") or {})
+    if not legacy:
+        return canonical, "CANONICAL_FINDING_TIME"
+    # A frozen V1 card may already contain the correctly call-anchored display
+    # time while its persisted Finding carries only relative/raw analyzer seconds.
+    # Keep the card display values, but retain current canonical semantics and
+    # boundary fields so this compatibility path cannot upgrade timing authority.
+    display_keys = (
+        "absolute_start_utc", "absolute_end_utc", "representative_utc",
+        "call_relative_start", "call_relative_end", "call_relative_representative",
+    )
+    merged = dict(canonical)
+    used = False
+    for key in display_keys:
+        if legacy.get(key) not in (None, ""):
+            merged[key] = legacy.get(key)
+            used = True
+    return merged, "LEGACY_EVIDENCE_CARD_V1" if used else "CANONICAL_FINDING_TIME"
+
+
 def build_evidence_card(finding: dict, *, call: dict | None = None) -> dict:
     ftype = str(finding.get("type") or "")
+    legacy_card = _legacy_v1_card(finding)
     refs = [_artifact_display(ref) for ref in (finding.get("artifact_refs") or [])]
     refs.sort(key=lambda ref: _artifact_priority(ftype, ref))
-    visuals = [x for x in refs if x["kind"] == "IMAGE"][:3]
-    audio = [x for x in refs if x["kind"] == "AUDIO"][:3]
-    details = [x for x in refs if x["kind"] == "DETAIL"][:6]
+
+    canonical_visuals = [x for x in refs if x["kind"] == "IMAGE"][:3]
+    canonical_audio = [x for x in refs if x["kind"] == "AUDIO"][:3]
+    canonical_details = [x for x in refs if x["kind"] == "DETAIL"][:6]
+    canonical_measurements = _measurements(finding)
+    canonical_packet_refs = _packet_refs(finding)
+    time_display, time_source = _resolve_time_display(finding, call, legacy_card)
+
+    legacy_visuals = _legacy_rows(legacy_card.get("visual_evidence"))[:3]
+    legacy_audio_evidence = dict(legacy_card.get("audio_evidence") or {})
+    legacy_audio = _legacy_rows(legacy_audio_evidence.get("clips"))[:3]
+    legacy_details = _legacy_rows(legacy_card.get("detail_artifacts"))[:6]
+    legacy_measurements = [
+        dict(item) for item in (legacy_card.get("measurements") or [])
+        if isinstance(item, dict) and item.get("label") not in (None, "") and "value" in item
+    ][:8]
+    legacy_packet_refs = _legacy_rows(legacy_card.get("packet_refs"))[:8]
+
+    visuals = canonical_visuals or legacy_visuals
+    audio = canonical_audio or legacy_audio
+    details = canonical_details or legacy_details
+    measurements = canonical_measurements or legacy_measurements
+    packet_refs = canonical_packet_refs or legacy_packet_refs
+
     audio_expected = ftype in _AUDIO_EXPECTED_FINDINGS
-    audio_status = "AVAILABLE" if audio else "UNAVAILABLE" if audio_expected else "NOT_REQUIRED"
-    audio_reason = None if audio_status == "AVAILABLE" else (
-        "NO_MATCHING_ANOMALY_AUDIO_CLIP: 当前 Finding 未关联到可安全展示的代表异常音频；不得用其他时间窗/其他 Finding 的音频替代。"
-        if audio_status == "UNAVAILABLE" else "该 Finding 类型不要求异常音频片段。"
-    )
+    if canonical_audio:
+        audio_status, audio_reason = "AVAILABLE", None
+        audio_source = "CANONICAL_ARTIFACT_REFS"
+    elif legacy_audio_evidence.get("status") == "AVAILABLE" and legacy_audio:
+        audio_status, audio_reason = "AVAILABLE", None
+        audio_source = "LEGACY_EVIDENCE_CARD_V1"
+    elif legacy_audio_evidence.get("status") == "UNAVAILABLE" and legacy_audio_evidence.get("reason"):
+        audio_status = "UNAVAILABLE"
+        audio_reason = legacy_audio_evidence.get("reason")
+        audio_source = "LEGACY_EVIDENCE_CARD_V1"
+    else:
+        audio_status = "UNAVAILABLE" if audio_expected else "NOT_REQUIRED"
+        audio_reason = (
+            "NO_MATCHING_ANOMALY_AUDIO_CLIP: 当前 Finding 未关联到可安全展示的代表异常音频；不得用其他时间窗/其他 Finding 的音频替代。"
+            if audio_status == "UNAVAILABLE" else "该 Finding 类型不要求异常音频片段。"
+        )
+        audio_source = "CANONICAL_ARTIFACT_REFS"
+
     next_action = finding.get("next_action") or _default_next_action(ftype)
     acceptance = finding.get("verification_acceptance")
+    compatibility_sources = {
+        "time": time_source,
+        "measurements": "CANONICAL_FINDING_METRICS" if canonical_measurements else ("LEGACY_EVIDENCE_CARD_V1" if legacy_measurements else "NONE"),
+        "packet_refs": "CANONICAL_FINDING_METRICS" if canonical_packet_refs else ("LEGACY_EVIDENCE_CARD_V1" if legacy_packet_refs else "NONE"),
+        "visual_evidence": "CANONICAL_ARTIFACT_REFS" if canonical_visuals else ("LEGACY_EVIDENCE_CARD_V1" if legacy_visuals else "NONE"),
+        "audio_evidence": audio_source,
+        "detail_artifacts": "CANONICAL_ARTIFACT_REFS" if canonical_details else ("LEGACY_EVIDENCE_CARD_V1" if legacy_details else "NONE"),
+    }
+    projected_artifact_ids = {
+        str(item.get("artifact_id"))
+        for item in visuals + audio + details
+        if item.get("artifact_id") not in (None, "")
+    }
     return {
         "version": EVIDENCE_CARD_VERSION,
         "actionable_extension": EVIDENCE_CARD_ACTIONABLE_EXTENSION,
@@ -285,24 +364,27 @@ def build_evidence_card(finding: dict, *, call: dict | None = None) -> dict:
         "finding_type": ftype,
         "severity": finding.get("severity"),
         "title": finding.get("title"),
-        "what_happened": finding.get("observation"),
-        "initial_interpretation": finding.get("interpretation"),
+        "what_happened": finding.get("observation") or legacy_card.get("what_happened"),
+        "initial_interpretation": finding.get("interpretation") or legacy_card.get("initial_interpretation"),
         "scope": _scope_display(finding),
-        "time": _time_display(finding, call),
-        "measurements": _measurements(finding),
-        "packet_refs": _packet_refs(finding),
+        "time": time_display,
+        "measurements": measurements,
+        "measurement_source": compatibility_sources["measurements"],
+        "packet_refs": packet_refs,
         "visual_evidence": visuals,
         "audio_evidence": {"status": audio_status, "reason": audio_reason, "clips": audio},
         "detail_artifacts": details,
-        "root_cause_boundary": finding.get("root_cause_boundary"),
+        "root_cause_boundary": finding.get("root_cause_boundary") or legacy_card.get("root_cause_boundary"),
         "next_action": next_action,
-        "verification_acceptance": acceptance,
-        "action_contract": finding.get("action_contract") or {},
+        "verification_acceptance": acceptance or legacy_card.get("verification_acceptance"),
+        "action_contract": finding.get("action_contract") or legacy_card.get("action_contract") or {},
+        "compatibility_projection_sources": compatibility_sources,
         "traceability": {
             "evidence_refs": finding.get("evidence_refs") or [],
             "event_refs": finding.get("event_refs") or [],
             "source_analyzer_run_ids": finding.get("source_analyzer_run_ids") or [],
-            "artifact_count": len(refs),
+            "artifact_count": max(len(refs), len(projected_artifact_ids)),
+            "legacy_projection_used": any(value == "LEGACY_EVIDENCE_CARD_V1" for value in compatibility_sources.values()),
         },
     }
 
@@ -327,6 +409,9 @@ def attach_evidence_cards(payload: dict) -> dict:
         "cards_with_acceptance": sum(1 for c in cards if c.get("verification_acceptance")),
         "cards_with_bound_scope": sum(1 for c in cards if (c.get("scope") or {}).get("binding_status") == "BOUND"),
         "cards_with_bound_time": sum(1 for c in cards if (c.get("time") or {}).get("absolute_start_utc") or (c.get("time") or {}).get("absolute_end_utc")),
+        "cards_using_legacy_projection": sum(
+            1 for c in cards if (c.get("traceability") or {}).get("legacy_projection_used")
+        ),
     }
     from app.reports.report_grounding import apply_report_grounding
     apply_report_grounding(payload, raise_on_blocker=True)
