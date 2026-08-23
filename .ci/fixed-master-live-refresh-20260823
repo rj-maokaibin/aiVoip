@@ -4,3 +4,4 @@ retry with real runner env loaded before full regression
 retry with isolated PostgreSQL/Redis regression environment
 fast path: focused report gates then real PCAP and original Feishu refresh
 no-fetch fast path using validated local fixed-master product snapshot
+retry corrected focused gate path
