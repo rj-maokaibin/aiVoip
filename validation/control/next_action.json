@@ -1,20 +1,12 @@
 {
   "schema_version": "capture-v2-remote-action-v1",
-  "action_id": "R7-02-APF3260M-SERVICE-ACTIVATION-ROLLBACK-RC43",
-  "sequence": 155,
-  "created_at": "2026-08-23T10:07:00+00:00",
-  "expires_at": "2026-08-23T22:07:00+00:00",
-  "action_type": "ACTIVATION_REHEARSAL",
+  "action_id": "RC44-REHEARSAL-NO-HOST-PORTS-SW-001",
+  "sequence": 156,
+  "created_at": "2026-08-23T10:10:00+00:00",
+  "expires_at": "2026-08-23T22:10:00+00:00",
+  "action_type": "SOFTWARE_REGRESSION",
   "parameters": {
-    "timeout_seconds": 3600,
-    "sn": "G1U060H000384",
-    "host": "10.48.8.74",
-    "port": 10002,
-    "username": "root",
-    "platform_id": "mt7981",
-    "model": "APF3260-M",
-    "profile_id": "VOIP_GENERIC_FULL_CAPTURE",
-    "observation_seconds": 20
+    "timeout_seconds": 1200
   },
   "safety": {
     "require_clean_git": true,
@@ -22,8 +14,8 @@
     "require_v2_disabled": true,
     "allow_worker_kill": false,
     "allow_server_quarantine": false,
-    "expected_head": "62c4618ce4a1812fe253cbb107606f960b7ac9ed"
+    "expected_head": "0047463ab84f078f330a3b308e26086aeebcc4f2"
   },
   "requested_by": "ChatGPT-remote-validation-controller",
-  "note": "Guarded bounded APF3260-M real service-level activation/rollback rehearsal. Precleans and finally removes the isolated rehearsal Compose project, uses dedicated localhost host ports, original env remains untouched, Production V2 remains false, and R7 PASS requires real-DUT PRE_V1 -> explicit ACTIVATION_REHEARSAL V2 with exactly one producer/durable segment -> serialized cleanup -> V1 business path restored with zero residual V2 producer."
+  "note": "Regression after introducing the rehearsal-only Compose override which removes Backend and MinIO host port publishing and preserves unconditional isolated-project cleanup. Production V2 remains disabled and V1 remains authoritative."
 }
