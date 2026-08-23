@@ -1,20 +1,37 @@
 {
-  "schema_version": "capture-v2-remote-status-v1",
-  "action_id": "RC56-R6-DB-TOPOLOGY-PREFLIGHT-001",
-  "sequence": 182,
-  "action_type": "DEPLOYMENT_PREFLIGHT",
-  "state": "FAILED",
-  "runner_id": "srv:257142",
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "RC56-R6-DB-TOPOLOGY-PREFLIGHT-001",
+    "sequence": 182,
+    "created_at": "2026-08-23T13:12:00+00:00",
+    "expires_at": "2026-08-23T23:12:00+00:00",
+    "action_type": "DEPLOYMENT_PREFLIGHT",
+    "parameters": {
+      "timeout_seconds": 120
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "9066dda3e050556cb5e881929f9ce64d730c4341"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "Read-only deployment preflight after R6 product materialization found the runner-local PostgreSQL endpoint stale. Discover the current Compose project/runtime authority and service presence without mutating containers, DUT, database, or production configuration."
+  },
   "action_sha256": "c467f81e50b53cd878915f868edced69b58fccbf281f0e2e3d2d6c2ad5cd2e82",
-  "updated_at": "2026-08-23T13:08:59.510229+00:00",
-  "started_at": null,
-  "finished_at": "2026-08-23T13:08:59.510229+00:00",
+  "runner_id": "srv:257142",
+  "state": "FAILED",
   "return_code": 1,
   "verdict": "FAIL",
-  "result_path": "validation/control/results/RC56-R6-DB-TOPOLOGY-PREFLIGHT-001/result.json",
+  "error": null,
+  "finished_at": "2026-08-23T13:08:59.510229+00:00",
   "stdout_sha256": "090d06577a7091009d62ba917eb2a382bf43dc1ba98980769861ff3f82d2881a",
   "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-  "error": null,
+  "local_stdout": ".capture-v2-control/logs/RC56-R6-DB-TOPOLOGY-PREFLIGHT-001/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/RC56-R6-DB-TOPOLOGY-PREFLIGHT-001/stderr.log",
   "detail": {
     "safety": {
       "capture_engine_version": "V1",
