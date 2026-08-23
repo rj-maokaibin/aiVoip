@@ -1,0 +1,74 @@
+from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
+
+from app.capture_v2 import gate_cli
+from app.capture_v2.control import r6_report_materialize
+
+
+def test_gate_cli_bounded_r6_dispatch_only_for_exact_golden(monkeypatch, tmp_path):
+    repo = tmp_path / "repo"
+    module = repo / "backend/app/capture_v2/gate_cli.py"
+    golden = repo / "validation/capture_v2/R6_APF1250_FIRST_8000_ABNORMAL_GOLDEN_RC33.json"
+    module.parent.mkdir(parents=True)
+    golden.parent.mkdir(parents=True)
+    module.write_text("# marker\n")
+    golden.write_text("{}\n")
+
+    class FakePath(Path):
+        _flavour = type(Path())._flavour
+
+    calls = []
+
+    def fake_materialize(argv):
+        calls.append(argv)
+        return 0
+
+    monkeypatch.setattr(gate_cli, "__file__", str(module))
+    monkeypatch.setattr(r6_report_materialize, "main", fake_materialize)
+
+    rc = gate_cli._bounded_r6_materialization([
+        "evaluate",
+        "--bundle", str(golden),
+        "--gate-id", "R6-PRODUCT-REPORT-MATERIALIZE-RC56",
+    ])
+    assert rc == 0
+    assert calls == [[
+        "--repo-root", str(repo),
+        "--golden-path", str(golden.resolve()),
+    ]]
+
+    calls.clear()
+    assert gate_cli._bounded_r6_materialization([
+        "evaluate", "--bundle", str(golden), "--gate-id", "R3-01"
+    ]) is None
+    assert calls == []
+
+    other = repo / "validation/capture_v2/other.json"
+    other.write_text("{}\n")
+    assert gate_cli._bounded_r6_materialization([
+        "evaluate", "--bundle", str(other),
+        "--gate-id", "R6-PRODUCT-REPORT-MATERIALIZE-RC56",
+    ]) is None
+    assert calls == []
+
+
+def test_golden_loader_rejects_wrong_finding(tmp_path):
+    path = tmp_path / "golden.json"
+    path.write_text(
+        '{"schema_version":"capture-v2-r6-abnormal-golden-v1",'
+        '"expected_panel_target":"8000","observed_dtmf_digits":"000",'
+        '"finding":{"conclusion":"OVERCLAIMED_ROOT_CAUSE"}}\n'
+    )
+    with pytest.raises(RuntimeError, match="R6_GOLDEN_FINDING_MISMATCH"):
+        r6_report_materialize._load_golden(path)
+
+
+def test_overlap_handles_single_timestamp_point():
+    from datetime import datetime, timezone
+
+    start = datetime(2026, 8, 23, 7, 5, 21, tzinfo=timezone.utc)
+    end = datetime(2026, 8, 23, 7, 5, 59, tzinfo=timezone.utc)
+    point = datetime(2026, 8, 23, 7, 5, 32, tzinfo=timezone.utc)
+    assert r6_report_materialize._overlaps(point, point, start, end) is True
