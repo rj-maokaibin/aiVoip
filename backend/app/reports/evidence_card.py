@@ -272,6 +272,36 @@ def _legacy_rows(value: Any) -> list[dict]:
     return [dict(item) for item in (value or []) if isinstance(item, dict)]
 
 
+def _legacy_visual_rows(value: Any) -> list[dict]:
+    """Migrate only explicitly captioned, report-safe V1 visuals.
+
+    Frozen V1 cards predate Renderer annotation metadata. A legacy visual can be
+    considered annotation-complete only when the frozen card already carries a
+    report-safe image type and an explicit human-readable caption. No caption or
+    unsafe/unknown type is repaired here; RG-012 must continue to block it.
+    """
+    out: list[dict] = []
+    for item in _legacy_rows(value):
+        atype = str(item.get("type") or "").upper()
+        caption = str(item.get("caption") or "").strip()
+        if atype in _IMAGE_TYPES:
+            item["type"] = atype
+        if not item.get("annotation_complete") and atype in _IMAGE_TYPES and caption:
+            contract = dict(item.get("annotation_contract") or {})
+            contract.setdefault("caption", caption)
+            contract.setdefault("source", "LEGACY_EVIDENCE_CARD_V1")
+            contract.setdefault("compatibility_contract", "legacy-v1-explicit-caption")
+            contract.setdefault(
+                "boundary",
+                "兼容迁移仅确认冻结 V1 卡片已存在的图片类型与 caption；不新增图片内容、时间或根因声明。",
+            )
+            item["annotation_contract"] = contract
+            item["annotation_complete"] = True
+            item["legacy_annotation_migrated"] = True
+        out.append(item)
+    return out
+
+
 def _resolve_time_display(finding: dict, call: dict | None, legacy_card: dict) -> tuple[dict, str]:
     canonical = _time_display(finding, call)
     legacy = dict(legacy_card.get("time") or {})
@@ -307,7 +337,7 @@ def build_evidence_card(finding: dict, *, call: dict | None = None) -> dict:
     canonical_packet_refs = _packet_refs(finding)
     time_display, time_source = _resolve_time_display(finding, call, legacy_card)
 
-    legacy_visuals = _legacy_rows(legacy_card.get("visual_evidence"))[:3]
+    legacy_visuals = _legacy_visual_rows(legacy_card.get("visual_evidence"))[:3]
     legacy_audio_evidence = dict(legacy_card.get("audio_evidence") or {})
     legacy_audio = _legacy_rows(legacy_audio_evidence.get("clips"))[:3]
     legacy_details = _legacy_rows(legacy_card.get("detail_artifacts"))[:6]
