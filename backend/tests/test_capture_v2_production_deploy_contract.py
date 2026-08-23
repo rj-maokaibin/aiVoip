@@ -33,7 +33,14 @@ def test_production_runtime_verifier_requires_real_v2_control_queues():
 
 
 def test_production_cutover_is_guarded_and_rolls_back_failures():
-    text = (ROOT / "backend/app/capture_v2/control/production_cutover_guarded.py").read_text(encoding="utf-8")
+    wrapper = (ROOT / "backend/app/capture_v2/control/production_cutover_guarded.py").read_text(encoding="utf-8")
+    base = (ROOT / "backend/app/capture_v2/control/production_cutover_guarded_base.py").read_text(encoding="utf-8")
+    text = wrapper + "\n" + base
+
+    assert "_EFFECTIVE_PRESTATE_DEFAULTS" in wrapper
+    assert '"CAPTURE_ENGINE_VERSION": "V1"' in wrapper
+    assert '"CAPTURE_V2_PRODUCTION_ENABLED": "false"' in wrapper
+    assert '"CAPTURE_V2_ACTIVATION_REHEARSAL": "false"' in wrapper
     assert '"REPRODUCTION_PLATFORM_MODE":"real"' in text
     assert '"CAPTURE_ENGINE_VERSION":"V2"' in text
     assert '"CAPTURE_V2_PRODUCTION_ENABLED":"true"' in text
