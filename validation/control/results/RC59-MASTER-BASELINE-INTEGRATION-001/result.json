@@ -1,20 +1,39 @@
 {
-  "schema_version": "capture-v2-remote-status-v1",
-  "action_id": "RC59-MASTER-BASELINE-INTEGRATION-001",
-  "sequence": 189,
-  "action_type": "GATE_EVALUATE",
-  "state": "FAILED",
-  "runner_id": "srv:257142",
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "RC59-MASTER-BASELINE-INTEGRATION-001",
+    "sequence": 189,
+    "created_at": "2026-08-23T13:48:00+00:00",
+    "expires_at": "2026-08-24T00:48:00+00:00",
+    "action_type": "GATE_EVALUATE",
+    "parameters": {
+      "timeout_seconds": 7200,
+      "bundle": "e8d108a228b151b7711bfe6048c3f39e94b57783",
+      "gate_id": "MASTER-BASELINE-INTEGRATION-RC59"
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "6ae0b8262aa8468977b4ef21e041c15c670253ba"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "Run an isolated no-commit integration acceptance against exact master e8d108a228b151b7711bfe6048c3f39e94b57783. Use a temporary detached worktree with master as the base and the current feature head as the merge input. Require merge success, Capture V2 regression, current master frozen contracts, full software release gate, and Real Offline Golden #001 142/142 when the exact TShark runtime is available. Remove the worktree afterwards. Do not modify the PR branch, create a merge commit, access the DUT, or enable Production V2."
+  },
   "action_sha256": "8e1d42f141176727020f0d97ad879db2801bc77c19ba5e766f77de7eda4c9204",
-  "updated_at": "2026-08-23T13:45:07.173609+00:00",
-  "started_at": null,
-  "finished_at": "2026-08-23T13:45:07.173609+00:00",
+  "runner_id": "srv:257142",
+  "state": "FAILED",
   "return_code": 1,
   "verdict": "FAIL",
-  "result_path": "validation/control/results/RC59-MASTER-BASELINE-INTEGRATION-001/result.json",
+  "error": null,
+  "finished_at": "2026-08-23T13:45:07.173609+00:00",
   "stdout_sha256": "63133380234e1dd4551950d6083a67c726bd8b8505f5fec8935922062d733cb3",
   "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-  "error": null,
+  "local_stdout": ".capture-v2-control/logs/RC59-MASTER-BASELINE-INTEGRATION-001/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/RC59-MASTER-BASELINE-INTEGRATION-001/stderr.log",
   "detail": {
     "safety": {
       "capture_engine_version": "V1",
