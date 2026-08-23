@@ -1,27 +1,33 @@
 {
   "schema_version": "capture-v2-remote-status-v1",
-  "action_id": "RC61-INTEGRATION-TEST-COMPAT-SW-001",
-  "sequence": 192,
-  "action_type": "SOFTWARE_REGRESSION",
-  "state": "SUCCEEDED",
+  "action_id": "RC62-MASTER-FIX-CANDIDATE-INTEGRATION-002",
+  "sequence": 193,
+  "action_type": "GATE_EVALUATE",
+  "state": "FAILED",
   "runner_id": "srv:257142",
-  "action_sha256": "aba09cb5deafd1f7bf208f6ac5eeb43c2e955712939c8638d001dd1a5f5a3130",
-  "updated_at": "2026-08-23T14:02:35.317661+00:00",
+  "action_sha256": "936a7b009c90ccc5cd02a859aa0466c3cdb209b00c94bf9c9217e33419fd9fb6",
+  "updated_at": "2026-08-23T14:03:08.560023+00:00",
   "started_at": null,
-  "finished_at": "2026-08-23T14:02:35.317661+00:00",
-  "return_code": 0,
+  "finished_at": "2026-08-23T14:03:08.560023+00:00",
+  "return_code": 2,
   "verdict": null,
-  "result_path": "validation/control/results/RC61-INTEGRATION-TEST-COMPAT-SW-001/result.json",
-  "stdout_sha256": "d1ff4d966290ea0bad854d1111ad40aa03ac4b234f57d28eb8ca765e7e2a1ee4",
+  "result_path": "validation/control/results/RC62-MASTER-FIX-CANDIDATE-INTEGRATION-002/result.json",
+  "stdout_sha256": "458bc1e113417723b0df551bdea733ab425aef0e2de72acba2b0fc3728c77632",
   "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "error": null,
   "detail": {
     "safety": {
       "capture_engine_version": "V1",
       "capture_v2_production_enabled": "false",
-      "git_head": "f76a6e77a07225b0a9eeef94a581c3ea22b9fa9e",
+      "git_head": "9a2abba2da8597e2e3e5fbd4fe8678a0a15f0a99",
       "expected_product_head": "20c87b75e7c1c19e9449f41d17fc8341627c7493"
     },
-    "parsed_output": null
+    "parsed_output": {
+      "details": {
+        "message": "[Errno 2] No such file or directory: '391486c7a70f8e36c088dcb512397044a552c78c/manifest.json'"
+      },
+      "error": "GATE_COMMAND_EXCEPTION:FileNotFoundError",
+      "ok": false
+    }
   }
 }
