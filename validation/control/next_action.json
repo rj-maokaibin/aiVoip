@@ -1,12 +1,29 @@
 {
   "schema_version": "capture-v2-remote-action-v1",
-  "action_id": "RC32-COVERAGE-ADDITIVE-ROUNDING-SW-001",
-  "sequence": 128,
-  "created_at": "2026-08-23T06:24:00+00:00",
-  "expires_at": "2026-08-23T18:24:00+00:00",
-  "action_type": "SOFTWARE_REGRESSION",
+  "action_id": "R5-01-APF3260M-LIVE-COVERAGE-RC32",
+  "sequence": 129,
+  "created_at": "2026-08-23T06:25:00+00:00",
+  "expires_at": "2026-08-23T18:25:00+00:00",
+  "action_type": "GATE_READINESS_FXS",
   "parameters": {
-    "timeout_seconds": 1800
+    "device_id": "c132f336-df1b-4285-b175-01d848f23b5d",
+    "model": "APF3260-M",
+    "host": "10.48.8.74",
+    "port": 10002,
+    "username": "root",
+    "platform_id": "mt7981",
+    "password_env": "DB:G1U060H000384",
+    "profile_root": "../profiles",
+    "profile_id": "voip-standard",
+    "object_root": "/tmp/voip-reproduction-objects",
+    "output_root": "/tmp/capture-v2-gates",
+    "repo_root": "..",
+    "reproduction_session_id": "AUTO_NEW",
+    "worker_id": "r5-01-apf3260m-live-coverage-rc32",
+    "gate_id": "R5-01-APF3260M-LIVE-COVERAGE-RC32",
+    "duration": 180,
+    "transport": "scp",
+    "timeout_seconds": 900
   },
   "safety": {
     "require_clean_git": true,
@@ -17,5 +34,5 @@
     "expected_head": "86f7d7c01bdfe613e149f2e048cc7beb9538fd97"
   },
   "requested_by": "ChatGPT-remote-validation-controller",
-  "note": "Regression after real R5 RC31 exposed a 1 ms false PARTIAL caused by per-partition millisecond rounding. Coverage duration accounting now sums interval durations at microsecond precision and rounds once, with a regression reproducing the 41641 ms fully-covered partitioned window. Production V2 remains disabled and V1 remains authoritative."
+  "note": "Fresh APF3260-M R5 rerun after RC31 proved all real evidence and exposed only a 1 ms non-additive coverage rounding defect. Require real OFFHOOK/301/ONHOOK, durable PCAP, explicit kernel_drops=0, real UDP 40000/50000 packets, and all PostgreSQL Coverage tracks/window COMPLETE. Production V2 remains disabled and V1 remains authoritative."
 }
