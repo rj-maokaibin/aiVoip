@@ -1,26 +1,26 @@
 {
   "schema_version": "capture-v2-remote-status-v1",
-  "action_id": "RC33-PCAP-WINDOW-SCOPE-SW-001",
-  "sequence": 135,
+  "action_id": "RC33-PCAP-WINDOW-SCOPE-SW-002",
+  "sequence": 136,
   "action_type": "SOFTWARE_REGRESSION",
-  "state": "FAILED",
+  "state": "SUCCEEDED",
   "runner_id": "srv:231819",
-  "action_sha256": "acaea5c7b4034a2ac2d2ac90fe82d1de7cd178df4ae3942164c725c9a77780eb",
-  "updated_at": "2026-08-23T07:13:06.862139+00:00",
+  "action_sha256": "739db6b21b4f85a7c5279259c2b61985a2d1315f52082e07152e0dfdf8043844",
+  "updated_at": "2026-08-23T07:16:48.288483+00:00",
   "started_at": null,
-  "finished_at": "2026-08-23T07:13:06.862139+00:00",
-  "return_code": 1,
+  "finished_at": "2026-08-23T07:16:48.288483+00:00",
+  "return_code": 0,
   "verdict": null,
-  "result_path": "validation/control/results/RC33-PCAP-WINDOW-SCOPE-SW-001/result.json",
-  "stdout_sha256": "6ddc941f0b1be4d1f9fa5f2a799621b416e1b5433121862c8ecca9f253bc100b",
+  "result_path": "validation/control/results/RC33-PCAP-WINDOW-SCOPE-SW-002/result.json",
+  "stdout_sha256": "e1b8ac9686179fc8229732fd601b562bb643f88994722418e45100318c37917f",
   "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "error": null,
   "detail": {
     "safety": {
       "capture_engine_version": "V1",
       "capture_v2_production_enabled": "false",
-      "git_head": "c805f2ac344f3edcabadb784441fcd8f3a4762b6",
-      "expected_product_head": "9a125cf0d32ddccdf629401d0e8587ba9433b933"
+      "git_head": "5ac3cbd238d13a04d41c025d57f2157fce330db0",
+      "expected_product_head": "56b9353ee7281a7c1de7729dfc28672e0ae64893"
     },
     "parsed_output": null
   }
