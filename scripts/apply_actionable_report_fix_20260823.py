@@ -1,0 +1,232 @@
+from pathlib import Path
+
+helper = Path('backend/app/reports/actionable_summary.py')
+helper.write_text(r'''from __future__ import annotations
+
+from datetime import datetime, timedelta, timezone
+from typing import Any
+
+LOCAL_TIMEZONE = timezone(timedelta(hours=8))
+SUPPORTED_STATES = {"SUPPORTED", "STRONGLY_SUPPORTED", "CONFIRMED"}
+
+
+def _local_iso(value: Any) -> str | None:
+    if not value:
+        return None
+    raw = str(value)
+    try:
+        dt = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(LOCAL_TIMEZONE).isoformat()
+
+
+def build_observation_window(payload: dict) -> dict:
+    call = payload.get("display_call") or payload.get("call") or {}
+    media_start = call.get("media_started_at")
+    media_end = call.get("media_ended_at")
+    call_start = call.get("started_at")
+    call_end = call.get("ended_at")
+    start = media_start or call_start
+    end = media_end or call_end
+    scope = "ACTIVE_MEDIA_WINDOW" if media_start or media_end else "CALL_WINDOW"
+    return {
+        "scope": scope,
+        "absolute_start_utc": start,
+        "absolute_end_utc": end,
+        "absolute_start_local": _local_iso(start),
+        "absolute_end_local": _local_iso(end),
+        "timezone": "UTC+08:00",
+        "exact_event_window_known": False,
+        "boundary_statement": "当前绝对时间表示可确认的媒体/Call观察边界；若Finding未给出独立的异常首末时刻，不得把该窗口伪装成异常精确发生区间。",
+    }
+
+
+def _top_supported(diagnosis: dict) -> dict:
+    hypotheses = list(diagnosis.get("hypotheses") or [])
+    supported = [x for x in hypotheses if str(x.get("status") or "").upper() in SUPPORTED_STATES]
+    supported.sort(key=lambda x: float(x.get("confidence") or 0.0), reverse=True)
+    return supported[0] if supported else (hypotheses[0] if hypotheses else {})
+
+
+def build_problem_scope(payload: dict, diagnosis: dict) -> dict:
+    top = _top_supported(diagnosis)
+    code = str(top.get("code") or "")
+    title = top.get("title") or payload.get("headline") or "当前问题范围尚未收敛"
+    fault_domain = top.get("fault_domain")
+    if code == "LOCAL_CAPTURE_PERIODIC_INTERFERENCE":
+        affected_path = "被测设备本地音频采集链路（PCM RX → 上行 RTP）"
+        statement = "当前证据已将持续周期性干扰从整个VOIP网络链路收敛到被测设备本地采集链路：异常在PCM RX阶段已经存在，并传播进入上行RTP；现有反向RTP证据不支持PBX/下行网络是该持续周期底噪的主要引入点。"
+    else:
+        affected_path = fault_domain or "当前证据绑定范围"
+        statement = f"当前最高置信诊断方向：{title}；影响范围：{affected_path}。"
+    return {
+        "hypothesis_code": code or None,
+        "headline": title,
+        "fault_domain": fault_domain,
+        "affected_path": affected_path,
+        "statement": statement,
+        "excluded_or_weakened": list(diagnosis.get("excluded") or []),
+        "unresolved": list(diagnosis.get("unknown") or []),
+    }
+
+
+def _hardware_ab_steps() -> list[str]:
+    return [
+        "基线A：保持当前可复现故障环境，固定号码、通话时长和采集Profile，采集PCAP、PCM RX、PCM TX。",
+        "B1：只改变电源/接地条件；完成后恢复A确认现象是否回归。",
+        "B2：只更换电话机/话柄/线路；完成后恢复A确认现象是否回归。",
+        "B3：只切换FXS端口；完成后恢复A确认现象是否回归。",
+        "B4：只替换同环境另一台被测设备；完成后恢复A确认现象是否回归。",
+        "每轮比较PCM RX与上行RTP中的约20ms周期自相关及150/250/350/...Hz梳状谱强度，禁止同时改变多个变量。",
+    ]
+
+
+def _jitter_steps() -> list[str]:
+    return [
+        "在被测设备侧与PBX侧或中间链路增加同一时段多点PCAP。",
+        "按SSRC、RTP sequence和payload对同一媒体包进行跨抓包点匹配。",
+        "比较同一包在各抓包点的到达时间差与HIGH_DELTA出现位置，区分发送端、交换网络或PBX侧引入。",
+    ]
+
+
+def build_next_actions(payload: dict, diagnosis: dict) -> list[dict]:
+    actions = []
+    plan = sorted(list(diagnosis.get("plan") or []), key=lambda x: int(x.get("priority") or 100))
+    for item in plan:
+        params = dict(item.get("params") or {})
+        purpose = params.get("purpose")
+        if purpose == "close_specific_hardware_root_cause":
+            steps = _hardware_ab_steps()
+            acceptance = "某单一变量改变后，PCM RX的20ms周期/奇次谐波梳状谱显著下降或消失，且上行RTP对应特征同步下降或消失；恢复基线A后两者重新出现。只有完成B→A回归闭环，才可把该变量提升为强因果证据。"
+        elif purpose in {"locate_jitter_segment", "locate_loss_segment", "locate_one_way_media_segment"}:
+            steps = _jitter_steps()
+            acceptance = "同一RTP包的跨点时间相关能够把异常增量明确夹在两个抓包点之间；若各点均无对应异常，则不得把单点HIGH_DELTA解释为网络段根因。"
+        else:
+            steps = [str(item.get("reason") or "按计划补充证据并重新运行确定性诊断。")]
+            acceptance = "补采后必须新增可复核证据，并使对应Hypothesis状态或Root Cause Boundary发生可解释变化；否则视为无进展。"
+        actions.append({
+            "action_type": item.get("action_type"),
+            "priority": item.get("priority"),
+            "risk_level": item.get("risk_level"),
+            "auto_execute": bool(item.get("auto_execute")),
+            "reason": item.get("reason"),
+            "params": params,
+            "execution_steps": steps,
+            "acceptance_criteria": acceptance,
+        })
+    if not actions:
+        recommended = ((payload.get("preliminary_assessment") or {}).get("recommended_next_action"))
+        if recommended:
+            actions.append({"action_type": "REVIEW_AND_VERIFY", "priority": 100, "risk_level": "USER", "auto_execute": False, "reason": recommended, "params": {}, "execution_steps": [recommended], "acceptance_criteria": "复核结果必须绑定到明确Evidence/Finding时间窗，并更新当前诊断边界。"})
+    return actions
+
+
+def attach_actionable_summary(payload: dict, diagnosis: dict | None = None) -> dict:
+    diagnosis = diagnosis or payload.get("diagnosis") or {}
+    if diagnosis:
+        payload["diagnosis"] = diagnosis
+    payload["problem_scope"] = build_problem_scope(payload, diagnosis)
+    payload["observation_window"] = build_observation_window(payload)
+    payload["next_actions"] = build_next_actions(payload, diagnosis)
+    assessment = payload.setdefault("preliminary_assessment", {})
+    if payload["next_actions"]:
+        assessment["recommended_next_action"] = payload["next_actions"][0]["reason"]
+        payload["verification_acceptance"] = payload["next_actions"][0]["acceptance_criteria"]
+    return payload
+''', encoding='utf-8')
+
+offline = Path('backend/app/golden/offline_analysis_e2e.py')
+text = offline.read_text(encoding='utf-8')
+needle = 'from app.reports.evidence_brief import build_report_payload\n'
+replacement = needle + 'from app.reports.actionable_summary import attach_actionable_summary\n'
+assert needle in text and 'from app.reports.actionable_summary import attach_actionable_summary' not in text
+text = text.replace(needle, replacement, 1)
+needle = '            for item in decision.hypotheses\n        ],\n    }\n'
+replacement = '            for item in decision.hypotheses\n        ],\n        "plan": [item.to_dict() for item in sorted(decision.plan, key=lambda item: item.priority)],\n    }\n'
+assert needle in text
+text = text.replace(needle, replacement, 1)
+needle = '    })\n    return {\n        "schema_version": "offline-analysis-replay-bundle-v1",\n'
+replacement = '    })\n    diagnosis = _diagnosis_dict(decision)\n    attach_actionable_summary(report, diagnosis)\n    return {\n        "schema_version": "offline-analysis-replay-bundle-v1",\n'
+assert needle in text
+text = text.replace(needle, replacement, 1)
+needle = '        "diagnosis": _diagnosis_dict(decision),\n'
+assert needle in text
+text = text.replace(needle, '        "diagnosis": diagnosis,\n', 1)
+offline.write_text(text, encoding='utf-8')
+
+feishu = Path('backend/app/integrations/feishu/evidence_document.py')
+text = feishu.read_text(encoding='utf-8')
+needle = 'from app.integrations.storage import ObjectStorage\n'
+replacement = needle + 'from app.reports.actionable_summary import attach_actionable_summary\n'
+assert needle in text and 'from app.reports.actionable_summary import attach_actionable_summary' not in text
+text = text.replace(needle, replacement, 1)
+needle = '        context=payload.get("analysis_context") or {};offline=context.get("analysis_mode")=="OFFLINE_IMPORTED"\n'
+replacement = needle + '        attach_actionable_summary(payload,payload.get("diagnosis") or {})\n'
+assert needle in text
+text = text.replace(needle, replacement, 1)
+needle = '        blocks.extend([self._text("1. 当前初步结论",4),self._text(payload.get("headline") or ""),self._text((payload.get("evidence_boundary") or {}).get("statement") or "")])\n        blocks.append(self._text("2. 当前重点问题",4))\n'
+replacement = '''        blocks.extend([self._text("1. 当前初步结论",4),self._text(payload.get("headline") or ""),self._text((payload.get("evidence_boundary") or {}).get("statement") or "")])
+        problem_scope=payload.get("problem_scope") or {};window=payload.get("observation_window") or {};next_actions=payload.get("next_actions") or []
+        blocks.append(self._text("1.1 问题范围与绝对时间",4))
+        blocks.append(self._text(f"问题范围：{problem_scope.get('statement') or 'UNKNOWN'}"))
+        blocks.append(self._text(f"已确认影响链路：{problem_scope.get('affected_path') or 'UNKNOWN'}"))
+        for item in (problem_scope.get("excluded_or_weakened") or [])[:8]:blocks.append(self._text(f"已排除/明显弱化：{item}",12))
+        for item in (problem_scope.get("unresolved") or [])[:8]:blocks.append(self._text(f"尚未确认：{item}",12))
+        blocks.append(self._text(f"观察窗口：{window.get('scope')}｜UTC {window.get('absolute_start_utc')} ～ {window.get('absolute_end_utc')}"))
+        blocks.append(self._text(f"本地绝对时间（UTC+8）：{window.get('absolute_start_local')} ～ {window.get('absolute_end_local')}"))
+        blocks.append(self._text(f"精确异常首末时刻已知：{'是' if window.get('exact_event_window_known') else '否'}｜{window.get('boundary_statement') or ''}"))
+        blocks.append(self._text("1.2 下一步建议 / 验证顺序 / 通过标准",4))
+        if next_actions:
+            for index,action in enumerate(next_actions,1):
+                blocks.append(self._text(f"P{index-1}｜{action.get('action_type')}｜priority={action.get('priority')}｜risk={action.get('risk_level')}",5))
+                blocks.append(self._text(f"目的：{action.get('reason')}"))
+                for step in (action.get("execution_steps") or [])[:10]:blocks.append(self._text(f"执行：{step}",12))
+                blocks.append(self._text(f"通过标准：{action.get('acceptance_criteria')}"))
+        else:
+            blocks.append(self._text(f"下一步建议：{(payload.get('preliminary_assessment') or {}).get('recommended_next_action') or '当前没有可执行计划。'}"))
+        blocks.append(self._text("2. 当前重点问题",4))
+'''
+assert needle in text
+text = text.replace(needle, replacement, 1)
+feishu.write_text(text, encoding='utf-8')
+
+test = Path('backend/tests/test_actionable_report_projection.py')
+test.write_text(r'''from __future__ import annotations
+import json
+from types import SimpleNamespace
+from app.integrations.feishu.evidence_document import FeishuEvidenceDocumentService
+from app.reports.actionable_summary import attach_actionable_summary
+
+
+def _payload():
+    return {"headline":"本地音频采集链路存在稳定周期性干扰并进入上行RTP","case":{"case_no":"OFFLINE-GOLDEN-001"},"analysis_context":{"analysis_mode":"OFFLINE_IMPORTED","reconstructed_call_count":2},"display_call":{"id":"CALL-001","sip_call_id":"00ad1c804c33b255@192.168.3.200","status":"TERMINATED","caller":"8000","dialed_number":"601","started_at":"2026-08-14T07:02:49.100710+00:00","ended_at":"2026-08-14T07:03:40.556065+00:00","media_started_at":"2026-08-14T07:02:52.055640+00:00","media_ended_at":"2026-08-14T07:03:40.535864+00:00"},"diagnosis":{"state":"DIAGNOSED","summary":{"headline":"本地音频采集链路存在稳定周期性干扰并进入上行RTP"},"hypotheses":[{"code":"LOCAL_CAPTURE_PERIODIC_INTERFERENCE","title":"本地音频采集链路存在稳定周期性干扰并进入上行RTP","status":"SUPPORTED","confidence":0.96,"fault_domain":"Audio/Analog"}],"known":["周期干扰已进入上行RTP"],"unknown":["具体硬件节点尚未闭环"],"excluded":["PBX/下行网络不是当前持续周期底噪的主要引入点"],"plan":[{"action_type":"REQUEST_USER_EVIDENCE","reason":"A/B区分具体硬件节点","risk_level":"USER","auto_execute":False,"params":{"purpose":"close_specific_hardware_root_cause"},"priority":40},{"action_type":"REQUEST_MULTI_POINT_PCAP","reason":"定位RTP抖动产生区间","risk_level":"USER","auto_execute":False,"params":{"purpose":"locate_jitter_segment"},"priority":65}]},"preliminary_assessment":{},"evidence_boundary":{"statement":"初步证据，不确认最终硬件根因。"},"completeness":{"state":"COMPLETE","reviewability":"FULLY_REVIEWABLE","capture":{"pcap":True,"pcm_rx":True,"pcm_tx":True}},"findings":[],"highest_severity":"HIGH","normal_and_exclusion_evidence":[]}
+
+
+def test_actionable_summary_exposes_scope_absolute_time_and_plan():
+    payload=_payload();attach_actionable_summary(payload,payload["diagnosis"])
+    assert payload["problem_scope"]["affected_path"]=="被测设备本地音频采集链路（PCM RX → 上行 RTP）"
+    w=payload["observation_window"]
+    assert w["absolute_start_utc"]=="2026-08-14T07:02:52.055640+00:00"
+    assert w["absolute_end_utc"]=="2026-08-14T07:03:40.535864+00:00"
+    assert w["absolute_start_local"].startswith("2026-08-14T15:02:52.055640+08:00")
+    assert w["absolute_end_local"].startswith("2026-08-14T15:03:40.535864+08:00")
+    assert w["exact_event_window_known"] is False
+    assert len(payload["next_actions"])==2
+    assert "恢复基线A" in " ".join(payload["next_actions"][0]["execution_steps"])
+    assert "B→A" in payload["next_actions"][0]["acceptance_criteria"]
+
+
+def test_feishu_projection_renders_actionable_sections():
+    payload=_payload();report=SimpleNamespace(version=1,status="COMPLETE",scope_type="CASE",id="report-1")
+    service=FeishuEvidenceDocumentService(transport=object(),storage=object())
+    blocks,_,_=service._core_blocks(report,payload);raw=json.dumps(blocks,ensure_ascii=False)
+    assert "1.1 问题范围与绝对时间" in raw
+    assert "本地绝对时间（UTC+8）" in raw
+    assert "2026-08-14T15:02:52.055640+08:00" in raw
+    assert "1.2 下一步建议 / 验证顺序 / 通过标准" in raw
+    assert "A/B区分具体硬件节点" in raw
+    assert "通过标准" in raw
+''', encoding='utf-8')
