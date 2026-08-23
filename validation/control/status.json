@@ -1,26 +1,26 @@
 {
   "schema_version": "capture-v2-remote-status-v1",
-  "action_id": "RC36-AUTHORIZED-FAIL-CLOSED-CHECKPOINT-SW-001",
-  "sequence": 142,
+  "action_id": "RC37-PRODUCTION-WIRING-SW-001",
+  "sequence": 143,
   "action_type": "SOFTWARE_REGRESSION",
-  "state": "SUCCEEDED",
+  "state": "FAILED",
   "runner_id": "srv:257142",
-  "action_sha256": "518ea67c7cd843cb21201f548828e9ceae5729414695d576f4ab3dbe0cae3341",
-  "updated_at": "2026-08-23T08:14:43.732218+00:00",
+  "action_sha256": "9e0dc553e3e84b4986f4c58b8bfca0d0c56810f23e8151af685c3dbce293a453",
+  "updated_at": "2026-08-23T09:02:27.035055+00:00",
   "started_at": null,
-  "finished_at": "2026-08-23T08:14:43.732218+00:00",
-  "return_code": 0,
+  "finished_at": "2026-08-23T09:02:27.035055+00:00",
+  "return_code": 1,
   "verdict": null,
-  "result_path": "validation/control/results/RC36-AUTHORIZED-FAIL-CLOSED-CHECKPOINT-SW-001/result.json",
-  "stdout_sha256": "f14bf8ec27d601eeae5e0a46cf4d839bd2e8ed1596f2d4de4c22a34a89b0a0fe",
+  "result_path": "validation/control/results/RC37-PRODUCTION-WIRING-SW-001/result.json",
+  "stdout_sha256": "5424c2a363af959388784977c262f83576b969f3ef529adccd4f728c501833e0",
   "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "error": null,
   "detail": {
     "safety": {
       "capture_engine_version": "V1",
       "capture_v2_production_enabled": "false",
-      "git_head": "6e2ace78d44a1abf73209e1750f3773fd62bfbca",
-      "expected_product_head": "4c83ceb1f33b22af3b4fa62fa693122a9494ca84"
+      "git_head": "cf26dc29ab33cd623107c83907ec8393183a82e3",
+      "expected_product_head": "49f81b51454bcf61acf7b64a0394ba72c6a9efa3"
     },
     "parsed_output": null
   }
