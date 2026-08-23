@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 
-EVIDENCE_CARD_VERSION = "evidence-card-v1"
+EVIDENCE_CARD_VERSION = "evidence-card-v2"
 _IMAGE_TYPES = {"WAVEFORM_PNG", "SPECTRUM_PNG", "SPECTROGRAM_PNG", "RTP_TIMELINE_PNG", "SIP_CALL_FLOW_PNG"}
 _AUDIO_TYPES = {"AUDIO_CLIP", "PERIODIC_AUDIO_CLIP"}
 _AUDIO_EXPECTED_FINDINGS = {
@@ -35,12 +35,12 @@ def _epoch(value: Any) -> float | None:
 def _iso_utc(value: Any) -> str | None:
     epoch = _epoch(value)
     if epoch is None:
-        return str(value) if value is not None else None
+        return str(value) if value not in (None, "") else None
     return datetime.fromtimestamp(epoch, tz=timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
 
 def _call_start(call: dict | None) -> float | None:
-    for key in ("started_at", "media_start_time", "start_time"):
+    for key in ("started_at", "media_started_at", "media_start_time", "start_time"):
         value = _epoch((call or {}).get(key))
         if value is not None:
             return value
@@ -59,21 +59,37 @@ def _time_display(finding: dict, call: dict | None) -> dict:
     tr = finding.get("time_range") or {}
     call_start = _call_start(call)
     start, end, rep = tr.get("start"), tr.get("end"), tr.get("representative")
+    semantics = str(tr.get("semantics") or "EVENT_OR_ANALYZER_RANGE")
+    exact = bool(tr.get("exact_event_window_known")) if "exact_event_window_known" in tr else semantics not in {"OBSERVATION_BOUNDARY", "ANALYSIS_WINDOW", "UNKNOWN"}
     return {
-        "absolute_start_utc": _iso_utc(start), "absolute_end_utc": _iso_utc(end), "representative_utc": _iso_utc(rep),
-        "call_relative_start": _relative(start, call_start), "call_relative_end": _relative(end, call_start),
+        "absolute_start_utc": _iso_utc(start),
+        "absolute_end_utc": _iso_utc(end),
+        "representative_utc": _iso_utc(rep),
+        "call_relative_start": _relative(start, call_start),
+        "call_relative_end": _relative(end, call_start),
         "call_relative_representative": _relative(rep, call_start),
-        "clock_boundary": "Absolute time is rendered in UTC; T+ is relative to the reconstructed/runtime Call start when available.",
+        "semantics": semantics,
+        "exact_event_window_known": exact,
+        "boundary_statement": tr.get("boundary_statement") or (
+            "该时间范围是可确认的观察/分析边界，不等于异常精确首末时刻。"
+            if not exact else "该时间范围来自当前 Finding 的事件/Analyzer 时间字段。"
+        ),
+        "clock_boundary": "Absolute time is rendered in UTC; T+ is relative to reconstructed/runtime Call start when available.",
     }
 
 
 def _scope_display(finding: dict) -> dict:
     scope = finding.get("scope") or {}
     return {
+        "binding_status": finding.get("scope_binding_status") or ("BOUND" if scope else "UNKNOWN"),
         "layer": scope.get("layer") or scope.get("pcm_tap") or "UNKNOWN",
-        "call_id": scope.get("call_id"), "rtp_stream_id": scope.get("rtp_stream_id"),
+        "call_id": scope.get("call_id"),
+        "rtp_stream_id": scope.get("rtp_stream_id"),
         "direction": scope.get("direction") or scope.get("rtp_direction") or scope.get("pcm_direction"),
-        "pcm_tap": scope.get("pcm_tap"), "ssrc": scope.get("ssrc"), "call_direction_role": scope.get("call_direction_role"),
+        "pcm_tap": scope.get("pcm_tap"),
+        "ssrc": scope.get("ssrc"),
+        "call_direction_role": scope.get("call_direction_role"),
+        "path_role": scope.get("path_role") or scope.get("stream_role"),
     }
 
 
@@ -104,10 +120,10 @@ def _measurements(finding: dict) -> list[dict]:
     elif ftype in {"LOCAL_CAPTURE_PERIODIC_INTERFERENCE", "PERIODIC_INTERFERENCE_PATH_COMPARISON"} and metrics.get("pcm_rx"):
         pcm_rx, upstream, downstream = metrics.get("pcm_rx") or {}, metrics.get("upstream_rtp") or {}, metrics.get("downstream_rtp") or {}
         strength = metrics.get("strength") or {}
-        _add_measurement(out, "PCM_RX 周期等级", pcm_rx.get("level"))
-        _add_measurement(out, "PCM_RX 20ms 自相关", _periodic_ac20(pcm_rx))
-        _add_measurement(out, "PCM_RX 频梳命中", _periodic_comb_hits(pcm_rx), "peaks")
-        _add_measurement(out, "PCM_RX 周期强度", strength.get("pcm_rx"))
+        _add_measurement(out, "PCM RX 周期等级", pcm_rx.get("level"))
+        _add_measurement(out, "PCM RX 20ms 自相关", _periodic_ac20(pcm_rx))
+        _add_measurement(out, "PCM RX 频梳命中", _periodic_comb_hits(pcm_rx), "peaks")
+        _add_measurement(out, "PCM RX 周期强度", strength.get("pcm_rx"))
         _add_measurement(out, "上行 RTP 周期强度", strength.get("upstream_rtp"))
         _add_measurement(out, "反向 RTP 周期强度", strength.get("downstream_rtp"))
         _add_measurement(out, "上行 RTP 20ms 自相关", _periodic_ac20(upstream))
@@ -155,21 +171,29 @@ def _packet_refs(finding: dict) -> list[dict]:
                 continue
             if any(event.get(k) is not None for k in ("previous_frame_number", "current_frame_number", "previous_sequence", "current_sequence")):
                 refs.append({
-                    "event": index, "time": event.get("time"), "previous_frame": event.get("previous_frame_number"),
-                    "current_frame": event.get("current_frame_number"), "previous_seq": event.get("previous_sequence"),
-                    "current_seq": event.get("current_sequence"), "delta_ms": event.get("delta_ms"), "classification": event.get("classification"),
+                    "event": index,
+                    "time": event.get("time"),
+                    "previous_frame": event.get("previous_frame_number"),
+                    "current_frame": event.get("current_frame_number"),
+                    "previous_seq": event.get("previous_sequence"),
+                    "current_seq": event.get("current_sequence"),
+                    "delta_ms": event.get("delta_ms"),
+                    "classification": event.get("classification"),
                 })
     if not refs and any(metrics.get(k) is not None for k in ("previous_frame_number", "current_frame_number", "previous_sequence", "current_sequence")):
         refs.append({
-            "event": 1, "previous_frame": metrics.get("previous_frame_number"), "current_frame": metrics.get("current_frame_number"),
-            "previous_seq": metrics.get("previous_sequence"), "current_seq": metrics.get("current_sequence"),
-            "delta_ms": metrics.get("delta_ms"), "classification": metrics.get("classification"),
+            "event": 1,
+            "previous_frame": metrics.get("previous_frame_number"),
+            "current_frame": metrics.get("current_frame_number"),
+            "previous_seq": metrics.get("previous_sequence"),
+            "current_seq": metrics.get("current_sequence"),
+            "delta_ms": metrics.get("delta_ms"),
+            "classification": metrics.get("classification"),
         })
     return refs
 
 
 def _artifact_kind(ref: dict) -> str:
-    """Classify only explicit report-safe Artifact types; MIME is not an authority boundary."""
     atype = str(ref.get("type") or "").upper()
     if atype in _IMAGE_TYPES:
         return "IMAGE"
@@ -188,14 +212,11 @@ def _artifact_priority(ftype: str, ref: dict) -> tuple[int, str]:
         "PERIODIC_LOW_FREQUENCY_INTERFERENCE": ["SPECTRUM_PNG", "SPECTROGRAM_PNG", "WAVEFORM_PNG", "PERIODIC_AUDIO_CLIP"],
         "UNEXPECTED_SILENCE": ["WAVEFORM_PNG", "SPECTROGRAM_PNG", "AUDIO_CLIP"],
         "CLICK_POP": ["WAVEFORM_PNG", "SPECTROGRAM_PNG", "AUDIO_CLIP"],
-        "SIP_CALL_FAILED": ["SIP_CALL_FLOW_PNG"], "CODEC_NEGOTIATION_MISMATCH": ["SIP_CALL_FLOW_PNG", "RTP_TIMELINE_PNG"],
+        "SIP_CALL_FAILED": ["SIP_CALL_FLOW_PNG"],
+        "CODEC_NEGOTIATION_MISMATCH": ["SIP_CALL_FLOW_PNG", "RTP_TIMELINE_PNG"],
     }
     order = preferred.get(ftype, ["WAVEFORM_PNG", "SPECTRUM_PNG", "SPECTROGRAM_PNG", "RTP_TIMELINE_PNG", "SIP_CALL_FLOW_PNG", "AUDIO_CLIP", "PERIODIC_AUDIO_CLIP"])
-    try:
-        rank = order.index(atype)
-    except ValueError:
-        rank = 50
-    return rank, str(ref.get("filename") or "")
+    return (order.index(atype) if atype in order else 50, str(ref.get("filename") or ""))
 
 
 def _artifact_display(ref: dict) -> dict:
@@ -206,24 +227,29 @@ def _artifact_display(ref: dict) -> dict:
     source = meta.get("source")
     source_direction = source.get("direction") if isinstance(source, dict) else None
     return {
-        "artifact_id": artifact_id, "type": ref.get("type"), "filename": ref.get("filename"),
-        "content_type": ref.get("content_type"), "role": ref.get("role"), "kind": kind,
+        "artifact_id": artifact_id,
+        "type": ref.get("type"),
+        "filename": ref.get("filename"),
+        "content_type": ref.get("content_type"),
+        "role": ref.get("role"),
+        "kind": kind,
         "content_url": f"/api/v1/artifacts/{artifact_id}/content" if artifact_id and kind in {"IMAGE", "AUDIO"} else None,
         "caption": annotation.get("caption") or annotation.get("title") or ref.get("filename"),
         "source": source if source is not None else {},
         "time_window": meta.get("time_window") or meta.get("anomaly_window") or {},
         "direction": meta.get("direction") or source_direction,
-        "annotation_complete": bool(meta.get("annotation_complete")), "annotation_contract": annotation,
+        "annotation_complete": bool(meta.get("annotation_complete")),
+        "annotation_contract": annotation,
     }
 
 
-def _next_action(ftype: str) -> str:
+def _default_next_action(ftype: str) -> str:
     return {
         "HIGH_DELTA": "对齐同时间 PCM RX/TX Gap、反向 RTP 和 DUT 运行日志；只有跨层同步证据才能继续收窄发送端/网络/抓包观察点边界。",
         "PACKET_LOSS": "下钻丢包边界 Frame/Seq，并对照对端或另一观察点抓包，区分发送端未发、链路丢失和接收侧未捕获。",
         "BURST_LOSS": "复核突发丢包前后 RTP Timeline、网络队列/接口计数和对端抓包，确认丢失发生在哪个观察边界。",
-        "LOCAL_CAPTURE_PERIODIC_INTERFERENCE": "使用异常 Clip 与 Spectrum/Spectrogram 做 A/B：话柄、FXS/SLIC、供电/接地逐项替换；比较 PCM_RX 与 RTP_UP 特征是否同步消失。",
-        "PERIODIC_LOW_FREQUENCY_INTERFERENCE": "选择低能量代表窗复核频谱与音频；如需确认物理来源，执行话柄/线路/FXS-SLIC/供电接地 A/B。",
+        "LOCAL_CAPTURE_PERIODIC_INTERFERENCE": "执行单变量 A-B-A：电源/接地、话柄/线路、FXS端口、另一台被测设备逐项替换，并比较 PCM RX 与上行 RTP 周期特征。",
+        "PERIODIC_LOW_FREQUENCY_INTERFERENCE": "选择代表窗口复核频谱与音频；如需确认物理来源，执行话柄/线路/FXS-SLIC/供电接地 A-B-A。",
         "UNEXPECTED_SILENCE": "试听异常窗并同时对照对应方向 RTP 与 PCM；只有上游有能量而下游静音时才继续收窄静音引入层。",
         "CLICK_POP": "先试听 Clip，并确认异常窗不与 DTMF/拨号音/媒体边界重叠；再用相邻层波形判断瞬态首次出现位置。",
         "ECHO_PATH_DETECTED": "复核参考/观测 Tap 的相关峰和时延，并用端点静音或受控单向语音验证回声路径。",
@@ -242,18 +268,34 @@ def build_evidence_card(finding: dict, *, call: dict | None = None) -> dict:
     audio_status = "AVAILABLE" if audio else "UNAVAILABLE" if audio_expected else "NOT_REQUIRED"
     audio_reason = None if audio_status == "AVAILABLE" else (
         "NO_MATCHING_ANOMALY_AUDIO_CLIP: 当前 Finding 未关联到可安全展示的代表异常音频；不得用其他时间窗/其他 Finding 的音频替代。"
-        if audio_status == "UNAVAILABLE" else "This Finding type does not require an anomaly audio clip."
+        if audio_status == "UNAVAILABLE" else "该 Finding 类型不要求异常音频片段。"
     )
+    next_action = finding.get("next_action") or _default_next_action(ftype)
+    acceptance = finding.get("verification_acceptance")
     return {
-        "version": EVIDENCE_CARD_VERSION, "finding_id": finding.get("finding_id"), "finding_type": ftype,
-        "severity": finding.get("severity"), "title": finding.get("title"), "what_happened": finding.get("observation"),
-        "initial_interpretation": finding.get("interpretation"), "scope": _scope_display(finding), "time": _time_display(finding, call),
-        "measurements": _measurements(finding), "packet_refs": _packet_refs(finding), "visual_evidence": visuals,
-        "audio_evidence": {"status": audio_status, "reason": audio_reason, "clips": audio}, "detail_artifacts": details,
-        "root_cause_boundary": finding.get("root_cause_boundary"), "next_action": _next_action(ftype),
+        "version": EVIDENCE_CARD_VERSION,
+        "finding_id": finding.get("finding_id") or finding.get("stable_key"),
+        "finding_type": ftype,
+        "severity": finding.get("severity"),
+        "title": finding.get("title"),
+        "what_happened": finding.get("observation"),
+        "initial_interpretation": finding.get("interpretation"),
+        "scope": _scope_display(finding),
+        "time": _time_display(finding, call),
+        "measurements": _measurements(finding),
+        "packet_refs": _packet_refs(finding),
+        "visual_evidence": visuals,
+        "audio_evidence": {"status": audio_status, "reason": audio_reason, "clips": audio},
+        "detail_artifacts": details,
+        "root_cause_boundary": finding.get("root_cause_boundary"),
+        "next_action": next_action,
+        "verification_acceptance": acceptance,
+        "action_contract": finding.get("action_contract") or {},
         "traceability": {
-            "evidence_refs": finding.get("evidence_refs") or [], "event_refs": finding.get("event_refs") or [],
-            "source_analyzer_run_ids": finding.get("source_analyzer_run_ids") or [], "artifact_count": len(refs),
+            "evidence_refs": finding.get("evidence_refs") or [],
+            "event_refs": finding.get("event_refs") or [],
+            "source_analyzer_run_ids": finding.get("source_analyzer_run_ids") or [],
+            "artifact_count": len(refs),
         },
     }
 
@@ -267,16 +309,17 @@ def attach_evidence_cards(payload: dict) -> dict:
         cards.append(card)
     payload["evidence_cards"] = cards
     payload["evidence_card_summary"] = {
-        "version": EVIDENCE_CARD_VERSION, "finding_count": len(cards),
+        "version": EVIDENCE_CARD_VERSION,
+        "finding_count": len(cards),
         "audio_expected_count": sum(1 for c in cards if c["audio_evidence"]["status"] != "NOT_REQUIRED"),
         "audio_available_count": sum(1 for c in cards if c["audio_evidence"]["status"] == "AVAILABLE"),
         "audio_unavailable_count": sum(1 for c in cards if c["audio_evidence"]["status"] == "UNAVAILABLE"),
         "cards_with_visuals": sum(1 for c in cards if c["visual_evidence"]),
         "cards_with_packet_refs": sum(1 for c in cards if c["packet_refs"]),
+        "cards_with_acceptance": sum(1 for c in cards if c.get("verification_acceptance")),
+        "cards_with_bound_scope": sum(1 for c in cards if (c.get("scope") or {}).get("binding_status") == "BOUND"),
+        "cards_with_bound_time": sum(1 for c in cards if (c.get("time") or {}).get("absolute_start_utc") or (c.get("time") or {}).get("absolute_end_utc")),
     }
-    # PR6 runtime hard gate: render_report_html() always passes through this
-    # function after Artifact refs are attached. BLOCKER-level contradictions
-    # therefore stop HTML/JSON publication rather than only failing CI later.
     from app.reports.report_grounding import apply_report_grounding
     apply_report_grounding(payload, raise_on_blocker=True)
     return payload
