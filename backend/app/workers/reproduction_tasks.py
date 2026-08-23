@@ -1,23 +1,37 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime, timezone
 
 from sqlalchemy import select
 
 from app.collectors.asyncssh_adapter import DeviceCommandError, DeviceConnectionError
+from app.capture_v2.db_models import CaptureLease, CaptureSession
 from app.capture_v2.runtime import (
     assert_selected_v2_live_capture_allowed,
     assert_v1_live_capture_allowed,
     capture_v2_enabled,
 )
+from app.contracts.enums import CleanupStatus, LockStatus, ReproductionEvent, ReproductionState
 from app.core.config import settings
-from app.db.models import ReproductionSession
+from app.db.models import DeviceDiagnosticLock, ReproductionSession
 from app.db.session import SessionLocal
 from app.reproduction.orchestrator import ReproductionOrchestrator
 from app.reproduction.recovery import RecoveryReconciler
+from app.reproduction.state_machine import LOCK_HOLDING_STATES, TERMINAL_STATES, next_state, transition_session
 from app.workers.celery_app import celery_app
 
 _DIAGNOSABLE_TERMINAL_STATES = ("COMPLETED", "PARTIAL_SUCCESS", "CANCELLED")
+
+
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _aware(value):
+    if value is not None and value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value
 
 
 @celery_app.task(name='fix_verification.schedule_reproduction', bind=True,
@@ -138,7 +152,6 @@ def ensure_fix_verification_evaluation(session_id: str) -> dict:
 
 
 def ensure_reproduction_diagnosis(session_id: str) -> dict:
-    from app.contracts.enums import CleanupStatus
     from app.db.models import DiagnosisRun
     from app.services.diagnosis import create_diagnosis_job
     from app.workers.diagnosis_tasks import run_diagnosis
@@ -211,6 +224,36 @@ def _build_orchestrator_for(
     return orch, adapter, close
 
 
+def _build_v2_cleanup_orchestrator(session: ReproductionSession):
+    """Build a cleanup-only V2 platform without requiring V2 to remain selected.
+
+    Rollback/recovery must always be able to stop a residual V2 producer, even after
+    the application authority has already been switched back to V1.  This helper is
+    only called by the dedicated cleanup task and the platform refuses to create a
+    new CaptureSession when no existing V2 session exists.
+    """
+    from app.capture_v2.production_platform import CaptureV2ProductionPlatform
+    adapter = _build_real_adapter(session)
+    worker_id = CaptureV2ProductionPlatform._worker_id(session.id)
+    platform = CaptureV2ProductionPlatform(
+        adapter=adapter,
+        reproduction_session_id=session.id,
+        worker_id=worker_id,
+    )
+    orch = ReproductionOrchestrator(
+        platform=platform,
+        pcm_cleanup_guard=platform.pcm_cleanup_guard,
+    )
+    platform.connect()
+    return orch, platform
+
+
+def _session_has_v2_capture(db, session_id: str) -> bool:
+    return db.scalar(select(CaptureSession.id).where(
+        CaptureSession.reproduction_session_id == session_id
+    )) is not None
+
+
 @celery_app.task(name='reproduction.start', bind=True, queue='reproduction-control', autoretry_for=(DeviceConnectionError, DeviceCommandError),
                  retry_backoff=True, retry_backoff_max=60, max_retries=3)
 def start_reproduction(self, session_id: str):
@@ -219,10 +262,6 @@ def start_reproduction(self, session_id: str):
     real_mode = str(settings.reproduction_platform_mode or 'mock').lower() != 'mock'
     if real_mode:
         if capture_v2_enabled():
-            # Authorize the selected V2 mode before performing any DUT arm action.
-            # The short-lived start task deliberately uses the proven legacy
-            # semantic/arm platform only; it does NOT establish V2 lease/producer
-            # ownership.  The long-lived watcher owns that lifecycle.
             assert_selected_v2_live_capture_allowed()
         else:
             assert_v1_live_capture_allowed()
@@ -230,17 +269,16 @@ def start_reproduction(self, session_id: str):
         row=db.get(ReproductionSession,session_id)
         if not row:
             return {'status':'NOT_FOUND','session_id':session_id}
-        orch, adapter, close = _build_orchestrator_for(
-            row,
-            connect=True,
-            force_legacy_platform=bool(real_mode and capture_v2_enabled()),
-        )
+        # Under V2 the real Production platform participates in ARM itself so the
+        # fenced producer + valid PCAP header are proven before WATCHING is exposed.
+        # Platform close stops only the controller renewer; the producer remains
+        # continuous for watcher adoption with no capture gap.
+        orch, adapter, close = _build_orchestrator_for(row, connect=True)
         try:
             orch.start(db,session=row,owner_worker=f'celery:{self.request.id}',actor='reproduction-worker')
             db.commit()
         finally:
             close()
-        from app.contracts.enums import ReproductionState
         if ReproductionState(row.state) in {ReproductionState.WATCHING, ReproductionState.ACTIVITY_DETECTED}:
             from app.workers.reproduction_event_tasks import watch_fxs_events
             watch_fxs_events.apply_async(args=[row.id], queue='reproduction-watch')
@@ -249,30 +287,242 @@ def start_reproduction(self, session_id: str):
                 'capture_engine':'V2' if capture_v2_enabled() else 'V1'}
 
 
-@celery_app.task(name='reproduction.cancel', queue='reproduction-control-high')
-def cancel_reproduction(session_id: str):
+@celery_app.task(
+    name='reproduction.v2_cleanup',
+    bind=True,
+    queue='reproduction-watch',
+    autoretry_for=(DeviceConnectionError, DeviceCommandError),
+    retry_backoff=True,
+    retry_backoff_max=60,
+    max_retries=3,
+)
+def cleanup_v2_reproduction(self, session_id: str, reason: str = 'V2_CLEANUP_SERIALIZED'):
+    """Adopt/finalize V2 and perform reverse cleanup on the single watch queue.
+
+    The watch worker is concurrency=1 in the production compose definition. A
+    high-priority cancel can therefore change the DB state immediately, while the
+    physical finalizer runs only after the current watcher has exited. Two OS
+    processes never operate as one logical V2 controller concurrently.
+    """
     with SessionLocal() as db:
         row=db.get(ReproductionSession,session_id)
         if not row:
             return {'status':'NOT_FOUND','session_id':session_id}
-        orch, adapter, close = _build_orchestrator_for(row, connect=True)
+        state=ReproductionState(row.state)
+        if state in TERMINAL_STATES and row.cleanup_status == CleanupStatus.CLEANUP_VERIFIED.value:
+            return {'status':'ALREADY_CLEAN','session_id':session_id,'state':state.value}
+        orch, platform = _build_v2_cleanup_orchestrator(row)
         try:
-            orch.cancel(db,session=row,actor='reproduction-worker')
+            state=ReproductionState(row.state)
+            if state in {
+                ReproductionState.CLEANUP_FAILED,
+                ReproductionState.CLEANUP_DEGRADED,
+                ReproductionState.ORPHANED,
+            }:
+                orch.retry_cleanup(db,session=row,actor='capture-v2-cleanup-worker')
+            elif state == ReproductionState.CLEANUP:
+                orch.cleanup(
+                    db,session=row,actor='capture-v2-cleanup-worker',
+                    already_cleanup_state=True,
+                )
+            elif state in TERMINAL_STATES:
+                # Terminal but unverified is an inconsistent state. Do not invent a
+                # business transition; fail closed so the operator/reconciler sees it.
+                raise RuntimeError(f'V2_TERMINAL_CLEANUP_UNVERIFIED:{state.value}')
+            else:
+                try:
+                    next_state(state, ReproductionEvent.CLEANUP_STARTED)
+                except Exception as exc:
+                    raise RuntimeError(f'V2_CLEANUP_STATE_NOT_ALLOWED:{state.value}') from exc
+                row.terminal_reason = row.terminal_reason or reason
+                transition_session(
+                    db,row,ReproductionEvent.CLEANUP_STARTED,
+                    actor='capture-v2-cleanup-worker',reason=reason,
+                )
+                orch.cleanup(
+                    db,session=row,actor='capture-v2-cleanup-worker',
+                    already_cleanup_state=True,
+                )
             db.commit()
         finally:
-            close()
-        diag = ensure_reproduction_diagnosis(session_id)
-        return {'session_id':row.id,'state':row.state,'cleanup_status':row.cleanup_status,
-                'diagnosis':diag}
+            platform.disconnect()
+    diag=ensure_reproduction_diagnosis(session_id)
+    with SessionLocal() as db:
+        current=db.get(ReproductionSession,session_id)
+        return {
+            'status':'CLEANUP_FINISHED',
+            'session_id':session_id,
+            'state':current.state if current else 'GONE',
+            'cleanup_status':current.cleanup_status if current else None,
+            'diagnosis':diag,
+        }
+
+
+@celery_app.task(name='reproduction.cancel', queue='reproduction-control-high')
+def cancel_reproduction(session_id: str):
+    # Route any session which already owns a Capture V2 record through serialized
+    # V2 cleanup even if the global authority has since rolled back to V1.
+    with SessionLocal() as db:
+        row=db.get(ReproductionSession,session_id)
+        if not row:
+            return {'status':'NOT_FOUND','session_id':session_id}
+        use_v2 = capture_v2_enabled() or _session_has_v2_capture(db, session_id)
+        if use_v2:
+            state=ReproductionState(row.state)
+            if state in TERMINAL_STATES and row.cleanup_status == CleanupStatus.CLEANUP_VERIFIED.value:
+                return {'session_id':row.id,'state':row.state,'cleanup_status':row.cleanup_status,
+                        'status':'ALREADY_TERMINAL'}
+            if state not in {
+                ReproductionState.CLEANUP,
+                ReproductionState.CLEANUP_FAILED,
+                ReproductionState.CLEANUP_DEGRADED,
+                ReproductionState.ORPHANED,
+            }:
+                row.terminal_reason='CANCEL_REQUESTED'
+                transition_session(
+                    db,row,ReproductionEvent.CANCEL_REQUESTED,
+                    actor='reproduction-worker',reason='user_stop_requested',
+                )
+            db.commit()
+            state_value=row.state
+            cleanup_status=row.cleanup_status
+        else:
+            orch, adapter, close = _build_orchestrator_for(row, connect=True)
+            try:
+                orch.cancel(db,session=row,actor='reproduction-worker')
+                db.commit()
+            finally:
+                close()
+            diag = ensure_reproduction_diagnosis(session_id)
+            return {'session_id':row.id,'state':row.state,'cleanup_status':row.cleanup_status,
+                    'diagnosis':diag}
+
+    cleanup_v2_reproduction.apply_async(
+        args=[session_id, 'USER_CANCELLED_V2'], queue='reproduction-watch'
+    )
+    return {
+        'session_id':session_id,
+        'state':state_value,
+        'cleanup_status':cleanup_status,
+        'status':'V2_CLEANUP_QUEUED',
+    }
+
+
+def _mark_v2_recovery_needed(db, v2_session_ids: set[str]) -> tuple[list[str], list[str]]:
+    if not v2_session_ids:
+        return [], []
+    now=_utcnow()
+    recovered:set[str]=set()
+
+    # Capture lease expiry is the earliest V2 controller-loss signal. Expire the
+    # mirrored business lock too so a stale watcher cannot keep heartbeating the
+    # session after its fenced Capture authority was lost.
+    expired_capture_leases=list(db.scalars(select(CaptureLease).where(
+        CaptureLease.state == 'ACTIVE',
+        CaptureLease.expires_at <= now,
+    )))
+    for lease in expired_capture_leases:
+        capture=db.get(CaptureSession, lease.capture_session_id)
+        if capture is None or capture.reproduction_session_id not in v2_session_ids:
+            continue
+        session=db.get(ReproductionSession,capture.reproduction_session_id)
+        if session is None or ReproductionState(session.state) in TERMINAL_STATES:
+            continue
+        lock=db.scalar(select(DeviceDiagnosticLock).where(
+            DeviceDiagnosticLock.session_id == session.id,
+            DeviceDiagnosticLock.device_id == session.device_id,
+        ))
+        if lock is not None and lock.status == LockStatus.ACTIVE.value:
+            lock.status=LockStatus.EXPIRED.value
+        try:
+            next_state(ReproductionState(session.state),ReproductionEvent.LEASE_EXPIRED)
+        except Exception:
+            pass
+        else:
+            transition_session(
+                db,session,ReproductionEvent.LEASE_EXPIRED,
+                actor='capture-v2-recovery-reconciler',
+                reason='capture_v2_lease_expired',
+            )
+            session.terminal_reason='LEASE_EXPIRED'
+        recovered.add(session.id)
+
+    # Business diagnostic lock expiry/missing-lock mirror remains a second recovery
+    # backstop, matching the legacy reconciler but without executing Mock cleanup.
+    locks=list(db.scalars(select(DeviceDiagnosticLock).where(
+        DeviceDiagnosticLock.status == LockStatus.ACTIVE.value,
+        DeviceDiagnosticLock.session_id.in_(v2_session_ids),
+    )))
+    for lock in locks:
+        if (_aware(lock.lease_expires_at) or now) > now:
+            continue
+        lock.status=LockStatus.EXPIRED.value
+        session=db.get(ReproductionSession,lock.session_id)
+        if session is None or ReproductionState(session.state) in TERMINAL_STATES:
+            continue
+        try:
+            next_state(ReproductionState(session.state),ReproductionEvent.LEASE_EXPIRED)
+        except Exception:
+            continue
+        transition_session(
+            db,session,ReproductionEvent.LEASE_EXPIRED,
+            actor='capture-v2-recovery-reconciler',reason='business_lease_expired_v2',
+        )
+        session.terminal_reason='LEASE_EXPIRED'
+        recovered.add(session.id)
+
+    active_lock_ids=set(db.scalars(select(DeviceDiagnosticLock.session_id).where(
+        DeviceDiagnosticLock.status == LockStatus.ACTIVE.value,
+        DeviceDiagnosticLock.session_id.in_(v2_session_ids),
+    )))
+    candidates=list(db.scalars(select(ReproductionSession).where(
+        ReproductionSession.id.in_(v2_session_ids),
+        ReproductionSession.state.in_([s.value for s in LOCK_HOLDING_STATES]),
+        ReproductionSession.lease_expires_at.is_not(None),
+        ReproductionSession.lease_expires_at <= now,
+    )))
+    for session in candidates:
+        if session.id in recovered or session.id in active_lock_ids:
+            continue
+        try:
+            next_state(ReproductionState(session.state),ReproductionEvent.LEASE_EXPIRED)
+        except Exception:
+            continue
+        transition_session(
+            db,session,ReproductionEvent.LEASE_EXPIRED,
+            actor='capture-v2-recovery-reconciler',
+            reason='session_lease_expired_without_active_lock_v2',
+            payload={'active_lock_missing':True},
+        )
+        session.terminal_reason='LEASE_EXPIRED'
+        recovered.add(session.id)
+
+    retry_ids=set(db.scalars(select(ReproductionSession.id).where(
+        ReproductionSession.id.in_(v2_session_ids),
+        ReproductionSession.state.in_([
+            ReproductionState.CLEANUP_FAILED.value,
+            ReproductionState.CLEANUP_DEGRADED.value,
+            ReproductionState.ORPHANED.value,
+        ]),
+    )))
+    return sorted(recovered), sorted(retry_ids | recovered)
 
 
 @celery_app.task(name='reproduction.reconcile', queue='reproduction-control-high')
 def reconcile_reproduction():
     with SessionLocal() as db:
+        v2_session_ids=set(db.scalars(select(CaptureSession.reproduction_session_id)))
+        v2_recovered, v2_cleanup_ids=_mark_v2_recovery_needed(db,v2_session_ids)
         r=RecoveryReconciler()
-        recovered=r.reconcile_expired_leases(db)
-        cleanup=r.retry_failed_cleanups(db)
+        recovered=r.reconcile_expired_leases(db,exclude_session_ids=v2_session_ids)
+        cleanup=r.retry_failed_cleanups(db,exclude_session_ids=v2_session_ids)
         db.commit()
+
+    for session_id in v2_cleanup_ids:
+        cleanup_v2_reproduction.apply_async(
+            args=[session_id, 'V2_RECOVERY_RECONCILE'], queue='reproduction-watch'
+        )
+
     triggered=0; skipped=0
     with SessionLocal() as db:
         rows=list(db.scalars(select(ReproductionSession).where(
@@ -283,5 +533,11 @@ def reconcile_reproduction():
             triggered+=1
         else:
             skipped+=1
-    return {'expired_lease_recovered':recovered,'cleanup_retried':cleanup,
-            'diagnosis_triggered':triggered,'diagnosis_skipped':skipped}
+    return {
+        'expired_lease_recovered':recovered,
+        'cleanup_retried':cleanup,
+        'v2_recovery_marked':v2_recovered,
+        'v2_cleanup_queued':v2_cleanup_ids,
+        'diagnosis_triggered':triggered,
+        'diagnosis_skipped':skipped,
+    }
