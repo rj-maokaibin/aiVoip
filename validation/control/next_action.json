@@ -1,20 +1,12 @@
 {
   "schema_version": "capture-v2-remote-action-v1",
-  "action_id": "R7-02-APF3260M-SERVICE-ACTIVATION-ROLLBACK-RC49",
-  "sequence": 167,
-  "created_at": "2026-08-23T10:39:00+00:00",
-  "expires_at": "2026-08-23T22:39:00+00:00",
-  "action_type": "ACTIVATION_REHEARSAL",
+  "action_id": "RC50-V2-START-SESSION-BINDING-SW-001",
+  "sequence": 168,
+  "created_at": "2026-08-23T11:01:00+00:00",
+  "expires_at": "2026-08-23T23:01:00+00:00",
+  "action_type": "SOFTWARE_REGRESSION",
   "parameters": {
-    "timeout_seconds": 3600,
-    "sn": "G1U060H000384",
-    "host": "10.48.8.74",
-    "port": 10002,
-    "username": "root",
-    "platform_id": "mt7981",
-    "model": "APF3260-M",
-    "profile_id": "VOIP_GENERIC_FULL_CAPTURE",
-    "observation_seconds": 20
+    "timeout_seconds": 1200
   },
   "safety": {
     "require_clean_git": true,
@@ -22,8 +14,8 @@
     "require_v2_disabled": true,
     "allow_worker_kill": false,
     "allow_server_quarantine": false,
-    "expected_head": "8cc6b32177e7504738ec1a32098cdb5880ce41e8"
+    "expected_head": "fd46c7ece2e7ec89ef8bd7415a5ca9fc15821c06"
   },
   "requested_by": "ChatGPT-remote-validation-controller",
-  "note": "Guarded APF3260-M service rehearsal focused on preserving reproduction.start worker failure tail. Production V2 remains false; original env untouched; zero host ports; project cleanup is unconditional."
+  "note": "Regression after fixing CaptureV2ProductionPlatform start-time transaction visibility: defer only ACTIVE device-lock discovery when the caller lock is uncommitted, then bind the explicit reproduction session id at arm(). Watcher/recovery retain committed lock-based discovery. V1 remains authoritative; Production V2 remains disabled."
 }
