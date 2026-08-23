@@ -10,7 +10,11 @@ permissions:
 
 jobs:
   apply-fix-directly-to-master:
-    runs-on: ubuntu-latest
+    runs-on:
+      - self-hosted
+      - linux
+      - x64
+      - voip-controlled-linux
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
