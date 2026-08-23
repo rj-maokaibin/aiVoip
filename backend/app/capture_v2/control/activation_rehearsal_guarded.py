@@ -5,12 +5,43 @@ import json
 import os
 from pathlib import Path
 
-from app.capture_v2.control.activation_rehearsal import _compose, _down, run
+from app.capture_v2.control.activation_rehearsal import _compose, _down, _safe_error, run
+
+
+DIAG_SERVICES = (
+    "backend",
+    "postgres",
+    "redis",
+    "minio",
+    "reproduction-worker",
+    "reproduction-control-high-worker",
+    "reproduction-watch-worker",
+    "beat",
+)
 
 
 def _project_empty(repo_root: Path, env_file: Path) -> bool:
     cp = _compose(repo_root, env_file, ["ps", "-q"], timeout=60, check=False)
     return cp.returncode == 0 and not cp.stdout.strip()
+
+
+def _collect_diagnostics(repo_root: Path, env_file: Path) -> dict:
+    out: dict = {}
+    ps = _compose(repo_root, env_file, ["ps", "-a"], timeout=60, check=False)
+    out["compose_ps"] = _safe_error((ps.stdout or "") + "\n" + (ps.stderr or ""))
+    logs: dict[str, str] = {}
+    for service in DIAG_SERVICES:
+        cp = _compose(
+            repo_root,
+            env_file,
+            ["logs", "--no-color", "--tail", "80", service],
+            timeout=60,
+            check=False,
+        )
+        text = (cp.stdout or "") + "\n" + (cp.stderr or "")
+        logs[service] = _safe_error(text)
+    out["logs_tail"] = logs
+    return out
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -34,9 +65,6 @@ def main(argv: list[str] | None = None) -> int:
     if not original_env.is_absolute():
         original_env = repo_root / original_env
 
-    # The rehearsal never needs host-facing application ports. Compose 2.40+
-    # supports !reset, so the dedicated override removes inherited Backend/MinIO
-    # port publishing while preserving internal service-to-service ports.
     base_compose = repo_root / "docker-compose.yml"
     rehearsal_compose = repo_root / "docker-compose.capture-v2-rehearsal.yml"
     if not rehearsal_compose.is_file():
@@ -76,6 +104,11 @@ def main(argv: list[str] | None = None) -> int:
     final_error = None
     try:
         rc, payload = run(args)
+        if rc != 0:
+            try:
+                payload["diagnostics"] = _collect_diagnostics(repo_root, original_env)
+            except Exception as exc:
+                payload["diagnostics_error"] = f"{type(exc).__name__}:{_safe_error(str(exc))}"
     finally:
         try:
             _down(repo_root, original_env)
