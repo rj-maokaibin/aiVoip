@@ -8,3 +8,4 @@ retry corrected focused gate path
 canonical V2: single fact layer + finding scope/time/actions + D112 + bundle + full regression
 canonical V2 retry: actions/checkout latest master with job token
 canonical V2 retry: D112 HTML gate matches frozen section title contract
+real acceptance: Evidence Card V1 compatibility + Canonical V2 full gates + real PCAP + Feishu readback
