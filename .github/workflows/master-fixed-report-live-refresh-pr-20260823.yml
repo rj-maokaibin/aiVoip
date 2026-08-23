@@ -21,7 +21,7 @@ jobs:
       OFFLINE_PCAP_SHA256: b038aa7c9a0644581f2815f654fcdee4620860796382265b178823fccba2e3f0
       DOCUMENT_ID: SN6DdJX16oisLQxnPjzcwLwfnLb
       TARGET_OPEN_ID: ou_67bee3c2e462a7f8939093bd8e697a96
-      ACCEPTANCE_MASTER_SHA: 705ff6e5a7965473ad2941c15e601bf29fad727a
+      ACCEPTANCE_MASTER_SHA: 82f78c60161198b008c7853c569c836855b4a770
       ACCEPTANCE_EVIDENCE_CARD_BLOB: ca1d37461a786f6fb8d525515fcf5c67e9a339ee
 
     steps:
@@ -122,6 +122,7 @@ jobs:
           grep -q 'single_canonical_fact_layer' backend/app/reports/prd_spec_v1_alignment.py
           grep -q 'legacy_prepend_revision_allowed' backend/app/reports/prd_spec_v1_alignment.py
           grep -q 'feishu-evidence-living-document-v2' backend/app/integrations/feishu/evidence_document.py
+          grep -q '4. 最新一次复现结果' backend/app/integrations/feishu/evidence_document.py
           grep -q '4. 当前离线 Call 重建结果' backend/app/integrations/feishu/evidence_document.py
           grep -q 'legacy-v1-explicit-caption' backend/app/reports/evidence_card.py
           grep -q 'DEFAULT_ACTIONABLE_FALLBACK' backend/app/reports/actionable_summary.py
