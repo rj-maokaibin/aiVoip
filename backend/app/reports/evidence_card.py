@@ -4,7 +4,11 @@ from datetime import datetime, timezone
 from typing import Any
 
 
-EVIDENCE_CARD_VERSION = "evidence-card-v2"
+# Frozen public card schema remains V1. New actionable/report-V2 semantics are
+# additive and explicitly versioned as an extension so existing consumers do not
+# break merely because a Report instance was revised to V2.
+EVIDENCE_CARD_VERSION = "evidence-card-v1"
+EVIDENCE_CARD_ACTIONABLE_EXTENSION = "evidence-card-actionable-extension-v2"
 _IMAGE_TYPES = {"WAVEFORM_PNG", "SPECTRUM_PNG", "SPECTROGRAM_PNG", "RTP_TIMELINE_PNG", "SIP_CALL_FLOW_PNG"}
 _AUDIO_TYPES = {"AUDIO_CLIP", "PERIODIC_AUDIO_CLIP"}
 _AUDIO_EXPECTED_FINDINGS = {
@@ -274,6 +278,7 @@ def build_evidence_card(finding: dict, *, call: dict | None = None) -> dict:
     acceptance = finding.get("verification_acceptance")
     return {
         "version": EVIDENCE_CARD_VERSION,
+        "actionable_extension": EVIDENCE_CARD_ACTIONABLE_EXTENSION,
         "finding_id": finding.get("finding_id") or finding.get("stable_key"),
         "finding_type": ftype,
         "severity": finding.get("severity"),
@@ -310,6 +315,7 @@ def attach_evidence_cards(payload: dict) -> dict:
     payload["evidence_cards"] = cards
     payload["evidence_card_summary"] = {
         "version": EVIDENCE_CARD_VERSION,
+        "actionable_extension": EVIDENCE_CARD_ACTIONABLE_EXTENSION,
         "finding_count": len(cards),
         "audio_expected_count": sum(1 for c in cards if c["audio_evidence"]["status"] != "NOT_REQUIRED"),
         "audio_available_count": sum(1 for c in cards if c["audio_evidence"]["status"] == "AVAILABLE"),
