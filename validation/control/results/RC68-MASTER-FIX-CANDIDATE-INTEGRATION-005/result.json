@@ -1,20 +1,39 @@
 {
-  "schema_version": "capture-v2-remote-status-v1",
-  "action_id": "RC68-MASTER-FIX-CANDIDATE-INTEGRATION-005",
-  "sequence": 199,
-  "action_type": "GATE_EVALUATE",
-  "state": "SUCCEEDED",
-  "runner_id": "srv:611900",
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "RC68-MASTER-FIX-CANDIDATE-INTEGRATION-005",
+    "sequence": 199,
+    "created_at": "2026-08-23T15:01:00+00:00",
+    "expires_at": "2026-08-24T03:01:00+00:00",
+    "action_type": "GATE_EVALUATE",
+    "parameters": {
+      "timeout_seconds": 7200,
+      "bundle": "391486c7a70f8e36c088dcb512397044a552c78c",
+      "gate_id": "MASTER-FIX-CANDIDATE-INTEGRATION-RC68"
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "22656bd8a14e1815d52481dff6f26c8442057ae1"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "Final isolated full acceptance retry after RC66 proved merge/Capture/Frozen/full software gates and host validation confirmed /usr/bin/tshark is TShark 4.2.2. The gate now pins a known executable host tshark candidate while retaining the underlying exact 4.2.2 version check. Require audited-master ancestry, no-conflict detached merge simulation, Capture V2 regression, Frozen contracts, full VOIP AI software release gate, and Real Offline Golden #001 exactly 142/142. Remove temporary worktree afterwards. No branch merge, DUT access, Production V2 enable, ready-for-review, or cutover."
+  },
   "action_sha256": "b7beefa18da84969f8f0c40c0591607d3d31d4a363e7b11fde0372395f37b171",
-  "updated_at": "2026-08-23T15:05:29.969752+00:00",
-  "started_at": null,
-  "finished_at": "2026-08-23T15:05:29.969752+00:00",
+  "runner_id": "srv:611900",
+  "state": "SUCCEEDED",
   "return_code": 0,
   "verdict": "PASS",
-  "result_path": "validation/control/results/RC68-MASTER-FIX-CANDIDATE-INTEGRATION-005/result.json",
+  "error": null,
+  "finished_at": "2026-08-23T15:05:29.969752+00:00",
   "stdout_sha256": "82df60e2decb0190f9944e1849ec60fc8a9b39a64d19b18fc8e852efc7fc33b9",
   "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-  "error": null,
+  "local_stdout": ".capture-v2-control/logs/RC68-MASTER-FIX-CANDIDATE-INTEGRATION-005/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/RC68-MASTER-FIX-CANDIDATE-INTEGRATION-005/stderr.log",
   "detail": {
     "safety": {
       "capture_engine_version": "V1",
