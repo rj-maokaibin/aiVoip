@@ -18,6 +18,7 @@ for p in (BACKEND, TOOLS):
     if str(p) not in sys.path:
         sys.path.insert(0, str(p))
 
+from app.capture_v2.runtime import capture_authority_mode  # noqa: E402
 from app.core.config import settings  # noqa: E402
 from app.integrations.storage import ObjectStorage  # noqa: E402
 from app.production_config import production_config_readiness  # noqa: E402
@@ -95,7 +96,19 @@ def minio_probe() -> dict[str, Any]:
 
 
 def celery_queues() -> dict[str, Any]:
-    required = {"collector", "packet", "pcm", "media", "diagnosis", "reproduction"}
+    # Capture V2 requires three distinct serialized reproduction queues. The old
+    # verifier checked a non-existent generic "reproduction" queue and therefore
+    # could not prove that cancel/recovery/watch paths were actually deployable.
+    required = {
+        "collector",
+        "packet",
+        "pcm",
+        "media",
+        "diagnosis",
+        "reproduction-control",
+        "reproduction-control-high",
+        "reproduction-watch",
+    }
     insp = celery_app.control.inspect(timeout=8)
     pings = insp.ping() or {}
     queues = insp.active_queues() or {}
@@ -109,7 +122,7 @@ def celery_queues() -> dict[str, Any]:
     missing = sorted(required - seen)
     if missing:
         raise RuntimeError(f"required queues unavailable: {missing}; seen={sorted(seen)}")
-    return {"workers": sorted(pings), "queues": sorted(seen)}
+    return {"workers": sorted(pings), "queues": sorted(seen), "required": sorted(required)}
 
 
 def production_config() -> dict[str, Any]:
@@ -118,6 +131,28 @@ def production_config() -> dict[str, Any]:
         blockers = [x["key"] for x in payload.get("items", []) if x.get("status") != "PASS"]
         raise RuntimeError(f"production config blockers: {blockers}")
     return payload
+
+
+def reproduction_platform() -> dict[str, Any]:
+    mode = str(settings.reproduction_platform_mode or "mock").strip().lower()
+    if mode in {"", "mock", "pending"}:
+        raise RuntimeError(f"real production reproduction platform required; observed={mode}")
+    return {"mode": mode}
+
+
+def capture_authority() -> dict[str, Any]:
+    configured = str(settings.capture_engine_version or "V1").strip().upper()
+    observed = capture_authority_mode()
+    expected = "V2" if configured == "V2" else "V1"
+    if observed != expected:
+        raise RuntimeError(f"capture authority mismatch configured={configured} observed={observed}")
+    if configured == "V2" and not bool(settings.capture_v2_production_enabled):
+        raise RuntimeError("V2 selected without production enable")
+    return {
+        "configured_engine": configured,
+        "production_enabled": bool(settings.capture_v2_production_enabled),
+        "authority_mode": observed,
+    }
 
 
 def main() -> int:
@@ -130,6 +165,8 @@ def main() -> int:
         check("MINIO_READ_WRITE", minio_probe),
         check("CELERY_QUEUES", celery_queues),
         check("PRODUCTION_CONFIG", production_config),
+        check("REPRODUCTION_PLATFORM", reproduction_platform),
+        check("CAPTURE_AUTHORITY", capture_authority),
     ]
     passed = all(x["status"] == "PASS" for x in checks)
     payload = evidence_envelope(evidence_type="PRODUCTION_DEPLOYMENT_RUNTIME", payload={
