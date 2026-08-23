@@ -6,15 +6,21 @@
   "readiness_gate_passed": true,
   "coverage_gate_passed": true,
   "e2e_gate_passed": true,
-  "rollback_gate_passed": false,
-  "approved": true,
-  "approval_scope": "AUTHORIZED_TO_BEGIN_REAL_ACTIVATION_VALIDATION_AND_CUTOVER_SEQUENCE",
-  "approval_recorded_at": "2026-08-23T08:10:00+00:00",
+  "rollback_gate_passed": true,
+  "approved": false,
+  "production_cutover_approved": false,
+  "activation_rehearsal_authorization": {
+    "authorized": true,
+    "scope": "AUTHORIZED_TO_BEGIN_REAL_ACTIVATION_VALIDATION_AND_CUTOVER_SEQUENCE",
+    "recorded_at": "2026-08-23T08:10:00+00:00",
+    "consumed_by": "R7-02-APF3260M-SERVICE-ACTIVATION-ROLLBACK-RC55",
+    "result": "PASS"
+  },
   "production_v2_enabled": false,
   "capture_engine_version": "V1",
-  "release_decision": "BLOCKED_PENDING_REAL_PRODUCTION_V2_ACTIVE_ROLLBACK_AND_PRODUCTION_RUNTIME_WIRING",
+  "release_decision": "TECHNICAL_GATES_PASS_PRODUCTION_CUTOVER_APPROVAL_REQUIRED",
   "evidence": {
-    "software_regression": "validation/control/results/RC35-R7-VALIDATION-ROLLBACK-SW-001/result.json",
+    "software_regression": "validation/control/results/RC55-ROLLBACK-V1-START-SW-001/result.json",
     "ownership_recovery": [
       "validation/control/results/R2-01B-APF1250-CONTROLLER-LOSS-ADOPT-RC17/result.json",
       "validation/control/results/R2-01B-APF3260M-CONTROLLER-LOSS-ADOPT-RC17/result.json"
@@ -33,11 +39,13 @@
     "validation_scope_rollback_mechanics": [
       "validation/control/results/R7-01-APF1250-VALIDATION-ROLLBACK-REUSE-RC35/result.json",
       "validation/control/results/R7-01-APF3260M-VALIDATION-ROLLBACK-RC35/result.json"
-    ]
+    ],
+    "real_service_activation_rollback": "validation/control/results/R7-02-APF3260M-SERVICE-ACTIVATION-ROLLBACK-RC55/result.json"
   },
   "blocking_reasons": [
-    "Production reproduction.start still routes to V1 ReproductionOrchestrator and only forbids V1 when CAPTURE_ENGINE_VERSION=V2; no production V2 I/O orchestrator is wired yet.",
-    "CaptureV2DSession explicitly leaves real FXS stream wiring outside the class.",
-    "Actual production PRE_V1 -> V2_ACTIVE -> ROLLED_BACK_V1 evidence is not yet available and must not be inferred from validation-scope rollback mechanics."
+    "EXPLICIT_PRODUCTION_CUTOVER_APPROVAL_REQUIRED",
+    "CAPTURE_ENGINE_VERSION_REMAINS_V1",
+    "CAPTURE_V2_PRODUCTION_ENABLED_REMAINS_FALSE",
+    "PR_27_REMAINS_DRAFT"
   ]
 }
