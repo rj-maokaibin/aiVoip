@@ -1,12 +1,20 @@
 {
   "schema_version": "capture-v2-remote-action-v1",
-  "action_id": "RC47-REHEARSAL-ASYNC-PRODUCER-PROBE-SW-001",
-  "sequence": 162,
-  "created_at": "2026-08-23T10:22:00+00:00",
-  "expires_at": "2026-08-23T22:22:00+00:00",
-  "action_type": "SOFTWARE_REGRESSION",
+  "action_id": "R7-02-APF3260M-SERVICE-ACTIVATION-ROLLBACK-RC47",
+  "sequence": 163,
+  "created_at": "2026-08-23T10:23:00+00:00",
+  "expires_at": "2026-08-23T22:23:00+00:00",
+  "action_type": "ACTIVATION_REHEARSAL",
   "parameters": {
-    "timeout_seconds": 1200
+    "timeout_seconds": 3600,
+    "sn": "G1U060H000384",
+    "host": "10.48.8.74",
+    "port": 10002,
+    "username": "root",
+    "platform_id": "mt7981",
+    "model": "APF3260-M",
+    "profile_id": "VOIP_GENERIC_FULL_CAPTURE",
+    "observation_seconds": 20
   },
   "safety": {
     "require_clean_git": true,
@@ -17,5 +25,5 @@
     "expected_head": "9d7faa8c68d6984e376be4a8e7a025c5d555e2c9"
   },
   "requested_by": "ChatGPT-remote-validation-controller",
-  "note": "Regression after removing nested asyncio.run from service-rehearsal DUT producer status probe. V1 remains authoritative and Production V2 remains disabled. On PASS, retry APF3260-M rehearsal immediately."
+  "note": "Guarded APF3260-M real service-level activation/rollback rehearsal after async producer probe fix. Fixed sudo module, zero host ports, bounded backend readiness, original env untouched, Production V2 false, sanitized diagnostics, unconditional project cleanup."
 }
