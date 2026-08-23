@@ -21,8 +21,8 @@ jobs:
       OFFLINE_PCAP_SHA256: b038aa7c9a0644581f2815f654fcdee4620860796382265b178823fccba2e3f0
       DOCUMENT_ID: SN6DdJX16oisLQxnPjzcwLwfnLb
       TARGET_OPEN_ID: ou_67bee3c2e462a7f8939093bd8e697a96
-      ACCEPTANCE_MASTER_SHA: 712212dce5387b73022b74d2d9111064c91036a0
-      ACCEPTANCE_EVIDENCE_CARD_BLOB: 95fcaa9e84f41ac28b71a03ee88470a71e0f479a
+      ACCEPTANCE_MASTER_SHA: 130fb840ddb4fcda346d4e5b3f076df01718da5f
+      ACCEPTANCE_EVIDENCE_CARD_BLOB: ca1d37461a786f6fb8d525515fcf5c67e9a339ee
 
     steps:
       - name: Pre-clean persistent self-hosted workspace
@@ -123,6 +123,8 @@ jobs:
           grep -q 'legacy_prepend_revision_allowed' backend/app/reports/prd_spec_v1_alignment.py
           grep -q 'feishu-evidence-living-document-v2' backend/app/integrations/feishu/evidence_document.py
           grep -q 'legacy-v1-explicit-caption' backend/app/reports/evidence_card.py
+          grep -q 'DEFAULT_ACTIONABLE_FALLBACK' backend/app/reports/actionable_summary.py
+          grep -q 'compatibility_projection_sources' backend/app/reports/evidence_card.py
           ! grep -q '下方旧版内容保留作为历史记录，若有冲突以本修订版为准' scripts/fixed_master_live_refresh_20260823.py
           echo "VALIDATED_ACCEPTANCE_SNAPSHOT=$FIXED_MASTER_HEAD via $MASTER_SYNC_MODE"
 
