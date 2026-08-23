@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import socket
 import subprocess
 import sys
@@ -28,6 +29,9 @@ class RemoteValidationRunner:
     CONTROL_RELOAD_PREFIXES = (
         "backend/app/capture_v2/control/",
         "backend/app/capture_v2/control_cli.py",
+    )
+    _SENSITIVE_LINE_RE = re.compile(
+        r"(?i)(password|passwd|secret|authorization|cookie|private[_ -]?key|api[_ -]?token|access[_ -]?token)"
     )
 
     def __init__(self, *, repo_root: Path, action_path: Path | None = None,
@@ -68,9 +72,6 @@ class RemoteValidationRunner:
         )
 
     def _reexec_current_process(self) -> None:
-        # The service is documented and deployed through ``python -m``.  Do not
-        # reuse sys.argv[0] here: under ``-m`` it is a resolved .py path and
-        # re-executing that path directly can change import/package semantics.
         os.execv(
             sys.executable,
             [sys.executable, "-m", "app.capture_v2.control_cli", *sys.argv[1:]],
@@ -83,8 +84,6 @@ class RemoteValidationRunner:
             return
         if self._control_source_changed(old_head, new_head):
             self._reexec_current_process()
-        # Normally execv never returns. Keeping this assignment makes the helper
-        # deterministic under tests that stub the re-exec boundary.
         self._loaded_head = new_head
 
     def _load_ledger(self) -> dict[str, Any]:
@@ -109,7 +108,6 @@ class RemoteValidationRunner:
                 previous = json.loads(self.status_path.read_text(encoding="utf-8"))
             except Exception:
                 previous = {}
-        # A persistent parse/sync fault must not create one Git commit every poll.
         if previous.get("state") == "RUNNER_ERROR" and previous.get("error") == error:
             return
         payload = {
@@ -146,6 +144,17 @@ class RemoteValidationRunner:
         if verdict is None and payload.get("result") and isinstance(payload["result"], dict):
             verdict = payload["result"].get("verdict")
         return str(verdict) if verdict else None, payload
+
+    @classmethod
+    def _safe_failure_tail(cls, text: str, *, max_lines: int = 120, max_chars: int = 12000) -> str:
+        """Return a bounded diagnostic tail with obviously sensitive lines removed."""
+        if not text:
+            return ""
+        selected = text.splitlines()[-max_lines:]
+        redacted = ["[REDACTED_SENSITIVE_LINE]" if cls._SENSITIVE_LINE_RE.search(line) else line
+                    for line in selected]
+        joined = "\n".join(redacted)
+        return joined[-max_chars:]
 
     def _human_ack(self, action: RemoteAction) -> bool:
         if not self.ack_path.exists():
@@ -244,19 +253,23 @@ class RemoteValidationRunner:
         local_dir.mkdir(parents=True, exist_ok=True)
         (local_dir / "stdout.log").write_text(stdout, encoding="utf-8", errors="replace")
         (local_dir / "stderr.log").write_text(stderr, encoding="utf-8", errors="replace")
+        detail_payload = dict(detail or {})
+        if state == ControlState.FAILED and action.action_type == ControlActionType.SOFTWARE_REGRESSION:
+            detail_payload["failure_stdout_tail"] = self._safe_failure_tail(stdout)
+            detail_payload["failure_stderr_tail"] = self._safe_failure_tail(stderr)
         result = {"schema_version": "capture-v2-remote-result-v1", "action": action.canonical_dict(),
                   "action_sha256": digest, "runner_id": self.runner_id, "state": state.value,
                   "return_code": return_code, "verdict": verdict, "error": error, "finished_at": finished,
                   "stdout_sha256": _sha(stdout), "stderr_sha256": _sha(stderr),
                   "local_stdout": str((local_dir / "stdout.log").relative_to(self.repo_root)),
-                  "local_stderr": str((local_dir / "stderr.log").relative_to(self.repo_root)), "detail": detail or {}}
+                  "local_stderr": str((local_dir / "stderr.log").relative_to(self.repo_root)), "detail": detail_payload}
         result_path = result_dir / "result.json"
         result_path.write_text(json.dumps(result, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
         status = ControlStatus(action_id=action.action_id, sequence=action.sequence, action_type=action.action_type.value,
             state=state, runner_id=self.runner_id, action_sha256=digest, updated_at=finished,
             finished_at=finished, return_code=return_code, verdict=verdict,
             result_path=str(result_path.relative_to(self.repo_root)), stdout_sha256=result["stdout_sha256"],
-            stderr_sha256=result["stderr_sha256"], error=error, detail=detail or {})
+            stderr_sha256=result["stderr_sha256"], error=error, detail=detail_payload)
         self._write_status(status)
         ledger = self._load_ledger()
         ledger.setdefault("actions", {})[action.action_id] = {"action_sha256": digest, "sequence": action.sequence,
