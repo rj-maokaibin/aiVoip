@@ -268,6 +268,7 @@ def bind_actionable_findings(payload: dict) -> dict:
         if action:
             steps = list(action.get("execution_steps") or [])
             finding["next_action"] = action.get("reason") or (steps[0] if steps else None)
+            finding["next_action_source"] = "DIAGNOSIS_ACTION_PLAN"
             finding["verification_acceptance"] = action.get("acceptance_criteria")
             finding["action_contract"] = {
                 "contract_version": ACTIONABLE_CONTRACT_VERSION,
@@ -278,7 +279,11 @@ def bind_actionable_findings(payload: dict) -> dict:
                 "acceptance_criteria": action.get("acceptance_criteria"),
             }
         else:
-            finding.setdefault("next_action", "复核该Finding的原始Evidence及相邻层对照，再决定是否进入确定性补采/A-B验证。")
+            if finding.get("next_action") not in (None, ""):
+                finding.setdefault("next_action_source", "EXISTING_FINDING")
+            else:
+                finding["next_action"] = "复核该Finding的原始Evidence及相邻层对照，再决定是否进入确定性补采/A-B验证。"
+                finding["next_action_source"] = "DEFAULT_ACTIONABLE_FALLBACK"
             finding.setdefault("verification_acceptance", "新增证据必须绑定到该Finding的明确Scope与时间边界，并使证据边界发生可解释变化。")
         finding["actionable_contract_version"] = ACTIONABLE_CONTRACT_VERSION
     return payload
