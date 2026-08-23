@@ -12,6 +12,8 @@ from app.capture_v2.gate.cli import main as gate_main
 _R6_PRODUCT_GATE_ID = "R6-PRODUCT-REPORT-MATERIALIZE-RC56"
 _R6_GOLDEN_RELATIVE = Path("validation/capture_v2/R6_APF1250_FIRST_8000_ABNORMAL_GOLDEN_RC33.json")
 _MASTER_BASELINE_GATE_ID = "MASTER-BASELINE-INTEGRATION-RC59"
+_MASTER_FIX_CANDIDATE_GATE_ID = "MASTER-FIX-CANDIDATE-INTEGRATION-RC60"
+_MASTER_FIX_CANDIDATE_SHA = "c962c0d174099bae1afc8db55067402b36717487"
 _SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 
 
@@ -51,14 +53,7 @@ def _bounded_r6_materialization(argv: list[str]) -> int | None:
 
 
 def _bounded_master_baseline_regression(argv: list[str]) -> int | None:
-    """Dispatch one exact-SHA isolated master merge simulation.
-
-    ``GATE_EVALUATE`` remains the only remote executable surface. For this one Gate
-    ID, ``--bundle`` is interpreted only as an immutable 40-hex master commit SHA.
-    The delegated runner creates a detached temporary worktree, performs a no-commit
-    merge of the feature head into that exact master commit, runs acceptance, and
-    removes the worktree. It never updates the PR branch or creates a merge commit.
-    """
+    """Dispatch one exact-SHA isolated master merge simulation."""
     if not argv or argv[0] != "evaluate":
         return None
     if _arg_value(argv, "--gate-id") != _MASTER_BASELINE_GATE_ID:
@@ -76,12 +71,34 @@ def _bounded_master_baseline_regression(argv: list[str]) -> int | None:
     ])
 
 
+def _bounded_master_fix_candidate_regression(argv: list[str]) -> int | None:
+    """Dispatch only the audited PR #37 candidate plus Capture V2 simulation."""
+    if not argv or argv[0] != "evaluate":
+        return None
+    if _arg_value(argv, "--gate-id") != _MASTER_FIX_CANDIDATE_GATE_ID:
+        return None
+    candidate_sha = str(_arg_value(argv, "--bundle") or "").strip().lower()
+    if candidate_sha != _MASTER_FIX_CANDIDATE_SHA:
+        return None
+
+    from app.capture_v2.control.master_fix_candidate_regression import main as regression_main
+
+    repo_root = Path(__file__).resolve().parents[3]
+    return regression_main([
+        "--repo-root", str(repo_root),
+        "--candidate-sha", candidate_sha,
+    ])
+
+
 def main(argv: list[str] | None = None) -> int:
     args = list(sys.argv[1:] if argv is None else argv)
     bounded = _bounded_r6_materialization(args)
     if bounded is not None:
         return bounded
     bounded = _bounded_master_baseline_regression(args)
+    if bounded is not None:
+        return bounded
+    bounded = _bounded_master_fix_candidate_regression(args)
     if bounded is not None:
         return bounded
     return gate_main(args)
