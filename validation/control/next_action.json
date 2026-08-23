@@ -1,12 +1,14 @@
 {
   "schema_version": "capture-v2-remote-action-v1",
-  "action_id": "RC82-PRODUCTION-CUTOVER-HOTFIX-SW-002",
-  "sequence": 213,
-  "created_at": "2026-08-23T16:24:00+00:00",
-  "expires_at": "2026-08-24T04:24:00+00:00",
-  "action_type": "SOFTWARE_REGRESSION",
+  "action_id": "RC83-PRODUCTION-CUTOVER-003",
+  "sequence": 214,
+  "created_at": "2026-08-23T16:25:00+00:00",
+  "expires_at": "2026-08-24T04:25:00+00:00",
+  "action_type": "GATE_EVALUATE",
   "parameters": {
-    "timeout_seconds": 1800
+    "timeout_seconds": 7200,
+    "bundle": "/home/dev/workspace/aiVoip/validation/capture_v2/PRODUCTION_CUTOVER_AUTHORIZATION_RC69.json",
+    "gate_id": "PRODUCTION-CUTOVER-RC83"
   },
   "safety": {
     "require_clean_git": true,
@@ -17,5 +19,5 @@
     "expected_head": "c44b7e31625847f9ec60e695378033354267c4fd"
   },
   "requested_by": "ChatGPT-remote-validation-controller",
-  "note": "Re-run the full Capture V2 software regression after the legacy production-env compatibility hotfix and its updated static cutover contract test are both merged to master and mirrored exactly into the control branch. Require fail-closed explicit-value behavior and all prior Capture V2 tests. No production or DUT mutation."
+  "note": "Execute the authorized guarded production cutover after RC82 full Capture V2 regression PASS and after the legacy production.env effective-default hotfix plus wrapper/base contract test are both merged to master and mirrored exactly to the control branch. Require validated source merged to master, effective prestate V1/false/false, production env backup, strict release preflight, switch to REPRODUCTION_PLATFORM_MODE=real + CAPTURE_ENGINE_VERSION=V2 + CAPTURE_V2_PRODUCTION_ENABLED=true, full production deployment with control-high/watch/beat, runtime and V2 authority verification, and automatic rollback on any failed postcheck. No DUT mutation."
 }
