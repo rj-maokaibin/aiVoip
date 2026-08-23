@@ -1,0 +1,60 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "R6-02-APF1250-8000-ABNORMAL-EVIDENCE-COLLECT-RC32",
+    "sequence": 134,
+    "created_at": "2026-08-23T07:08:30+00:00",
+    "expires_at": "2026-08-23T19:08:30+00:00",
+    "action_type": "GATE_COLLECT",
+    "parameters": {
+      "device_id": "259f16e6-af9e-4dff-969b-2bb5eac43eb2",
+      "model": "APF1250",
+      "host": "10.48.8.74",
+      "port": 10001,
+      "username": "root",
+      "platform_id": "mt7621",
+      "password_env": "DB:G1V030E010214",
+      "profile_root": "../profiles",
+      "profile_id": "voip-standard",
+      "object_root": "/tmp/voip-reproduction-objects",
+      "output_root": "/tmp/capture-v2-gates",
+      "repo_root": "..",
+      "capture_session_id": "21aab150-2aa0-4fba-aff9-8c5a68ae653f",
+      "gate_id": "R6-02-APF1250-8000-ABNORMAL-EVIDENCE-COLLECT-RC32",
+      "timeout_seconds": 600
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "86f7d7c01bdfe613e149f2e048cc7beb9538fd97"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "Collect immutable evidence for the reproduced APF1250 abnormal panel one-touch call: expected target 8000, observed AIM/FXS DTMF 000. No handset action and no Production V2 change."
+  },
+  "action_sha256": "a6b4a913c3bcb666affb1d8a7cf60f879980f9dfc7dcce04ec20ce9fc12a5134",
+  "runner_id": "srv:231819",
+  "state": "SUCCEEDED",
+  "return_code": 0,
+  "verdict": null,
+  "error": null,
+  "finished_at": "2026-08-23T07:10:21.557471+00:00",
+  "stdout_sha256": "889558c5579fcef562ca0a8874cdb95ea2d88bd45e450f755567b4ef7fe1c6cb",
+  "stderr_sha256": "b8258e86248ce6f15dfea1a12afcd2ad3fde62ba6d3cd24536ffc8cb3bb61c48",
+  "local_stdout": ".capture-v2-control/logs/R6-02-APF1250-8000-ABNORMAL-EVIDENCE-COLLECT-RC32/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/R6-02-APF1250-8000-ABNORMAL-EVIDENCE-COLLECT-RC32/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "32748211a33159598a91117090e783eb901b8d40",
+      "expected_product_head": "86f7d7c01bdfe613e149f2e048cc7beb9538fd97"
+    },
+    "parsed_output": {
+      "bundle": "/tmp/capture-v2-gates/20260823T071020Z_R6-02-APF1250-8000-ABNORMAL-EVIDENCE-COLLECT-RC32_259f16e6-af9e-4dff-969b-2bb5eac43eb2"
+    }
+  }
+}
