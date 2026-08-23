@@ -16,3 +16,4 @@ real acceptance retry: preserve exact offline no-fabrication wording
 real acceptance retry: migrate explicit legacy Evidence Card scope into canonical observed boundary
 real acceptance retry: preserve legacy Evidence Card V1 projection data as fallback only
 real acceptance retry: bounded manual master sync after checkout hang
+real acceptance retry: safe legacy visual annotation migration
