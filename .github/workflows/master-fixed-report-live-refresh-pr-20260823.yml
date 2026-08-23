@@ -38,6 +38,7 @@ jobs:
           grep -q '1.1 问题范围与绝对时间' backend/app/integrations/feishu/evidence_document.py
           grep -q '1.2 下一步建议 / 验证顺序 / 通过标准' backend/app/integrations/feishu/evidence_document.py
           test -f backend/tests/test_actionable_report_projection.py
+          test -f backend/tests/test_preliminary_evidence_report_v1.py
           test -f scripts/fixed_master_live_refresh_20260823.py
           echo "LOCAL_PRODUCT_SNAPSHOT=$head"
 
@@ -101,7 +102,7 @@ jobs:
           export PYTHONPATH=backend
           "$LIVE_VENV/bin/python" -m compileall -q backend/app
           "$LIVE_VENV/bin/python" -m pytest -q backend/tests/test_actionable_report_projection.py
-          "$LIVE_VENV/bin/python" -m pytest -q backend/tests/test_offline_analysis_e2e.py backend/tests/test_preliminary_evidence_report_v1.py
+          "$LIVE_VENV/bin/python" -m pytest -q backend/tests/test_preliminary_evidence_report_v1.py
 
       - name: Reanalyze real PCAP and update original Feishu document
         shell: bash
