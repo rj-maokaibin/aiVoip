@@ -20,3 +20,4 @@ real acceptance retry: safe legacy visual annotation migration
 real acceptance retry: exact 712 snapshot with Git/API fallback
 real acceptance retry: specific legacy V1 action beats generic fallback
 real acceptance retry: offline reconstructed Call D112 heading preserved
+real acceptance retry: dual D112 main heading plus offline reconstructed subheading
