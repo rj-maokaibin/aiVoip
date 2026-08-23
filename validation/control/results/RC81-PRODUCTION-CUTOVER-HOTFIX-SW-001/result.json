@@ -1,20 +1,37 @@
 {
-  "schema_version": "capture-v2-remote-status-v1",
-  "action_id": "RC81-PRODUCTION-CUTOVER-HOTFIX-SW-001",
-  "sequence": 212,
-  "action_type": "SOFTWARE_REGRESSION",
-  "state": "FAILED",
-  "runner_id": "srv:611900",
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "RC81-PRODUCTION-CUTOVER-HOTFIX-SW-001",
+    "sequence": 212,
+    "created_at": "2026-08-23T16:21:00+00:00",
+    "expires_at": "2026-08-24T04:21:00+00:00",
+    "action_type": "SOFTWARE_REGRESSION",
+    "parameters": {
+      "timeout_seconds": 1800
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "8860cacc1dc9e9085954510af2417dbe013789d9"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "Validate the exact master-merged production cutover legacy-env compatibility hotfix after syncing only its three files to the control branch. Missing legacy V2 keys may resolve to application defaults V1/false/false; explicit unsafe values remain fail-closed. No production or DUT mutation."
+  },
   "action_sha256": "35bb890454d9aeb1f1cee761ee4a27066692ac8caf98f60d9db461c1bdd2c501",
-  "updated_at": "2026-08-23T16:21:35.677591+00:00",
-  "started_at": null,
-  "finished_at": "2026-08-23T16:21:35.677591+00:00",
+  "runner_id": "srv:611900",
+  "state": "FAILED",
   "return_code": 1,
   "verdict": null,
-  "result_path": "validation/control/results/RC81-PRODUCTION-CUTOVER-HOTFIX-SW-001/result.json",
+  "error": null,
+  "finished_at": "2026-08-23T16:21:35.677591+00:00",
   "stdout_sha256": "752b7f10e0ec465ed147a19fa22c87225e9addce44cce565232f25935f1bf7d7",
   "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-  "error": null,
+  "local_stdout": ".capture-v2-control/logs/RC81-PRODUCTION-CUTOVER-HOTFIX-SW-001/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/RC81-PRODUCTION-CUTOVER-HOTFIX-SW-001/stderr.log",
   "detail": {
     "safety": {
       "capture_engine_version": "V1",
