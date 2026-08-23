@@ -1,26 +1,26 @@
 {
   "schema_version": "capture-v2-remote-status-v1",
-  "action_id": "RC37-PRODUCTION-WIRING-SW-003",
-  "sequence": 145,
+  "action_id": "RC38-PRODUCTION-HANDOFF-RECOVERY-SW-001",
+  "sequence": 146,
   "action_type": "SOFTWARE_REGRESSION",
   "state": "SUCCEEDED",
   "runner_id": "srv:257142",
-  "action_sha256": "36651cc853d12eaac2bcea25ce978e21eb029096d29e08b6f0c3dd6a544fcab9",
-  "updated_at": "2026-08-23T09:06:38.818868+00:00",
+  "action_sha256": "78c959be76656c0a129cb5e592056e294bc02091ea9ae380b2895c1740ed3922",
+  "updated_at": "2026-08-23T09:14:58.101650+00:00",
   "started_at": null,
-  "finished_at": "2026-08-23T09:06:38.818868+00:00",
+  "finished_at": "2026-08-23T09:14:58.101650+00:00",
   "return_code": 0,
   "verdict": null,
-  "result_path": "validation/control/results/RC37-PRODUCTION-WIRING-SW-003/result.json",
-  "stdout_sha256": "d4220c6b33a10992acb76f6ff709b48ae58b0f25bce7a48ee91d2e48964af2f6",
+  "result_path": "validation/control/results/RC38-PRODUCTION-HANDOFF-RECOVERY-SW-001/result.json",
+  "stdout_sha256": "5e8abe987aed480667989816d3f3eed8f353429621f3191da8d6c6f64f1d28ba",
   "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "error": null,
   "detail": {
     "safety": {
       "capture_engine_version": "V1",
       "capture_v2_production_enabled": "false",
-      "git_head": "748b7b397ea9c59d72abafaa17b2a66e99440413",
-      "expected_product_head": "46f93dac70bf01189c081246bb5b369c7c1c61c8"
+      "git_head": "b9215a24d0f104196effe0762bd5faaa5c0cc66d",
+      "expected_product_head": "702d8cd879b35fd2a62469cb0d3ba69bc64fb5db"
     },
     "parsed_output": null
   }
