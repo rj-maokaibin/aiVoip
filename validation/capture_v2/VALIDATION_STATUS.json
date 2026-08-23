@@ -1,15 +1,15 @@
 {
-  "schema_version": "capture-v2-real-gates-validation-v5",
+  "schema_version": "capture-v2-real-gates-validation-v6",
   "production_v2_enabled": false,
   "capture_engine_authority": "V1",
   "approved": false,
   "merge_ready": false,
   "latest_software_regression": {
-    "action_id": "RC55-ROLLBACK-V1-START-SW-001",
-    "sequence": 178,
+    "action_id": "RC58-R6-SUDO-DOCKER-GUARD-SW-001",
+    "sequence": 186,
     "state": "SUCCEEDED",
     "return_code": 0,
-    "expected_product_head": "02f17a1d46cdf42e48e212b0047cb1bff79b9c3e"
+    "expected_product_head": "376a04bdcc18359f25317d6c364474f300ec6377"
   },
   "evidence_audit": {
     "R1_POSTGRESQL_LEASE_FENCING": {
@@ -67,7 +67,7 @@
       "remaining": []
     },
     "R6_EVIDENCE_FIRST_REPORT_E2E": {
-      "status": "ABNORMAL_GOLDEN_CAPTURED_WITH_LOCALIZATION_BOUNDARY",
+      "status": "PASS_WITH_LOCALIZATION_BOUNDARY",
       "real_postgresql_evidence_first_runtime": "PASS",
       "abnormal_real_golden": {
         "platform": "APF1250",
@@ -92,9 +92,29 @@
         "fix": "scope PCAP uncertainty to the current CoverageWindow and normalize timezone comparisons",
         "regression": "RC33-PCAP-WINDOW-SCOPE-SW-002:SUCCEEDED"
       },
+      "product_report_materialization": {
+        "action": "R6-03-APF1250-8000-PRODUCT-REPORT-MATERIALIZE-RC58",
+        "status": "PASS",
+        "result_file": "validation/control/results/R6-03-APF1250-8000-PRODUCT-REPORT-MATERIALIZE-RC58/result.json",
+        "coverage_window": "COMPLETE",
+        "required_tracks": {
+          "FXS": "COMPLETE",
+          "PCAP": "COMPLETE",
+          "PCM_RX": "COMPLETE",
+          "PCM_TX": "COMPLETE"
+        },
+        "pcap_uncertain_boundary": false,
+        "observed_raw_fxs_digits": "000",
+        "evidence_asset_count": 8,
+        "quality_snapshot_id": "376e7a85-5e06-4660-8bd5-ac758098ffb8",
+        "diagnostic_confidence": "HIGH",
+        "finding_supported": true,
+        "temporary_postgres_restored_to_absent": true,
+        "dut_mutation": false,
+        "production_mutation": false
+      },
       "remaining": [
-        "ROOT_CAUSE_DEPTH: current evidence proves loss no later than AIM/FXS DTMF event ingestion, but does not distinguish panel event generation vs SLIC/driver vs libhardware vs AIM as the exact first failing component",
-        "PRODUCT_REPORT_ASSET_BINDING: abnormal Golden is immutably collected and audited; the existing real-PostgreSQL EvidenceAsset/report runtime is separately PASS, but this specific abnormal Golden has not yet been re-materialized as EvidenceAsset rows by a dedicated product report invocation"
+        "OPTIONAL_ROOT_CAUSE_DEPTH: current evidence proves loss no later than AIM/FXS DTMF event ingestion, but does not distinguish panel event generation vs SLIC/driver vs libhardware vs AIM as the exact first failing component"
       ]
     },
     "R7_SHADOW_LONGRUN_ROLLBACK": {
@@ -123,8 +143,8 @@
       "remaining": []
     }
   },
-  "non_physical_unprivileged_remaining": [
-    "R6 specific abnormal Golden EvidenceAsset/report materialization can be implemented without handset interaction if a bounded validation invocation is added; current runtime semantics are already independently validated against PostgreSQL."
+  "non_physical_validation_remaining": [
+    "Audit and regression-test PR #27 against the current master baseline before any merge decision."
   ],
   "remaining_user_assistance": {
     "physical_handset": [
@@ -146,5 +166,5 @@
     "pr_must_remain_draft": true,
     "technical_gates_passed": true
   },
-  "next_required_step": "R6_REPORT_MATERIALIZATION_OR_EXPLICIT_PRODUCTION_CUTOVER_APPROVAL"
+  "next_required_step": "MASTER_BASELINE_INTEGRATION_AUDIT_OR_EXPLICIT_PRODUCTION_CUTOVER_APPROVAL"
 }
