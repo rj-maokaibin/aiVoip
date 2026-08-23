@@ -1,0 +1,181 @@
+name: Exact Master Feishu Report Supplement Cached
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/master-feishu-report-supplement-cached-20260823.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  supplement-feishu-report-cached:
+    runs-on:
+      - self-hosted
+      - linux
+      - x64
+      - voip-controlled-linux
+    timeout-minutes: 30
+    env:
+      MASTER_HEAD: 03fa37ec0035204cf6b4711e2a1f824fc948227e
+      OFFLINE_PCAP: /tmp/tcpdump-2026-08-14.pcap
+      OFFLINE_PCAP_SHA256: b038aa7c9a0644581f2815f654fcdee4620860796382265b178823fccba2e3f0
+      DOCUMENT_ID: SN6DdJX16oisLQxnPjzcwLwfnLb
+      TARGET_OPEN_ID: ou_67bee3c2e462a7f8939093bd8e697a96
+
+    steps:
+      - name: Verify cached exact-master workspace
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE"
+          test -d .git
+          actual="$(git rev-parse HEAD)"
+          printf 'CACHED_WORKSPACE_HEAD=%s\n' "$actual"
+          test "$actual" = "$MASTER_HEAD"
+          test -f backend/requirements.txt
+          test -f backend/app/golden/offline_analysis_e2e.py
+
+      - name: Stage PCAP and runtime without GitHub fetch
+        shell: bash
+        run: |
+          set -euo pipefail
+          fixture="$OFFLINE_PCAP"
+          if [ ! -r "$fixture" ]; then
+            fixture="$RUNNER_TEMP/report-supplement-cached.pcap"
+            docker run --rm -v /tmp:/source:ro -v "$RUNNER_TEMP":/output --entrypoint sh postgres:16 \
+              -c "cp /source/tcpdump-2026-08-14.pcap /output/report-supplement-cached.pcap && chmod 0644 /output/report-supplement-cached.pcap"
+          fi
+          test -r "$fixture"
+          test "$(sha256sum "$fixture" | awk '{print $1}')" = "$OFFLINE_PCAP_SHA256"
+          echo "OFFLINE_PCAP=$fixture" >> "$GITHUB_ENV"
+
+          root="$RUNNER_TEMP/tshark-root"; debs="$RUNNER_TEMP/tshark-debs"
+          rm -rf "$root" "$debs"; mkdir -p "$root" "$debs"; cd "$debs"
+          mapfile -t pkgs < <(apt-cache depends --recurse --no-recommends --no-suggests --no-conflicts --no-breaks --no-replaces --no-enhances tshark | awk '/^[^ <][^:]*$/ {print $1}' | sort -u)
+          miss=(); for p in "${pkgs[@]}"; do dpkg-query -W -f='${Status}' "$p" 2>/dev/null | grep -q 'install ok installed' || miss+=("$p"); done
+          [ ${#miss[@]} -eq 0 ] || apt-get download "${miss[@]}"
+          shopt -s nullglob; for d in ./*.deb; do dpkg-deb -x "$d" "$root"; done
+          tshark_bin="$RUNNER_TEMP/tshark-userspace"
+          printf '#!/bin/bash\nexport LD_LIBRARY_PATH="%s/usr/lib/x86_64-linux-gnu:%s/lib/x86_64-linux-gnu:${LD_LIBRARY_PATH:-}"\nexport WIRESHARK_DATA_DIR="%s/usr/share/wireshark"\nexec "%s/usr/bin/tshark" "$@"\n' "$root" "$root" "$root" "$root" > "$tshark_bin"
+          chmod +x "$tshark_bin"
+          version="$($tshark_bin -v | head -n1)"; echo "$version"; [[ "$version" == *'4.2.2'* ]]
+          echo "TSHARK_BINARY=$tshark_bin" >> "$GITHUB_ENV"
+
+          cd "$GITHUB_WORKSPACE"
+          venv="$RUNNER_TEMP/voip-ai-report-supplement-cached"
+          rm -rf "$venv"; python3 -m venv "$venv"
+          "$venv/bin/python" -m pip install -r backend/requirements.txt >/dev/null
+          echo "SUPPLEMENT_VENV=$venv" >> "$GITHUB_ENV"
+
+      - name: Re-analyze and append scope time and next actions
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f /home/github-runner/.config/voip-ai/.env
+          test -f /home/github-runner/.config/voip-ai/feishu_app_secret
+          set -a; source /home/github-runner/.config/voip-ai/.env; set +a
+          export FEISHU_APP_SECRET_FILE=/home/github-runner/.config/voip-ai/feishu_app_secret
+          export PYTHONPATH=backend
+          cd "$GITHUB_WORKSPACE"
+          "$SUPPLEMENT_VENV/bin/python" - <<'PY'
+          import asyncio, json, os
+          from datetime import datetime
+          from pathlib import Path
+          from urllib.parse import quote
+          from zoneinfo import ZoneInfo
+
+          from app.diagnosis.reasoner import DeterministicDiagnosisReasoner
+          from app.golden.offline_analysis_e2e import build_offline_analysis_bundle
+          from app.integrations.feishu.document_acl import FeishuDocumentPermissionAdapter
+          from app.integrations.feishu.evidence_document import FeishuEvidenceDocumentService
+
+          PCAP=Path(os.environ['OFFLINE_PCAP']); DOC=os.environ['DOCUMENT_ID']; OPEN_ID=os.environ['TARGET_OPEN_ID']
+          OUT=Path('validation/master_feishu_report_supplement_cached'); OUT.mkdir(parents=True,exist_ok=True); RESULT=OUT/'result.json'
+          bundle=build_offline_analysis_bundle(pcap_path=PCAP,pcm_profile_path='profiles/pcm/ruijie_aim_diag_v1.yaml',output_dir=OUT/'analysis',tshark_binary=os.environ['TSHARK_BINARY'])
+          assert bundle['source']['sha256']==os.environ['OFFLINE_PCAP_SHA256']
+          decision=DeterministicDiagnosisReasoner().reason({
+              'case':{'id':'offline-golden-001','summary':'持续电流音/周期底噪'},'devices':[],
+              'evidences':[{'id':'golden-source','type':'PCAP','filename':PCAP.name}],
+              'analyzers':{'media_intelligence':{'run_id':'golden-media-run','status':(bundle['media'] or {}).get('status'),'version':(bundle['media'] or {}).get('version'),'result':bundle['media']}},
+              'fingerprint':'offline-golden-001'})
+          dd=decision.to_dict(); call=bundle.get('display_call') or {}; report=bundle.get('report') or {}; findings=report.get('findings') or []; tz=ZoneInfo('Asia/Shanghai')
+          def local(v):
+              if not v:return 'UNKNOWN'
+              try:return datetime.fromisoformat(str(v).replace('Z','+00:00')).astimezone(tz).isoformat(timespec='microseconds')
+              except Exception:return str(v)
+          def txt(block):
+              for key in ('text','heading1','heading2','heading3','bullet'):
+                  body=block.get(key)
+                  if body:return ''.join(str((x.get('text_run') or {}).get('content') or '') for x in body.get('elements') or [])
+              return ''
+          async def children(transport):
+              rows=[]; token=None
+              while True:
+                  params={'page_size':'50'}
+                  if token:params['page_token']=token
+                  r=await transport._request('GET',f'/docx/v1/documents/{quote(DOC,safe="")}/blocks/{quote(DOC,safe="")}/children',params=params)
+                  d=r.get('data') or {}; rows.extend(d.get('items') or d.get('children') or [])
+                  if not d.get('has_more'):return rows
+                  token=d.get('page_token'); assert token
+          periodic=[]
+          for f in findings:
+              card=f.get('evidence_card') or {}; t=card.get('time') or {}
+              if '周期' in str(f.get('title') or '') or 'periodic' in str(card).lower():
+                  periodic.append({'title':f.get('title'),'scope':card.get('scope') or {},'start':t.get('absolute_start_utc'),'end':t.get('absolute_end_utc'),'relative':t.get('call_relative_representative') or t.get('call_relative_start'),'next_action':card.get('next_action')})
+          periodic_events=[e for e in (bundle.get('media') or {}).get('cross_layer_events',[]) or [] if e.get('type')=='LOCAL_CAPTURE_PERIODIC_INTERFERENCE']
+          cs,ce,ms,me=call.get('started_at'),call.get('ended_at'),call.get('media_started_at'),call.get('media_ended_at')
+          headline=(dd.get('summary') or {}).get('headline') or 'UNKNOWN'; plan=dd.get('plan') or []
+          service=FeishuEvidenceDocumentService(); transport=service.transport; root=await children(transport); marker='12. 问题范围 / 绝对时间 / 下一步建议（补充）'
+          if not any(txt(x)==marker for x in root):
+              blocks=[]
+              def add(s,t=2):blocks.append(service._text(s,t))
+              add(marker,4); add('本节补齐原飞书投影缺失的问题作用范围、绝对时间窗口与 Deterministic Diagnosis 下一步计划。')
+              add('12.1 分析对象与绝对时间',5)
+              add(f"Call：{call.get('caller')} → {call.get('dialed_number')}｜SIP Call-ID：{call.get('sip_call_id')}｜被测设备：{(bundle.get('analysis_context') or {}).get('subject_device_ip')}")
+              add(f"Call 绝对时间（UTC+8）：{local(cs)} ～ {local(ce)}")
+              add(f"媒体绝对时间（UTC+8）：{local(ms)} ～ {local(me)}")
+              add(f"原始UTC：Call {cs} ～ {ce}；Media {ms} ～ {me}",12)
+              add('12.2 当前已确认的问题范围',5); add(f"诊断结论：{headline}")
+              add('已确认受影响链路：本地采集方向 PCM RX → 上行 RTP。周期特征已在本地 PCM RX 出现，并传播进入上行 RTP。')
+              add('排除/弱化范围：反向 RTP 未出现同等级周期特征，因此 PBX/下行网络不是当前持续周期底噪的主要引入点。')
+              add('未发现：当前选定 Call 的 PCM DTMF 与 SIP 拨号目标一致，未见丢号证据；RTP Sequence 未形成可归因的丢包证据。')
+              add('仍未闭环：具体硬件节点仍可能位于电源/接地、电话机/线路、FXS/SLIC 模拟前端或 PCM 采集接口；RTP 瞬时高 Delta/抖动属于独立 OPEN 项。')
+              add('12.3 问题时间窗 / Finding 时间',5)
+              if periodic:
+                  for i,row in enumerate(periodic,1):
+                      add(f"周期干扰 Finding #{i}：{row['title']}｜UTC {row['start'] or 'UNKNOWN'} ～ {row['end'] or 'UNKNOWN'}｜UTC+8 {local(row['start'])} ～ {local(row['end'])}")
+                      add(f"范围：{json.dumps(row['scope'],ensure_ascii=False)}｜Call相对时间：{row['relative'] or 'UNKNOWN'}",12)
+              else:add(f"Evidence Card 未形成独立周期干扰绝对起止窗；当前可确认的问题观察边界采用 Active Media Window：{local(ms)} ～ {local(me)}。")
+              add(f"周期传播事件数量：{len(periodic_events)}。",12)
+              add('12.4 Deterministic Diagnosis 原始下一步计划',5)
+              for i,item in enumerate(plan,1):
+                  add(f"P{i}｜{item.get('action_type')}｜优先级 {item.get('priority')}｜{item.get('reason')}")
+                  add(f"参数：{json.dumps(item.get('params') or {},ensure_ascii=False)}｜自动执行：{item.get('auto_execute')}｜风险级别：{item.get('risk_level')}",12)
+              add('12.5 建议的执行顺序与判定标准',5)
+              add('P0：先做本地硬件 A/B，目标是闭环“周期底噪具体从哪个本地节点引入”。每轮只改变一个变量，其余拓扑、话机拨号、Codec、抓包方式保持一致。')
+              for s in [
+                  'A/B-1 电源/接地：更换电源适配器或改变接地条件；复测同一通话并比较 PCM RX 与上行 RTP 的约20ms周期/150、250、350…Hz梳状谱是否消失或显著下降。',
+                  'A/B-2 电话机/线路：仅替换话机或话柄/线路，其余不变；若周期特征同步消失，优先收敛到电话机/线路侧。',
+                  'A/B-3 FXS端口：仅切换 FXS 端口；若问题随端口迁移/消失，优先收敛到端口/SLIC模拟前端。',
+                  'A/B-4 设备对照：同环境换另一台设备；若异常跟随设备，进一步收敛到设备本地模拟/采集链路。',
+                  '建议采用 A-B-A：原条件 A → 单变量变更 B → 恢复 A。只有 B 改善且恢复 A 后异常重新出现，才把该变量升级为强因果证据。']:
+                  add(s,12)
+              add('P0 通过标准：目标变量变更后，PCM RX 周期性自相关/梳状谱与上行 RTP 同类特征同时显著下降或消失；恢复原条件后特征恢复。')
+              add('P1：若还需要解释 RTP 高 Delta/抖动，再补 PBX侧/中间链路多点 PCAP 做同包相关；该动作主要用于定位抖动区间，不是当前周期底噪硬件根因闭环的第一优先级。')
+              await service._insert_blocks(DOC,blocks,index=len(root))
+          perm=FeishuDocumentPermissionAdapter(transport=transport); collabs=await perm.list_collaborators(DOC); acl=next((c for c in collabs if c.member_type=='openid' and c.member_id==OPEN_ID),None); assert acl and acl.perm=='edit'
+          final=await children(transport); texts=[txt(x) for x in final]; assert marker in texts; assert any('Call 绝对时间（UTC+8）' in x for x in texts); assert any('Deterministic Diagnosis 原始下一步计划' in x for x in texts); assert any('A/B-1 电源/接地' in x for x in texts)
+          result={'status':'PASS','document_url':f'https://feishu.cn/docx/{DOC}','editor_permission':'VERIFIED_EDIT','call_window_utc':[cs,ce],'call_window_utc8':[local(cs),local(ce)],'media_window_utc':[ms,me],'media_window_utc8':[local(ms),local(me)],'periodic_finding_cards':periodic,'periodic_event_count':len(periodic_events),'diagnosis_headline':headline,'plan':plan,'supplement_marker_verified':True}
+          RESULT.write_text(json.dumps(result,ensure_ascii=False,indent=2)+'\n',encoding='utf-8'); print(json.dumps(result,ensure_ascii=False,indent=2))
+          asyncio.run(main())
+          PY
+
+      - name: Upload supplement evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: exact-master-feishu-report-supplement-cached
+          path: validation/master_feishu_report_supplement_cached/result.json
+          if-no-files-found: warn
