@@ -63,16 +63,34 @@ def _install_status_timeout_diagnostics() -> None:
             cp = _compose(
                 repo_root,
                 env_file,
-                ["logs", "--no-color", "--tail", "120", "reproduction-worker"],
+                ["logs", "--no-color", "--tail", "80", "reproduction-worker"],
                 timeout=60,
                 check=False,
             )
             worker_tail = _safe_error((cp.stdout or "") + "\n" + (cp.stderr or ""))
+            db_diag = _compose(
+                repo_root,
+                env_file,
+                [
+                    "exec", "-T", "backend", "python", "-m",
+                    "app.capture_v2.control.service_rehearsal_diagnostics",
+                    "--session-id", session_id,
+                ],
+                timeout=60,
+                check=False,
+            )
+            db_tail = _safe_error((db_diag.stdout or "") + "\n" + (db_diag.stderr or ""))
+            # Put the authoritative DB timeout/snapshot last. activation_rehearsal._safe_error
+            # intentionally keeps only a bounded tail, so placing this after worker logs
+            # prevents the exact terminal_reason/ArmValidation evidence from being clipped.
             raise RuntimeError(
                 "SESSION_STATUS_TIMEOUT_DIAGNOSTICS:\n"
-                f"DB_TIMEOUT:{type(exc).__name__}:{_safe_error(str(exc))}\n"
                 "[reproduction-worker]\n"
                 + worker_tail
+                + "\n[db-diagnostic]\n"
+                + db_tail
+                + "\nDB_TIMEOUT:"
+                + f"{type(exc).__name__}:{_safe_error(str(exc))}"
             ) from exc
 
     rehearsal._wait_status = _wait_status_with_diagnostics
