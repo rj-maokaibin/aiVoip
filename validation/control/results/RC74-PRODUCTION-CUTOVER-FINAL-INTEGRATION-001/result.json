@@ -1,20 +1,39 @@
 {
-  "schema_version": "capture-v2-remote-status-v1",
-  "action_id": "RC74-PRODUCTION-CUTOVER-FINAL-INTEGRATION-001",
-  "sequence": 205,
-  "action_type": "GATE_EVALUATE",
-  "state": "INCONCLUSIVE",
-  "runner_id": "srv:611900",
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "RC74-PRODUCTION-CUTOVER-FINAL-INTEGRATION-001",
+    "sequence": 205,
+    "created_at": "2026-08-23T15:44:00+00:00",
+    "expires_at": "2026-08-24T03:44:00+00:00",
+    "action_type": "GATE_EVALUATE",
+    "parameters": {
+      "timeout_seconds": 7200,
+      "bundle": "391486c7a70f8e36c088dcb512397044a552c78c",
+      "gate_id": "MASTER-FIX-CANDIDATE-INTEGRATION-RC74"
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "0bb05f8cfdeb04212eca4a17d27fa19b8689f443"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "Re-run the complete audited master-fix candidate plus current Capture V2 acceptance after production deployment/cutover control changes. Require no-conflict detached merge, Capture V2 regression, Frozen contracts, full VOIP AI software release gate, and Real Offline Golden #001 exactly 142/142. No production or DUT mutation."
+  },
   "action_sha256": "1f13b5f27c5af7c1a374b465060c9c9525911decb5679f380aaeed4d69fcfbe6",
-  "updated_at": "2026-08-23T15:42:49.896875+00:00",
-  "started_at": null,
-  "finished_at": "2026-08-23T15:42:49.896875+00:00",
+  "runner_id": "srv:611900",
+  "state": "INCONCLUSIVE",
   "return_code": 2,
   "verdict": "INCONCLUSIVE",
-  "result_path": "validation/control/results/RC74-PRODUCTION-CUTOVER-FINAL-INTEGRATION-001/result.json",
+  "error": null,
+  "finished_at": "2026-08-23T15:42:49.896875+00:00",
   "stdout_sha256": "ba6a2f145ba1d0dc54381865b9318ae4039a5c2dbf909577542f27f0d3049b16",
   "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-  "error": null,
+  "local_stdout": ".capture-v2-control/logs/RC74-PRODUCTION-CUTOVER-FINAL-INTEGRATION-001/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/RC74-PRODUCTION-CUTOVER-FINAL-INTEGRATION-001/stderr.log",
   "detail": {
     "safety": {
       "capture_engine_version": "V1",
