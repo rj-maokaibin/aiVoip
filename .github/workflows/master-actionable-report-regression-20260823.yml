@@ -1,0 +1,36 @@
+name: Master Actionable Report Regression
+
+on:
+  pull_request:
+    paths:
+      - '.ci/fixed-master-live-refresh-20260823'
+
+permissions:
+  contents: read
+
+jobs:
+  backend-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - name: Install
+        run: python -m pip install -r backend/requirements.txt
+      - name: Compile and targeted gate
+        env:
+          PYTHONPATH: backend
+        run: |
+          python -m compileall -q backend/app
+          python -m pytest -q backend/tests/test_actionable_report_projection.py
+      - name: Full backend regression
+        env:
+          PYTHONPATH: backend
+        run: python -m pytest -q backend/tests -x
