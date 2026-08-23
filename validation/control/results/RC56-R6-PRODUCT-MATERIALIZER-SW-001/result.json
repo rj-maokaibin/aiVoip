@@ -1,0 +1,44 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "RC56-R6-PRODUCT-MATERIALIZER-SW-001",
+    "sequence": 180,
+    "created_at": "2026-08-23T13:08:00+00:00",
+    "expires_at": "2026-08-23T23:08:00+00:00",
+    "action_type": "SOFTWARE_REGRESSION",
+    "parameters": {
+      "timeout_seconds": 1800
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "9066dda3e050556cb5e881929f9ce64d730c4341"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "Full Capture V2 regression for the bounded R6 abnormal-Golden product materializer. The implementation recalculates the known stale PCAP CoverageWindow using current fixed logic, verifies immutable server PCAP bytes and DB FXS digits 000, then can idempotently bind EvidenceAssets/QualitySnapshot/report. This software-regression action itself performs no product materialization, no DUT I/O, and no production activation."
+  },
+  "action_sha256": "c838b185dc32619e5228300b30c9e039eec4d5d7e3afe7a8742e7a9c33835851",
+  "runner_id": "srv:257142",
+  "state": "SUCCEEDED",
+  "return_code": 0,
+  "verdict": null,
+  "error": null,
+  "finished_at": "2026-08-23T13:06:58.022070+00:00",
+  "stdout_sha256": "50126432b08abbccedb376234409155f2b43158a5ad33a8d760d0fab6ca6b8a2",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "local_stdout": ".capture-v2-control/logs/RC56-R6-PRODUCT-MATERIALIZER-SW-001/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/RC56-R6-PRODUCT-MATERIALIZER-SW-001/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "315488b84a197f2cfc52567f4e9b076bf6b2011c",
+      "expected_product_head": "9066dda3e050556cb5e881929f9ce64d730c4341"
+    },
+    "parsed_output": null
+  }
+}
