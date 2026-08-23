@@ -15,7 +15,7 @@ jobs:
       - linux
       - x64
       - voip-controlled-linux
-    timeout-minutes: 30
+    timeout-minutes: 40
     env:
       OFFLINE_PCAP: /tmp/tcpdump-2026-08-14.pcap
       OFFLINE_PCAP_SHA256: b038aa7c9a0644581f2815f654fcdee4620860796382265b178823fccba2e3f0
@@ -23,7 +23,7 @@ jobs:
       TARGET_OPEN_ID: ou_67bee3c2e462a7f8939093bd8e697a96
 
     steps:
-      - name: Validate local fixed-master product snapshot
+      - name: Sync latest master into clean persistent workspace
         shell: bash
         run: |
           set -euo pipefail
@@ -31,16 +31,23 @@ jobs:
           test -d .git
           git reset --hard HEAD
           git clean -ffdx
+          git fetch --no-tags --prune origin master
+          git checkout -f -B master FETCH_HEAD
+          git reset --hard FETCH_HEAD
+          git clean -ffdx
+          test -z "$(git status --porcelain)"
           head="$(git rev-parse HEAD)"
           echo "FIXED_MASTER_HEAD=$head" >> "$GITHUB_ENV"
           test -f backend/app/reports/actionable_summary.py
-          grep -q '"plan": \[item.to_dict()' backend/app/golden/offline_analysis_e2e.py
-          grep -q '1.1 问题范围与绝对时间' backend/app/integrations/feishu/evidence_document.py
-          grep -q '1.2 下一步建议 / 验证顺序 / 通过标准' backend/app/integrations/feishu/evidence_document.py
-          test -f backend/tests/test_actionable_report_projection.py
-          test -f backend/tests/test_preliminary_evidence_report_v1.py
+          test -f backend/app/reports/prd_spec_v1_alignment.py
+          test -f backend/app/golden/offline_report_v2.py
+          test -f backend/tests/test_report_prd_spec_100_percent.py
           test -f scripts/fixed_master_live_refresh_20260823.py
-          echo "LOCAL_PRODUCT_SNAPSHOT=$head"
+          grep -q 'single_canonical_fact_layer' backend/app/reports/prd_spec_v1_alignment.py
+          grep -q 'legacy_prepend_revision_allowed' backend/app/reports/prd_spec_v1_alignment.py
+          grep -q 'feishu-evidence-living-document-v2' backend/app/integrations/feishu/evidence_document.py
+          ! grep -q '下方旧版内容保留作为历史记录，若有冲突以本修订版为准' scripts/fixed_master_live_refresh_20260823.py
+          echo "LATEST_MASTER_SNAPSHOT=$head"
 
       - name: Prepare PCAP TShark and Python
         shell: bash
@@ -86,13 +93,13 @@ jobs:
           echo "TSHARK_BINARY=$tshark_bin" >> "$GITHUB_ENV"
 
           cd "$GITHUB_WORKSPACE"
-          venv="$RUNNER_TEMP/voip-fixed-master-live"
+          venv="$RUNNER_TEMP/voip-fixed-master-live-v2"
           rm -rf "$venv"
           python3 -m venv "$venv"
           "$venv/bin/python" -m pip install -r backend/requirements.txt >/dev/null
           echo "LIVE_VENV=$venv" >> "$GITHUB_ENV"
 
-      - name: Run focused report regression gates
+      - name: Run canonical V2 focused report gates
         shell: bash
         run: |
           set -euo pipefail
@@ -100,11 +107,23 @@ jobs:
           export FEISHU_LIVE_ENABLED='false'
           export REPRODUCTION_PLATFORM_MODE='mock'
           export PYTHONPATH=backend
-          "$LIVE_VENV/bin/python" -m compileall -q backend/app
-          "$LIVE_VENV/bin/python" -m pytest -q backend/tests/test_actionable_report_projection.py
-          "$LIVE_VENV/bin/python" -m pytest -q backend/tests/test_preliminary_evidence_report_v1.py
+          "$LIVE_VENV/bin/python" -m compileall -q backend/app scripts/fixed_master_live_refresh_20260823.py
+          "$LIVE_VENV/bin/python" -m pytest -q \
+            backend/tests/test_actionable_report_projection.py \
+            backend/tests/test_preliminary_evidence_report_v1.py \
+            backend/tests/test_report_prd_spec_100_percent.py
 
-      - name: Reanalyze real PCAP and update original Feishu document
+      - name: Run full backend regression before live mutation
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE"
+          export FEISHU_LIVE_ENABLED='false'
+          export REPRODUCTION_PLATFORM_MODE='mock'
+          export PYTHONPATH=backend
+          "$LIVE_VENV/bin/python" -m pytest -q backend/tests -x
+
+      - name: Reanalyze real PCAP and replace original Feishu with canonical V2
         shell: bash
         run: |
           set -euo pipefail
@@ -117,6 +136,7 @@ jobs:
           test "${REPRODUCTION_PLATFORM_MODE:-}" = "real"
           export FEISHU_APP_SECRET_FILE=/home/github-runner/.config/voip-ai/feishu_app_secret
           export PYTHONPATH=backend
+          rm -rf validation/fixed_master_live_refresh
           mkdir -p validation/fixed_master_live_refresh
           "$LIVE_VENV/bin/python" scripts/fixed_master_live_refresh_20260823.py
 
@@ -125,5 +145,11 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: fixed-master-original-feishu-refresh
-          path: validation/fixed_master_live_refresh/result.json
+          path: |
+            validation/fixed_master_live_refresh/result.json
+            validation/fixed_master_live_refresh/canonical_v2/canonical-report-v2.json
+            validation/fixed_master_live_refresh/canonical_v2/canonical-report-v2.html
+            validation/fixed_master_live_refresh/canonical_v2/evidence-bundle-internal-full-v2.zip
+            validation/fixed_master_live_refresh/legacy-feishu-root-before-canonical-v2.json
+            validation/fixed_master_live_refresh/legacy-feishu-text-before-canonical-v2.txt
           if-no-files-found: warn
