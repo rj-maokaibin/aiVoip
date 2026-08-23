@@ -1,9 +1,9 @@
 {
   "schema_version": "capture-v2-remote-action-v1",
-  "action_id": "R7-01-APF1250-VALIDATION-ROLLBACK-RC35",
-  "sequence": 139,
-  "created_at": "2026-08-23T07:29:00+00:00",
-  "expires_at": "2026-08-23T19:29:00+00:00",
+  "action_id": "R7-01-APF1250-VALIDATION-ROLLBACK-REUSE-RC35",
+  "sequence": 140,
+  "created_at": "2026-08-23T07:34:00+00:00",
+  "expires_at": "2026-08-23T19:34:00+00:00",
   "action_type": "GATE_READINESS_FXS",
   "parameters": {
     "device_id": "259f16e6-af9e-4dff-969b-2bb5eac43eb2",
@@ -18,9 +18,9 @@
     "object_root": "/tmp/voip-reproduction-objects",
     "output_root": "/tmp/capture-v2-gates",
     "repo_root": "..",
-    "reproduction_session_id": "AUTO_NEW",
-    "worker_id": "r7-apf1250-validation-rollback-rc35",
-    "gate_id": "R7-01-APF1250-VALIDATION-ROLLBACK-RC35",
+    "reproduction_session_id": "828e07c6-600a-4605-ab66-aa975c8029d1",
+    "worker_id": "r6-apf1250-first-digit-loss-reboot-rc32",
+    "gate_id": "R7-01-APF1250-VALIDATION-ROLLBACK-REUSE-RC35",
     "duration": 60,
     "transport": "scp",
     "timeout_seconds": 1200
@@ -34,5 +34,5 @@
     "expected_head": "910f854de2a9431734b7143c843636530a92a340"
   },
   "requested_by": "ChatGPT-remote-validation-controller",
-  "note": "Authorized real-device validation only: exercise APF1250 V2 fenced producer/lease/segment pipeline in validation scope, then prove exact cleanup and V1 configuration authority restored. Production V2 must remain disabled throughout."
+  "note": "Retry APF1250 real-DUT validation rollback using the existing post-reboot ReproductionSession and original owner identity so fencing remains valid. Production V2 stays disabled; no handset action is required."
 }
