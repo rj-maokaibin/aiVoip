@@ -15,19 +15,7 @@ from app.reproduction.real_platform import RealCapture, RealReproductionPlatform
 
 
 class CaptureV2ProductionPlatform(RealReproductionPlatform):
-    """Production-compatible Reproduction platform with Capture V2 PCAP authority.
-
-    FXS/PCM/debug control keeps using the proven ``RealReproductionPlatform`` path,
-    while the long-lived PCAP producer, segment transfer/ACK and fencing are owned
-    exclusively by Capture V2.  The public segmented-ring methods intentionally
-    match the V1.1 watcher contract so the mature reproduction state machine can be
-    reused without starting a second PCAP producer.
-
-    A second SSH adapter is used for Capture V2.  This is deliberate: the legacy
-    real platform owns its adapter on a private bridge loop for AIM/FXS streaming,
-    while Capture V2 uses an independent bridge loop for fenced producer and exact
-    segment transfer.  No asyncssh connection crosses event loops.
-    """
+    """Real reproduction platform whose only long-lived PCAP authority is V2."""
 
     platform_id = "ruijie-voip-capture-v2"
     version = "2.1.1"
@@ -49,7 +37,11 @@ class CaptureV2ProductionPlatform(RealReproductionPlatform):
         self._capture_device = device
         self._reproduction_session_id = str(reproduction_session_id)
         self._capture_worker_id = str(worker_id)
-        self._capture_transport = str(transport or settings.capture_v2_transport).lower().strip()
+        self._capture_transport = str(
+            transport or getattr(settings, "capture_v2_transport", "scp")
+        ).lower().strip()
+        if self._capture_transport not in {"scp", "sftp"}:
+            raise ValueError("CAPTURE_V2_PRODUCTION_TRANSPORT_INVALID")
         self._capture_bridge = _EventLoopBridge()
         self._capture_session: CaptureV2CGateSession | None = None
         self._capture_finalized = False
@@ -84,8 +76,6 @@ class CaptureV2ProductionPlatform(RealReproductionPlatform):
             worker_id=self._capture_worker_id,
         )
         await session.start_lease_renewer()
-        # Prove the lease/producer/pump path before the watcher advertises runtime
-        # readiness.  An error here fails closed before any V1 ring can be started.
         await session.drain_once()
         self._capture_session = session
 
@@ -132,9 +122,8 @@ class CaptureV2ProductionPlatform(RealReproductionPlatform):
         session = self._capture_session
         if session is None:
             raise RuntimeError("CAPTURE_V2_PRODUCTION_SESSION_NOT_READY")
-        # Match the existing segmented watcher cadence.  On an End Anchor this wait
-        # is especially important: it lets the currently open V2 file rotate so the
-        # post-ONHOOK drain can include the file that actually covers the boundary.
+        # Preserve the existing watcher cadence.  After ONHOOK this also lets the
+        # file covering the End Anchor rotate before the explicit tail drain.
         await asyncio.sleep(max(0.1, float(seconds)))
         await session.drain_once()
         paths, pending = self._durable_segment_paths()
@@ -155,9 +144,6 @@ class CaptureV2ProductionPlatform(RealReproductionPlatform):
                 merge_path.unlink(missing_ok=True)
             except Exception:
                 pass
-        # ``remaining_files`` is the legacy watcher's tail-drain continuation
-        # signal.  Capture V2's pump drains every known sealed file in the cycle;
-        # any DB row below ACKED therefore correctly requests another drain.
         return RealCapture(pcap=payload, debug_log=b"", remaining_files=pending)
 
     def spawn_ring_segment(self, *, context, seconds: int, segment_key: str):
@@ -165,16 +151,14 @@ class CaptureV2ProductionPlatform(RealReproductionPlatform):
         return self._capture_bridge.spawn(self._capture_next_segment(int(seconds)))
 
     def seal_segmented_ring(self, session_id: str | None = None) -> None:
-        # Do not stop the V2 producer at every no-call ONHOOK.  The V2 reliability
-        # contract is continuous capture.  The watcher performs an explicit delayed
-        # drain after this marker, then clears it through stop_segmented_ring().
+        # Compatibility marker only.  Continuous V2 capture must not be stopped at
+        # every no-call ONHOOK; final producer stop is owned by the finalizer.
         del session_id
         self._tail_drain_requested = True
 
     def stop_segmented_ring(self, session_id: str | None = None) -> None:
-        # Legacy V1.1 uses this to restart an idle producer after a no-call Attempt.
-        # V2 must remain continuous, so the operation only resets the compatibility
-        # tail marker.  Real producer shutdown happens exclusively in finalization.
+        # V1.1 calls this after a no-call tail drain to restart the idle ring.  V2
+        # never stopped, so only clear the compatibility marker.
         del session_id
         self._tail_drain_requested = False
 
@@ -208,21 +192,22 @@ class CaptureV2ProductionPlatform(RealReproductionPlatform):
         self._capture_finalized = True
         return result
 
-    def finalize_capture_if_active(self, *, reason: str = "REPRODUCTION_WATCHER_EXIT") -> FinalizeResult | None:
+    def finalize_capture_if_active(
+        self, *, reason: str = "REPRODUCTION_WATCHER_EXIT"
+    ) -> FinalizeResult | None:
         return self._capture_bridge.run(self._finalize_capture_v2(reason))
 
     def cleanup(self, *, session_id: str, device, actions: list[str]):
-        # PCAP authority must be truthfully gone and its final segment durable before
-        # the existing cleanup barrier is allowed to verify PCM/debug/PCAP shutdown.
+        # Do not let legacy cleanup report PCAP closed while the V2 producer still
+        # exists.  Stop/final-drain/release first, then perform PCM/debug cleanup.
         self.finalize_capture_if_active(reason="REPRODUCTION_CLEANUP")
         return super().cleanup(session_id=session_id, device=device, actions=actions)
 
     async def _disconnect_capture_adapter(self) -> None:
         session = self._capture_session
         if session is not None and not self._capture_finalized:
-            # Normal exceptions leave the DUT producer running for the fenced
-            # takeover/recovery path, but stop renewing this worker's authority so
-            # the lease can expire.  Do not release a possibly incomplete session.
+            # On an exceptional watcher exit, stop renewing but leave the producer
+            # for fenced recovery.  Do not release possibly incomplete authority.
             await session.stop_lease_renewer(release_lease=False)
         try:
             await self._capture_adapter.disconnect()
