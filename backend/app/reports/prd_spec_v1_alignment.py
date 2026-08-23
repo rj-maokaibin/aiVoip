@@ -241,12 +241,22 @@ def validate_artifact_provenance(provenance: dict) -> list[str]:
 
 def _reviewability(payload: dict, *, provenance_complete: bool) -> dict:
     completeness = payload.get("capture_quality") or {}
+    context = payload.get("analysis_context") or {}
     blockers: list[str] = []
     limits: list[str] = []
     if completeness.get("missing_required"):
         blockers.append("REQUIRED_EVIDENCE_MISSING")
     if not provenance_complete and payload.get("artifacts"):
         limits.append("ARTIFACT_PROVENANCE_INCOMPLETE")
+
+    context_reviewability = str(context.get("reviewability") or "").upper()
+    semantic_issues = {str(x) for x in (context.get("semantic_issues") or [])}
+    if context_reviewability in {"NOT_FULLY_REVIEWABLE", "NOT_REVIEWABLE"} or semantic_issues.intersection({
+        "CALL_LIFECYCLE_INCOMPLETE", "CALL_BINDING_INCOMPLETE", "REPORT_SEMANTIC_CONTRADICTION"
+    }):
+        blockers.append("ANALYSIS_CONTEXT_NOT_FULLY_REVIEWABLE")
+    elif context_reviewability == "PARTIALLY_REVIEWABLE":
+        limits.append("ANALYSIS_CONTEXT_PARTIALLY_REVIEWABLE")
 
     for finding in payload.get("findings") or []:
         key = str(finding.get("finding_id") or finding.get("stable_key") or finding.get("type") or "UNKNOWN")
@@ -311,12 +321,16 @@ def finalize_report_contract(report: Any, payload: dict) -> dict:
         if "CALL_LIFECYCLE_INCOMPLETE" not in issues:
             issues.append("CALL_LIFECYCLE_INCOMPLETE")
         context["semantic_issues"] = issues
+        context["semantic_status"] = "INCOMPLETE"
+        context["reviewability"] = "NOT_FULLY_REVIEWABLE"
         boundary = payload.setdefault("evidence_boundary", {})
         boundary["statement"] = call_quality["statement"] + " " + str(boundary.get("statement") or "")
 
     if formation_quality["no_valid_call"]:
         context = payload.setdefault("analysis_context", {})
         context["session_call_status"] = "NO_VALID_CALL"
+        context["semantic_status"] = "INCOMPLETE"
+        context["reviewability"] = "NOT_FULLY_REVIEWABLE"
         boundary = payload.setdefault("evidence_boundary", {})
         boundary["statement"] = formation_quality["statement"] + " " + str(boundary.get("statement") or "")
         headline = "本次 Reproduction Session 未形成有效 Call；以下内容仅覆盖实际已采集的前置 Evidence。"
