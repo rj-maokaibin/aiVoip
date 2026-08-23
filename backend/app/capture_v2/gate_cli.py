@@ -16,6 +16,7 @@ _MASTER_BASELINE_GATE_ID = "MASTER-BASELINE-INTEGRATION-RC59"
 _MASTER_FIX_CANDIDATE_GATE_RE = re.compile(r"^MASTER-FIX-CANDIDATE-INTEGRATION-RC\d+$")
 _MASTER_FIX_CANDIDATE_SHA = "391486c7a70f8e36c088dcb512397044a552c78c"
 _PRODUCTION_PREFLIGHT_GATE_RE = re.compile(r"^PRODUCTION-DEPLOYMENT-PREFLIGHT-RC\d+$")
+_PRODUCTION_CUTOVER_GATE_RE = re.compile(r"^PRODUCTION-CUTOVER-RC\d+$")
 _PRODUCTION_AUTH_RELATIVE = Path("validation/capture_v2/PRODUCTION_CUTOVER_AUTHORIZATION_RC69.json")
 _TSHARK_HOST_CANDIDATES = (
     Path("/usr/bin/tshark"),
@@ -116,10 +117,6 @@ def _bounded_master_fix_candidate_regression(argv: list[str]) -> int | None:
     if candidate_sha != _MASTER_FIX_CANDIDATE_SHA:
         return None
 
-    # master_fix_candidate_regression has an additional fixed-SHA assertion.
-    # Keep it synchronized here rather than widening that module to arbitrary
-    # candidate SHAs; this process-local assignment is reachable only after the
-    # exact gate-id shape and exact audited SHA checks above have passed.
     from app.capture_v2.control import master_fix_candidate_regression as regression
 
     regression.CANDIDATE_SHA = _MASTER_FIX_CANDIDATE_SHA
@@ -135,12 +132,11 @@ def _bounded_master_fix_candidate_regression(argv: list[str]) -> int | None:
             os.environ.pop("TSHARK_BINARY", None)
 
 
-def _bounded_production_deployment_preflight(argv: list[str]) -> int | None:
-    """Dispatch only the audited production preflight authorization artifact."""
+def _resolve_exact_production_authorization(argv: list[str], gate_re: re.Pattern[str]) -> tuple[Path, Path] | None:
     if not argv or argv[0] != "evaluate":
         return None
     gate_id = str(_arg_value(argv, "--gate-id") or "").strip()
-    if not _PRODUCTION_PREFLIGHT_GATE_RE.fullmatch(gate_id):
+    if not gate_re.fullmatch(gate_id):
         return None
     bundle = str(_arg_value(argv, "--bundle") or "").strip()
     if not bundle:
@@ -154,10 +150,30 @@ def _bounded_production_deployment_preflight(argv: list[str]) -> int | None:
         supplied = supplied.resolve()
     if supplied != expected:
         return None
+    return repo_root, expected
 
+
+def _bounded_production_deployment_preflight(argv: list[str]) -> int | None:
+    """Dispatch only the audited production preflight authorization artifact."""
+    resolved = _resolve_exact_production_authorization(argv, _PRODUCTION_PREFLIGHT_GATE_RE)
+    if resolved is None:
+        return None
+    repo_root, expected = resolved
     from app.capture_v2.control.production_deployment_preflight_guarded import main as preflight_main
-
     return preflight_main([
+        "--repo-root", str(repo_root),
+        "--authorization", str(expected),
+    ])
+
+
+def _bounded_production_cutover(argv: list[str]) -> int | None:
+    """Dispatch only the explicitly authorized, audited production V2 cutover."""
+    resolved = _resolve_exact_production_authorization(argv, _PRODUCTION_CUTOVER_GATE_RE)
+    if resolved is None:
+        return None
+    repo_root, expected = resolved
+    from app.capture_v2.control.production_cutover_guarded import main as cutover_main
+    return cutover_main([
         "--repo-root", str(repo_root),
         "--authorization", str(expected),
     ])
@@ -175,6 +191,9 @@ def main(argv: list[str] | None = None) -> int:
     if bounded is not None:
         return bounded
     bounded = _bounded_production_deployment_preflight(args)
+    if bounded is not None:
+        return bounded
+    bounded = _bounded_production_cutover(args)
     if bounded is not None:
         return bounded
     return gate_main(args)
