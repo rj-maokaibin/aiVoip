@@ -1,27 +1,36 @@
 {
   "schema_version": "capture-v2-remote-status-v1",
-  "action_id": "RC57-R6-GUARDED-DATA-RUNTIME-SW-002",
-  "sequence": 184,
-  "action_type": "SOFTWARE_REGRESSION",
-  "state": "SUCCEEDED",
+  "action_id": "R6-03-APF1250-8000-PRODUCT-REPORT-MATERIALIZE-RC57",
+  "sequence": 185,
+  "action_type": "GATE_EVALUATE",
+  "state": "FAILED",
   "runner_id": "srv:257142",
-  "action_sha256": "02ffefb623b3e9088b3d09f04a96ae6b76bbd02a36bf2c2e26a19f2ac8b8c8ab",
-  "updated_at": "2026-08-23T13:35:45.721885+00:00",
+  "action_sha256": "21283f4eb4e72ff58196a8274f0c662e40a63ff6c1044a6c023024d48f2da22d",
+  "updated_at": "2026-08-23T13:36:19.621298+00:00",
   "started_at": null,
-  "finished_at": "2026-08-23T13:35:45.721885+00:00",
-  "return_code": 0,
-  "verdict": null,
-  "result_path": "validation/control/results/RC57-R6-GUARDED-DATA-RUNTIME-SW-002/result.json",
-  "stdout_sha256": "5232ce41a4543187da9ad9a05f84b29d05a1b23b843044838e844710aa112b78",
+  "finished_at": "2026-08-23T13:36:19.621298+00:00",
+  "return_code": 1,
+  "verdict": "FAIL",
+  "result_path": "validation/control/results/R6-03-APF1250-8000-PRODUCT-REPORT-MATERIALIZE-RC57/result.json",
+  "stdout_sha256": "9bbc110eb8fd6146f36f311b94bb51f50551ca68ab512c9fdc88d127696dd349",
   "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "error": null,
   "detail": {
     "safety": {
       "capture_engine_version": "V1",
       "capture_v2_production_enabled": "false",
-      "git_head": "6fa1a824afc2891efb6d09645f89a71e56c48045",
+      "git_head": "67b2632853c00b81ac539652b4fb1024c392c6a5",
       "expected_product_head": "927787df5e3f830a74c7f3d178d39121b6ae81f4"
     },
-    "parsed_output": null
+    "parsed_output": {
+      "scope": "R6_BOUNDED_POSTGRES_PRODUCT_MATERIALIZATION",
+      "production_mutation": false,
+      "dut_mutation": false,
+      "temporary_postgres_started": false,
+      "prestate_application_services_running": false,
+      "verdict": "FAIL",
+      "reason": "R6_PRODUCT_MATERIALIZATION_RUNTIME_EXCEPTION",
+      "error": "RuntimeError:COMMAND_FAILED:/usr/bin/docker:rc=1:unable to get image 'postgres:16': permission denied while trying to connect to the Docker daemon socket at unix:///var/run/docker.sock: Get \"http://%2Fvar%2Frun%2Fdocker.sock/v1.51/images/postgres:16/json\": dial unix /var/run/docker.sock: connect: permission denied"
+    }
   }
 }
