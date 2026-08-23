@@ -12,6 +12,7 @@ from app.db.evidence_report_models import FeishuEvidenceDocumentBinding, Prelimi
 from app.db.models import Case
 from app.integrations.feishu.transport import FeishuLiveTransport
 from app.integrations.storage import ObjectStorage
+from app.reports.actionable_summary import attach_actionable_summary
 from app.services.audit import audit
 from app.services.evidence_report_artifacts import report_artifacts
 
@@ -111,7 +112,7 @@ class FeishuEvidenceDocumentService:
     def _time_text(card:dict)->str:
         t=card.get("time") or {};absolute=f"{t.get('absolute_start_utc')} ～ {t.get('absolute_end_utc')}"
         relative=t.get("call_relative_representative") or t.get("call_relative_start")
-        return f"绝对时间（UTC）：{absolute}"+(f"｜Call 相对时间：{relative}" if relative else "")
+        return f"绝对时间（UTC）：{absolute}"+(f"｜Call 相对时间：{relative}" if rel else "")
 
     def _append_inline_media(self,blocks:list[dict],plan:list[dict],card:dict,*,budget:int)->int:
         used=0
@@ -133,12 +134,31 @@ class FeishuEvidenceDocumentService:
     def _core_blocks(self,report:PreliminaryEvidenceReport,payload:dict)->tuple[list[dict],int,list[dict]]:
         findings=payload.get("findings") or [];comp=payload.get("completeness") or {};case=payload.get("case") or {};blocks=[];inline_plan=[];media_budget=self.INLINE_MEDIA_LIMIT
         context=payload.get("analysis_context") or {};offline=context.get("analysis_mode")=="OFFLINE_IMPORTED"
+        attach_actionable_summary(payload,payload.get("diagnosis") or {})
         frozen_comp=comp.get("frozen_v1") or payload.get("capture_quality") or {}
         blocks.extend([self._text(f"V{report.version}｜{payload.get('generated_at')}｜{report.status}",3),self._text("0. 当前状态 / 快速导航",4),
                        self._text(f"Case：{case.get('case_no')}｜范围：{report.scope_type}｜证据完整度：{frozen_comp.get('state') or comp.get('state')}｜可复核性：{comp.get('reviewability')}｜问题点：{len(findings)}｜最高等级：{payload.get('highest_severity')}")])
         card_summary=payload.get("evidence_card_summary") or {}
         if card_summary:blocks.append(self._text(f"Evidence Card：{card_summary.get('finding_count')}｜需音频：{card_summary.get('audio_expected_count')}｜已匹配：{card_summary.get('audio_available_count')}｜缺失：{card_summary.get('audio_unavailable_count')}"))
         blocks.extend([self._text("1. 当前初步结论",4),self._text(payload.get("headline") or ""),self._text((payload.get("evidence_boundary") or {}).get("statement") or "")])
+        problem_scope=payload.get("problem_scope") or {};window=payload.get("observation_window") or {};next_actions=payload.get("next_actions") or []
+        blocks.append(self._text("1.1 问题范围与绝对时间",4))
+        blocks.append(self._text(f"问题范围：{problem_scope.get('statement') or 'UNKNOWN'}"))
+        blocks.append(self._text(f"已确认影响链路：{problem_scope.get('affected_path') or 'UNKNOWN'}"))
+        for item in (problem_scope.get("excluded_or_weakened") or [])[:8]:blocks.append(self._text(f"已排除/明显弱化：{item}",12))
+        for item in (problem_scope.get("unresolved") or [])[:8]:blocks.append(self._text(f"尚未确认：{item}",12))
+        blocks.append(self._text(f"观察窗口：{window.get('scope')}｜UTC {window.get('absolute_start_utc')} ～ {window.get('absolute_end_utc')}"))
+        blocks.append(self._text(f"本地绝对时间（UTC+8）：{window.get('absolute_start_local')} ～ {window.get('absolute_end_local')}"))
+        blocks.append(self._text(f"精确异常首末时刻已知：{'是' if window.get('exact_event_window_known') else '否'}｜{window.get('boundary_statement') or ''}"))
+        blocks.append(self._text("1.2 下一步建议 / 验证顺序 / 通过标准",4))
+        if next_actions:
+            for index,action in enumerate(next_actions,1):
+                blocks.append(self._text(f"P{index-1}｜{action.get('action_type')}｜priority={action.get('priority')}｜risk={action.get('risk_level')}",5))
+                blocks.append(self._text(f"目的：{action.get('reason')}"))
+                for step in (action.get("execution_steps") or [])[:10]:blocks.append(self._text(f"执行：{step}",12))
+                blocks.append(self._text(f"通过标准：{action.get('acceptance_criteria')}"))
+        else:
+            blocks.append(self._text(f"下一步建议：{(payload.get('preliminary_assessment') or {}).get('recommended_next_action') or '当前没有可执行计划。'}"))
         blocks.append(self._text("2. 当前重点问题",4))
         for f in findings[:20]:
             card=f.get("evidence_card") or {};first=((f.get("correlation") or {}).get("first_observable_boundary") or {})
