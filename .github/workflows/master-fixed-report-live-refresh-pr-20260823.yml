@@ -23,7 +23,7 @@ jobs:
       TARGET_OPEN_ID: ou_67bee3c2e462a7f8939093bd8e697a96
 
     steps:
-      - name: Sync latest master into clean persistent workspace
+      - name: Pre-clean persistent self-hosted workspace
         shell: bash
         run: |
           set -euo pipefail
@@ -31,9 +31,21 @@ jobs:
           test -d .git
           git reset --hard HEAD
           git clean -ffdx
-          git fetch --no-tags --prune origin master
-          git checkout -f -B master FETCH_HEAD
-          git reset --hard FETCH_HEAD
+
+      - name: Checkout latest master with job token
+        uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 1
+          clean: true
+          persist-credentials: false
+
+      - name: Validate latest master product snapshot
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE"
+          git reset --hard HEAD
           git clean -ffdx
           test -z "$(git status --porcelain)"
           head="$(git rev-parse HEAD)"
