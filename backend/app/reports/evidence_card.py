@@ -124,10 +124,12 @@ def _measurements(finding: dict) -> list[dict]:
     elif ftype in {"LOCAL_CAPTURE_PERIODIC_INTERFERENCE", "PERIODIC_INTERFERENCE_PATH_COMPARISON"} and metrics.get("pcm_rx"):
         pcm_rx, upstream, downstream = metrics.get("pcm_rx") or {}, metrics.get("upstream_rtp") or {}, metrics.get("downstream_rtp") or {}
         strength = metrics.get("strength") or {}
-        _add_measurement(out, "PCM RX 周期等级", pcm_rx.get("level"))
-        _add_measurement(out, "PCM RX 20ms 自相关", _periodic_ac20(pcm_rx))
-        _add_measurement(out, "PCM RX 频梳命中", _periodic_comb_hits(pcm_rx), "peaks")
-        _add_measurement(out, "PCM RX 周期强度", strength.get("pcm_rx"))
+        # Preserve the frozen Evidence Card V1 labels; presentation projections may
+        # prettify PCM_RX to PCM RX without mutating the canonical card schema.
+        _add_measurement(out, "PCM_RX 周期等级", pcm_rx.get("level"))
+        _add_measurement(out, "PCM_RX 20ms 自相关", _periodic_ac20(pcm_rx))
+        _add_measurement(out, "PCM_RX 频梳命中", _periodic_comb_hits(pcm_rx), "peaks")
+        _add_measurement(out, "PCM_RX 周期强度", strength.get("pcm_rx"))
         _add_measurement(out, "上行 RTP 周期强度", strength.get("upstream_rtp"))
         _add_measurement(out, "反向 RTP 周期强度", strength.get("downstream_rtp"))
         _add_measurement(out, "上行 RTP 20ms 自相关", _periodic_ac20(upstream))
