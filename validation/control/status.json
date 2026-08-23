@@ -1,86 +1,27 @@
 {
   "schema_version": "capture-v2-remote-status-v1",
-  "action_id": "R7-02-APF3260M-SERVICE-ACTIVATION-ROLLBACK-RC52",
-  "sequence": 173,
-  "action_type": "ACTIVATION_REHEARSAL",
-  "state": "INCONCLUSIVE",
+  "action_id": "RC53-ACTIVATION-TERMINAL-DIAGNOSTICS-SW-001",
+  "sequence": 174,
+  "action_type": "SOFTWARE_REGRESSION",
+  "state": "SUCCEEDED",
   "runner_id": "srv:257142",
-  "action_sha256": "91ec2c2a65e790cd1bad44618406f2cfb52b22060df35ab3d6229f2bba54eaad",
-  "updated_at": "2026-08-23T12:20:34.885617+00:00",
+  "action_sha256": "2d3085be68b37053218fbbdce81131c8e7b09c871d3b85f174837ef6439511d7",
+  "updated_at": "2026-08-23T12:23:29.029066+00:00",
   "started_at": null,
-  "finished_at": "2026-08-23T12:20:34.885617+00:00",
-  "return_code": 2,
-  "verdict": "INCONCLUSIVE",
-  "result_path": "validation/control/results/R7-02-APF3260M-SERVICE-ACTIVATION-ROLLBACK-RC52/result.json",
-  "stdout_sha256": "f88fd388c76e273396f7174fcdaae828bbcd7f39bd9dc8c92b111b16338db8d8",
+  "finished_at": "2026-08-23T12:23:29.029066+00:00",
+  "return_code": 0,
+  "verdict": null,
+  "result_path": "validation/control/results/RC53-ACTIVATION-TERMINAL-DIAGNOSTICS-SW-001/result.json",
+  "stdout_sha256": "8f5d2d2c363942975bc09343c6aeb56ca0cde7b7d50146034c79211e060428c4",
   "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "error": null,
   "detail": {
     "safety": {
       "capture_engine_version": "V1",
       "capture_v2_production_enabled": "false",
-      "git_head": "04ce8f50e90506fcddd7b4517e62827e16f62f10",
-      "expected_product_head": "d71df4d54fb01f0df67934d57ad5f3170fcc2fd7"
+      "git_head": "4f007d66365ec10596ada2cb0dc6b84efd8cc888",
+      "expected_product_head": "93fe8e5e25c7f13a64913daba144e939a5c2e4f8"
     },
-    "parsed_output": {
-      "scope": "BOUNDED_SERVICE_LEVEL_ACTIVATION_REHEARSAL",
-      "production_v2_enabled": false,
-      "original_env_modified": false,
-      "project": "capture-v2-r7-rehearsal",
-      "device": {
-        "sn": "G1U060H000384",
-        "model": "APF3260-M",
-        "host": "10.48.8.74",
-        "port": 10002
-      },
-      "checks": [],
-      "pre_v1": {
-        "contract": {
-          "capture_engine_version": "V1",
-          "capture_v2_production_enabled": false,
-          "contract_ok": true,
-          "expected": "V1",
-          "reproduction_platform_mode": "real"
-        },
-        "session": {
-          "business_lock_status": null,
-          "capture": null,
-          "case_id": "786d047e-3d70-4c0a-88d3-9a127af5ebf2",
-          "cleanup_status": "NOT_REQUIRED",
-          "device_id": "bd1e8604-4f6a-441f-89e5-13f3dac00568",
-          "dut": {
-            "producer_count": 0,
-            "producers": []
-          },
-          "exists": true,
-          "session_id": "c5c62ce5-fd52-4771-a9d9-b96150af4bea",
-          "state": "CREATED",
-          "terminal_reason": null
-        }
-      },
-      "verdict": "INCONCLUSIVE",
-      "reason": "SERVICE_LEVEL_REHEARSAL_EXCEPTION",
-      "failure_phase": "V2_REHEARSAL_ACTIVATION",
-      "error": "RuntimeError:[reproduction-worker]\nreproduction-worker-1  | trap cleanup_lock EXIT INT TERM\nreproduction-worker-1  | \nreproduction-worker-1  | current=$(cat \"$CONTROL/lease_epoch\" 2>/dev/null || true)\nreproduction-worker-1  | if [ \"$current\" != 1 ]; then\nreproduction-worker-1  |   echo AIVOIP_FENCED\nreproduction-worker-1  |   exit 73\nreproduction-worker-1  | fi\nreproduction-worker-1  | [ -f /tmp/aivoip_capture/epochs/CAP_6809fa26_0001_6c8eab71/spool/seg_000000000001__capture_20260823_201654.pcap ] || exit 0\nreproduction-worker-1  | inode=$(stat -c %i /tmp/aivoip_capture/epochs/CAP_6809fa26_0001_6c8eab71/spool/seg_000000000001__capture_20260823_201654.pcap 2>/dev/null || echo 0)\nreproduction-worker-1  | size=$(stat -c %s /tmp/aivoip_capture/epochs/CAP_6809fa26_0001_6c8eab71/spool/seg_000000000001__capture_20260823_201654.pcap 2>/dev/null || echo 0)\nreproduction-worker-1  | [ \"$inode\" = 7356734 ] || exit 74\nreproduction-worker-1  | [ \"$size\" = 24 ] || exit 74\nreproduction-worker-1  | rm -f -- /tmp/aivoip_capture/epochs/CAP_6809fa26_0001_6c8eab71/spool/seg_000000000001__capture_20260823_201654.pcap || exit 82\nreproduction-worker-1  | [ ! -e /tmp/aivoip_capture/epochs/CAP_6809fa26_0001_6c8eab71/spool/seg_000000000001__capture_20260823_201654.pcap ] || exit 82\nreproduction-worker-1  | \nreproduction-worker-1  | \nreproduction-worker-1  | [2026-08-23 12:17:03,233: INFO/ForkPoolWorker-1] [conn=1, chan=68] Received exit status 0\nreproduction-worker-1  | [2026-08-23 12:17:03,233: INFO/ForkPoolWorker-1] [conn=1, chan=68] Received channel close\nreproduction-worker-1  | [2026-08-23 12:17:03,233: INFO/ForkPoolWorker-1] [conn=1, chan=68] Channel closed\nreproduction-worker-1  | [2026-08-23 12:17:03,327: INFO/ForkPoolWorker-1] [conn=1] Closing connection\nreproduction-worker-1  | [2026-08-23 12:17:03,327: INFO/ForkPoolWorker-1] [conn=1] Sending disconnect: Disconnected by application (11)\nreproduction-worker-1  | [2026-08-23 12:17:03,328: INFO/ForkPoolWorker-1] [conn=1] Connection closed\nreproduction-worker-1  | [2026-08-23 12:17:03,333: INFO/ForkPoolWorker-1] [conn=0, chan=6] Received exit signal HUP\nreproduction-worker-1  | [2026-08-23 12:17:03,333: INFO/ForkPoolWorker-1] [conn=0, chan=6] Received channel close\nreproduction-worker-1  | [2026-08-23 12:17:03,333: INFO/ForkPoolWorker-1] [conn=0, chan=6] Channel closed\nreproduction-worker-1  | [2026-08-23 12:17:03,333: INFO/ForkPoolWorker-1] [conn=0] Closing connection\nreproduction-worker-1  | [2026-08-23 12:17:03,334: INFO/ForkPoolWorker-1] [conn=0] Sending disconnect: Disconnected by application (11)\nreproduction-worker-1  | [2026-08-23 12:17:03,334: INFO/ForkPoolWorker-1] [conn=0] Connection closed\nreproduction-worker-1  | [2026-08-23 12:17:03,442: INFO/ForkPoolWorker-1] Task reproduction.start[73d6d344-3369-4aef-ae40-43cd71e85749] succeeded in 12.774162249872461s: {'session_id': 'c5c62ce5-fd52-4771-a9d9-b96150af4bea', 'state': 'PARTIAL_SUCCESS', 'diagnosis': {'status': 'TRIGGERED', 'job_id': 'd73d3d41-737d-4302-88e6-9a451fa417cb', 'run_id': '12ddf44d-a314-4892-a33f-9909b80e5805', 'case_id': '786d047e-3d70-4c0a-88d3-9a127af5ebf2', 'session_id': 'c5c62ce5-fd52-4771-a9d9-b96150af4bea', 'fix_",
-      "final_server_target_state": "PRESTATE_NO_REHEARSAL_CONTAINERS",
-      "final_authority_target": "V1",
-      "diagnostics": {
-        "compose_ps": "NAME      IMAGE     COMMAND   SERVICE   CREATED   STATUS    PORTS\n",
-        "logs_tail": {
-          "backend": "",
-          "postgres": "",
-          "redis": "",
-          "minio": "",
-          "reproduction-worker": "",
-          "reproduction-control-high-worker": "",
-          "reproduction-watch-worker": "",
-          "beat": ""
-        }
-      },
-      "guarded_rehearsal": true,
-      "host_port_publishing": "DISABLED_BY_COMPOSE_OVERRIDE",
-      "backend_health_wait_seconds": 120,
-      "final_rehearsal_project_empty": true
-    }
+    "parsed_output": null
   }
 }
