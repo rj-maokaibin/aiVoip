@@ -33,15 +33,8 @@ def _collect_diagnostics(repo_root: Path, env_file: Path) -> dict:
     out["compose_ps"] = _safe_error((ps.stdout or "") + "\n" + (ps.stderr or ""))
     logs: dict[str, str] = {}
     for service in DIAG_SERVICES:
-        cp = _compose(
-            repo_root,
-            env_file,
-            ["logs", "--no-color", "--tail", "80", service],
-            timeout=60,
-            check=False,
-        )
-        text = (cp.stdout or "") + "\n" + (cp.stderr or "")
-        logs[service] = _safe_error(text)
+        cp = _compose(repo_root, env_file, ["logs", "--no-color", "--tail", "80", service], timeout=60, check=False)
+        logs[service] = _safe_error((cp.stdout or "") + "\n" + (cp.stderr or ""))
     out["logs_tail"] = logs
     return out
 
@@ -63,50 +56,30 @@ def _install_backend_health_wait(timeout: float = 120.0) -> None:
 def _install_status_timeout_diagnostics() -> None:
     original_wait_status = rehearsal._wait_status
 
-    def _wait_status_with_diagnostics(
-        repo_root: Path,
-        env_file: Path,
-        session_id: str,
-        predicate,
-        *,
-        timeout: float,
-        with_producer: bool = False,
-    ):
+    def _wait_status_with_diagnostics(repo_root: Path, env_file: Path, session_id: str, predicate, *, timeout: float, with_producer: bool = False):
         try:
-            return original_wait_status(
+            return original_wait_status(repo_root, env_file, session_id, predicate, timeout=timeout, with_producer=with_producer)
+        except Exception as exc:
+            cp = _compose(
                 repo_root,
                 env_file,
-                session_id,
-                predicate,
-                timeout=timeout,
-                with_producer=with_producer,
+                ["logs", "--no-color", "--tail", "120", "reproduction-worker"],
+                timeout=60,
+                check=False,
             )
-        except Exception as exc:
-            pieces = [f"{type(exc).__name__}:{_safe_error(str(exc))}"]
-            for service in (
-                "reproduction-worker",
-                "reproduction-control-high-worker",
-                "reproduction-watch-worker",
-                "backend",
-            ):
-                cp = _compose(
-                    repo_root,
-                    env_file,
-                    ["logs", "--no-color", "--tail", "60", service],
-                    timeout=60,
-                    check=False,
-                )
-                text = (cp.stdout or "") + "\n" + (cp.stderr or "")
-                pieces.append(f"[{service}]\n{_safe_error(text)}")
-            raise RuntimeError("SESSION_STATUS_TIMEOUT_DIAGNOSTICS:\n" + "\n".join(pieces)) from exc
+            worker_tail = _safe_error((cp.stdout or "") + "\n" + (cp.stderr or ""))
+            raise RuntimeError(
+                "SESSION_STATUS_TIMEOUT_DIAGNOSTICS:\n"
+                f"DB_TIMEOUT:{type(exc).__name__}:{_safe_error(str(exc))}\n"
+                "[reproduction-worker]\n"
+                + worker_tail
+            ) from exc
 
     rehearsal._wait_status = _wait_status_with_diagnostics
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(
-        description="Guarded bounded Capture V2 activation rehearsal"
-    )
+    parser = argparse.ArgumentParser(description="Guarded bounded Capture V2 activation rehearsal")
     parser.add_argument("--repo-root", required=True)
     parser.add_argument("--action-id", required=True)
     parser.add_argument("--sn", required=True)
@@ -127,17 +100,9 @@ def main(argv: list[str] | None = None) -> int:
     base_compose = repo_root / "docker-compose.yml"
     rehearsal_compose = repo_root / "docker-compose.capture-v2-rehearsal.yml"
     if not rehearsal_compose.is_file():
-        payload = {
-            "verdict": "INCONCLUSIVE",
-            "reason": "REHEARSAL_COMPOSE_OVERRIDE_MISSING",
-            "production_v2_enabled": False,
-            "final_authority_target": "V1",
-        }
-        print(json.dumps(payload, ensure_ascii=False, indent=2))
+        print(json.dumps({"verdict":"INCONCLUSIVE","reason":"REHEARSAL_COMPOSE_OVERRIDE_MISSING","production_v2_enabled":False,"final_authority_target":"V1"}, ensure_ascii=False, indent=2))
         return 2
-    os.environ["COMPOSE_FILE"] = os.pathsep.join(
-        [str(base_compose), str(rehearsal_compose)]
-    )
+    os.environ["COMPOSE_FILE"] = os.pathsep.join([str(base_compose), str(rehearsal_compose)])
     _install_backend_health_wait()
     _install_status_timeout_diagnostics()
 
@@ -148,16 +113,8 @@ def main(argv: list[str] | None = None) -> int:
             preclean_error = "REHEARSAL_PROJECT_NOT_EMPTY_AFTER_PRECLEAN"
     except Exception as exc:
         preclean_error = f"REHEARSAL_PRECLEAN_FAILED:{type(exc).__name__}:{exc}"
-
     if preclean_error:
-        payload = {
-            "verdict": "INCONCLUSIVE",
-            "reason": "REHEARSAL_PRECLEAN_NOT_PROVEN",
-            "error": preclean_error,
-            "production_v2_enabled": False,
-            "final_authority_target": "V1",
-        }
-        print(json.dumps(payload, ensure_ascii=False, indent=2))
+        print(json.dumps({"verdict":"INCONCLUSIVE","reason":"REHEARSAL_PRECLEAN_NOT_PROVEN","error":preclean_error,"production_v2_enabled":False,"final_authority_target":"V1"}, ensure_ascii=False, indent=2))
         return 2
 
     rc = 2
