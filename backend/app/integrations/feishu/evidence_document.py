@@ -309,7 +309,7 @@ class FeishuEvidenceDocumentService:
 
         call = payload.get("display_call") or payload.get("call") or {}
         if offline:
-            blocks.append(self._text("4. 最新一次复现结果", 4))
+            blocks.append(self._text("4. 当前离线 Call 重建结果", 4))
             blocks.append(self._text(f"分析方式：离线证据导入｜复现 Session：不适用｜重建 Call：{context.get('reconstructed_call_count')}"))
             if call:
                 blocks.append(self._text(
