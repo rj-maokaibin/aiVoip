@@ -1,0 +1,44 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "RC77-SINGLE-EXECUTOR-CUTOVER-SW-001",
+    "sequence": 208,
+    "created_at": "2026-08-23T15:53:00+00:00",
+    "expires_at": "2026-08-24T03:53:00+00:00",
+    "action_type": "SOFTWARE_REGRESSION",
+    "parameters": {
+      "timeout_seconds": 1800
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "a44cfd49da8a0ba82b0235bb7b2ccad3293b2d2c"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "Supersede older-head RC76 for release purposes. Validate the final production cutover control source including host-local single-executor locking, concurrent-fetch isolation, full runtime service deployment, rollback evidence, and cutover guards. No production or DUT mutation."
+  },
+  "action_sha256": "159a96c16d58472ca1f1fb2a3d800a946e0d08d836aab1fe0d0b0ade3324e2fb",
+  "runner_id": "srv:611900",
+  "state": "SUCCEEDED",
+  "return_code": 0,
+  "verdict": null,
+  "error": null,
+  "finished_at": "2026-08-23T15:51:39.369366+00:00",
+  "stdout_sha256": "f26487a8d2cf7497501c4c0fa5363c33e3a8806272f6a39313b46363d91ae204",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "local_stdout": ".capture-v2-control/logs/RC77-SINGLE-EXECUTOR-CUTOVER-SW-001/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/RC77-SINGLE-EXECUTOR-CUTOVER-SW-001/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "63e85f32fe162b206bae4f1de5c3976611e63f8b",
+      "expected_product_head": "a44cfd49da8a0ba82b0235bb7b2ccad3293b2d2c"
+    },
+    "parsed_output": null
+  }
+}
