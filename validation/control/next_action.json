@@ -1,12 +1,14 @@
 {
   "schema_version": "capture-v2-remote-action-v1",
-  "action_id": "RC60-MASTER-FIX-CANDIDATE-SW-001",
-  "sequence": 190,
-  "created_at": "2026-08-23T13:55:00+00:00",
-  "expires_at": "2026-08-24T00:55:00+00:00",
-  "action_type": "SOFTWARE_REGRESSION",
+  "action_id": "RC60-MASTER-FIX-CANDIDATE-INTEGRATION-001",
+  "sequence": 191,
+  "created_at": "2026-08-23T13:57:00+00:00",
+  "expires_at": "2026-08-24T01:57:00+00:00",
+  "action_type": "GATE_EVALUATE",
   "parameters": {
-    "timeout_seconds": 1800
+    "timeout_seconds": 7200,
+    "bundle": "c962c0d174099bae1afc8db55067402b36717487",
+    "gate_id": "MASTER-FIX-CANDIDATE-INTEGRATION-RC60"
   },
   "safety": {
     "require_clean_git": true,
@@ -17,5 +19,5 @@
     "expected_head": "a3a042b3b69c1354f4911a58494c82c17f047f8b"
   },
   "requested_by": "ChatGPT-remote-validation-controller",
-  "note": "Full Capture V2 software regression for the audited PR #37 candidate integration simulator. The simulator accepts only candidate c962c0d174099bae1afc8db55067402b36717487 on the fixed master-frozen-v2-contract branch, verifies audited master e8d108a as its ancestor, uses a detached temporary worktree, and creates no merge commit. This software regression performs no candidate integration run, no DUT I/O, and no production activation."
+  "note": "Run isolated full acceptance for audited Draft PR #37 candidate c962c0d174099bae1afc8db55067402b36717487 plus the current Capture V2 product head. Verify the candidate is based on audited master e8d108a228b151b7711bfe6048c3f39e94b57783, merge the current feature into a detached temporary candidate worktree without committing, then require Capture V2 regression, current Frozen contracts, full VOIP AI software release gate, and Real Offline Golden #001 142/142. Remove the worktree afterwards. Do not mutate either branch, create a merge commit, access the DUT, or enable Production V2."
 }
