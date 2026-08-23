@@ -1,0 +1,61 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "R6-01-APF1250-FIRST-8000-LIVE-RC32",
+    "sequence": 132,
+    "created_at": "2026-08-23T06:45:00+00:00",
+    "expires_at": "2026-08-23T18:45:00+00:00",
+    "action_type": "GATE_READINESS_FXS",
+    "parameters": {
+      "device_id": "259f16e6-af9e-4dff-969b-2bb5eac43eb2",
+      "model": "APF1250",
+      "host": "10.48.8.74",
+      "port": 10001,
+      "username": "root",
+      "platform_id": "mt7621",
+      "password_env": "DB:G1V030E010214",
+      "profile_root": "../profiles",
+      "profile_id": "voip-standard",
+      "object_root": "/tmp/voip-reproduction-objects",
+      "output_root": "/tmp/capture-v2-gates",
+      "repo_root": "..",
+      "reproduction_session_id": "AUTO_NEW",
+      "worker_id": "r6-apf1250-first-8000-rc32",
+      "gate_id": "R6-FIRST-8000-LIVE-COVERAGE-RC32",
+      "duration": 240,
+      "transport": "scp",
+      "timeout_seconds": 1200
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "86f7d7c01bdfe613e149f2e048cc7beb9538fd97"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "APF1250 real first-call capture after version switch. Panel one-touch target is 8000. Require readiness before operator action and collect FXS, PCAP, PCM RX/TX, kernel-drop, durable segment and Coverage Ledger evidence. Production V2 stays disabled."
+  },
+  "action_sha256": "5d1358cdf7bfa8f0c82fe4787cc377ac1755e8b35b194b49b1b6ef5f0af87ee7",
+  "runner_id": "srv:231819",
+  "state": "FAILED",
+  "return_code": 1,
+  "verdict": null,
+  "error": null,
+  "finished_at": "2026-08-23T06:59:16.696724+00:00",
+  "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "stderr_sha256": "88ef32f561e301c63be5315f4fd8c7a203762b373207fec3e8aba5e01777087a",
+  "local_stdout": ".capture-v2-control/logs/R6-01-APF1250-FIRST-8000-LIVE-RC32/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/R6-01-APF1250-FIRST-8000-LIVE-RC32/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "935f4261fdff98851c380cf658eaddbdba21b11d",
+      "expected_product_head": "86f7d7c01bdfe613e149f2e048cc7beb9538fd97"
+    },
+    "parsed_output": null
+  }
+}

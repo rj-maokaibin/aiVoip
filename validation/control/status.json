@@ -1,261 +1,27 @@
 {
   "schema_version": "capture-v2-remote-status-v1",
-  "action_id": "R6-01-APF1250-FIRST-DIGIT-LOSS-LIVE-COVERAGE-RC32",
-  "sequence": 131,
+  "action_id": "R6-01-APF1250-FIRST-8000-LIVE-RC32",
+  "sequence": 132,
   "action_type": "GATE_READINESS_FXS",
-  "state": "INCONCLUSIVE",
-  "runner_id": "srv:3456908",
-  "action_sha256": "627668956a2ea3ad0831e248aaa92cd2a8c45b9ae53de8d02844cc066fac5efa",
-  "updated_at": "2026-08-23T06:39:18.079886+00:00",
+  "state": "FAILED",
+  "runner_id": "srv:231819",
+  "action_sha256": "5d1358cdf7bfa8f0c82fe4787cc377ac1755e8b35b194b49b1b6ef5f0af87ee7",
+  "updated_at": "2026-08-23T06:59:16.696724+00:00",
   "started_at": null,
-  "finished_at": "2026-08-23T06:39:18.079886+00:00",
-  "return_code": 2,
-  "verdict": "INCONCLUSIVE",
-  "result_path": "validation/control/results/R6-01-APF1250-FIRST-DIGIT-LOSS-LIVE-COVERAGE-RC32/result.json",
-  "stdout_sha256": "d63bd6919e1b434b01ba5afd699bd3e64d3c7910e07e13fca235af180090ff72",
-  "stderr_sha256": "b8258e86248ce6f15dfea1a12afcd2ad3fde62ba6d3cd24536ffc8cb3bb61c48",
+  "finished_at": "2026-08-23T06:59:16.696724+00:00",
+  "return_code": 1,
+  "verdict": null,
+  "result_path": "validation/control/results/R6-01-APF1250-FIRST-8000-LIVE-RC32/result.json",
+  "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "stderr_sha256": "88ef32f561e301c63be5315f4fd8c7a203762b373207fec3e8aba5e01777087a",
   "error": null,
   "detail": {
     "safety": {
       "capture_engine_version": "V1",
       "capture_v2_production_enabled": "false",
-      "git_head": "9a9cc5e8e6256a0ef3747a97871c19274f05f480",
+      "git_head": "935f4261fdff98851c380cf658eaddbdba21b11d",
       "expected_product_head": "86f7d7c01bdfe613e149f2e048cc7beb9538fd97"
     },
-    "parsed_output": {
-      "checks": [
-        {
-          "details": {},
-          "expected": "READY",
-          "name": "stage1_ready_before_handset",
-          "observed": "READY",
-          "passed": true,
-          "verdict": "PASS"
-        },
-        {
-          "details": {},
-          "expected": true,
-          "name": "stage1_all_real_checks_ready",
-          "observed": {
-            "exactly_one_producer": true,
-            "fxs_ready": true,
-            "lease_active": true,
-            "pcap_ready": true,
-            "pcm_control_ready": true,
-            "server_store_ready": true,
-            "storage_guard_ready": true,
-            "transfer_ready": true,
-            "voice_context_ready": true,
-            "watchdog_ready": true
-          },
-          "passed": true,
-          "verdict": "PASS"
-        },
-        {
-          "details": {},
-          "expected": "OFFHOOK->DTMF->ONHOOK",
-          "name": "physical_offhook_dtmf_onhook_observed",
-          "observed": [
-            "ONHOOK",
-            "ONHOOK"
-          ],
-          "passed": false,
-          "verdict": "FAIL"
-        },
-        {
-          "details": {},
-          "expected": ">0",
-          "name": "real_attempt_bound",
-          "observed": null,
-          "passed": false,
-          "verdict": "FAIL"
-        },
-        {
-          "details": {},
-          "expected": true,
-          "name": "capture_finalizer_durable",
-          "observed": null,
-          "passed": false,
-          "verdict": "FAIL"
-        },
-        {
-          "details": {},
-          "expected": 0,
-          "name": "kernel_capture_drops_zero",
-          "observed": null,
-          "passed": false,
-          "verdict": "FAIL"
-        },
-        {
-          "details": {},
-          "expected": ">0",
-          "name": "real_pcm_rx_packets_observed",
-          "observed": null,
-          "passed": false,
-          "verdict": "FAIL"
-        },
-        {
-          "details": {},
-          "expected": ">0",
-          "name": "real_pcm_tx_packets_observed",
-          "observed": null,
-          "passed": false,
-          "verdict": "FAIL"
-        },
-        {
-          "details": {},
-          "expected": "COMPLETE+finalized_at",
-          "name": "coverage_window_auto_finalized_complete",
-          "observed": {},
-          "passed": false,
-          "verdict": "FAIL"
-        },
-        {
-          "details": {},
-          "expected": {
-            "FXS": "COMPLETE",
-            "PCAP": "COMPLETE",
-            "PCM_RX": "COMPLETE",
-            "PCM_TX": "COMPLETE"
-          },
-          "name": "coverage_required_tracks_complete",
-          "observed": {},
-          "passed": false,
-          "verdict": "FAIL"
-        },
-        {
-          "details": {},
-          "expected": {
-            "FXS": ">0",
-            "PCAP": ">0",
-            "PCM_RX": ">0",
-            "PCM_TX": ">0"
-          },
-          "name": "coverage_intervals_persisted",
-          "observed": {
-            "FXS": null,
-            "PCAP": null,
-            "PCM_RX": null,
-            "PCM_TX": null
-          },
-          "passed": false,
-          "verdict": "FAIL"
-        },
-        {
-          "details": {},
-          "expected": {
-            "off": 2,
-            "on": 2
-          },
-          "name": "pcm_control_symmetric",
-          "observed": {
-            "off": 2,
-            "on": 2
-          },
-          "passed": true,
-          "verdict": "PASS"
-        },
-        {
-          "details": {},
-          "expected": {
-            "off": 9,
-            "on": 9
-          },
-          "name": "aim_debug_control_symmetric",
-          "observed": {
-            "off": 9,
-            "on": 9
-          },
-          "passed": true,
-          "verdict": "PASS"
-        },
-        {
-          "details": {},
-          "expected": true,
-          "name": "producer_cleanup_exact_identity",
-          "observed": true,
-          "passed": true,
-          "verdict": "PASS"
-        },
-        {
-          "details": {},
-          "expected": true,
-          "name": "lease_cleanup_released",
-          "observed": true,
-          "passed": true,
-          "verdict": "PASS"
-        },
-        {
-          "details": {},
-          "expected": [],
-          "name": "cleanup_no_exception",
-          "observed": [],
-          "passed": true,
-          "verdict": "PASS"
-        },
-        {
-          "details": {},
-          "expected": [],
-          "name": "runtime_no_exception",
-          "observed": [
-            "RuntimeError:R5_REAL_CALL_SEQUENCE_NOT_COMPLETED"
-          ],
-          "passed": false,
-          "verdict": "FAIL"
-        }
-      ],
-      "created_at": "2026-08-23T06:39:17.731415+00:00",
-      "evidence_bundle": "/tmp/capture-v2-gates/20260823T063511Z_R6-FIRST-DIGIT-LOSS-LIVE-COVERAGE-RC32_259f16e6-af9e-4dff-969b-2bb5eac43eb2",
-      "facts": {
-        "capture_attempt_id": null,
-        "capture_epoch_id": "73246f98-6d44-44ba-b698-97b2e303e98e",
-        "capture_session_id": "64972fc7-a663-451a-82bf-dd4ab278f7f7",
-        "cleanup_errors": [],
-        "coverage_tracks": {},
-        "coverage_window": {},
-        "finalizer": {
-          "acked": null,
-          "durable": null,
-          "kernel_drops": null,
-          "remote_deleted": null,
-          "sealed": null,
-          "transferred": null
-        },
-        "fxs_monitor_end": null,
-        "fxs_monitor_start": "2026-08-23T14:35:17+08:00",
-        "lease_epoch": 75,
-        "observed_fxs_events": [
-          {
-            "digit": null,
-            "event": "ONHOOK",
-            "line": 0,
-            "source_ts": "2026-08-23T14:35:43.768000+08:00",
-            "timestamp": "2026-08-23 14:35:43.768000"
-          },
-          {
-            "digit": null,
-            "event": "ONHOOK",
-            "line": 0,
-            "source_ts": "2026-08-23T14:35:43.770003+08:00",
-            "timestamp": "2026-08-23 14:35:43.770003"
-          }
-        ],
-        "pcm": {},
-        "physical_sequence_complete": false,
-        "release_gate_effect": "R5_REAL_LIVE_COVERAGE_VALIDATION_ONLY_PRODUCTION_V2_DISABLED",
-        "runtime_errors": [
-          "RuntimeError:R5_REAL_CALL_SEQUENCE_NOT_COMPLETED"
-        ],
-        "transcript_path": "/tmp/capture-v2-gates/20260823T063511Z_R6-FIRST-DIGIT-LOSS-LIVE-COVERAGE-RC32_259f16e6-af9e-4dff-969b-2bb5eac43eb2/dut/aim_fxs_transcript.log",
-        "voice_context": {
-          "gateway_ip": "192.168.3.200",
-          "interface": "br-lan_400",
-          "voice_vlan_id": "400"
-        }
-      },
-      "gate_id": "R6-FIRST-DIGIT-LOSS-LIVE-COVERAGE-RC32",
-      "summary": "R5 real call -> durable evidence -> automatic Coverage Ledger COMPLETE",
-      "verdict": "INCONCLUSIVE"
-    }
+    "parsed_output": null
   }
 }
