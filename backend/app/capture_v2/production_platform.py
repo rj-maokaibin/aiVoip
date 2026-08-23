@@ -207,13 +207,31 @@ class CaptureV2ProductionPlatform(RealReproductionPlatform):
 
     def resolve_voice_context(self, device):
         context = super().resolve_voice_context(device)
-        self._ensure_capture_v2(device)
+        try:
+            # Watch/recovery runs after the business lock commit and can bind from
+            # that authoritative lock exactly as before. During reproduction.start,
+            # however, the lock was acquired in the caller's still-open transaction;
+            # a second SessionLocal cannot see it yet. Defer only that specific case
+            # until arm(), which receives the explicit reproduction session id.
+            self._ensure_capture_v2(device)
+        except RuntimeError as exc:
+            if str(exc) != "CAPTURE_V2_ACTIVE_DEVICE_LOCK_NOT_FOUND":
+                raise
+            self._capture_device = device
         return context
 
     def arm(self, *, session_id: str, device, actions: list[str]):
         # START_VOICE_PCAP is deliberately removed before entering the legacy real
-        # platform.  Its historical implementation starts a separate 3s tcpdump
+        # platform. Its historical implementation starts a separate 3s tcpdump
         # probe; V2 readiness below proves the actual long-lived fenced producer.
+        if self._capture_session is None:
+            explicit_session_id = str(session_id)
+            if self._reproduction_session_id not in {None, explicit_session_id}:
+                raise RuntimeError("CAPTURE_V2_REPRODUCTION_BINDING_MISMATCH")
+            self._capture_device = device
+            self._reproduction_session_id = explicit_session_id
+            self._capture_worker_id = self._capture_worker_id or self._worker_id(explicit_session_id)
+            self._ensure_capture_v2(device)
         filtered = [action for action in actions if action != "START_VOICE_PCAP"]
         result = super().arm(session_id=session_id, device=device, actions=filtered)
         if "START_VOICE_PCAP" in actions:
@@ -341,7 +359,7 @@ class CaptureV2ProductionPlatform(RealReproductionPlatform):
         session = self._capture_session
         if session is not None and not self._capture_finalized:
             # Handoff/crash behavior: stop controller renewal but leave the exact
-            # producer running.  The next controller adopts it without a gap.
+            # producer running. The next controller adopts it without a gap.
             await session.stop_lease_renewer(release_lease=False)
         try:
             await self._capture_adapter.disconnect()
