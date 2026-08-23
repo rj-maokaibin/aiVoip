@@ -5,6 +5,19 @@ from typing import Any
 
 LOCAL_TIMEZONE = timezone(timedelta(hours=8))
 SUPPORTED_STATES = {"SUPPORTED", "STRONGLY_SUPPORTED", "CONFIRMED"}
+ACTIONABLE_CONTRACT_VERSION = "actionable-finding-contract-v2"
+
+_PERIODIC_FINDINGS = {
+    "LOCAL_CAPTURE_PERIODIC_INTERFERENCE",
+    "PERIODIC_LOW_FREQUENCY_INTERFERENCE",
+    "PERIODIC_INTERFERENCE_PATH_COMPARISON",
+}
+_NETWORK_FINDINGS = {
+    "HIGH_DELTA",
+    "PACKET_LOSS",
+    "BURST_LOSS",
+    "ONE_WAY_RTP_MEDIA",
+}
 
 
 def _local_iso(value: Any) -> str | None:
@@ -22,10 +35,10 @@ def _local_iso(value: Any) -> str | None:
 
 def build_observation_window(payload: dict) -> dict:
     call = payload.get("display_call") or payload.get("call") or {}
-    media_start = call.get("media_started_at")
-    media_end = call.get("media_ended_at")
-    call_start = call.get("started_at")
-    call_end = call.get("ended_at")
+    media_start = call.get("media_started_at") or call.get("media_start_time")
+    media_end = call.get("media_ended_at") or call.get("media_end_time")
+    call_start = call.get("started_at") or call.get("start_time")
+    call_end = call.get("ended_at") or call.get("end_time")
     start = media_start or call_start
     end = media_end or call_end
     scope = "ACTIVE_MEDIA_WINDOW" if media_start or media_end else "CALL_WINDOW"
@@ -143,6 +156,126 @@ def build_next_actions(payload: dict, diagnosis: dict) -> list[dict]:
     return actions
 
 
+def _display_call_id(payload: dict) -> str | None:
+    call = payload.get("display_call") or payload.get("call") or {}
+    return call.get("id") or call.get("call_id") or call.get("call_no")
+
+
+def _has_bound_time(time_range: dict) -> bool:
+    return any(time_range.get(key) is not None for key in ("start", "end", "representative"))
+
+
+def _bind_time_semantics(finding: dict, window: dict) -> None:
+    time_range = dict(finding.get("time_range") or {})
+    ftype = str(finding.get("type") or "")
+    if _has_bound_time(time_range):
+        # Session-wide periodic detection is a confirmed analysis window, but is
+        # not automatically the exact audible anomaly onset/offset.
+        if ftype in _PERIODIC_FINDINGS:
+            time_range.setdefault("semantics", "ANALYSIS_WINDOW")
+            time_range.setdefault("exact_event_window_known", False)
+        else:
+            time_range.setdefault("semantics", "EVENT_OR_ANALYZER_RANGE")
+            time_range.setdefault("exact_event_window_known", True)
+        finding["time_range"] = time_range
+        return
+
+    start = window.get("absolute_start_utc")
+    end = window.get("absolute_end_utc")
+    if start is None and end is None:
+        finding["time_range"] = {
+            "start": None,
+            "end": None,
+            "representative": None,
+            "semantics": "UNKNOWN",
+            "exact_event_window_known": False,
+            "boundary_statement": "当前 Evidence 未提供可绑定的异常或观察时间边界。",
+        }
+        return
+    finding["time_range"] = {
+        "start": start,
+        "end": end,
+        "representative": start,
+        "semantics": "OBSERVATION_BOUNDARY",
+        "exact_event_window_known": False,
+        "boundary_statement": window.get("boundary_statement"),
+    }
+
+
+def _bind_scope(finding: dict, payload: dict) -> None:
+    scope = dict(finding.get("scope") or {})
+    ftype = str(finding.get("type") or "")
+    call_id = _display_call_id(payload)
+    if call_id and not scope.get("call_id"):
+        scope["call_id"] = call_id
+
+    if ftype == "LOCAL_CAPTURE_PERIODIC_INTERFERENCE":
+        # This is an Evidence Boundary, not a physical root-cause claim. The
+        # deterministic Media Analyzer has already established PCM_RX -> RTP_UP.
+        scope.setdefault("layer", "PCM_RX_TO_RTP_UPSTREAM")
+        scope.setdefault("pcm_tap", "pcm_rx")
+        scope.setdefault("direction", "LOCAL_CAPTURE_TO_UPSTREAM_RTP")
+        scope.setdefault("path_role", "LOCAL_CAPTURE_PATH")
+        metrics = finding.get("metrics") or {}
+        scope.setdefault("rtp_stream_id", metrics.get("upstream_rtp_stream_id"))
+    elif ftype == "PERIODIC_LOW_FREQUENCY_INTERFERENCE" and scope.get("pcm_tap"):
+        scope.setdefault("layer", str(scope.get("pcm_tap")).upper())
+    finding["scope"] = scope
+    finding["scope_binding_status"] = "BOUND" if any(
+        scope.get(key) not in (None, "") for key in ("layer", "pcm_tap", "rtp_stream_id", "call_id")
+    ) else "UNKNOWN"
+
+
+def _choose_action(finding: dict, actions: list[dict]) -> dict | None:
+    if not actions:
+        return None
+    ftype = str(finding.get("type") or "")
+    if ftype in _PERIODIC_FINDINGS:
+        match = next((a for a in actions if (a.get("params") or {}).get("purpose") == "close_specific_hardware_root_cause"), None)
+        if match:
+            return match
+    if ftype in _NETWORK_FINDINGS:
+        match = next((a for a in actions if (a.get("params") or {}).get("purpose") in {
+            "locate_jitter_segment", "locate_loss_segment", "locate_one_way_media_segment"
+        }), None)
+        if match:
+            return match
+    return actions[0]
+
+
+def bind_actionable_findings(payload: dict) -> dict:
+    """Project Case/Diagnosis actions into each Finding without inventing facts.
+
+    Frozen SPEC requires each Finding to be independently reviewable. If an exact
+    event interval is absent, the confirmed Call/media observation boundary is
+    attached with explicit OBSERVATION_BOUNDARY semantics rather than pretending
+    it is the precise anomaly interval.
+    """
+    window = payload.get("observation_window") or build_observation_window(payload)
+    actions = list(payload.get("next_actions") or [])
+    for finding in payload.get("findings") or []:
+        _bind_scope(finding, payload)
+        _bind_time_semantics(finding, window)
+        action = _choose_action(finding, actions)
+        if action:
+            steps = list(action.get("execution_steps") or [])
+            finding["next_action"] = action.get("reason") or (steps[0] if steps else None)
+            finding["verification_acceptance"] = action.get("acceptance_criteria")
+            finding["action_contract"] = {
+                "contract_version": ACTIONABLE_CONTRACT_VERSION,
+                "action_type": action.get("action_type"),
+                "priority": action.get("priority"),
+                "risk_level": action.get("risk_level"),
+                "execution_steps": steps,
+                "acceptance_criteria": action.get("acceptance_criteria"),
+            }
+        else:
+            finding.setdefault("next_action", "复核该Finding的原始Evidence及相邻层对照，再决定是否进入确定性补采/A-B验证。")
+            finding.setdefault("verification_acceptance", "新增证据必须绑定到该Finding的明确Scope与时间边界，并使证据边界发生可解释变化。")
+        finding["actionable_contract_version"] = ACTIONABLE_CONTRACT_VERSION
+    return payload
+
+
 def attach_actionable_summary(payload: dict, diagnosis: dict | None = None) -> dict:
     diagnosis = diagnosis or payload.get("diagnosis") or {}
     if diagnosis:
@@ -154,4 +287,6 @@ def attach_actionable_summary(payload: dict, diagnosis: dict | None = None) -> d
     if payload["next_actions"]:
         assessment["recommended_next_action"] = payload["next_actions"][0]["reason"]
         payload["verification_acceptance"] = payload["next_actions"][0]["acceptance_criteria"]
+    bind_actionable_findings(payload)
+    payload["actionable_contract_version"] = ACTIONABLE_CONTRACT_VERSION
     return payload
