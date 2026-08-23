@@ -161,12 +161,30 @@ def _db_status(session_id: str) -> dict:
 
 
 async def _producer_status(session_id: str) -> dict:
-    from app.workers.reproduction_tasks import _build_real_adapter
+    from app.collectors.asyncssh_adapter import AsyncSSHDeviceAdapter
+    from app.integrations.credentials import LocalSecretCredentialProvider, get_credential_provider
+
     with SessionLocal() as db:
         session = db.get(ReproductionSession, session_id)
         if session is None:
             return {"producer_count": None, "error": "SESSION_NOT_FOUND"}
-    adapter = _build_real_adapter(session)
+        device = db.get(CaseDevice, session.device_id)
+        if device is None:
+            return {"producer_count": None, "error": "DEVICE_NOT_FOUND"}
+        sn = device.sn
+        ip = device.ip
+        port = int(device.ssh_port)
+        username = device.username
+
+    provider = get_credential_provider()
+    password = await provider.get_password(sn=sn, ip=ip)
+    if isinstance(provider, LocalSecretCredentialProvider):
+        try:
+            username = provider.resolve_username(ip=ip, fallback=username)
+        except Exception:
+            pass
+
+    adapter = AsyncSSHDeviceAdapter(ip=ip, port=port, username=username, password=password)
     await adapter.connect()
     try:
         records = await ReadOnlyDeviceTransport(adapter).list_tcpdump_processes()
