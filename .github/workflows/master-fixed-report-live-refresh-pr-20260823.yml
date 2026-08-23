@@ -230,6 +230,7 @@ jobs:
           set +a
           test "${REPRODUCTION_PLATFORM_MODE:-}" = "real"
           export FEISHU_APP_SECRET_FILE=/home/github-runner/.config/voip-ai/feishu_app_secret
+          export FEISHU_TIMEOUT_SECONDS=120
           export PYTHONPATH=backend
           rm -rf validation/fixed_master_live_refresh
           mkdir -p validation/fixed_master_live_refresh
