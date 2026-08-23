@@ -48,6 +48,7 @@ services:
       - ./profiles:/app/profiles:ro
       - ./rules:/app/rules:ro
       - ./knowledge:/app/knowledge:ro
+      - ./validation:/app/validation:ro
       - ./tools:/tools:ro
       - /home/dev/secret.yaml:/home/dev/secret.yaml:ro
       - ${VOIP_DATA_ROOT:-/data/voip}/reproduction/capture:/tmp/voip-reproduction-capture
@@ -116,7 +117,6 @@ services:
       minio:
         condition: service_started
 
-
   media-worker:
     build:
       context: ./backend
@@ -135,7 +135,6 @@ services:
         condition: service_healthy
       minio:
         condition: service_started
-
 
   diagnosis-worker:
     build:
@@ -159,8 +158,6 @@ services:
       minio:
         condition: service_started
 
-  # Feishu WebSocket long-connection listener (intranet-friendly: outbound-only,
-  # no public callback URL needed). Only acts when FEISHU_LIVE_ENABLED=true.
   feishu-long-connection:
     build:
       context: ./backend
@@ -189,6 +186,7 @@ services:
       - ./profiles:/app/profiles:ro
       - ./rules:/app/rules:ro
       - ./knowledge:/app/knowledge:ro
+      - ./validation:/app/validation:ro
       - /home/dev/secret.yaml:/home/dev/secret.yaml:ro
       - ${VOIP_DATA_ROOT:-/data/voip}/reproduction/capture:/tmp/voip-reproduction-capture
       - ${VOIP_DATA_ROOT:-/data/voip}/reproduction/objects:/tmp/voip-reproduction-objects
@@ -211,6 +209,7 @@ services:
       - ./profiles:/app/profiles:ro
       - ./rules:/app/rules:ro
       - ./knowledge:/app/knowledge:ro
+      - ./validation:/app/validation:ro
       - /home/dev/secret.yaml:/home/dev/secret.yaml:ro
       - ${VOIP_DATA_ROOT:-/data/voip}/reproduction/capture:/tmp/voip-reproduction-capture
       - ${VOIP_DATA_ROOT:-/data/voip}/reproduction/objects:/tmp/voip-reproduction-objects
@@ -233,6 +232,7 @@ services:
       - ./profiles:/app/profiles:ro
       - ./rules:/app/rules:ro
       - ./knowledge:/app/knowledge:ro
+      - ./validation:/app/validation:ro
       - /home/dev/secret.yaml:/home/dev/secret.yaml:ro
       - ${VOIP_DATA_ROOT:-/data/voip}/reproduction/capture:/tmp/voip-reproduction-capture
       - ${VOIP_DATA_ROOT:-/data/voip}/reproduction/objects:/tmp/voip-reproduction-objects
@@ -244,9 +244,6 @@ services:
       minio:
         condition: service_started
 
-  # Celery beat: schedules the reproduction watchdog (reconcile) every 60s so a
-  # crashed watcher / stale lease / failed cleanup is recovered automatically
-  # instead of leaving the session wedged.
   beat:
     build:
       context: ./backend
@@ -256,6 +253,7 @@ services:
       - ./profiles:/app/profiles:ro
       - ./rules:/app/rules:ro
       - ./knowledge:/app/knowledge:ro
+      - ./validation:/app/validation:ro
       - /home/dev/secret.yaml:/home/dev/secret.yaml:ro
       - ${VOIP_DATA_ROOT:-/data/voip}/reproduction/capture:/tmp/voip-reproduction-capture
       - ${VOIP_DATA_ROOT:-/data/voip}/reproduction/objects:/tmp/voip-reproduction-objects
