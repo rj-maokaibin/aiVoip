@@ -22,7 +22,7 @@ jobs:
       DOCUMENT_ID: SN6DdJX16oisLQxnPjzcwLwfnLb
       TARGET_OPEN_ID: ou_67bee3c2e462a7f8939093bd8e697a96
       PRODUCT_CODE_SHA: 82f78c60161198b008c7853c569c836855b4a770
-      ACCEPTANCE_MASTER_SHA: 494c098a16e3698351be37f9bc3df44e8bffe492
+      ACCEPTANCE_MASTER_SHA: 950c8a4dc8d03c3d07458b829f23c93fe9bf6575
       ACCEPTANCE_EVIDENCE_CARD_BLOB: ca1d37461a786f6fb8d525515fcf5c67e9a339ee
 
     steps:
@@ -131,6 +131,16 @@ jobs:
           grep -q 'compatibility_projection_sources' backend/app/reports/evidence_card.py
           grep -q 'assert "4. 最新一次复现结果" in text' backend/tests/test_feishu_evidence_document_v1.py
           ! grep -q 'assert "4. 最新一次复现结果" not in text' backend/tests/test_feishu_evidence_document_v1.py
+          grep -q '异常音频：暂不可用' backend/tests/test_feishu_evidence_document_v1.py
+          grep -q 'feishu-evidence-living-document-v2' backend/tests/test_feishu_living_document_v1.py
+          grep -q 'test_fr014_missing_optional_debug_preserves_complete_report' backend/tests/test_prd_spec_v1_alignment.py
+          grep -q 'expected_platform_status' backend/tests/test_phase_f1_release_readiness.py
+          grep -q "monkeypatch.setattr(reproduction_tasks, 'SessionLocal'" backend/tests/test_reproduction_event_tasks.py
+          grep -q 'wrapped.quarantine_root = tmp_path' backend/tests/test_capture_v2_gate_faults.py
+          grep -q 'target = tmp_path / "seg-after.pcap"' backend/tests/test_capture_v2_scp_transport.py
+          grep -q 'LOCAL_CAPTURE_TO_UPSTREAM_RTP' scripts/fixed_master_live_refresh_20260823.py
+          grep -q 'LOCAL_CAPTURE_PATH' scripts/fixed_master_live_refresh_20260823.py
+          ! grep -q 'PCM_RX_TO_RTP_UPSTREAM' scripts/fixed_master_live_refresh_20260823.py
           ! grep -q '下方旧版内容保留作为历史记录，若有冲突以本修订版为准' scripts/fixed_master_live_refresh_20260823.py
           echo "VALIDATED_ACCEPTANCE_SNAPSHOT=$FIXED_MASTER_HEAD via $MASTER_SYNC_MODE"
 
