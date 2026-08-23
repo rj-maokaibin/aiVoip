@@ -1,9 +1,9 @@
 {
   "schema_version": "capture-v2-remote-action-v1",
-  "action_id": "RC40-DEPLOYMENT-PREFLIGHT-001",
-  "sequence": 148,
-  "created_at": "2026-08-23T09:44:00+00:00",
-  "expires_at": "2026-08-23T21:44:00+00:00",
+  "action_id": "RC40-DEPLOYMENT-PREFLIGHT-002",
+  "sequence": 149,
+  "created_at": "2026-08-23T09:47:00+00:00",
+  "expires_at": "2026-08-23T21:47:00+00:00",
   "action_type": "DEPLOYMENT_PREFLIGHT",
   "parameters": {
     "timeout_seconds": 120
@@ -14,8 +14,8 @@
     "require_v2_disabled": true,
     "allow_worker_kill": false,
     "allow_server_quarantine": false,
-    "expected_head": "b795762a2ef31008dda3a27068481a39802a2bc8"
+    "expected_head": "c5c9d82444b0070db0fde9869a7c7a3a7f131410"
   },
   "requested_by": "ChatGPT-remote-validation-controller",
-  "note": "Read-only deployment preflight after RC39 PASS. Inspect Compose availability, effective runtime containers, release-artifact mount, and sanitized Capture authority state. No configuration mutation or service restart is permitted."
+  "note": "Second read-only deployment preflight. Discover non-default Compose projects from Docker labels, identify the actual running reproduction stack, verify sanitized V1 authority, and report whether containers need recreation for the new /app/validation mount. No mutation or restart."
 }
