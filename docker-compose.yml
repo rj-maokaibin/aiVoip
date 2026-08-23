@@ -33,7 +33,7 @@ services:
     volumes:
       - ${VOIP_DATA_ROOT:-/data/voip}/minio:/data
     ports:
-      - "9001:9001"
+      - "${VOIP_MINIO_CONSOLE_BIND:-0.0.0.0}:${VOIP_MINIO_CONSOLE_PORT:-9001}:9001"
 
   backend:
     build:
