@@ -1,20 +1,12 @@
 {
   "schema_version": "capture-v2-remote-action-v1",
-  "action_id": "R7-02-APF3260M-SERVICE-ACTIVATION-ROLLBACK-RC51",
-  "sequence": 171,
-  "created_at": "2026-08-23T12:12:00+00:00",
-  "expires_at": "2026-08-23T23:12:00+00:00",
-  "action_type": "ACTIVATION_REHEARSAL",
+  "action_id": "RC52-REHEARSAL-GUARD-SELF-EXCLUSION-SW-001",
+  "sequence": 172,
+  "created_at": "2026-08-23T12:16:00+00:00",
+  "expires_at": "2026-08-23T23:16:00+00:00",
+  "action_type": "SOFTWARE_REGRESSION",
   "parameters": {
-    "timeout_seconds": 3600,
-    "sn": "G1U060H000384",
-    "host": "10.48.8.74",
-    "port": 10002,
-    "username": "root",
-    "platform_id": "mt7981",
-    "model": "APF3260-M",
-    "profile_id": "VOIP_GENERIC_FULL_CAPTURE",
-    "observation_seconds": 20
+    "timeout_seconds": 1200
   },
   "safety": {
     "require_clean_git": true,
@@ -22,8 +14,8 @@
     "require_v2_disabled": true,
     "allow_worker_kill": false,
     "allow_server_quarantine": false,
-    "expected_head": "1216d0c304d9677a5faee617db5ba3a5de4a2147"
+    "expected_head": "d71df4d54fb01f0df67934d57ad5f3170fcc2fd7"
   },
   "requested_by": "ChatGPT-remote-validation-controller",
-  "note": "Guarded APF3260-M service-level activation/rollback rerun after RC51 rehearsal-only stale-fence fix and successful software regression. Before V2 enqueue, the runtime must prove ACTIVATION_REHEARSAL mode, Production V2=false, zero AIVOIP producer and no live op.lock, then clear only stale DUT control fence identity. PASS still requires PRE_V1 -> rehearsal V2 with exactly one real DUT producer and durable segment -> serialized cleanup -> restored V1 business path with zero residual V2 producer. Original env remains untouched and Production V2 remains false."
+  "note": "Regression after correcting the rehearsal DUT /proc producer race guard to exclude only the executing guard shell itself. All other process scans remain fail-closed; live op.lock and AIVOIP producers still block cleanup; generic production fencing remains unchanged. V1 remains authoritative and Production V2 remains false."
 }
