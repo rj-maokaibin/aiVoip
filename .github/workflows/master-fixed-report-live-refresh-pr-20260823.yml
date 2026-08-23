@@ -22,7 +22,7 @@ jobs:
       DOCUMENT_ID: SN6DdJX16oisLQxnPjzcwLwfnLb
       TARGET_OPEN_ID: ou_67bee3c2e462a7f8939093bd8e697a96
       PRODUCT_CODE_SHA: 82f78c60161198b008c7853c569c836855b4a770
-      ACCEPTANCE_MASTER_SHA: 4f80f2b937433ed126f1e23ec86684b9da7607b3
+      ACCEPTANCE_MASTER_SHA: 950c8a4dc8d03c3d07458b829f23c93fe9bf6575
       ACCEPTANCE_EVIDENCE_CARD_BLOB: ca1d37461a786f6fb8d525515fcf5c67e9a339ee
 
     steps:
@@ -138,6 +138,9 @@ jobs:
           grep -q "monkeypatch.setattr(reproduction_tasks, 'SessionLocal'" backend/tests/test_reproduction_event_tasks.py
           grep -q 'wrapped.quarantine_root = tmp_path' backend/tests/test_capture_v2_gate_faults.py
           grep -q 'target = tmp_path / "seg-after.pcap"' backend/tests/test_capture_v2_scp_transport.py
+          grep -q 'LOCAL_CAPTURE_TO_UPSTREAM_RTP' scripts/fixed_master_live_refresh_20260823.py
+          grep -q 'LOCAL_CAPTURE_PATH' scripts/fixed_master_live_refresh_20260823.py
+          ! grep -q 'PCM_RX_TO_RTP_UPSTREAM' scripts/fixed_master_live_refresh_20260823.py
           ! grep -q '下方旧版内容保留作为历史记录，若有冲突以本修订版为准' scripts/fixed_master_live_refresh_20260823.py
           echo "VALIDATED_ACCEPTANCE_SNAPSHOT=$FIXED_MASTER_HEAD via $MASTER_SYNC_MODE"
 
