@@ -5,3 +5,4 @@ retry with isolated PostgreSQL/Redis regression environment
 fast path: focused report gates then real PCAP and original Feishu refresh
 no-fetch fast path using validated local fixed-master product snapshot
 retry corrected focused gate path
+canonical V2: single fact layer + finding scope/time/actions + D112 + bundle + full regression
