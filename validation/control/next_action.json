@@ -1,9 +1,9 @@
 {
   "schema_version": "capture-v2-remote-action-v1",
-  "action_id": "RC57-R6-GUARDED-DATA-RUNTIME-SW-001",
-  "sequence": 183,
-  "created_at": "2026-08-23T13:33:00+00:00",
-  "expires_at": "2026-08-23T23:33:00+00:00",
+  "action_id": "RC57-R6-GUARDED-DATA-RUNTIME-SW-002",
+  "sequence": 184,
+  "created_at": "2026-08-23T13:36:00+00:00",
+  "expires_at": "2026-08-23T23:36:00+00:00",
   "action_type": "SOFTWARE_REGRESSION",
   "parameters": {
     "timeout_seconds": 1800
@@ -14,8 +14,8 @@
     "require_v2_disabled": true,
     "allow_worker_kill": false,
     "allow_server_quarantine": false,
-    "expected_head": "4ec450d0f2b84e72c30a43fa4003124a7740ca23"
+    "expected_head": "927787df5e3f830a74c7f3d178d39121b6ae81f4"
   },
   "requested_by": "ChatGPT-remote-validation-controller",
-  "note": "Full Capture V2 software regression for the guarded R6 product-materialization data runtime. The new wrapper may start only a temporary PostgreSQL Compose service against the existing persistent validation bind mount when no PostgreSQL container is running, rewrites DATABASE_URL only in the child process, forces V1 authority and Production V2 disabled, then removes the temporary project to restore the original absent-container prestate. No DUT I/O and no product materialization is performed by this software-regression action."
+  "note": "Rerun the full Capture V2 software regression after updating the R6 bounded-dispatch unit test to monkeypatch the new guarded materializer entrypoint. Product logic is unchanged. V1 remains authoritative, Production V2 remains disabled, and this regression performs no DUT I/O or product materialization."
 }
