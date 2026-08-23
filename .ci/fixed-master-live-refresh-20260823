@@ -1,2 +1,3 @@
 trigger fixed-master regression and original Feishu refresh
 retry after regression workflow added
+retry with real runner env loaded before full regression
