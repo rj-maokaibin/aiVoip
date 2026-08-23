@@ -1,0 +1,193 @@
+name: Master Report Fix Live Update
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'backend/app/golden/offline_analysis_e2e.py'
+      - 'backend/app/integrations/feishu/evidence_document.py'
+      - 'backend/app/reports/actionable_summary.py'
+      - 'backend/tests/test_actionable_report_projection.py'
+
+permissions:
+  contents: read
+
+jobs:
+  live-update-original-feishu:
+    runs-on:
+      - self-hosted
+      - linux
+      - x64
+      - voip-controlled-linux
+    timeout-minutes: 60
+    env:
+      OFFLINE_PCAP: /tmp/tcpdump-2026-08-14.pcap
+      OFFLINE_PCAP_SHA256: b038aa7c9a0644581f2815f654fcdee4620860796382265b178823fccba2e3f0
+      DOCUMENT_ID: SN6DdJX16oisLQxnPjzcwLwfnLb
+      TARGET_OPEN_ID: ou_67bee3c2e462a7f8939093bd8e697a96
+    steps:
+      - name: Sync fixed master with retry
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE"
+          git remote set-url origin https://github.com/${GITHUB_REPOSITORY}.git
+          ok=0
+          for i in 1 2 3 4 5 6 7 8; do
+            if git -c http.lowSpeedLimit=1 -c http.lowSpeedTime=120 fetch --no-tags origin master; then ok=1; break; fi
+            sleep 15
+          done
+          test "$ok" = 1
+          git checkout -B master origin/master
+          git reset --hard origin/master
+          git clean -ffdx
+          echo "FIXED_MASTER_HEAD=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+          git log -1 --oneline
+
+      - name: Verify PCAP and runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE"
+          test -r "$OFFLINE_PCAP"
+          test "$(sha256sum "$OFFLINE_PCAP" | awk '{print $1}')" = "$OFFLINE_PCAP_SHA256"
+          tshark_bin="$(command -v tshark || true)"
+          test -n "$tshark_bin"
+          "$tshark_bin" -v | head -n1
+          echo "TSHARK_BINARY=$tshark_bin" >> "$GITHUB_ENV"
+          venv="$RUNNER_TEMP/voip-report-fix-live"
+          rm -rf "$venv"
+          python3 -m venv "$venv"
+          "$venv/bin/python" -m pip install -r backend/requirements.txt >/dev/null
+          echo "LIVE_VENV=$venv" >> "$GITHUB_ENV"
+
+      - name: Reanalyze fixed master and prepend corrected report to original Feishu doc
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE"
+          test -f /home/github-runner/.config/voip-ai/.env
+          test -f /home/github-runner/.config/voip-ai/feishu_app_secret
+          set -a; source /home/github-runner/.config/voip-ai/.env; set +a
+          export FEISHU_APP_SECRET_FILE=/home/github-runner/.config/voip-ai/feishu_app_secret
+          export PYTHONPATH=backend
+          mkdir -p validation/master_report_fix_live
+          "$LIVE_VENV/bin/python" - <<'PY'
+          import asyncio
+          import json
+          import os
+          from pathlib import Path
+          from urllib.parse import quote
+
+          from app.golden.offline_analysis_e2e import build_offline_analysis_bundle
+          from app.integrations.feishu.document_acl import FeishuDocumentPermissionAdapter
+          from app.integrations.feishu.evidence_document import FeishuEvidenceDocumentService
+          from app.integrations.feishu.transport import FeishuLiveTransport
+
+          pcap = Path(os.environ['OFFLINE_PCAP'])
+          document_id = os.environ['DOCUMENT_ID']
+          target_open_id = os.environ['TARGET_OPEN_ID']
+          fixed_head = os.environ['FIXED_MASTER_HEAD']
+          out = Path('validation/master_report_fix_live')
+          bundle = build_offline_analysis_bundle(
+              pcap_path=pcap,
+              pcm_profile_path='profiles/pcm/ruijie_aim_diag_v1.yaml',
+              output_dir=out / 'analysis',
+              tshark_binary=os.environ['TSHARK_BINARY'],
+          )
+          assert bundle['source']['sha256'] == os.environ['OFFLINE_PCAP_SHA256']
+          report = bundle['report']
+          diagnosis = bundle['diagnosis']
+          scope = report.get('problem_scope') or {}
+          window = report.get('observation_window') or {}
+          actions = report.get('next_actions') or []
+          assert diagnosis.get('plan') and len(diagnosis['plan']) >= 2, diagnosis
+          assert scope.get('statement') and scope.get('affected_path'), scope
+          assert window.get('absolute_start_utc') and window.get('absolute_end_utc'), window
+          assert window.get('absolute_start_local') and window.get('absolute_end_local'), window
+          assert len(actions) >= 2 and all(x.get('acceptance_criteria') for x in actions), actions
+          assert (report.get('preliminary_assessment') or {}).get('recommended_next_action'), report.get('preliminary_assessment')
+
+          async def main():
+              transport = FeishuLiveTransport()
+              service = FeishuEvidenceDocumentService(transport=transport)
+              marker = f'【修订版｜master@{fixed_head[:12]}｜以本节为准】'
+              blocks = [
+                  service._text(marker, 3),
+                  service._text('本节由修复后的 master 基于同一真实 PCAP 重新分析生成。下方旧版内容保留作为历史记录，若有冲突以本修订版为准。'),
+                  service._text('A. 问题范围与绝对时间', 4),
+                  service._text(f"问题范围：{scope.get('statement')}"),
+                  service._text(f"已确认影响链路：{scope.get('affected_path')}"),
+              ]
+              for text in (scope.get('excluded_or_weakened') or [])[:8]:
+                  blocks.append(service._text(f'已排除/明显弱化：{text}', 12))
+              for text in (scope.get('unresolved') or [])[:8]:
+                  blocks.append(service._text(f'尚未确认：{text}', 12))
+              blocks.extend([
+                  service._text(f"观察窗口类型：{window.get('scope')}｜精确异常首末时刻：{window.get('exact_event_window_known')}"),
+                  service._text(f"绝对时间 UTC：{window.get('absolute_start_utc')} ～ {window.get('absolute_end_utc')}"),
+                  service._text(f"绝对时间 UTC+8：{window.get('absolute_start_local')} ～ {window.get('absolute_end_local')}"),
+                  service._text('B. 下一步建议 / 验证顺序 / 通过标准', 4),
+              ])
+              for index, action in enumerate(actions, 1):
+                  blocks.append(service._text(f"P{index-1}｜{action.get('action_type')}｜priority={action.get('priority')}", 5))
+                  blocks.append(service._text(f"目的：{action.get('reason')}"))
+                  for step in action.get('execution_steps') or []:
+                      blocks.append(service._text(f'执行：{step}', 12))
+                  blocks.append(service._text(f"通过标准：{action.get('acceptance_criteria')}"))
+              blocks.extend([
+                  service._text('C. 当前诊断边界', 4),
+                  service._text(f"诊断状态：{diagnosis.get('state')}｜{(diagnosis.get('summary') or {}).get('headline')}"),
+              ])
+              for text in (diagnosis.get('known') or [])[:12]:
+                  blocks.append(service._text(f'已知：{text}', 12))
+              for text in (diagnosis.get('excluded') or [])[:8]:
+                  blocks.append(service._text(f'排除性证据：{text}', 12))
+              for text in (diagnosis.get('unknown') or [])[:8]:
+                  blocks.append(service._text(f'未知/待闭环：{text}', 12))
+              blocks.append(service._text(f"输入 PCAP SHA256：{bundle['source']['sha256']}｜分析代码：master@{fixed_head}"))
+
+              await service._insert_blocks(document_id, blocks, index=0)
+
+              permission = FeishuDocumentPermissionAdapter(transport=transport)
+              collaborators = await permission.list_collaborators(document_id)
+              current = next((c for c in collaborators if c.member_type == 'openid' and c.member_id == target_open_id), None)
+              if current is None:
+                  await permission.add_collaborator(document_id, member_type='openid', member_id=target_open_id, perm='edit')
+              elif current.perm != 'edit':
+                  await permission.update_collaborator(document_id, member_type='openid', member_id=target_open_id, perm='edit')
+              collaborators = await permission.list_collaborators(document_id)
+              verified = next((c for c in collaborators if c.member_type == 'openid' and c.member_id == target_open_id), None)
+              assert verified is not None and verified.perm == 'edit'
+
+              response = await transport._request('GET', f'/docx/v1/documents/{quote(document_id, safe="")}/blocks/{quote(document_id, safe="")}/children', params={'page_size': 100})
+              children = (response.get('data') or {}).get('items') or (response.get('data') or {}).get('children') or []
+              raw = json.dumps(children, ensure_ascii=False)
+              assert marker in raw, raw[:2000]
+
+              result = {
+                  'status': 'PASS',
+                  'master_head': fixed_head,
+                  'document_id': document_id,
+                  'document_url': f'https://feishu.cn/docx/{document_id}',
+                  'acl': {'openid': target_open_id, 'permission': verified.perm, 'verified': True},
+                  'problem_scope': scope,
+                  'observation_window': window,
+                  'next_actions': actions,
+                  'diagnosis_plan_count': len(diagnosis.get('plan') or []),
+                  'marker_verified': True,
+                  'source_sha256': bundle['source']['sha256'],
+              }
+              (out / 'result.json').write_text(json.dumps(result, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+              print(json.dumps(result, ensure_ascii=False))
+
+          asyncio.run(main())
+          PY
+
+      - name: Upload live-update evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: master-report-fix-live-update
+          path: validation/master_report_fix_live/result.json
+          if-no-files-found: warn
