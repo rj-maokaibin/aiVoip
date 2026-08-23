@@ -24,3 +24,4 @@ real acceptance retry: dual D112 main heading plus offline reconstructed subhead
 final acceptance: migrated D112 V1 contract + full backend + real PCAP + canonical V2 Feishu
 final acceptance: latest master + isolated release/missing-session contracts
 final acceptance: isolated capture-v2 tmp paths + diagnosis DB handoff
+final acceptance: canonical scope tuple validation + live Feishu readback
