@@ -6,6 +6,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
+import app.workers.reproduction_event_tasks as reproduction_event_tasks
 from app.contracts.enums import LockStatus
 from app.db.base import Base
 from app.db.models import Case, CaseDevice, DeviceDiagnosticLock, ReproductionSession
@@ -78,9 +79,12 @@ def test_no_call_end_restarts_ring_only_when_session_resumes_watching():
     assert _should_restart_ring_after_end('COMPLETED', None) is False
 
 
-def test_watch_missing_session_returns_not_found():
-    # Missing session should return quickly without attempting a device connection.
-    result = watch_fxs_events.apply(args=['no-such-session'], throw=False)
+def test_watch_missing_session_returns_not_found(monkeypatch):
+    # This is a pure missing-row contract. Keep it isolated from the configured
+    # external PostgreSQL so CI/mock regression cannot fail on DNS/network state.
+    eng = _engine()
+    monkeypatch.setattr(reproduction_event_tasks, 'SessionLocal', lambda: Session(eng))
+    result = reproduction_event_tasks.watch_fxs_events.apply(args=['no-such-session'], throw=False)
     assert result.status == 'SUCCESS'
     assert result.result == {'status': 'SESSION_NOT_FOUND', 'session_id': 'no-such-session',
                              'diagnosis': {'status': 'NO_SESSION', 'session_id': 'no-such-session'}}
