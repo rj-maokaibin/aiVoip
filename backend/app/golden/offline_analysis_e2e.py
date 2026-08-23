@@ -12,6 +12,7 @@ from app.analyzers.media.candidate_decision import CANDIDATE_DECISION_VERSION, a
 from app.analyzers.packet import TSharkAdapter
 from app.analyzers.pcm import load_pcm_profile
 from app.diagnosis.reasoner import DeterministicDiagnosisReasoner
+from app.reports.actionable_summary import attach_actionable_summary
 from app.reports.evidence_brief import build_report_payload
 from app.services.evidence_boundary import apply_first_observable_boundaries
 from app.services.evidence_report_context import resolve_report_analysis_context
@@ -55,6 +56,7 @@ def _diagnosis_dict(decision) -> dict:
             }
             for item in decision.hypotheses
         ],
+        "plan": [item.to_dict() for item in sorted(decision.plan, key=lambda item: item.priority)],
     }
 
 
@@ -164,6 +166,8 @@ def build_offline_analysis_bundle(
         },
         "fingerprint": "offline-golden-001",
     })
+    diagnosis = _diagnosis_dict(decision)
+    attach_actionable_summary(report, diagnosis)
     return {
         "schema_version": "offline-analysis-replay-bundle-v1",
         "source": {"filename": pcap_path.name, "sha256": evidence["sha256"]},
@@ -174,7 +178,7 @@ def build_offline_analysis_bundle(
         "display_call": display_call,
         "report": report,
         "artifacts": media.get("artifacts", []) or [],
-        "diagnosis": _diagnosis_dict(decision),
+        "diagnosis": diagnosis,
     }
 
 
