@@ -59,29 +59,54 @@ def _read_env(path: Path) -> dict[str, str]:
     return values
 
 
-def _docker_tools(repo_root: Path) -> tuple[str, list[str]]:
+def _docker_tools(repo_root: Path) -> tuple[list[str], list[str], str]:
+    """Resolve a Docker daemon command without ever prompting for privilege.
+
+    Normal unprivileged Docker is preferred. If the runner can see the CLI but the
+    daemon rejects it (for example, docker.sock group mismatch), allow only an
+    already-configured noninteractive sudo path via ``sudo -n``. This helper never
+    invokes a shell and never accepts user-supplied Docker subcommands.
+    """
     docker = shutil.which("docker")
     if not docker:
         raise RuntimeError("DOCKER_NOT_AVAILABLE")
-    cp = _run([docker, "compose", "version"], cwd=repo_root, timeout=20, check=False)
+
+    docker_cmd = [docker]
+    daemon = _run([*docker_cmd, "ps", "-q"], cwd=repo_root, timeout=20, check=False)
+    authority = "DIRECT"
+    if daemon.returncode != 0:
+        sudo = shutil.which("sudo")
+        if not sudo:
+            raise RuntimeError("DOCKER_DAEMON_UNAVAILABLE_NO_SUDO")
+        docker_cmd = [sudo, "-n", docker]
+        daemon = _run([*docker_cmd, "ps", "-q"], cwd=repo_root, timeout=20, check=False)
+        if daemon.returncode != 0:
+            raise RuntimeError(
+                "DOCKER_DAEMON_PERMISSION_DENIED:"
+                + _safe_error(daemon.stderr or daemon.stdout)
+            )
+        authority = "SUDO_NONINTERACTIVE"
+
+    compose = [*docker_cmd, "compose"]
+    cp = _run([*compose, "version"], cwd=repo_root, timeout=20, check=False)
     if cp.returncode != 0:
         raise RuntimeError("DOCKER_COMPOSE_NOT_AVAILABLE")
-    return docker, [docker, "compose"]
+    return docker_cmd, compose, authority
 
 
-def _running_postgres_containers(docker: str, repo_root: Path) -> list[str]:
+def _running_postgres_containers(docker_cmd: list[str], repo_root: Path) -> list[str]:
     cp = _run(
-        [docker, "ps", "--filter", "label=com.docker.compose.service=postgres", "-q"],
+        [*docker_cmd, "ps", "--filter", "label=com.docker.compose.service=postgres", "-q"],
         cwd=repo_root, timeout=20, check=False,
     )
     if cp.returncode != 0:
-        return []
+        raise RuntimeError("POSTGRES_CONTAINER_DISCOVERY_FAILED")
     return [line.strip() for line in cp.stdout.splitlines() if line.strip()]
 
 
-def _container_ip(docker: str, repo_root: Path, cid: str) -> str:
+def _container_ip(docker_cmd: list[str], repo_root: Path, cid: str) -> str:
     cp = _run(
-        [docker, "inspect", "-f", "{{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}", cid],
+        [*docker_cmd, "inspect", "-f", "{{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}", cid],
         cwd=repo_root, timeout=20,
     )
     values = [item for item in cp.stdout.strip().split() if item]
@@ -90,12 +115,13 @@ def _container_ip(docker: str, repo_root: Path, cid: str) -> str:
     return values[0]
 
 
-def _wait_postgres_healthy(docker: str, repo_root: Path, cid: str, timeout: float = 120.0) -> None:
+def _wait_postgres_healthy(docker_cmd: list[str], repo_root: Path, cid: str,
+                           timeout: float = 120.0) -> None:
     deadline = time.monotonic() + timeout
     last = ""
     while time.monotonic() < deadline:
         cp = _run(
-            [docker, "inspect", "-f", "{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}", cid],
+            [*docker_cmd, "inspect", "-f", "{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}", cid],
             cwd=repo_root, timeout=20, check=False,
         )
         last = cp.stdout.strip().lower()
@@ -105,7 +131,8 @@ def _wait_postgres_healthy(docker: str, repo_root: Path, cid: str, timeout: floa
     raise RuntimeError(f"POSTGRES_NOT_HEALTHY:{last}")
 
 
-def _start_temp_postgres(repo_root: Path, env_file: Path, compose: list[str], docker: str) -> str:
+def _start_temp_postgres(repo_root: Path, env_file: Path, compose: list[str],
+                         docker_cmd: list[str]) -> str:
     env = os.environ.copy()
     env["COMPOSE_PROJECT_NAME"] = PROJECT
     _run(
@@ -123,7 +150,7 @@ def _start_temp_postgres(repo_root: Path, env_file: Path, compose: list[str], do
     cid = cp.stdout.strip().splitlines()[0].strip() if cp.stdout.strip() else ""
     if not cid:
         raise RuntimeError("TEMP_POSTGRES_CONTAINER_NOT_FOUND")
-    _wait_postgres_healthy(docker, repo_root, cid)
+    _wait_postgres_healthy(docker_cmd, repo_root, cid)
     return cid
 
 
@@ -166,7 +193,7 @@ def run(*, repo_root: Path, golden_path: Path) -> tuple[int, dict[str, Any]]:
 
     started_temp = False
     cid = ""
-    docker = ""
+    docker_cmd: list[str] = []
     compose: list[str] = []
     payload: dict[str, Any] = {
         "scope": "R6_BOUNDED_POSTGRES_PRODUCT_MATERIALIZATION",
@@ -176,21 +203,22 @@ def run(*, repo_root: Path, golden_path: Path) -> tuple[int, dict[str, Any]]:
         "prestate_application_services_running": False,
     }
     try:
-        docker, compose = _docker_tools(repo_root)
-        running = _running_postgres_containers(docker, repo_root)
+        docker_cmd, compose, docker_authority = _docker_tools(repo_root)
+        payload["docker_authority"] = docker_authority
+        running = _running_postgres_containers(docker_cmd, repo_root)
         if len(running) > 1:
             raise RuntimeError(f"MULTIPLE_RUNNING_POSTGRES_CONTAINERS:{len(running)}")
         if running:
             cid = running[0]
-            _wait_postgres_healthy(docker, repo_root, cid)
+            _wait_postgres_healthy(docker_cmd, repo_root, cid)
             payload["postgres_source"] = "EXISTING_RUNNING_CONTAINER"
         else:
-            cid = _start_temp_postgres(repo_root, env_file, compose, docker)
+            cid = _start_temp_postgres(repo_root, env_file, compose, docker_cmd)
             started_temp = True
             payload["temporary_postgres_started"] = True
             payload["postgres_source"] = "TEMPORARY_PERSISTENT_DATA_RUNTIME"
 
-        ip = _container_ip(docker, repo_root, cid)
+        ip = _container_ip(docker_cmd, repo_root, cid)
         child_env = os.environ.copy()
         child_env["DATABASE_URL"] = _database_url_for_ip(env_values, ip)
         child_env["CAPTURE_ENGINE_VERSION"] = "V1"
@@ -210,7 +238,6 @@ def run(*, repo_root: Path, golden_path: Path) -> tuple[int, dict[str, Any]]:
         try:
             child = json.loads(cp.stdout.strip().splitlines()[-1] if cp.stdout.strip() else "{}")
         except Exception:
-            # The materializer emits pretty JSON; parse the full stdout first.
             try:
                 child = json.loads(cp.stdout)
             except Exception as exc:
