@@ -1,20 +1,12 @@
 {
   "schema_version": "capture-v2-remote-action-v1",
-  "action_id": "R7-02-APF3260M-SERVICE-ACTIVATION-ROLLBACK-RC45",
-  "sequence": 159,
-  "created_at": "2026-08-23T10:18:00+00:00",
-  "expires_at": "2026-08-23T22:18:00+00:00",
-  "action_type": "ACTIVATION_REHEARSAL",
+  "action_id": "RC46-REHEARSAL-BACKEND-HEALTH-WAIT-SW-001",
+  "sequence": 160,
+  "created_at": "2026-08-23T10:19:00+00:00",
+  "expires_at": "2026-08-23T22:19:00+00:00",
+  "action_type": "SOFTWARE_REGRESSION",
   "parameters": {
-    "timeout_seconds": 3600,
-    "sn": "G1U060H000384",
-    "host": "10.48.8.74",
-    "port": 10002,
-    "username": "root",
-    "platform_id": "mt7981",
-    "model": "APF3260-M",
-    "profile_id": "VOIP_GENERIC_FULL_CAPTURE",
-    "observation_seconds": 20
+    "timeout_seconds": 1200
   },
   "safety": {
     "require_clean_git": true,
@@ -22,8 +14,8 @@
     "require_v2_disabled": true,
     "allow_worker_kill": false,
     "allow_server_quarantine": false,
-    "expected_head": "4feb91604e426a518d0e040777ba243a3e775497"
+    "expected_head": "07602c9f6b85ea162548f3b94b4bb0e5b334e974"
   },
   "requested_by": "ChatGPT-remote-validation-controller",
-  "note": "Retry guarded APF3260-M service-level activation/rollback rehearsal with sanitized Compose diagnostics retained before cleanup. Zero host port publishing; original env untouched; Production V2 remains false; final isolated project must be empty."
+  "note": "Regression after replacing one-shot rehearsal Backend /health probing with a bounded 120-second readiness wait. V1 remains authoritative and Production V2 remains disabled. On PASS, retry APF3260-M service-level activation rehearsal immediately."
 }
