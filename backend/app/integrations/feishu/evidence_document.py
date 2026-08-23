@@ -112,7 +112,7 @@ class FeishuEvidenceDocumentService:
     def _time_text(card:dict)->str:
         t=card.get("time") or {};absolute=f"{t.get('absolute_start_utc')} ～ {t.get('absolute_end_utc')}"
         relative=t.get("call_relative_representative") or t.get("call_relative_start")
-        return f"绝对时间（UTC）：{absolute}"+(f"｜Call 相对时间：{relative}" if rel else "")
+        return f"绝对时间（UTC）：{absolute}"+(f"｜Call 相对时间：{relative}" if relative else "")
 
     def _append_inline_media(self,blocks:list[dict],plan:list[dict],card:dict,*,budget:int)->int:
         used=0
