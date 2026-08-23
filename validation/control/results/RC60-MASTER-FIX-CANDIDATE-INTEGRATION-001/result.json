@@ -1,20 +1,39 @@
 {
-  "schema_version": "capture-v2-remote-status-v1",
-  "action_id": "RC60-MASTER-FIX-CANDIDATE-INTEGRATION-001",
-  "sequence": 191,
-  "action_type": "GATE_EVALUATE",
-  "state": "FAILED",
-  "runner_id": "srv:257142",
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "RC60-MASTER-FIX-CANDIDATE-INTEGRATION-001",
+    "sequence": 191,
+    "created_at": "2026-08-23T13:57:00+00:00",
+    "expires_at": "2026-08-24T01:57:00+00:00",
+    "action_type": "GATE_EVALUATE",
+    "parameters": {
+      "timeout_seconds": 7200,
+      "bundle": "c962c0d174099bae1afc8db55067402b36717487",
+      "gate_id": "MASTER-FIX-CANDIDATE-INTEGRATION-RC60"
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "a3a042b3b69c1354f4911a58494c82c17f047f8b"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "Run isolated full acceptance for audited Draft PR #37 candidate c962c0d174099bae1afc8db55067402b36717487 plus the current Capture V2 product head. Verify the candidate is based on audited master e8d108a228b151b7711bfe6048c3f39e94b57783, merge the current feature into a detached temporary candidate worktree without committing, then require Capture V2 regression, current Frozen contracts, full VOIP AI software release gate, and Real Offline Golden #001 142/142. Remove the worktree afterwards. Do not mutate either branch, create a merge commit, access the DUT, or enable Production V2."
+  },
   "action_sha256": "91f1b924f2256038ba981e290ed090c4a0e2d8c1def0955e71e9203c61eddb57",
-  "updated_at": "2026-08-23T13:57:04.544021+00:00",
-  "started_at": null,
-  "finished_at": "2026-08-23T13:57:04.544021+00:00",
+  "runner_id": "srv:257142",
+  "state": "FAILED",
   "return_code": 1,
   "verdict": "FAIL",
-  "result_path": "validation/control/results/RC60-MASTER-FIX-CANDIDATE-INTEGRATION-001/result.json",
+  "error": null,
+  "finished_at": "2026-08-23T13:57:04.544021+00:00",
   "stdout_sha256": "3fddcb63410ff39fa07f2deac63901e02eebe1eea13acaf82e2c463d4eed83de",
   "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-  "error": null,
+  "local_stdout": ".capture-v2-control/logs/RC60-MASTER-FIX-CANDIDATE-INTEGRATION-001/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/RC60-MASTER-FIX-CANDIDATE-INTEGRATION-001/stderr.log",
   "detail": {
     "safety": {
       "capture_engine_version": "V1",
