@@ -1,20 +1,37 @@
 {
-  "schema_version": "capture-v2-remote-status-v1",
-  "action_id": "RC37-PRODUCTION-WIRING-SW-002",
-  "sequence": 144,
-  "action_type": "SOFTWARE_REGRESSION",
-  "state": "FAILED",
-  "runner_id": "srv:257142",
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "RC37-PRODUCTION-WIRING-SW-002",
+    "sequence": 144,
+    "created_at": "2026-08-23T09:12:00+00:00",
+    "expires_at": "2026-08-23T21:12:00+00:00",
+    "action_type": "SOFTWARE_REGRESSION",
+    "parameters": {
+      "timeout_seconds": 1200
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "ff19ea47dc413186336c42859a834d737e3215b8"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "RC37 second regression after adding redacted pytest failure-tail publishing to the control runner. Exercises Production V2 authority routing while V1 remains authoritative and Production V2 remains disabled."
+  },
   "action_sha256": "7c106179f03734320ea0ee82e70792e70913e5f58d9e13cf0cef309de2897f29",
-  "updated_at": "2026-08-23T09:04:20.783478+00:00",
-  "started_at": null,
-  "finished_at": "2026-08-23T09:04:20.783478+00:00",
+  "runner_id": "srv:257142",
+  "state": "FAILED",
   "return_code": 1,
   "verdict": null,
-  "result_path": "validation/control/results/RC37-PRODUCTION-WIRING-SW-002/result.json",
+  "error": null,
+  "finished_at": "2026-08-23T09:04:20.783478+00:00",
   "stdout_sha256": "d60854e7f721131ff72fc2f6185ff87bea36d1fc4362396b2fa7d1ee0098709d",
   "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-  "error": null,
+  "local_stdout": ".capture-v2-control/logs/RC37-PRODUCTION-WIRING-SW-002/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/RC37-PRODUCTION-WIRING-SW-002/stderr.log",
   "detail": {
     "safety": {
       "capture_engine_version": "V1",
