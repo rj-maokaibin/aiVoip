@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "file_count": 594,
-  "aggregate_sha256": "3109561f332d2aa9f60e7861bb9388f6b2e6ccb0d23e0c4df41fb096b741931a",
+  "aggregate_sha256": "eb2fb2b2a36d140c59cf726322c49d026f865b9fc4194e41908c7fac56b5ecd9",
   "files": [
     {
       "path": ".env.example",
@@ -1540,8 +1540,8 @@
     },
     {
       "path": "backend/app/production_config.py",
-      "size": 4597,
-      "sha256": "b93c2a4b6a4c69bbc8515025000b295ae86d951e7d60c8aaab33346508a8cde4"
+      "size": 4579,
+      "sha256": "528b029e09ab25be7cd90a183e67093fbe18b1ad91f501471ce490d6bf5d3a58"
     },
     {
       "path": "backend/app/release_readiness.py",
@@ -2250,8 +2250,8 @@
     },
     {
       "path": "deploy/production_runtime_verify.py",
-      "size": 7417,
-      "sha256": "92a663346f1d45f044c35a1ec35a37a7d684a2c7fe6672740d45f25c3ffbe2b8"
+      "size": 7548,
+      "sha256": "d4cc78e2d748a3383dda91033c61feba6f14fe545eefa02414a76688ec9ea109"
     },
     {
       "path": "deploy/voip-ai",
@@ -2265,8 +2265,8 @@
     },
     {
       "path": "docker-compose.production.yml",
-      "size": 3253,
-      "sha256": "cae31c912e7fb2a0e7698055d21979bbf3054ca2594c479c4993142e807e48f3"
+      "size": 3293,
+      "sha256": "379eec62e46325ff8baf5dc522f50d4ffdb9b3cb7c929d55b03fd89db80ecb76"
     },
     {
       "path": "docker-compose.yml",
