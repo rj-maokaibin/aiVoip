@@ -1,12 +1,14 @@
 {
   "schema_version": "capture-v2-remote-action-v1",
-  "action_id": "RC56-R6-PRODUCT-MATERIALIZER-SW-001",
-  "sequence": 180,
-  "created_at": "2026-08-23T13:08:00+00:00",
-  "expires_at": "2026-08-23T23:08:00+00:00",
-  "action_type": "SOFTWARE_REGRESSION",
+  "action_id": "R6-03-APF1250-8000-PRODUCT-REPORT-MATERIALIZE-RC56",
+  "sequence": 181,
+  "created_at": "2026-08-23T13:10:00+00:00",
+  "expires_at": "2026-08-23T23:10:00+00:00",
+  "action_type": "GATE_EVALUATE",
   "parameters": {
-    "timeout_seconds": 1800
+    "timeout_seconds": 600,
+    "bundle": "../validation/capture_v2/R6_APF1250_FIRST_8000_ABNORMAL_GOLDEN_RC33.json",
+    "gate_id": "R6-PRODUCT-REPORT-MATERIALIZE-RC56"
   },
   "safety": {
     "require_clean_git": true,
@@ -17,5 +19,5 @@
     "expected_head": "9066dda3e050556cb5e881929f9ce64d730c4341"
   },
   "requested_by": "ChatGPT-remote-validation-controller",
-  "note": "Full Capture V2 regression for the bounded R6 abnormal-Golden product materializer. The implementation recalculates the known stale PCAP CoverageWindow using current fixed logic, verifies immutable server PCAP bytes and DB FXS digits 000, then can idempotently bind EvidenceAssets/QualitySnapshot/report. This software-regression action itself performs no product materialization, no DUT I/O, and no production activation."
+  "note": "Bounded non-DUT product binding for the immutable RC33 APF1250 abnormal first-8000 Golden. Recalculate the stale PCAP CoverageWindow using current fixed coverage logic; require COMPLETE coverage, zero kernel drops, verified durable server PCAP bytes, and exact DB raw FXS DTMF digits 000; then idempotently materialize real EvidenceAsset rows, a QualitySnapshot, and an evidence-first report manifest. No DUT I/O, no production activation, and no synthetic evidence is permitted."
 }
