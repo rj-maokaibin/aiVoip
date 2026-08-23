@@ -129,6 +129,16 @@ class ControlPolicy:
                 result_kind="pytest",
             )
 
+        if action.action_type == ControlActionType.DEPLOYMENT_PREFLIGHT:
+            if p.keys() - {"timeout_seconds"}:
+                raise ControlPolicyError("DEPLOYMENT_PREFLIGHT_PARAMETERS_NOT_ALLOWED")
+            return PreparedCommand(
+                argv=[sys.executable, "-m", "app.capture_v2.control.deployment_preflight",
+                      "--repo-root", str(self.repo_root)],
+                cwd=self.backend_root, timeout_seconds=min(timeout, 120.0), env=env,
+                result_kind="gate-cli",
+            )
+
         base = [sys.executable, "-m", "app.capture_v2.gate_cli"]
         common_device = ["device_id", "model", "host"]
 
