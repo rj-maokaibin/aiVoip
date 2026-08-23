@@ -1,20 +1,12 @@
 {
   "schema_version": "capture-v2-remote-action-v1",
-  "action_id": "R7-02-APF3260M-SERVICE-ACTIVATION-ROLLBACK-RC53",
-  "sequence": 175,
-  "created_at": "2026-08-23T12:24:00+00:00",
-  "expires_at": "2026-08-23T23:24:00+00:00",
-  "action_type": "ACTIVATION_REHEARSAL",
+  "action_id": "RC54-PRODUCTION-STAGE1-WIRING-SW-001",
+  "sequence": 176,
+  "created_at": "2026-08-23T12:48:00+00:00",
+  "expires_at": "2026-08-23T23:48:00+00:00",
+  "action_type": "SOFTWARE_REGRESSION",
   "parameters": {
-    "timeout_seconds": 3600,
-    "sn": "G1U060H000384",
-    "host": "10.48.8.74",
-    "port": 10002,
-    "username": "root",
-    "platform_id": "mt7981",
-    "model": "APF3260-M",
-    "profile_id": "VOIP_GENERIC_FULL_CAPTURE",
-    "observation_seconds": 20
+    "timeout_seconds": 1800
   },
   "safety": {
     "require_clean_git": true,
@@ -22,8 +14,8 @@
     "require_v2_disabled": true,
     "allow_worker_kill": false,
     "allow_server_quarantine": false,
-    "expected_head": "93fe8e5e25c7f13a64913daba144e939a5c2e4f8"
+    "expected_head": "b3692cbf91b60f3d4d0135ab5422a745f73dd577"
   },
   "requested_by": "ChatGPT-remote-validation-controller",
-  "note": "Guarded APF3260-M service-level activation/rollback diagnostic rerun. RC52 already proved the stale-fence blocker is removed and the V2 producer can create a durable segment; this run preserves DB terminal_reason and latest ArmValidation if the business session still exits before V2_ACTIVE. No production activation is authorized: Production V2 remains false and original env remains untouched."
+  "note": "Software regression for production Phase-D Stage-1 wiring. Capture V2 ProductionPlatform now evaluates and persists the real pre-OFFHOOK Stage-1 contract proven by R4; PCAP Arm readiness accepts only explicit persisted capture_path_ready when no idle business PCAP header exists. Production V2 remains false, V1 remains authoritative, and no DUT activation is performed by this action."
 }
