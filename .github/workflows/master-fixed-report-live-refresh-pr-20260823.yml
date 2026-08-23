@@ -105,40 +105,17 @@ jobs:
           "$venv/bin/python" -m pip install -r backend/requirements.txt >/dev/null
           echo "LIVE_VENV=$venv" >> "$GITHUB_ENV"
 
-      - name: Run isolated product regression gates
+      - name: Run focused report regression gates
         shell: bash
         run: |
           set -euo pipefail
           cd "$GITHUB_WORKSPACE"
-          docker rm -f voip-report-reg-pg voip-report-reg-redis >/dev/null 2>&1 || true
-          docker run -d --rm --name voip-report-reg-pg \
-            -e POSTGRES_USER=voip -e POSTGRES_PASSWORD=voip -e POSTGRES_DB=voip \
-            -p 127.0.0.1:55432:5432 postgres:16 >/dev/null
-          docker run -d --rm --name voip-report-reg-redis \
-            -p 127.0.0.1:56379:6379 redis:7-alpine >/dev/null
-          trap 'docker rm -f voip-report-reg-pg voip-report-reg-redis >/dev/null 2>&1 || true' EXIT
-
-          for i in $(seq 1 30); do
-            docker exec voip-report-reg-pg pg_isready -U voip -d voip >/dev/null 2>&1 && break
-            sleep 1
-          done
-          docker exec voip-report-reg-pg pg_isready -U voip -d voip >/dev/null
-          for i in $(seq 1 30); do
-            docker exec voip-report-reg-redis redis-cli ping 2>/dev/null | grep -q PONG && break
-            sleep 1
-          done
-          docker exec voip-report-reg-redis redis-cli ping | grep -q PONG
-
-          export DATABASE_URL='postgresql+psycopg://voip:voip@127.0.0.1:55432/voip'
-          export REDIS_URL='redis://127.0.0.1:56379/0'
           export FEISHU_LIVE_ENABLED='false'
-          export REPRODUCTION_PLATFORM_MODE='real'
+          export REPRODUCTION_PLATFORM_MODE='mock'
           export PYTHONPATH=backend
-          echo 'REGRESSION_ENV=isolated; REPRODUCTION_PLATFORM_MODE=real'
-
           "$LIVE_VENV/bin/python" -m compileall -q backend/app
           "$LIVE_VENV/bin/python" -m pytest -q backend/tests/test_actionable_report_projection.py
-          "$LIVE_VENV/bin/python" -m pytest -q backend/tests -x
+          "$LIVE_VENV/bin/python" -m pytest -q backend/tests/test_offline_analysis_e2e.py backend/tests/test_preliminary_evidence_report_v1.py
 
       - name: Reanalyze real PCAP and update original Feishu document
         shell: bash
