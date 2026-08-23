@@ -21,6 +21,8 @@ jobs:
       OFFLINE_PCAP_SHA256: b038aa7c9a0644581f2815f654fcdee4620860796382265b178823fccba2e3f0
       DOCUMENT_ID: SN6DdJX16oisLQxnPjzcwLwfnLb
       TARGET_OPEN_ID: ou_67bee3c2e462a7f8939093bd8e697a96
+      ACCEPTANCE_MASTER_SHA: 712212dce5387b73022b74d2d9111064c91036a0
+      ACCEPTANCE_EVIDENCE_CARD_BLOB: 95fcaa9e84f41ac28b71a03ee88470a71e0f479a
 
     steps:
       - name: Pre-clean persistent self-hosted workspace
@@ -33,9 +35,9 @@ jobs:
             git clean -ffdx || true
           fi
 
-      - name: Sync latest master with bounded retry
+      - name: Sync exact acceptance master with Git/API fallback
         shell: bash
-        timeout-minutes: 5
+        timeout-minutes: 8
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -50,31 +52,68 @@ jobs:
             git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
           fi
           auth="$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
-          ok=0
-          for attempt in 1 2 3; do
-            echo "master fetch attempt ${attempt}/3"
-            if timeout 60s git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $auth" \
-              fetch --no-tags --prune --depth=1 origin master; then
-              ok=1
+          sync_mode=""
+          for attempt in 1 2; do
+            echo "exact git fetch attempt ${attempt}/2"
+            if timeout 45s git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $auth" \
+              fetch --no-tags --depth=1 origin "$ACCEPTANCE_MASTER_SHA"; then
+              git checkout -f -B master FETCH_HEAD
+              git reset --hard FETCH_HEAD
+              git clean -ffdx
+              sync_mode="GIT_FETCH"
               break
             fi
             sleep $((attempt * 3))
           done
-          test "$ok" = 1
-          git checkout -f -B master FETCH_HEAD
-          git reset --hard FETCH_HEAD
-          git clean -ffdx
 
-      - name: Validate latest master product snapshot
+          if [ -z "$sync_mode" ]; then
+            echo "git transport unavailable; trying exact GitHub API tarball fallback"
+            archive="$RUNNER_TEMP/acceptance-master.tar.gz"
+            tree="$RUNNER_TEMP/acceptance-master-tree"
+            rm -rf "$archive" "$tree"
+            mkdir -p "$tree"
+            api_ok=0
+            for attempt in 1 2; do
+              echo "API tarball attempt ${attempt}/2"
+              if timeout 90s curl --fail --location --silent --show-error \
+                --connect-timeout 10 --max-time 80 --retry 1 --retry-all-errors \
+                -H "Authorization: Bearer $GH_TOKEN" \
+                -H "Accept: application/vnd.github+json" \
+                -H "X-GitHub-Api-Version: 2022-11-28" \
+                "https://api.github.com/repos/${GITHUB_REPOSITORY}/tarball/${ACCEPTANCE_MASTER_SHA}" \
+                -o "$archive"; then
+                api_ok=1
+                break
+              fi
+              sleep $((attempt * 3))
+            done
+            test "$api_ok" = 1
+            tar -xzf "$archive" --strip-components=1 -C "$tree"
+            find "$GITHUB_WORKSPACE" -mindepth 1 -maxdepth 1 ! -name '.git' -exec rm -rf {} +
+            cp -a "$tree"/. "$GITHUB_WORKSPACE"/
+            sync_mode="API_TARBALL"
+          fi
+
+          test -f backend/app/reports/evidence_card.py
+          test "$(git hash-object backend/app/reports/evidence_card.py)" = "$ACCEPTANCE_EVIDENCE_CARD_BLOB"
+          echo "MASTER_SYNC_MODE=$sync_mode" >> "$GITHUB_ENV"
+          echo "FIXED_MASTER_HEAD=$ACCEPTANCE_MASTER_SHA" >> "$GITHUB_ENV"
+          echo "MASTER_SYNC_MODE=$sync_mode"
+          echo "FIXED_MASTER_HEAD=$ACCEPTANCE_MASTER_SHA"
+
+      - name: Validate exact acceptance product snapshot
         shell: bash
         run: |
           set -euo pipefail
           cd "$GITHUB_WORKSPACE"
-          git reset --hard HEAD
-          git clean -ffdx
-          test -z "$(git status --porcelain)"
-          head="$(git rev-parse HEAD)"
-          echo "FIXED_MASTER_HEAD=$head" >> "$GITHUB_ENV"
+          test "$FIXED_MASTER_HEAD" = "$ACCEPTANCE_MASTER_SHA"
+          if [ "$MASTER_SYNC_MODE" = "GIT_FETCH" ]; then
+            test "$(git rev-parse HEAD)" = "$ACCEPTANCE_MASTER_SHA"
+            test -z "$(git status --porcelain)"
+          else
+            test "$MASTER_SYNC_MODE" = "API_TARBALL"
+            test "$(git hash-object backend/app/reports/evidence_card.py)" = "$ACCEPTANCE_EVIDENCE_CARD_BLOB"
+          fi
           test -f backend/app/reports/actionable_summary.py
           test -f backend/app/reports/prd_spec_v1_alignment.py
           test -f backend/app/golden/offline_report_v2.py
@@ -83,8 +122,9 @@ jobs:
           grep -q 'single_canonical_fact_layer' backend/app/reports/prd_spec_v1_alignment.py
           grep -q 'legacy_prepend_revision_allowed' backend/app/reports/prd_spec_v1_alignment.py
           grep -q 'feishu-evidence-living-document-v2' backend/app/integrations/feishu/evidence_document.py
+          grep -q 'legacy-v1-explicit-caption' backend/app/reports/evidence_card.py
           ! grep -q '下方旧版内容保留作为历史记录，若有冲突以本修订版为准' scripts/fixed_master_live_refresh_20260823.py
-          echo "LATEST_MASTER_SNAPSHOT=$head"
+          echo "VALIDATED_ACCEPTANCE_SNAPSHOT=$FIXED_MASTER_HEAD via $MASTER_SYNC_MODE"
 
       - name: Prepare PCAP TShark and Python
         shell: bash
