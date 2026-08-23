@@ -18,14 +18,17 @@ def test_runtime_release_readiness_is_conservative_for_pending_integrations():
     # EC-02 platform contract is promoted to VERIFIED and production-ready for
     # autonomous reproduction (2026-08-14); it is no longer a pending integration.
     assert items["EC02_PLATFORM_PRODUCTION_READY"]["status"] == "PASS"
-    # REAL_REPRODUCTION_PLATFORM reflects the configured platform mode: PASS when
-    # REPRODUCTION_PLATFORM_MODE=real (local dev now uses the real DUT), BLOCKED
-    # when mock (default CI). This test runs in the real-mode dev environment.
-    assert items["REAL_REPRODUCTION_PLATFORM"]["status"] == "PASS"
+    # REAL_REPRODUCTION_PLATFORM is configuration-sensitive by contract: PASS in
+    # real mode and BLOCKED in mock mode. Full CI intentionally runs in mock mode
+    # to prevent device side effects, while live acceptance switches to real only
+    # after the regression gate is green.
+    configured_mode = os.getenv("REPRODUCTION_PLATFORM_MODE", "mock").strip().lower()
+    expected_platform_status = "PASS" if configured_mode == "real" else "BLOCKED"
+    assert items["REAL_REPRODUCTION_PLATFORM"]["status"] == expected_platform_status
     assert items["PRODUCTION_AUTH_PROVIDER"]["status"] == "BLOCKED"
     # FEISHU_LIVE_TRANSPORT reflects the configured .env: PASS when
-    # FEISHU_LIVE_ENABLED=true and app credentials are present (this dev env now
-    # has them), BLOCKED when live Feishu is not configured (default CI).
+    # FEISHU_LIVE_ENABLED=true and app credentials are present, BLOCKED when live
+    # Feishu is intentionally disabled for isolated regression.
     feishu_status = items["FEISHU_LIVE_TRANSPORT"]["status"]
     assert feishu_status in {"PASS", "BLOCKED"}
 
