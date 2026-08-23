@@ -1,14 +1,12 @@
 {
   "schema_version": "capture-v2-remote-action-v1",
-  "action_id": "RC62-MASTER-FIX-CANDIDATE-INTEGRATION-002",
-  "sequence": 193,
-  "created_at": "2026-08-23T14:04:00+00:00",
-  "expires_at": "2026-08-24T02:04:00+00:00",
-  "action_type": "GATE_EVALUATE",
+  "action_id": "RC63-CANDIDATE-DISPATCH-GUARD-SW-001",
+  "sequence": 194,
+  "created_at": "2026-08-23T14:06:00+00:00",
+  "expires_at": "2026-08-24T02:06:00+00:00",
+  "action_type": "SOFTWARE_REGRESSION",
   "parameters": {
-    "timeout_seconds": 7200,
-    "bundle": "391486c7a70f8e36c088dcb512397044a552c78c",
-    "gate_id": "MASTER-FIX-CANDIDATE-INTEGRATION-RC62"
+    "timeout_seconds": 1800
   },
   "safety": {
     "require_clean_git": true,
@@ -16,8 +14,8 @@
     "require_v2_disabled": true,
     "allow_worker_kill": false,
     "allow_server_quarantine": false,
-    "expected_head": "20c87b75e7c1c19e9449f41d17fc8341627c7493"
+    "expected_head": "a4cef0de410e6078e220f568deab489039742d02"
   },
   "requested_by": "ChatGPT-remote-validation-controller",
-  "note": "Repeat isolated full acceptance with audited Draft PR #37 candidate 391486c7a70f8e36c088dcb512397044a552c78c after both RC60 integration-only test contract mismatches were corrected. Verify candidate ancestry from master e8d108a228b151b7711bfe6048c3f39e94b57783, no-conflict detached merge simulation with current Capture V2 product head, Capture V2 regression, Frozen contracts, full VOIP AI software release gate, and Real Offline Golden #001 142/142. Remove temporary worktree afterwards. Do not mutate either branch, create a merge commit, access DUT, or enable Production V2."
+  "note": "Full Capture V2 regression after fixing master-fix candidate retry dispatch. The handler accepts RC-number retries but remains fail-closed to the exact audited Draft PR #37 SHA 391486c7a70f8e36c088dcb512397044a552c78c, with an additional fixed-branch FETCH_HEAD equality check in the integration runner. No DUT I/O, no production mutation, V1 authoritative and Production V2 disabled."
 }
