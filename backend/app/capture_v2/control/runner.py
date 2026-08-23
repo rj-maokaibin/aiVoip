@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import fcntl
 import hashlib
 import json
 import os
@@ -43,6 +44,7 @@ class RemoteValidationRunner:
         self.result_root = self.repo_root / "validation/control/results"
         self.local_root = self.repo_root / ".capture-v2-control"
         self.ledger_path = self.local_root / "ledger.json"
+        self.process_lock_path = self.local_root / "process.lock"
         self.ack_path = self.repo_root / "validation/control/human_ack.json"
         self.runner_id = runner_id or f"{socket.gethostname()}:{os.getpid()}"
         self.policy = ControlPolicy(self.repo_root)
@@ -172,6 +174,30 @@ class RemoteValidationRunner:
         return cp.returncode, cp.stdout, cp.stderr
 
     def process_once(self) -> ControlStatus | None:
+        """Run at most one action under a host-local single-executor lock.
+
+        Multiple control-loop processes may exist during operator recovery or an
+        old systemd/tmux handoff. They must never perform Git sync or an action in
+        parallel, especially a production cutover. A non-owner skips this poll;
+        the lock owner keeps the lock for the entire sync + execute + publish
+        transaction. Python file descriptors are non-inheritable, so a control
+        source re-exec releases the lock and the new process can reacquire it.
+        """
+        self.local_root.mkdir(parents=True, exist_ok=True)
+        with self.process_lock_path.open("a+", encoding="utf-8") as lock_fh:
+            try:
+                fcntl.flock(lock_fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                return None
+            try:
+                return self._process_once_locked()
+            finally:
+                try:
+                    fcntl.flock(lock_fh.fileno(), fcntl.LOCK_UN)
+                except OSError:
+                    pass
+
+    def _process_once_locked(self) -> ControlStatus | None:
         if self.sync:
             synced_head = self.sync.pull_ff_only()
             self._maybe_reexec_after_sync(synced_head)
