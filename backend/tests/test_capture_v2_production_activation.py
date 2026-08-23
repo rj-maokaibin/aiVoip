@@ -82,6 +82,7 @@ def test_platform_factory_routes_v2_watcher_but_can_force_semantic_only_legacy(
     monkeypatch, tmp_path
 ):
     _select_v2_rehearsal(monkeypatch, tmp_path)
+    monkeypatch.setattr(settings, "reproduction_platform_mode", "real")
     monkeypatch.setenv("CAPTURE_V2_REUSE_LEGACY_REPRODUCTION_SEMANTICS", "true")
 
     from app.reproduction.platform_factory import build_orchestrator
