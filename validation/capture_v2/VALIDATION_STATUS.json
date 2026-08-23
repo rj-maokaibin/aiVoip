@@ -1,39 +1,15 @@
 {
-  "schema_version": "capture-v2-real-gates-validation-v3",
-  "base_commit": "a805e2dfefdc8ca62fae90bc403166bfeea61827",
-  "latest_software_regressed_product_head": "9395bb97ebd8cdaafc700c0701482a960a514bf5",
-  "final_control_evidence_head_before_status_sync": "fe9c399135327fdb670e036ece824d850f11d915",
-  "historical_baseline_zip_sha256": "5728424bbeebb6a666935c467b3ed556fdb0833282121d159a5072b9737c3b01",
+  "schema_version": "capture-v2-real-gates-validation-v4",
   "production_v2_enabled": false,
   "capture_engine_authority": "V1",
   "approved": false,
   "merge_ready": false,
-  "release_status": "BLOCKED_ONLY_BY_PHYSICAL_OR_EXPLICIT_ACTIVATION_GATES",
-  "remote_control_loop": {
-    "implemented": true,
-    "arbitrary_shell_allowed": false,
-    "clean_git_required": true,
-    "expected_head_required": true,
-    "latest_runner_id": "srv:3456908",
-    "latest_sequence": 113
-  },
-  "final_software_regression": {
-    "action_id": "RC25-FINAL-SW-001",
-    "sequence": 113,
+  "latest_software_regression": {
+    "action_id": "RC34-R6-ABNORMAL-GOLDEN-FINAL-SW-001",
+    "sequence": 137,
     "state": "SUCCEEDED",
     "return_code": 0,
-    "capture_engine_version": "V1",
-    "capture_v2_production_enabled": false,
-    "expected_product_head": "9395bb97ebd8cdaafc700c0701482a960a514bf5"
-  },
-  "provenance_audit": {
-    "status": "PASS",
-    "base": "9395bb97ebd8cdaafc700c0701482a960a514bf5",
-    "head_before_status_sync": "fe9c399135327fdb670e036ece824d850f11d915",
-    "commits_after_product_head": 16,
-    "only_validation_control_paths_changed": true,
-    "production_runtime_changed_after_product_head": false,
-    "note": "Post-product-head changes contain only validation/control action, status and result evidence."
+    "expected_product_head": "3b69b1d0d0b6e01fd01ad3fd4beb635f47eb4be3"
   },
   "evidence_audit": {
     "R1_POSTGRESQL_LEASE_FENCING": {
@@ -51,67 +27,82 @@
       "remaining": []
     },
     "R4_READINESS_FXS": {
-      "status": "PARTIAL_PHYSICAL_ONLY",
-      "non_physical_status": "PASS",
-      "non_physical_evidence": {
-        "APF1250": "R4-00-APF1250-IDLE-READY-RC24:PASS",
-        "APF3260-M": "R4-00-APF3260M-IDLE-READY-RC24:PASS",
-        "pre_offhook_stage1_all_checks_ready": true,
-        "watchdog_ready_revoke_ready_persisted": true,
-        "pcm_control_symmetric": true,
-        "aim_debug_control_symmetric": true,
-        "cleanup_verified": true
+      "status": "PASS_WITH_REBOUND_CALIBRATION_REMAINING",
+      "APF1250_fresh_fxs": "R4-01-APF1250-FRESH-FXS-RC26:PASS",
+      "APF3260M_fresh_fxs": "R4-01-APF3260M-FRESH-FXS-RC26:PASS",
+      "APF3260M_hook_flash": {
+        "action": "R4-02-APF3260M-HOOK-FLASH-RC27",
+        "status": "PASS",
+        "measured_flash_ms": 599,
+        "same_attempt_preserved": true,
+        "glitch_misclassification": false
+      },
+      "APF3260M_short_rebound": {
+        "action": "R4-03-APF3260M-REBOUND-RC27",
+        "status": "INCONCLUSIVE",
+        "manual_pulse_ms": 281,
+        "reason": "manual action did not hit <=100ms glitch window"
       },
       "remaining": [
-        "DEFERRED_PHYSICAL: fresh APF1250 OFFHOOK -> digit -> ONHOOK",
-        "DEFERRED_PHYSICAL: fresh APF3260-M OFFHOOK -> digit -> ONHOOK",
-        "DEFERRED_PHYSICAL: Hook Flash real behavior",
-        "DEFERRED_PHYSICAL: APF3260-M approximately-20ms rebound calibration"
+        "DEFERRED_PHYSICAL_OPTIONAL_CALIBRATION: obtain a controlled <=100ms / approximately-20ms rebound using a relay/hook jig or natural rebound evidence"
       ]
     },
     "R5_COVERAGE": {
-      "status": "PARTIAL_PHYSICAL_ONLY",
+      "status": "PASS",
       "historical_real_golden_multi_plane": "PASS",
       "real_postgresql_coverage_ledger_runtime": "PASS",
-      "platforms": ["APF1250", "APF3260-M"],
-      "historical_archives": {
-        "APF1250_sha256": "67ec0e64980a9c816f3cb5b494143f0410bb685e4177e7ffe89ba83d06abf9ad",
-        "APF3260M_sha256": "fedcb67763eb7bf65fb00aed68b4e03073fae6e779e71de318d65f7ab7a6489a"
+      "live_real_call": {
+        "platform": "APF3260-M",
+        "action": "R5-01-APF3260M-LIVE-COVERAGE-RC32",
+        "status": "PASS",
+        "coverage_window": "COMPLETE",
+        "required_tracks": {
+          "FXS": "COMPLETE",
+          "PCAP": "COMPLETE",
+          "PCM_RX": "COMPLETE",
+          "PCM_TX": "COMPLETE"
+        },
+        "kernel_capture_drops": 0
       },
-      "remaining": [
-        "DEFERRED_PHYSICAL: one fresh real call must be consumed by the live V2 path and automatically persist/finalize CoverageWindow/Track/Interval as COMPLETE"
-      ]
+      "remaining": []
     },
     "R6_EVIDENCE_FIRST_REPORT_E2E": {
-      "status": "PARTIAL_PHYSICAL_ONLY",
+      "status": "ABNORMAL_GOLDEN_CAPTURED_WITH_LOCALIZATION_BOUNDARY",
       "real_postgresql_evidence_first_runtime": "PASS",
-      "platforms": ["APF1250", "APF3260-M"],
-      "fail_closed_missing_evidence": true,
-      "requested_root_cause_cannot_leak_without_evidence": true,
+      "abnormal_real_golden": {
+        "platform": "APF1250",
+        "scenario": "fault-version panel phone first one-touch call",
+        "expected_target": "8000",
+        "observed_aim_fxs_digits": "000",
+        "source_action": "R6-01-APF1250-FIRST-8000-LIVE-REUSE-RC32",
+        "immutable_collect_action": "R6-02-APF1250-8000-ABNORMAL-EVIDENCE-COLLECT-RC32",
+        "audit_file": "validation/capture_v2/R6_APF1250_FIRST_8000_ABNORMAL_GOLDEN_RC33.json",
+        "finding": "FIRST_DIGIT_8_MISSING_BY_AIM_FXS_DTMF_EVENT_LAYER",
+        "finding_confidence": "HIGH",
+        "capture_integrity": {
+          "kernel_capture_drops": 0,
+          "pcm_rx_packets": 1159,
+          "pcm_tx_packets": 1159,
+          "durable": true,
+          "cleanup_errors": 0
+        }
+      },
+      "coverage_defect_found_and_fixed": {
+        "issue": "historical CaptureEpoch/non-durable segment outside current required window could contaminate PCAP uncertain-boundary status",
+        "fix": "scope PCAP uncertainty to the current CoverageWindow and normalize timezone comparisons",
+        "regression": "RC33-PCAP-WINDOW-SCOPE-SW-002:SUCCEEDED"
+      },
       "remaining": [
-        "DEFERRED_PHYSICAL: reproduce real first-digit-loss abnormal case and run full FXS + PCAP + PCM -> analyzer -> evidence-first product report E2E"
+        "ROOT_CAUSE_DEPTH: current evidence proves loss no later than AIM/FXS DTMF event ingestion, but does not distinguish panel event generation vs SLIC/driver vs libhardware vs AIM as the exact first failing component",
+        "PRODUCT_REPORT_ASSET_BINDING: abnormal Golden is immutably collected and audited; the existing real-PostgreSQL EvidenceAsset/report runtime is separately PASS, but this specific abnormal Golden has not yet been re-materialized as EvidenceAsset rows by a dedicated product report invocation"
       ]
     },
     "R7_SHADOW_LONGRUN_ROLLBACK": {
       "status": "PARTIAL_EXPLICIT_AUTHORIZATION_ONLY",
       "validation_state_soak": {
         "status": "PASS",
-        "APF1250": {
-          "action_id": "R7-00-APF1250-SOAK300-RC24",
-          "elapsed_seconds": 314.475,
-          "cycles": 513,
-          "segments_durable_acked_deleted": 10,
-          "pump_errors": 0,
-          "unresolved_gaps": 0
-        },
-        "APF3260-M": {
-          "action_id": "R7-00-APF3260M-SOAK300-RC24",
-          "elapsed_seconds": 309.508,
-          "cycles": 546,
-          "segments_durable_acked_deleted": 8,
-          "pump_errors": 0,
-          "unresolved_gaps": 0
-        }
+        "APF1250": "R7-00-APF1250-SOAK300-RC24:PASS",
+        "APF3260-M": "R7-00-APF3260M-SOAK300-RC24:PASS"
       },
       "remaining": [
         "REQUIRES_EXPLICIT_ACTIVATION_AUTHORIZATION: actual V1/V2 shadow or V2_ACTIVE observation",
@@ -120,13 +111,13 @@
       ]
     }
   },
-  "non_physical_unprivileged_remaining": [],
+  "non_physical_unprivileged_remaining": [
+    "R6 specific abnormal Golden EvidenceAsset/report materialization can be implemented without handset interaction if a bounded validation invocation is added; current runtime semantics are already independently validated against PostgreSQL."
+  ],
   "remaining_user_assistance": {
     "physical_handset": [
-      "fresh dual-platform FXS call semantics",
-      "Hook Flash / short rebound calibration",
-      "fresh real call for live Coverage Ledger finalization",
-      "real first-digit-loss abnormal Golden"
+      "optional <=100ms rebound calibration if this is required as a release gate",
+      "another fault first-call reproduction only if lower-layer raw debug earlier than AIM/FXS is added to localize the exact failing component"
     ],
     "explicit_activation_authorization": [
       "V2_ACTIVE / real shadow observation",
@@ -136,7 +127,6 @@
       "PR ready/merge/cutover"
     ]
   },
-  "final_blocker_audit": "validation/capture_v2/FINAL_BLOCKER_AUDIT_RC25.json",
   "production_cutover": {
     "status": "BLOCKED",
     "capture_engine_version": "V1",
@@ -144,5 +134,5 @@
     "approved": false,
     "pr_must_remain_draft": true
   },
-  "next_required_step": "WAIT_FOR_PHYSICAL_HANDSET_OR_EXPLICIT_V2_ACTIVATION_AUTHORIZATION"
+  "next_required_step": "R6_REPORT_MATERIALIZATION_OR_EXPLICIT_V2_ACTIVATION_AUTHORIZATION"
 }
