@@ -15,8 +15,8 @@ def stale_fence_cleanup_script() -> str:
 
     A bounded rehearsal uses an isolated PostgreSQL project, so its lease epoch can
     legitimately restart at 1 while /tmp on the DUT still carries a higher fence
-    epoch from an earlier rehearsal.  Production fencing must remain monotonic, so
-    the generic publish_fence path must never reset that state.  This script is a
+    epoch from an earlier rehearsal. Production fencing must remain monotonic, so
+    the generic publish_fence path must never reset that state. This script is a
     deliberately narrow rehearsal preflight: it refuses to run while an operation
     lock is live or while an AIVOIP tcpdump producer is visible, and deletes only
     the control-plane fence identity files after those checks pass.
@@ -24,8 +24,9 @@ def stale_fence_cleanup_script() -> str:
     return r'''
 CONTROL=/tmp/aivoip_capture/control
 LOCK="$CONTROL/op.lock"
+SELF_PID=$$
 
-# Never disturb an in-flight fenced mutation.  A stale mkdir lock is removable
+# Never disturb an in-flight fenced mutation. A stale mkdir lock is removable
 # only after PID + /proc starttime prove that its original owner is no longer live.
 if [ -d "$LOCK" ]; then
   oldpid=$(cat "$LOCK/owner_pid" 2>/dev/null || true)
@@ -40,10 +41,12 @@ if [ -d "$LOCK" ]; then
   rm -rf "$LOCK"
 fi
 
-# Re-check directly on the DUT immediately before mutation.  Do not rely only on
-# the controller-side process snapshot because another process could appear in the
-# small interval between read and mutation.
+# Re-check directly on the DUT immediately before mutation. The shell executing
+# this script necessarily has the literal tcpdump/path probe in its own cmdline,
+# so exclude SELF_PID; every other process remains subject to the fail-closed scan.
 for p in /proc/[0-9]*; do
+  pid=${p#/proc/}
+  [ "$pid" = "$SELF_PID" ] && continue
   [ -r "$p/cmdline" ] || continue
   cmd=$(tr '\000' ' ' < "$p/cmdline" 2>/dev/null || true)
   case "$cmd" in
@@ -68,7 +71,7 @@ async def clear_stale_fence_for_rehearsal(adapter: Any) -> dict[str, Any]:
     """Clear only stale rehearsal fence metadata after proving the DUT is idle.
 
     The caller must already be running under the explicit V2 activation-rehearsal
-    contract.  This function independently re-checks that contract so it cannot be
+    contract. This function independently re-checks that contract so it cannot be
     reused as a production escape hatch.
     """
     from app.capture_v2.runtime import assert_selected_v2_live_capture_allowed
@@ -116,11 +119,11 @@ async def clear_stale_fence_for_rehearsal(adapter: Any) -> dict[str, Any]:
         raise RuntimeError("REHEARSAL_STALE_FENCE_CLEAR_VERIFY_FAILED")
 
     records_after = await reader.list_tcpdump_processes()
-    owned_after = [
+    identities_after = [
         parse_process_record(row.pid, row.starttime, row.cmdline)
         for row in records_after
-        if parse_process_record(row.pid, row.starttime, row.cmdline).owned_by_aivoip
     ]
+    owned_after = [item for item in identities_after if item.owned_by_aivoip]
     if owned_after:
         raise RuntimeError("REHEARSAL_STALE_FENCE_CLEAR_POSTCHECK_PRODUCER_PRESENT")
 
