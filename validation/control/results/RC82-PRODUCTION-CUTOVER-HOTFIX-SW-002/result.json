@@ -1,0 +1,44 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "RC82-PRODUCTION-CUTOVER-HOTFIX-SW-002",
+    "sequence": 213,
+    "created_at": "2026-08-23T16:24:00+00:00",
+    "expires_at": "2026-08-24T04:24:00+00:00",
+    "action_type": "SOFTWARE_REGRESSION",
+    "parameters": {
+      "timeout_seconds": 1800
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "c44b7e31625847f9ec60e695378033354267c4fd"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "Re-run the full Capture V2 software regression after the legacy production-env compatibility hotfix and its updated static cutover contract test are both merged to master and mirrored exactly into the control branch. Require fail-closed explicit-value behavior and all prior Capture V2 tests. No production or DUT mutation."
+  },
+  "action_sha256": "d8887f802a97d7510e97e5e0f35df5a127d838a9c4d53e4ff550d4d111fd5a0a",
+  "runner_id": "srv:611900",
+  "state": "SUCCEEDED",
+  "return_code": 0,
+  "verdict": null,
+  "error": null,
+  "finished_at": "2026-08-23T16:24:12.663654+00:00",
+  "stdout_sha256": "28d2990980c01d1dd03dae03b35feec745f09068980a78a790e10d445a5adccd",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "local_stdout": ".capture-v2-control/logs/RC82-PRODUCTION-CUTOVER-HOTFIX-SW-002/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/RC82-PRODUCTION-CUTOVER-HOTFIX-SW-002/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "8a20e39d1a1edd147de5ffcf5685407e13cb1100",
+      "expected_product_head": "c44b7e31625847f9ec60e695378033354267c4fd"
+    },
+    "parsed_output": null
+  }
+}

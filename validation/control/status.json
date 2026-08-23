@@ -1,29 +1,27 @@
 {
   "schema_version": "capture-v2-remote-status-v1",
-  "action_id": "RC81-PRODUCTION-CUTOVER-HOTFIX-SW-001",
-  "sequence": 212,
+  "action_id": "RC82-PRODUCTION-CUTOVER-HOTFIX-SW-002",
+  "sequence": 213,
   "action_type": "SOFTWARE_REGRESSION",
-  "state": "FAILED",
+  "state": "SUCCEEDED",
   "runner_id": "srv:611900",
-  "action_sha256": "35bb890454d9aeb1f1cee761ee4a27066692ac8caf98f60d9db461c1bdd2c501",
-  "updated_at": "2026-08-23T16:21:35.677591+00:00",
+  "action_sha256": "d8887f802a97d7510e97e5e0f35df5a127d838a9c4d53e4ff550d4d111fd5a0a",
+  "updated_at": "2026-08-23T16:24:12.663654+00:00",
   "started_at": null,
-  "finished_at": "2026-08-23T16:21:35.677591+00:00",
-  "return_code": 1,
+  "finished_at": "2026-08-23T16:24:12.663654+00:00",
+  "return_code": 0,
   "verdict": null,
-  "result_path": "validation/control/results/RC81-PRODUCTION-CUTOVER-HOTFIX-SW-001/result.json",
-  "stdout_sha256": "752b7f10e0ec465ed147a19fa22c87225e9addce44cce565232f25935f1bf7d7",
+  "result_path": "validation/control/results/RC82-PRODUCTION-CUTOVER-HOTFIX-SW-002/result.json",
+  "stdout_sha256": "28d2990980c01d1dd03dae03b35feec745f09068980a78a790e10d445a5adccd",
   "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "error": null,
   "detail": {
     "safety": {
       "capture_engine_version": "V1",
       "capture_v2_production_enabled": "false",
-      "git_head": "9bed50e2cbe05e70a6594598fc11f30b52a82f70",
-      "expected_product_head": "8860cacc1dc9e9085954510af2417dbe013789d9"
+      "git_head": "8a20e39d1a1edd147de5ffcf5685407e13cb1100",
+      "expected_product_head": "c44b7e31625847f9ec60e695378033354267c4fd"
     },
-    "parsed_output": null,
-    "failure_stdout_tail": "........................................................................ [ 30%]\n........................................................................ [ 60%]\n.............F.......................................................... [ 91%]\n.....................                                                    [100%]\n=================================== FAILURES ===================================\n__________ test_production_cutover_is_guarded_and_rolls_back_failures __________\n\n    def test_production_cutover_is_guarded_and_rolls_back_failures():\n        text = (ROOT / \"backend/app/capture_v2/control/production_cutover_guarded.py\").read_text(encoding=\"utf-8\")\n>       assert '\"REPRODUCTION_PLATFORM_MODE\":\"real\"' in text\nE       assert '\"REPRODUCTION_PLATFORM_MODE\":\"real\"' in 'from __future__ import annotations\\n\\nimport argparse\\nimport json\\nfrom pathlib import Path\\nfrom typing import Any\\...payload, ensure_ascii=False, indent=2))\\n    return rc\\n\\n\\nif __name__ == \"__main__\":\\n    raise SystemExit(main())\\n'\n\ntests/test_capture_v2_production_deploy_contract.py:37: AssertionError\n=============================== warnings summary ===============================\n../.venv-release-gate/lib/python3.12/site-packages/_pytest/cacheprovider.py:475\n  /home/dev/workspace/aiVoip/.venv-release-gate/lib/python3.12/site-packages/_pytest/cacheprovider.py:475: PytestCacheWarning: cache could not write path /home/dev/workspace/aiVoip/backend/.pytest_cache/v/cache/nodeids: [Errno 13] Permission denied: '/home/dev/workspace/aiVoip/backend/.pytest_cache/v/cache/nodeids'\n    config.cache.set(\"cache/nodeids\", sorted(self.cached_nodeids))\n\n../.venv-release-gate/lib/python3.12/site-packages/_pytest/cacheprovider.py:429\n  /home/dev/workspace/aiVoip/.venv-release-gate/lib/python3.12/site-packages/_pytest/cacheprovider.py:429: PytestCacheWarning: cache could not write path /home/dev/workspace/aiVoip/backend/.pytest_cache/v/cache/lastfailed: [Errno 13] Permission denied: '/home/dev/workspace/aiVoip/backend/.pytest_cache/v/cache/lastfailed'\n    config.cache.set(\"cache/lastfailed\", self.lastfailed)\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n=========================== short test summary info ============================\nFAILED tests/test_capture_v2_production_deploy_contract.py::test_production_cutover_is_guarded_and_rolls_back_failures\n1 failed, 236 passed, 2 warnings in 8.00s",
-    "failure_stderr_tail": ""
+    "parsed_output": null
   }
 }
