@@ -1,20 +1,39 @@
 {
-  "schema_version": "capture-v2-remote-status-v1",
-  "action_id": "R6-03-APF1250-8000-PRODUCT-REPORT-MATERIALIZE-RC58",
-  "sequence": 187,
-  "action_type": "GATE_EVALUATE",
-  "state": "SUCCEEDED",
-  "runner_id": "srv:257142",
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "R6-03-APF1250-8000-PRODUCT-REPORT-MATERIALIZE-RC58",
+    "sequence": 187,
+    "created_at": "2026-08-23T13:42:00+00:00",
+    "expires_at": "2026-08-23T23:42:00+00:00",
+    "action_type": "GATE_EVALUATE",
+    "parameters": {
+      "timeout_seconds": 900,
+      "bundle": "../validation/capture_v2/R6_APF1250_FIRST_8000_ABNORMAL_GOLDEN_RC33.json",
+      "gate_id": "R6-PRODUCT-REPORT-MATERIALIZE-RC56"
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "376a04bdcc18359f25317d6c364474f300ec6377"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "Retry the bounded non-DUT R6 product binding after RC58 software regression passed. Use the guarded PostgreSQL data runtime only, reuse the existing persistent validation database, recalculate the stale PCAP CoverageWindow with current fixed logic, verify zero kernel drops, exact raw FXS DTMF 000, and durable server PCAP integrity, then idempotently create EvidenceAsset rows, QualitySnapshot, and evidence-first report. Restore the original absent-container prestate afterwards. No DUT I/O, no application worker startup, no Production V2 activation, and no synthetic evidence."
+  },
   "action_sha256": "228c5ee7b866f94853856233d1f27c3d2bee87eb1b496c79c2a83d9a0be4ab98",
-  "updated_at": "2026-08-23T13:39:23.693824+00:00",
-  "started_at": null,
-  "finished_at": "2026-08-23T13:39:23.693824+00:00",
+  "runner_id": "srv:257142",
+  "state": "SUCCEEDED",
   "return_code": 0,
   "verdict": "PASS",
-  "result_path": "validation/control/results/R6-03-APF1250-8000-PRODUCT-REPORT-MATERIALIZE-RC58/result.json",
+  "error": null,
+  "finished_at": "2026-08-23T13:39:23.693824+00:00",
   "stdout_sha256": "b7113ef71d01f00c15537158f34e296e52bca42c8525ae9a260eea3e2c6d1c84",
   "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-  "error": null,
+  "local_stdout": ".capture-v2-control/logs/R6-03-APF1250-8000-PRODUCT-REPORT-MATERIALIZE-RC58/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/R6-03-APF1250-8000-PRODUCT-REPORT-MATERIALIZE-RC58/stderr.log",
   "detail": {
     "safety": {
       "capture_engine_version": "V1",
