@@ -5,65 +5,29 @@
   "approved": false,
   "merge_ready": false,
   "latest_software_regression": {
-    "action_id": "RC58-R6-SUDO-DOCKER-GUARD-SW-001",
-    "sequence": 186,
+    "action_id": "RC64-CANDIDATE-DISPATCH-GUARD-SW-002",
+    "sequence": 195,
     "state": "SUCCEEDED",
     "return_code": 0,
-    "expected_product_head": "376a04bdcc18359f25317d6c364474f300ec6377"
+    "expected_product_head": "4f151f45e89fe14ffdb92dd91c3cd548b9b55c8b"
   },
   "evidence_audit": {
-    "R1_POSTGRESQL_LEASE_FENCING": {
-      "status": "PASS",
-      "remaining": []
-    },
-    "R2_OWNERSHIP_RECOVERY": {
-      "status": "PASS",
-      "platforms": ["APF1250", "APF3260-M"],
-      "remaining": []
-    },
-    "R3_SEGMENT_TRANSFER_ACK": {
-      "status": "PASS",
-      "platforms": ["APF1250", "APF3260-M"],
-      "remaining": []
-    },
+    "R1_POSTGRESQL_LEASE_FENCING": {"status": "PASS", "remaining": []},
+    "R2_OWNERSHIP_RECOVERY": {"status": "PASS", "platforms": ["APF1250", "APF3260-M"], "remaining": []},
+    "R3_SEGMENT_TRANSFER_ACK": {"status": "PASS", "platforms": ["APF1250", "APF3260-M"], "remaining": []},
     "R4_READINESS_FXS": {
       "status": "PASS_WITH_REBOUND_CALIBRATION_REMAINING",
       "APF1250_fresh_fxs": "R4-01-APF1250-FRESH-FXS-RC26:PASS",
       "APF3260M_fresh_fxs": "R4-01-APF3260M-FRESH-FXS-RC26:PASS",
-      "APF3260M_hook_flash": {
-        "action": "R4-02-APF3260M-HOOK-FLASH-RC27",
-        "status": "PASS",
-        "measured_flash_ms": 599,
-        "same_attempt_preserved": true,
-        "glitch_misclassification": false
-      },
-      "APF3260M_short_rebound": {
-        "action": "R4-03-APF3260M-REBOUND-RC27",
-        "status": "INCONCLUSIVE",
-        "manual_pulse_ms": 281,
-        "reason": "manual action did not hit <=100ms glitch window"
-      },
-      "remaining": [
-        "DEFERRED_PHYSICAL_OPTIONAL_CALIBRATION: obtain a controlled <=100ms / approximately-20ms rebound using a relay/hook jig or natural rebound evidence"
-      ]
+      "APF3260M_hook_flash": {"action": "R4-02-APF3260M-HOOK-FLASH-RC27", "status": "PASS", "measured_flash_ms": 599, "same_attempt_preserved": true, "glitch_misclassification": false},
+      "APF3260M_short_rebound": {"action": "R4-03-APF3260M-REBOUND-RC27", "status": "INCONCLUSIVE", "manual_pulse_ms": 281, "reason": "manual action did not hit <=100ms glitch window"},
+      "remaining": ["DEFERRED_PHYSICAL_OPTIONAL_CALIBRATION: obtain a controlled <=100ms / approximately-20ms rebound using a relay/hook jig or natural rebound evidence"]
     },
     "R5_COVERAGE": {
       "status": "PASS",
       "historical_real_golden_multi_plane": "PASS",
       "real_postgresql_coverage_ledger_runtime": "PASS",
-      "live_real_call": {
-        "platform": "APF3260-M",
-        "action": "R5-01-APF3260M-LIVE-COVERAGE-RC32",
-        "status": "PASS",
-        "coverage_window": "COMPLETE",
-        "required_tracks": {
-          "FXS": "COMPLETE",
-          "PCAP": "COMPLETE",
-          "PCM_RX": "COMPLETE",
-          "PCM_TX": "COMPLETE"
-        },
-        "kernel_capture_drops": 0
-      },
+      "live_real_call": {"platform": "APF3260-M", "action": "R5-01-APF3260M-LIVE-COVERAGE-RC32", "status": "PASS", "coverage_window": "COMPLETE", "required_tracks": {"FXS": "COMPLETE", "PCAP": "COMPLETE", "PCM_RX": "COMPLETE", "PCM_TX": "COMPLETE"}, "kernel_capture_drops": 0},
       "remaining": []
     },
     "R6_EVIDENCE_FIRST_REPORT_E2E": {
@@ -79,13 +43,7 @@
         "audit_file": "validation/capture_v2/R6_APF1250_FIRST_8000_ABNORMAL_GOLDEN_RC33.json",
         "finding": "FIRST_DIGIT_8_MISSING_BY_AIM_FXS_DTMF_EVENT_LAYER",
         "finding_confidence": "HIGH",
-        "capture_integrity": {
-          "kernel_capture_drops": 0,
-          "pcm_rx_packets": 1159,
-          "pcm_tx_packets": 1159,
-          "durable": true,
-          "cleanup_errors": 0
-        }
+        "capture_integrity": {"kernel_capture_drops": 0, "pcm_rx_packets": 1159, "pcm_tx_packets": 1159, "durable": true, "cleanup_errors": 0}
       },
       "coverage_defect_found_and_fixed": {
         "issue": "historical CaptureEpoch/non-durable segment outside current required window could contaminate PCAP uncertain-boundary status",
@@ -97,12 +55,7 @@
         "status": "PASS",
         "result_file": "validation/control/results/R6-03-APF1250-8000-PRODUCT-REPORT-MATERIALIZE-RC58/result.json",
         "coverage_window": "COMPLETE",
-        "required_tracks": {
-          "FXS": "COMPLETE",
-          "PCAP": "COMPLETE",
-          "PCM_RX": "COMPLETE",
-          "PCM_TX": "COMPLETE"
-        },
+        "required_tracks": {"FXS": "COMPLETE", "PCAP": "COMPLETE", "PCM_RX": "COMPLETE", "PCM_TX": "COMPLETE"},
         "pcap_uncertain_boundary": false,
         "observed_raw_fxs_digits": "000",
         "evidence_asset_count": 8,
@@ -113,17 +66,11 @@
         "dut_mutation": false,
         "production_mutation": false
       },
-      "remaining": [
-        "OPTIONAL_ROOT_CAUSE_DEPTH: current evidence proves loss no later than AIM/FXS DTMF event ingestion, but does not distinguish panel event generation vs SLIC/driver vs libhardware vs AIM as the exact first failing component"
-      ]
+      "remaining": ["OPTIONAL_ROOT_CAUSE_DEPTH: current evidence proves loss no later than AIM/FXS DTMF event ingestion, but does not distinguish panel event generation vs SLIC/driver vs libhardware vs AIM as the exact first failing component"]
     },
     "R7_SHADOW_LONGRUN_ROLLBACK": {
       "status": "PASS",
-      "validation_state_soak": {
-        "status": "PASS",
-        "APF1250": "R7-00-APF1250-SOAK300-RC24:PASS",
-        "APF3260-M": "R7-00-APF3260M-SOAK300-RC24:PASS"
-      },
+      "validation_state_soak": {"status": "PASS", "APF1250": "R7-00-APF1250-SOAK300-RC24:PASS", "APF3260-M": "R7-00-APF3260M-SOAK300-RC24:PASS"},
       "real_service_activation_rollback": {
         "action": "R7-02-APF3260M-SERVICE-ACTIVATION-ROLLBACK-RC55",
         "status": "PASS",
@@ -143,28 +90,21 @@
       "remaining": []
     }
   },
-  "non_physical_validation_remaining": [
-    "Audit and regression-test PR #27 against the current master baseline before any merge decision."
-  ],
+  "master_baseline_integration": {
+    "status": "IN_PROGRESS",
+    "audited_master": "e8d108a228b151b7711bfe6048c3f39e94b57783",
+    "draft_master_fix_pr": 37,
+    "draft_master_fix_candidate": "391486c7a70f8e36c088dcb512397044a552c78c",
+    "RC60": "FAILED_IN_FULL_BACKEND_WITH_2_INTEGRATION_TEST_CONTRACT_MISMATCHES",
+    "RC61_capture_v2_regression": "SUCCEEDED",
+    "RC64_dispatch_regression": "SUCCEEDED",
+    "current_action": "RC65-MASTER-FIX-CANDIDATE-INTEGRATION-003"
+  },
+  "non_physical_validation_remaining": ["Complete RC65 isolated full acceptance against the audited current-master repair candidate before any merge decision."],
   "remaining_user_assistance": {
-    "physical_handset": [
-      "optional <=100ms rebound calibration if this is required as a release gate",
-      "another fault first-call reproduction only if lower-layer raw debug earlier than AIM/FXS is added to localize the exact failing component"
-    ],
-    "production_cutover": [
-      "explicit production cutover approval",
-      "CAPTURE_ENGINE_VERSION=V2",
-      "CAPTURE_V2_PRODUCTION_ENABLED=true",
-      "PR ready/merge/cutover"
-    ]
+    "physical_handset": ["optional <=100ms rebound calibration if this is required as a release gate", "another fault first-call reproduction only if lower-layer raw debug earlier than AIM/FXS is added to localize the exact failing component"],
+    "production_cutover": ["explicit production cutover approval", "CAPTURE_ENGINE_VERSION=V2", "CAPTURE_V2_PRODUCTION_ENABLED=true", "PR ready/merge/cutover"]
   },
-  "production_cutover": {
-    "status": "BLOCKED_PENDING_EXPLICIT_APPROVAL",
-    "capture_engine_version": "V1",
-    "capture_v2_production_enabled": false,
-    "approved": false,
-    "pr_must_remain_draft": true,
-    "technical_gates_passed": true
-  },
-  "next_required_step": "MASTER_BASELINE_INTEGRATION_AUDIT_OR_EXPLICIT_PRODUCTION_CUTOVER_APPROVAL"
+  "production_cutover": {"status": "BLOCKED_PENDING_EXPLICIT_APPROVAL", "capture_engine_version": "V1", "capture_v2_production_enabled": false, "approved": false, "pr_must_remain_draft": true, "technical_gates_passed": true},
+  "next_required_step": "RC65_MASTER_BASELINE_FULL_ACCEPTANCE_OR_EXPLICIT_PRODUCTION_CUTOVER_APPROVAL"
 }
