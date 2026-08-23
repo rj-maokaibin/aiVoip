@@ -1,20 +1,37 @@
 {
-  "schema_version": "capture-v2-remote-status-v1",
-  "action_id": "RC63-CANDIDATE-DISPATCH-GUARD-SW-001",
-  "sequence": 194,
-  "action_type": "SOFTWARE_REGRESSION",
-  "state": "FAILED",
-  "runner_id": "srv:257142",
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "RC63-CANDIDATE-DISPATCH-GUARD-SW-001",
+    "sequence": 194,
+    "created_at": "2026-08-23T14:06:00+00:00",
+    "expires_at": "2026-08-24T02:06:00+00:00",
+    "action_type": "SOFTWARE_REGRESSION",
+    "parameters": {
+      "timeout_seconds": 1800
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "a4cef0de410e6078e220f568deab489039742d02"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "Full Capture V2 regression after fixing master-fix candidate retry dispatch. The handler accepts RC-number retries but remains fail-closed to the exact audited Draft PR #37 SHA 391486c7a70f8e36c088dcb512397044a552c78c, with an additional fixed-branch FETCH_HEAD equality check in the integration runner. No DUT I/O, no production mutation, V1 authoritative and Production V2 disabled."
+  },
   "action_sha256": "57f697bf39652cff7074adcf3fbc051d9bd69753ff05e16a4f2f4a9c0e8e7251",
-  "updated_at": "2026-08-23T14:04:45.810922+00:00",
-  "started_at": null,
-  "finished_at": "2026-08-23T14:04:45.810922+00:00",
+  "runner_id": "srv:257142",
+  "state": "FAILED",
   "return_code": 1,
   "verdict": null,
-  "result_path": "validation/control/results/RC63-CANDIDATE-DISPATCH-GUARD-SW-001/result.json",
+  "error": null,
+  "finished_at": "2026-08-23T14:04:45.810922+00:00",
   "stdout_sha256": "d45db1ca9ecbbe3c7245d2caa434e23f02b07a2a543b88acb550446312e75f0b",
   "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-  "error": null,
+  "local_stdout": ".capture-v2-control/logs/RC63-CANDIDATE-DISPATCH-GUARD-SW-001/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/RC63-CANDIDATE-DISPATCH-GUARD-SW-001/stderr.log",
   "detail": {
     "safety": {
       "capture_engine_version": "V1",
