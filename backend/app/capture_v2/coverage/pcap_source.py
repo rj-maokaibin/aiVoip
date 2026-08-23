@@ -17,6 +17,14 @@ class PcapCoverageEvidenceBuilder:
     def __init__(self, session_factory):
         self.session_factory = session_factory
 
+    @staticmethod
+    def _overlaps(start: datetime | None, end: datetime | None,
+                  required_start: datetime, required_end: datetime) -> bool:
+        if start is None:
+            return False
+        effective_end = end or required_end
+        return start < required_end and effective_end > required_start
+
     def build(self, *, capture_session_id: str, required_start: datetime,
               required_end: datetime) -> tuple[list[EvidenceInterval], bool, list[str]]:
         evidence: list[EvidenceInterval] = []
@@ -38,9 +46,13 @@ class PcapCoverageEvidenceBuilder:
                 ),
             )))
 
+        overlapping_epoch_ids: set[str] = set()
         for epoch in epochs:
             start = epoch.started_at
             end = epoch.ended_at or required_end
+            if not self._overlaps(start, end, required_start, required_end):
+                continue
+            overlapping_epoch_ids.add(str(epoch.id))
             if start is not None and end is not None and end > start:
                 evidence.append(EvidenceInterval(
                     start, end, CoverageIntervalType.COVERED,
@@ -52,7 +64,9 @@ class PcapCoverageEvidenceBuilder:
             # capture file when the kernel reported drops. Because tcpdump only
             # gives an aggregate count, the exact lost interval is unknowable; do
             # not fabricate one, but cap completeness at PARTIAL. Likewise, a
-            # closed epoch without final drop statistics cannot be proven complete.
+            # closed epoch overlapping this required window without final drop
+            # statistics cannot be proven complete. Historical epochs outside the
+            # required window must not contaminate the current CoverageWindow.
             if epoch.packets_dropped_kernel is not None and int(epoch.packets_dropped_kernel) > 0:
                 uncertain = True
                 reasons.append("KERNEL_CAPTURE_DROP")
@@ -62,8 +76,14 @@ class PcapCoverageEvidenceBuilder:
 
         for gap in gaps:
             if gap.gap_start_ts is None or gap.gap_end_ts is None:
-                uncertain = True
-                reasons.append(gap.reason_code)
+                # An unbounded gap is only relevant when it belongs to an epoch
+                # which overlaps this CoverageWindow; otherwise a historical gap
+                # from the same long-lived CaptureSession must not downgrade it.
+                if str(getattr(gap, "capture_epoch_id", "") or "") in overlapping_epoch_ids:
+                    uncertain = True
+                    reasons.append(gap.reason_code)
+                continue
+            if not self._overlaps(gap.gap_start_ts, gap.gap_end_ts, required_start, required_end):
                 continue
             evidence.append(EvidenceInterval(
                 gap.gap_start_ts, gap.gap_end_ts,
@@ -73,9 +93,26 @@ class PcapCoverageEvidenceBuilder:
             ))
 
         # A capture plane can be continuous while evidence is not yet durable. Final
-        # completeness therefore cannot be COMPLETE while known sealed segments remain
-        # pre-PERSISTED. We do not invent a timestamp interval if the segment has no packets.
-        if non_durable:
+        # completeness therefore cannot be COMPLETE while known sealed segments that
+        # overlap this required window remain pre-PERSISTED. A segment without packet
+        # timestamps inherits relevance from its owning epoch. Historical non-durable
+        # segments outside the requested window must not contaminate current coverage.
+        relevant_non_durable = []
+        for segment in non_durable:
+            if segment.first_packet_ts is not None or segment.last_packet_ts is not None:
+                seg_start = segment.first_packet_ts or segment.last_packet_ts
+                seg_end = segment.last_packet_ts or segment.first_packet_ts
+                if seg_start is not None and seg_end is not None and seg_end <= seg_start:
+                    # A single-timestamp segment is treated as relevant if the point
+                    # falls within the required interval.
+                    relevant = required_start <= seg_start < required_end
+                else:
+                    relevant = self._overlaps(seg_start, seg_end, required_start, required_end)
+            else:
+                relevant = str(segment.capture_epoch_id) in overlapping_epoch_ids
+            if relevant:
+                relevant_non_durable.append(segment)
+        if relevant_non_durable:
             uncertain = True
             reasons.append("SEGMENT_NOT_DURABLE")
         return evidence, uncertain, reasons
