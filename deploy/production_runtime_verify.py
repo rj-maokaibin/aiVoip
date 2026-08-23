@@ -51,8 +51,9 @@ def frontend_health() -> dict[str, Any]:
     with httpx.Client(timeout=8.0) as client:
         r = client.get("http://frontend/")
         r.raise_for_status()
-        if "<html" not in r.text.lower():
-            raise RuntimeError("frontend response is not HTML")
+        content_type = r.headers.get("content-type", "").lower()
+        if "text/html" not in content_type or 'id="root"' not in r.text.lower():
+            raise RuntimeError("frontend response is not the application HTML entrypoint")
         # Verify same-origin nginx proxy reaches the protected backend. An unauthenticated
         # request must be rejected by backend auth rather than falling back to SPA HTML.
         api = client.get("http://frontend/api/v1/cases")

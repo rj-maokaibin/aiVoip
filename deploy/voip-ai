@@ -142,14 +142,41 @@ build_images() {
   host_preflight
   echo "Building production images for source manifest:"
   python3 tools/source_manifest_gate.py
-  # Build every service that participates in the production capture/control path.
-  # The high-priority cancel/recovery worker, serialized watcher and beat scheduler
-  # are mandatory for Capture V2 and must use the exact same source image as the
-  # ordinary reproduction worker.
-  compose build --pull \
-    backend collector-worker packet-worker pcm-worker media-worker diagnosis-worker \
-    reproduction-worker reproduction-control-high-worker reproduction-watch-worker beat \
+  local services=(
+    backend collector-worker packet-worker pcm-worker media-worker diagnosis-worker
+    reproduction-worker reproduction-control-high-worker reproduction-watch-worker beat
     frontend release-runner
+  )
+  local data_root release_root build_log audit_file rc
+  data_root="$(env_value VOIP_DATA_ROOT 2>/dev/null || echo /data/voip)"
+  release_root="$data_root/release"
+  build_log="$release_root/docker-build-pull.log"
+  audit_file="${VOIP_OFFLINE_BUILD_AUDIT:-$release_root/offline-build-fallback.json}"
+  mkdir -p "$release_root"
+
+  # Online pull is always preferred. Offline fallback is allowed only for a
+  # proven registry transport failure with a complete local image inventory.
+  set +e
+  compose build --pull "${services[@]}" 2>&1 | tee "$build_log"
+  rc="${PIPESTATUS[0]}"
+  set -e
+  if [[ "$rc" == "0" ]]; then
+    echo "PRODUCTION_IMAGE_BUILD=PASS mode=ONLINE_PULL"
+    return 0
+  fi
+
+  echo "Online image build failed; evaluating fail-closed offline eligibility..."
+  if ! python3 deploy/offline_build_fallback.py \
+      --build-log "$build_log" \
+      --online-exit-code "$rc" \
+      --audit "$audit_file"; then
+    echo "PRODUCTION_IMAGE_BUILD=BLOCKED online_exit_code=$rc audit=$audit_file" >&2
+    return "$rc"
+  fi
+
+  echo "OFFLINE_IMAGE_FALLBACK=AUTHORIZED audit=$audit_file"
+  compose build --pull=false "${services[@]}"
+  echo "PRODUCTION_IMAGE_BUILD=PASS mode=OFFLINE_LOCAL_INVENTORY audit=$audit_file"
 }
 
 wait_http() {
