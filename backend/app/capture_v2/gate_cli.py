@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 import sys
 from pathlib import Path
@@ -14,6 +15,11 @@ _R6_GOLDEN_RELATIVE = Path("validation/capture_v2/R6_APF1250_FIRST_8000_ABNORMAL
 _MASTER_BASELINE_GATE_ID = "MASTER-BASELINE-INTEGRATION-RC59"
 _MASTER_FIX_CANDIDATE_GATE_RE = re.compile(r"^MASTER-FIX-CANDIDATE-INTEGRATION-RC\d+$")
 _MASTER_FIX_CANDIDATE_SHA = "391486c7a70f8e36c088dcb512397044a552c78c"
+_TSHARK_HOST_CANDIDATES = (
+    Path("/usr/bin/tshark"),
+    Path("/usr/local/bin/tshark"),
+    Path("/tmp/tshark-userspace"),
+)
 _SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 
 
@@ -23,6 +29,22 @@ def _arg_value(argv: list[str], name: str) -> str | None:
     except ValueError:
         return None
     return argv[index + 1] if index + 1 < len(argv) else None
+
+
+def _pin_host_tshark_candidate() -> bool:
+    """Expose a known host tshark path to isolated acceptance runners.
+
+    The underlying regression still executes ``tshark -v`` and requires 4.2.2,
+    so this only makes discovery independent of a runner's inherited PATH. The
+    caller must remove TSHARK_BINARY afterwards when this function returns True.
+    """
+    if str(os.environ.get("TSHARK_BINARY") or "").strip():
+        return False
+    for candidate in _TSHARK_HOST_CANDIDATES:
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            os.environ["TSHARK_BINARY"] = str(candidate)
+            return True
+    return False
 
 
 def _bounded_r6_materialization(argv: list[str]) -> int | None:
@@ -65,10 +87,15 @@ def _bounded_master_baseline_regression(argv: list[str]) -> int | None:
     from app.capture_v2.control.master_baseline_regression import main as regression_main
 
     repo_root = Path(__file__).resolve().parents[3]
-    return regression_main([
-        "--repo-root", str(repo_root),
-        "--master-sha", master_sha,
-    ])
+    pinned = _pin_host_tshark_candidate()
+    try:
+        return regression_main([
+            "--repo-root", str(repo_root),
+            "--master-sha", master_sha,
+        ])
+    finally:
+        if pinned:
+            os.environ.pop("TSHARK_BINARY", None)
 
 
 def _bounded_master_fix_candidate_regression(argv: list[str]) -> int | None:
@@ -95,10 +122,15 @@ def _bounded_master_fix_candidate_regression(argv: list[str]) -> int | None:
 
     regression.CANDIDATE_SHA = _MASTER_FIX_CANDIDATE_SHA
     repo_root = Path(__file__).resolve().parents[3]
-    return regression.main([
-        "--repo-root", str(repo_root),
-        "--candidate-sha", candidate_sha,
-    ])
+    pinned = _pin_host_tshark_candidate()
+    try:
+        return regression.main([
+            "--repo-root", str(repo_root),
+            "--candidate-sha", candidate_sha,
+        ])
+    finally:
+        if pinned:
+            os.environ.pop("TSHARK_BINARY", None)
 
 
 def main(argv: list[str] | None = None) -> int:
