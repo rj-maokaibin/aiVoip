@@ -1,23 +1,19 @@
 {
   "schema_version": "capture-v2-remote-action-v1",
-  "action_id": "RC72-PRODUCTION-DEPLOYMENT-PREFLIGHT-003",
-  "sequence": 203,
-  "created_at": "2026-08-23T15:36:00+00:00",
-  "expires_at": "2026-08-24T03:36:00+00:00",
-  "action_type": "GATE_EVALUATE",
-  "parameters": {
-    "timeout_seconds": 300,
-    "bundle": "/home/dev/workspace/aiVoip/validation/capture_v2/PRODUCTION_CUTOVER_AUTHORIZATION_RC69.json",
-    "gate_id": "PRODUCTION-DEPLOYMENT-PREFLIGHT-RC72"
-  },
+  "action_id": "RC73-PRODUCTION-CUTOVER-CONTROL-SW-001",
+  "sequence": 204,
+  "created_at": "2026-08-23T15:43:00+00:00",
+  "expires_at": "2026-08-24T03:43:00+00:00",
+  "action_type": "SOFTWARE_REGRESSION",
+  "parameters": {"timeout_seconds": 1800},
   "safety": {
     "require_clean_git": true,
     "require_v1_authority": true,
     "require_v2_disabled": true,
     "allow_worker_kill": false,
     "allow_server_quarantine": false,
-    "expected_head": "fe0ec5000e15d8ab832a92aebd4169d7c769781b"
+    "expected_head": "0bb05f8cfdeb04212eca4a17d27fa19b8689f443"
   },
   "requested_by": "ChatGPT-remote-validation-controller",
-  "note": "Retry guarded production deployment preflight using the exact absolute audited authorization path so bounded dispatch is unambiguous from the backend runner cwd. Fixed production env remains /etc/voip-ai/production.env. Read-only only; no env/container/DUT mutation."
+  "note": "Run full Capture V2 software regression after production deployment runtime fixes, guarded production cutover module, and bounded dispatch tests. No production or DUT mutation; V1 authoritative and Production V2 disabled."
 }
