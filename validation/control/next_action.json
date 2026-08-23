@@ -1,12 +1,20 @@
 {
   "schema_version": "capture-v2-remote-action-v1",
-  "action_id": "RC54-PRODUCTION-STAGE1-WIRING-SW-001",
-  "sequence": 176,
-  "created_at": "2026-08-23T12:48:00+00:00",
-  "expires_at": "2026-08-23T23:48:00+00:00",
-  "action_type": "SOFTWARE_REGRESSION",
+  "action_id": "R7-02-APF3260M-SERVICE-ACTIVATION-ROLLBACK-RC54",
+  "sequence": 177,
+  "created_at": "2026-08-23T12:49:00+00:00",
+  "expires_at": "2026-08-23T23:49:00+00:00",
+  "action_type": "ACTIVATION_REHEARSAL",
   "parameters": {
-    "timeout_seconds": 1800
+    "timeout_seconds": 3600,
+    "sn": "G1U060H000384",
+    "host": "10.48.8.74",
+    "port": 10002,
+    "username": "root",
+    "platform_id": "mt7981",
+    "model": "APF3260-M",
+    "profile_id": "VOIP_GENERIC_FULL_CAPTURE",
+    "observation_seconds": 20
   },
   "safety": {
     "require_clean_git": true,
@@ -17,5 +25,5 @@
     "expected_head": "b3692cbf91b60f3d4d0135ab5422a745f73dd577"
   },
   "requested_by": "ChatGPT-remote-validation-controller",
-  "note": "Software regression for production Phase-D Stage-1 wiring. Capture V2 ProductionPlatform now evaluates and persists the real pre-OFFHOOK Stage-1 contract proven by R4; PCAP Arm readiness accepts only explicit persisted capture_path_ready when no idle business PCAP header exists. Production V2 remains false, V1 remains authoritative, and no DUT activation is performed by this action."
+  "note": "Guarded APF3260-M service-level activation/rollback rerun after RC54 software regression passed. ProductionPlatform now persists Phase-D Stage-1 CAPTURE_PATH_READY using the real R4 pre-OFFHOOK contract; missing idle business PCAP header alone cannot fail PCAP readiness. PASS still requires PRE_V1 -> V2_ACTIVE with path_ready=true, exactly one real DUT producer and durable segment -> serialized cleanup -> restored V1 business path with zero residual V2 producer -> R7 rollback gate PASS. Production V2 remains false and the original deployment env remains untouched."
 }
