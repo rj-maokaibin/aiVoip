@@ -1,14 +1,12 @@
 {
   "schema_version": "capture-v2-remote-action-v1",
-  "action_id": "RC68-MASTER-FIX-CANDIDATE-INTEGRATION-005",
-  "sequence": 199,
-  "created_at": "2026-08-23T15:01:00+00:00",
-  "expires_at": "2026-08-24T03:01:00+00:00",
-  "action_type": "GATE_EVALUATE",
+  "action_id": "RC69-PRODUCTION-DEPLOYMENT-PREFLIGHT-001",
+  "sequence": 200,
+  "created_at": "2026-08-23T15:29:00+00:00",
+  "expires_at": "2026-08-24T03:29:00+00:00",
+  "action_type": "DEPLOYMENT_PREFLIGHT",
   "parameters": {
-    "timeout_seconds": 7200,
-    "bundle": "391486c7a70f8e36c088dcb512397044a552c78c",
-    "gate_id": "MASTER-FIX-CANDIDATE-INTEGRATION-RC68"
+    "timeout_seconds": 120
   },
   "safety": {
     "require_clean_git": true,
@@ -16,8 +14,8 @@
     "require_v2_disabled": true,
     "allow_worker_kill": false,
     "allow_server_quarantine": false,
-    "expected_head": "22656bd8a14e1815d52481dff6f26c8442057ae1"
+    "expected_head": "05bc82a1fcdd1baca2be1d756b3c0053dced8401"
   },
   "requested_by": "ChatGPT-remote-validation-controller",
-  "note": "Final isolated full acceptance retry after RC66 proved merge/Capture/Frozen/full software gates and host validation confirmed /usr/bin/tshark is TShark 4.2.2. The gate now pins a known executable host tshark candidate while retaining the underlying exact 4.2.2 version check. Require audited-master ancestry, no-conflict detached merge simulation, Capture V2 regression, Frozen contracts, full VOIP AI software release gate, and Real Offline Golden #001 exactly 142/142. Remove temporary worktree afterwards. No branch merge, DUT access, Production V2 enable, ready-for-review, or cutover."
+  "note": "Explicit production cutover is authorized. Perform read-only deployment preflight while V1 remains authoritative and Production V2 remains disabled. Discover actual Compose project/runtime, verify required services, env-file presence, current V1 authority, and validation artifact mount readiness. No restart, no env mutation, no DUT access."
 }
