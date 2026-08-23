@@ -34,12 +34,23 @@ def main(argv: list[str] | None = None) -> int:
     if not original_env.is_absolute():
         original_env = repo_root / original_env
 
-    # Keep the isolated rehearsal away from any host ports already used by the
-    # validation server. Internal service ports stay unchanged.
-    os.environ["VOIP_BACKEND_BIND"] = "127.0.0.1"
-    os.environ["VOIP_BACKEND_PORT"] = "18000"
-    os.environ["VOIP_MINIO_CONSOLE_BIND"] = "127.0.0.1"
-    os.environ["VOIP_MINIO_CONSOLE_PORT"] = "19001"
+    # The rehearsal never needs host-facing application ports. Compose 2.40+
+    # supports !reset, so the dedicated override removes inherited Backend/MinIO
+    # port publishing while preserving internal service-to-service ports.
+    base_compose = repo_root / "docker-compose.yml"
+    rehearsal_compose = repo_root / "docker-compose.capture-v2-rehearsal.yml"
+    if not rehearsal_compose.is_file():
+        payload = {
+            "verdict": "INCONCLUSIVE",
+            "reason": "REHEARSAL_COMPOSE_OVERRIDE_MISSING",
+            "production_v2_enabled": False,
+            "final_authority_target": "V1",
+        }
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+        return 2
+    os.environ["COMPOSE_FILE"] = os.pathsep.join(
+        [str(base_compose), str(rehearsal_compose)]
+    )
 
     preclean_error = None
     try:
@@ -74,10 +85,7 @@ def main(argv: list[str] | None = None) -> int:
             final_error = f"REHEARSAL_FINAL_DOWN_FAILED:{type(exc).__name__}:{exc}"
 
     payload["guarded_rehearsal"] = True
-    payload["host_ports"] = {
-        "backend": "127.0.0.1:18000",
-        "minio_console": "127.0.0.1:19001",
-    }
+    payload["host_port_publishing"] = "DISABLED_BY_COMPOSE_OVERRIDE"
     payload["final_rehearsal_project_empty"] = final_error is None
     if final_error:
         payload["guard_cleanup_error"] = final_error
