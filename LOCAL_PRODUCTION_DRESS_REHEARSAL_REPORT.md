@@ -327,6 +327,18 @@ The prior real-device R1-R7 evidence remains accepted from the handoff; this loc
 
 Open a PR from `fix/production-offline-image-fallback` and review all three commits together. After merge, retry production using the guarded deployment flow. Do not retry directly from unpatched `origin/master`.
 
+## PR Submission Synchronization
+
+While PR #41 was being created, remote `master` advanced from the rehearsal baseline `311c14eb2b56ea1e4c407f431b27864c12c8dd1f` to `4f25678e4806e103da347684316a7cf6168f3113` through nine test-isolation and CI/report-validation commits. The updated `master` was merged into the fix branch without conflict and without force-pushing. No production runtime implementation changed in those upstream commits.
+
+Post-merge validation against `4f25678e4806e103da347684316a7cf6168f3113`:
+
+- Capture V2 regression: `237 passed`
+- Full backend/software gate: `1004 passed`
+- Frontend dependency audit: `0 vulnerabilities`
+- Frontend production build: `PASS`
+- Overall software release gate: `PASS`
+
 Final verdict:
 
 `LOCAL_PRODUCTION_DRESS_REHEARSAL = PASS`
