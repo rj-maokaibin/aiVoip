@@ -1,0 +1,112 @@
+name: Final Live No Override Verification
+
+on:
+  pull_request:
+    paths:
+      - '.ci/final-live-no-override-20260824'
+
+permissions:
+  contents: read
+
+jobs:
+  verify-real-env-no-timeout-override:
+    runs-on:
+      - self-hosted
+      - linux
+      - x64
+      - voip-controlled-linux
+    timeout-minutes: 30
+    env:
+      OFFLINE_PCAP: /tmp/tcpdump-2026-08-14.pcap
+      OFFLINE_PCAP_SHA256: b038aa7c9a0644581f2815f654fcdee4620860796382265b178823fccba2e3f0
+      DOCUMENT_ID: SN6DdJX16oisLQxnPjzcwLwfnLb
+      TARGET_OPEN_ID: ou_67bee3c2e462a7f8939093bd8e697a96
+      EXPECTED_PRODUCT_SHA: 4583f985491a18d66dd01a302c967b0e6d304687
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 2
+
+      - name: Validate product parent and permanent timeout contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          parent="$(git show -s --format=%P HEAD | awk '{print $1}')"
+          test "$parent" = "$EXPECTED_PRODUCT_SHA"
+          test -f scripts/fixed_master_live_refresh_20260823.py
+          grep -q 'feishu_timeout_seconds: float = 120.0' backend/app/core/config.py
+          grep -q 'max(120.0, float(self.feishu_timeout_seconds))' backend/app/core/config.py
+          echo "PRODUCT_PARENT=$parent"
+
+      - name: Prepare real PCAP and Python
+        shell: bash
+        run: |
+          set -euo pipefail
+          fixture="$OFFLINE_PCAP"
+          if [ ! -r "$fixture" ]; then
+            fixture="$RUNNER_TEMP/final-live-input.pcap"
+            docker run --rm -v /tmp:/source:ro -v "$RUNNER_TEMP":/output --entrypoint sh postgres:16 \
+              -c "cp /source/tcpdump-2026-08-14.pcap /output/final-live-input.pcap && chmod 0644 /output/final-live-input.pcap"
+          fi
+          test -r "$fixture"
+          test "$(sha256sum "$fixture" | awk '{print $1}')" = "$OFFLINE_PCAP_SHA256"
+          echo "OFFLINE_PCAP=$fixture" >> "$GITHUB_ENV"
+          tshark_bin="$(command -v tshark)"
+          version="$($tshark_bin -v | head -n1)"
+          echo "$version"
+          [[ "$version" == *'4.2.2'* ]]
+          echo "TSHARK_BINARY=$tshark_bin" >> "$GITHUB_ENV"
+          venv="$RUNNER_TEMP/voip-final-live-no-override"
+          rm -rf "$venv"
+          python3 -m venv "$venv"
+          "$venv/bin/python" -m pip install -r backend/requirements.txt >/dev/null
+          echo "LIVE_VENV=$venv" >> "$GITHUB_ENV"
+
+      - name: Real runner env plus permanent timeout, no CI override
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f /home/github-runner/.config/voip-ai/.env
+          test -f /home/github-runner/.config/voip-ai/feishu_app_secret
+          set -a
+          source /home/github-runner/.config/voip-ai/.env
+          set +a
+          echo "RAW_FEISHU_TIMEOUT_SECONDS=${FEISHU_TIMEOUT_SECONDS:-UNSET}"
+          test "${REPRODUCTION_PLATFORM_MODE:-}" = "real"
+          export FEISHU_APP_SECRET_FILE=/home/github-runner/.config/voip-ai/feishu_app_secret
+          export PYTHONPATH=backend
+          "$LIVE_VENV/bin/python" - <<'PY'
+          from app.core.config import settings
+          print(f"EFFECTIVE_FEISHU_TIMEOUT_SECONDS={settings.feishu_timeout_seconds}")
+          print(f"REPRODUCTION_PLATFORM_MODE={settings.reproduction_platform_mode}")
+          assert settings.feishu_timeout_seconds >= 120.0
+          assert settings.reproduction_platform_mode == "real"
+          PY
+          export FIXED_MASTER_HEAD="$EXPECTED_PRODUCT_SHA"
+          rm -rf validation/fixed_master_live_refresh
+          mkdir -p validation/fixed_master_live_refresh
+          "$LIVE_VENV/bin/python" scripts/fixed_master_live_refresh_20260823.py
+          "$LIVE_VENV/bin/python" - <<'PY'
+          import json
+          from pathlib import Path
+          p=json.loads(Path('validation/fixed_master_live_refresh/result.json').read_text(encoding='utf-8'))
+          assert p['status']=='PASS', p
+          assert p['master_head']=='4583f985491a18d66dd01a302c967b0e6d304687', p
+          assert p['canonical_v2_verified'] is True
+          assert p['acl_verified'] is True
+          assert p['single_canonical_fact_layer_verified'] is True
+          print('FINAL_LIVE_NO_OVERRIDE=PASS')
+          PY
+
+      - name: Upload final live evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: final-live-no-override
+          path: |
+            validation/fixed_master_live_refresh/result.json
+            validation/fixed_master_live_refresh/canonical_v2/canonical-report-v2.json
+            validation/fixed_master_live_refresh/canonical_v2/canonical-report-v2.html
+            validation/fixed_master_live_refresh/canonical_v2/evidence-bundle-internal-full-v2.zip
+          if-no-files-found: warn
