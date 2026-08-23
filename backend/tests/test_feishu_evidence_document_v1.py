@@ -77,8 +77,11 @@ def test_feishu_document_projects_offline_call_as_reconstructed_not_reproduction
 
     blocks,_,plan=service._core_blocks(report,payload);text=[_block_text(x) for x in blocks]
 
+    # D112 is the current PRD/SPEC authority for the living V2 projection. The
+    # offline-specific reconstructed-Call heading is additive inside section 4;
+    # it must not replace the frozen D112 section title.
+    assert "4. 最新一次复现结果" in text
     assert "4. 当前离线 Call 重建结果" in text
-    assert "4. 最新一次复现结果" not in text
     assert any("分析方式：离线证据导入" in x and "复现 Session：不适用" in x for x in text)
     assert any("Call：CALL-001" in x and "SIP Call-ID：00ad1c804c33b255@192.168.3.200" in x for x in text)
     assert any("号码：8000 → 601" in x for x in text)
