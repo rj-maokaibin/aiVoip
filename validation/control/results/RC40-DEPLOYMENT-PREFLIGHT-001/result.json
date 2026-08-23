@@ -1,20 +1,37 @@
 {
-  "schema_version": "capture-v2-remote-status-v1",
-  "action_id": "RC40-DEPLOYMENT-PREFLIGHT-001",
-  "sequence": 148,
-  "action_type": "DEPLOYMENT_PREFLIGHT",
-  "state": "FAILED",
-  "runner_id": "srv:257142",
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "RC40-DEPLOYMENT-PREFLIGHT-001",
+    "sequence": 148,
+    "created_at": "2026-08-23T09:44:00+00:00",
+    "expires_at": "2026-08-23T21:44:00+00:00",
+    "action_type": "DEPLOYMENT_PREFLIGHT",
+    "parameters": {
+      "timeout_seconds": 120
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "b795762a2ef31008dda3a27068481a39802a2bc8"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "Read-only deployment preflight after RC39 PASS. Inspect Compose availability, effective runtime containers, release-artifact mount, and sanitized Capture authority state. No configuration mutation or service restart is permitted."
+  },
   "action_sha256": "c5b40d3758d2d8f39c3d3d101a661f6064cc6d1d9d9236e8814b65da86d4352e",
-  "updated_at": "2026-08-23T09:45:14.618799+00:00",
-  "started_at": null,
-  "finished_at": "2026-08-23T09:45:14.618799+00:00",
+  "runner_id": "srv:257142",
+  "state": "FAILED",
   "return_code": 1,
   "verdict": "FAIL",
-  "result_path": "validation/control/results/RC40-DEPLOYMENT-PREFLIGHT-001/result.json",
+  "error": null,
+  "finished_at": "2026-08-23T09:45:14.618799+00:00",
   "stdout_sha256": "1b0d5ef7bbeed1b9612f87f9ff48532d7eb05b44f2d47a4eebb9d8b97b0e6b82",
   "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-  "error": null,
+  "local_stdout": ".capture-v2-control/logs/RC40-DEPLOYMENT-PREFLIGHT-001/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/RC40-DEPLOYMENT-PREFLIGHT-001/stderr.log",
   "detail": {
     "safety": {
       "capture_engine_version": "V1",
