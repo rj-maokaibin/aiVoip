@@ -1,26 +1,12 @@
 {
   "schema_version": "capture-v2-remote-action-v1",
-  "action_id": "R6-02-APF1250-8000-ABNORMAL-EVIDENCE-COLLECT-RC32",
-  "sequence": 134,
-  "created_at": "2026-08-23T07:08:30+00:00",
-  "expires_at": "2026-08-23T19:08:30+00:00",
-  "action_type": "GATE_COLLECT",
+  "action_id": "RC33-PCAP-WINDOW-SCOPE-SW-001",
+  "sequence": 135,
+  "created_at": "2026-08-23T07:12:00+00:00",
+  "expires_at": "2026-08-23T19:12:00+00:00",
+  "action_type": "SOFTWARE_REGRESSION",
   "parameters": {
-    "device_id": "259f16e6-af9e-4dff-969b-2bb5eac43eb2",
-    "model": "APF1250",
-    "host": "10.48.8.74",
-    "port": 10001,
-    "username": "root",
-    "platform_id": "mt7621",
-    "password_env": "DB:G1V030E010214",
-    "profile_root": "../profiles",
-    "profile_id": "voip-standard",
-    "object_root": "/tmp/voip-reproduction-objects",
-    "output_root": "/tmp/capture-v2-gates",
-    "repo_root": "..",
-    "capture_session_id": "21aab150-2aa0-4fba-aff9-8c5a68ae653f",
-    "gate_id": "R6-02-APF1250-8000-ABNORMAL-EVIDENCE-COLLECT-RC32",
-    "timeout_seconds": 600
+    "timeout_seconds": 1200
   },
   "safety": {
     "require_clean_git": true,
@@ -28,8 +14,8 @@
     "require_v2_disabled": true,
     "allow_worker_kill": false,
     "allow_server_quarantine": false,
-    "expected_head": "86f7d7c01bdfe613e149f2e048cc7beb9538fd97"
+    "expected_head": "9a125cf0d32ddccdf629401d0e8587ba9433b933"
   },
   "requested_by": "ChatGPT-remote-validation-controller",
-  "note": "Collect immutable evidence for the reproduced APF1250 abnormal panel one-touch call: expected target 8000, observed AIM/FXS DTMF 000. No handset action and no Production V2 change."
+  "note": "Full Capture V2 regression after scoping PCAP coverage uncertainty and non-durable segment relevance to the current CoverageWindow. V1 remains authoritative and Production V2 stays disabled."
 }
