@@ -3,8 +3,10 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import time
 from pathlib import Path
 
+from app.capture_v2.control import activation_rehearsal as rehearsal
 from app.capture_v2.control.activation_rehearsal import _compose, _down, _safe_error, run
 
 
@@ -44,6 +46,20 @@ def _collect_diagnostics(repo_root: Path, env_file: Path) -> dict:
     return out
 
 
+def _install_backend_health_wait(timeout: float = 120.0) -> None:
+    single_probe = rehearsal._backend_http_health
+
+    def _wait(repo_root: Path, env_file: Path) -> bool:
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            if single_probe(repo_root, env_file):
+                return True
+            time.sleep(2)
+        return False
+
+    rehearsal._backend_http_health = _wait
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Guarded bounded Capture V2 activation rehearsal"
@@ -79,6 +95,7 @@ def main(argv: list[str] | None = None) -> int:
     os.environ["COMPOSE_FILE"] = os.pathsep.join(
         [str(base_compose), str(rehearsal_compose)]
     )
+    _install_backend_health_wait()
 
     preclean_error = None
     try:
@@ -119,6 +136,7 @@ def main(argv: list[str] | None = None) -> int:
 
     payload["guarded_rehearsal"] = True
     payload["host_port_publishing"] = "DISABLED_BY_COMPOSE_OVERRIDE"
+    payload["backend_health_wait_seconds"] = 120
     payload["final_rehearsal_project_empty"] = final_error is None
     if final_error:
         payload["guard_cleanup_error"] = final_error
