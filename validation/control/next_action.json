@@ -1,9 +1,9 @@
 {
   "schema_version": "capture-v2-remote-action-v1",
-  "action_id": "RC63-CANDIDATE-DISPATCH-GUARD-SW-001",
-  "sequence": 194,
-  "created_at": "2026-08-23T14:06:00+00:00",
-  "expires_at": "2026-08-24T02:06:00+00:00",
+  "action_id": "RC64-CANDIDATE-DISPATCH-GUARD-SW-002",
+  "sequence": 195,
+  "created_at": "2026-08-23T14:08:00+00:00",
+  "expires_at": "2026-08-24T02:08:00+00:00",
   "action_type": "SOFTWARE_REGRESSION",
   "parameters": {
     "timeout_seconds": 1800
@@ -14,8 +14,8 @@
     "require_v2_disabled": true,
     "allow_worker_kill": false,
     "allow_server_quarantine": false,
-    "expected_head": "a4cef0de410e6078e220f568deab489039742d02"
+    "expected_head": "4f151f45e89fe14ffdb92dd91c3cd548b9b55c8b"
   },
   "requested_by": "ChatGPT-remote-validation-controller",
-  "note": "Full Capture V2 regression after fixing master-fix candidate retry dispatch. The handler accepts RC-number retries but remains fail-closed to the exact audited Draft PR #37 SHA 391486c7a70f8e36c088dcb512397044a552c78c, with an additional fixed-branch FETCH_HEAD equality check in the integration runner. No DUT I/O, no production mutation, V1 authoritative and Production V2 disabled."
+  "note": "Repeat full Capture V2 regression after removing the stale hard-coded PR #37 candidate SHA from the legacy master-baseline dispatch unit test. The test now derives the audited SHA from gate_cli, preventing control-contract drift. V1 remains authoritative, Production V2 disabled, no DUT I/O and no cutover."
 }
