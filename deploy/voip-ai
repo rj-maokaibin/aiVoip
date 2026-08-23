@@ -142,7 +142,14 @@ build_images() {
   host_preflight
   echo "Building production images for source manifest:"
   python3 tools/source_manifest_gate.py
-  compose build --pull backend collector-worker packet-worker pcm-worker media-worker diagnosis-worker reproduction-worker frontend release-runner
+  # Build every service that participates in the production capture/control path.
+  # The high-priority cancel/recovery worker, serialized watcher and beat scheduler
+  # are mandatory for Capture V2 and must use the exact same source image as the
+  # ordinary reproduction worker.
+  compose build --pull \
+    backend collector-worker packet-worker pcm-worker media-worker diagnosis-worker \
+    reproduction-worker reproduction-control-high-worker reproduction-watch-worker beat \
+    frontend release-runner
 }
 
 wait_http() {
@@ -168,8 +175,10 @@ deploy_stack() {
   compose up -d postgres redis minio
   echo "Applying Alembic migration explicitly before application promotion..."
   compose run --rm backend alembic upgrade head
-  echo "Starting backend, workers and frontend..."
-  compose up -d backend collector-worker packet-worker pcm-worker media-worker diagnosis-worker reproduction-worker frontend
+  echo "Starting backend, workers, scheduler and frontend..."
+  compose up -d \
+    backend collector-worker packet-worker pcm-worker media-worker diagnosis-worker \
+    reproduction-worker reproduction-control-high-worker reproduction-watch-worker beat frontend
 
   local timeout backend_port frontend_port
   timeout="$(env_value VOIP_HEALTH_TIMEOUT_SECONDS 2>/dev/null || echo 180)"
@@ -288,7 +297,9 @@ case "$COMMAND" in
   verify) verify_stack ;;
   release) release_all ;;
   status) status_cmd ;;
-  logs) require_docker; compose logs -f backend collector-worker packet-worker pcm-worker media-worker diagnosis-worker reproduction-worker ;;
+  logs) require_docker; compose logs -f \
+    backend collector-worker packet-worker pcm-worker media-worker diagnosis-worker \
+    reproduction-worker reproduction-control-high-worker reproduction-watch-worker beat ;;
   backup-db) backup_db ;;
   down) require_docker; compose down --remove-orphans ;;
   *) echo "ERROR: unknown command: $COMMAND" >&2; usage >&2; exit 2 ;;
