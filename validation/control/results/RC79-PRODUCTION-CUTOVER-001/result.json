@@ -1,0 +1,38 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "RC79-PRODUCTION-CUTOVER-001",
+    "sequence": 210,
+    "created_at": "2026-08-23T16:10:00+00:00",
+    "expires_at": "2026-08-24T04:10:00+00:00",
+    "action_type": "GATE_EVALUATE",
+    "parameters": {
+      "timeout_seconds": 9000,
+      "bundle": "/home/dev/workspace/aiVoip/validation/capture_v2/PRODUCTION_CUTOVER_AUTHORIZATION_RC69.json",
+      "gate_id": "PRODUCTION-CUTOVER-RC79"
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "77f4e620b987be2d19d1e4b1ad66b6352d6c1be2"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "Execute the explicitly authorized guarded production cutover after PR #37 and PR #27 are merged and RC78 final acceptance PASS. Require exact audited authorization, validated feature head merged to master, pre-state V1/Production V2=false, production env backup, strict release preflight, switch REPRODUCTION_PLATFORM_MODE=real + CAPTURE_ENGINE_VERSION=V2 + CAPTURE_V2_PRODUCTION_ENABLED=true, full production deploy including reproduction control-high/watch/beat, runtime verification, V2 authority verification, and automatic rollback to the exact pre-cutover runtime/env on any failed postcheck. No DUT mutation is part of this deployment action."
+  },
+  "action_sha256": "2812e5b838ab6a743bc298f16fa3656826fb93c136b569f3779124151e6cdd95",
+  "runner_id": "srv:257142",
+  "state": "REJECTED",
+  "return_code": null,
+  "verdict": null,
+  "error": "TIMEOUT_OUT_OF_RANGE",
+  "finished_at": "2026-08-23T16:10:41.572315+00:00",
+  "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "local_stdout": ".capture-v2-control/logs/RC79-PRODUCTION-CUTOVER-001/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/RC79-PRODUCTION-CUTOVER-001/stderr.log",
+  "detail": {}
+}
