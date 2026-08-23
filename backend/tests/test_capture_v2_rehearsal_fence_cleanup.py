@@ -15,7 +15,12 @@ def test_rehearsal_stale_fence_script_is_narrow_and_fail_closed():
     assert '/proc/$oldpid/stat' in script
     assert "awk '{print $22}'" in script
 
-    # Only stale control-plane identity is removable.  Evidence/epochs and the
+    # The guard shell contains the literal probe text in its own sh -c cmdline;
+    # it must exclude only itself while continuing to scan every other process.
+    assert 'SELF_PID=$$' in script
+    assert '[ "$pid" = "$SELF_PID" ] && continue' in script
+
+    # Only stale control-plane identity is removable. Evidence/epochs and the
     # capture root are intentionally outside the mutation surface.
     assert '"$CONTROL/lease_epoch"' in script
     assert '"$CONTROL/session_id"' in script
