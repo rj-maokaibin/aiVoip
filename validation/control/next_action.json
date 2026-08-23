@@ -1,20 +1,12 @@
 {
   "schema_version": "capture-v2-remote-action-v1",
-  "action_id": "R7-02-APF3260M-SERVICE-ACTIVATION-ROLLBACK-RC42",
-  "sequence": 153,
-  "created_at": "2026-08-23T10:01:00+00:00",
-  "expires_at": "2026-08-23T22:01:00+00:00",
-  "action_type": "ACTIVATION_REHEARSAL",
+  "action_id": "RC43-GUARDED-REHEARSAL-PORT-ISOLATION-SW-001",
+  "sequence": 154,
+  "created_at": "2026-08-23T10:05:00+00:00",
+  "expires_at": "2026-08-23T22:05:00+00:00",
+  "action_type": "SOFTWARE_REGRESSION",
   "parameters": {
-    "timeout_seconds": 3600,
-    "sn": "G1U060H000384",
-    "host": "10.48.8.74",
-    "port": 10002,
-    "username": "root",
-    "platform_id": "mt7981",
-    "model": "APF3260-M",
-    "profile_id": "VOIP_GENERIC_FULL_CAPTURE",
-    "observation_seconds": 20
+    "timeout_seconds": 1200
   },
   "safety": {
     "require_clean_git": true,
@@ -22,8 +14,8 @@
     "require_v2_disabled": true,
     "allow_worker_kill": false,
     "allow_server_quarantine": false,
-    "expected_head": "e0d40b08d2b0479df7944dc88d114e9be88a37e3"
+    "expected_head": "62c4618ce4a1812fe253cbb107606f960b7ac9ed"
   },
   "requested_by": "ChatGPT-remote-validation-controller",
-  "note": "Retry bounded APF3260-M real service-level activation/rollback rehearsal using only the fixed audited activation module through sudo -n for Docker daemon access. Original env is never modified; Production V2 remains false; finally restores V1 and removes the isolated rehearsal Compose project."
+  "note": "Regression after guarded rehearsal wrapper, unconditional isolated-project cleanup, dedicated backend/MinIO host ports, and configurable MinIO console binding. V1 remains authoritative; Production V2 remains disabled."
 }
