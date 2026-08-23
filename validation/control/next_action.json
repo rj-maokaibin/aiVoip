@@ -1,12 +1,14 @@
 {
   "schema_version": "capture-v2-remote-action-v1",
-  "action_id": "RC59-MASTER-BASELINE-REGRESSION-SW-001",
-  "sequence": 188,
-  "created_at": "2026-08-23T13:47:00+00:00",
-  "expires_at": "2026-08-23T23:47:00+00:00",
-  "action_type": "SOFTWARE_REGRESSION",
+  "action_id": "RC59-MASTER-BASELINE-INTEGRATION-001",
+  "sequence": 189,
+  "created_at": "2026-08-23T13:48:00+00:00",
+  "expires_at": "2026-08-24T00:48:00+00:00",
+  "action_type": "GATE_EVALUATE",
   "parameters": {
-    "timeout_seconds": 1800
+    "timeout_seconds": 7200,
+    "bundle": "e8d108a228b151b7711bfe6048c3f39e94b57783",
+    "gate_id": "MASTER-BASELINE-INTEGRATION-RC59"
   },
   "safety": {
     "require_clean_git": true,
@@ -17,5 +19,5 @@
     "expected_head": "6ae0b8262aa8468977b4ef21e041c15c670253ba"
   },
   "requested_by": "ChatGPT-remote-validation-controller",
-  "note": "Full Capture V2 software regression for the isolated master-baseline merge simulator. The simulator accepts only an exact 40-hex master SHA, uses a detached temporary worktree, creates no merge commit and does not mutate the PR branch. This regression itself performs no master merge simulation, no DUT I/O, and no production activation."
+  "note": "Run an isolated no-commit integration acceptance against exact master e8d108a228b151b7711bfe6048c3f39e94b57783. Use a temporary detached worktree with master as the base and the current feature head as the merge input. Require merge success, Capture V2 regression, current master frozen contracts, full software release gate, and Real Offline Golden #001 142/142 when the exact TShark runtime is available. Remove the worktree afterwards. Do not modify the PR branch, create a merge commit, access the DUT, or enable Production V2."
 }
