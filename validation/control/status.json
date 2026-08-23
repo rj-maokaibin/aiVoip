@@ -1,121 +1,27 @@
 {
   "schema_version": "capture-v2-remote-status-v1",
-  "action_id": "RC40-DEPLOYMENT-PREFLIGHT-002",
-  "sequence": 149,
-  "action_type": "DEPLOYMENT_PREFLIGHT",
-  "state": "FAILED",
+  "action_id": "RC41-SERVICE-ACTIVATION-CONTROL-SW-001",
+  "sequence": 150,
+  "action_type": "SOFTWARE_REGRESSION",
+  "state": "SUCCEEDED",
   "runner_id": "srv:257142",
-  "action_sha256": "32848c7141d8451138985fb4545da32f0d311dca21735af7f8686b29435cba29",
-  "updated_at": "2026-08-23T09:46:48.000951+00:00",
+  "action_sha256": "84ff0713b2d86da078e571bfa444d24ef95e813422620044222a3a158033fc31",
+  "updated_at": "2026-08-23T09:54:55.980635+00:00",
   "started_at": null,
-  "finished_at": "2026-08-23T09:46:48.000951+00:00",
-  "return_code": 1,
-  "verdict": "FAIL",
-  "result_path": "validation/control/results/RC40-DEPLOYMENT-PREFLIGHT-002/result.json",
-  "stdout_sha256": "090d06577a7091009d62ba917eb2a382bf43dc1ba98980769861ff3f82d2881a",
+  "finished_at": "2026-08-23T09:54:55.980635+00:00",
+  "return_code": 0,
+  "verdict": null,
+  "result_path": "validation/control/results/RC41-SERVICE-ACTIVATION-CONTROL-SW-001/result.json",
+  "stdout_sha256": "afe5652be9fd006e29d08d5176e512a3db605c7936e533b4743bf940f42f6865",
   "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "error": null,
   "detail": {
     "safety": {
       "capture_engine_version": "V1",
       "capture_v2_production_enabled": "false",
-      "git_head": "4e4406a24b1da10ecc4a8eeeaf14ae2661e82fe4",
-      "expected_product_head": "c5c9d82444b0070db0fde9869a7c7a3a7f131410"
+      "git_head": "b798868dd5baeeb2d6ded412f454657d30a6f0b8",
+      "expected_product_head": "81609ed1279911ddeadf0d6b9efa6763afcb454d"
     },
-    "parsed_output": {
-      "verdict": "FAIL",
-      "checks": [
-        {
-          "name": "compose_available",
-          "passed": true
-        },
-        {
-          "name": "env_file_present",
-          "passed": true
-        },
-        {
-          "name": "required_services_defined",
-          "passed": true,
-          "observed": {
-            "missing": []
-          }
-        },
-        {
-          "name": "docker_cli_available",
-          "passed": true
-        },
-        {
-          "name": "required_services_running",
-          "passed": false,
-          "observed": {
-            "not_running": [
-              "backend",
-              "reproduction-worker",
-              "reproduction-control-high-worker",
-              "reproduction-watch-worker",
-              "beat"
-            ]
-          }
-        },
-        {
-          "name": "runtime_v1_authoritative",
-          "passed": true,
-          "observed": {}
-        },
-        {
-          "name": "release_artifact_mount_current",
-          "passed": true,
-          "observed": {
-            "missing_mount": []
-          }
-        }
-      ],
-      "facts": {
-        "scope": "READ_ONLY_DEPLOYMENT_PREFLIGHT",
-        "repo_root": "/home/dev/workspace/aiVoip",
-        "mutations_performed": false,
-        "compose_version": "Docker Compose version 2.40.3+ds1-0ubuntu1~24.04.1",
-        "env_file": "/home/dev/workspace/aiVoip/.env",
-        "env_file_safe": {
-          "APP_ENV": "development",
-          "VOIP_DATA_ROOT": "/home/dev/.local/share/aiVoip",
-          "REPRODUCTION_PLATFORM_MODE": "real"
-        },
-        "defined_required_services": [
-          "backend",
-          "reproduction-worker",
-          "reproduction-control-high-worker",
-          "reproduction-watch-worker",
-          "beat"
-        ],
-        "discovered_compose_projects": {},
-        "selected_compose_project": null,
-        "project_selection_basis": null,
-        "containers": {
-          "backend": {
-            "present": false,
-            "running": false
-          },
-          "reproduction-worker": {
-            "present": false,
-            "running": false
-          },
-          "reproduction-control-high-worker": {
-            "present": false,
-            "running": false
-          },
-          "reproduction-watch-worker": {
-            "present": false,
-            "running": false
-          },
-          "beat": {
-            "present": false,
-            "running": false
-          }
-        },
-        "recreate_required_for_validation_mount": []
-      },
-      "reason": "DEPLOYMENT_PREFLIGHT_FAILED"
-    }
+    "parsed_output": null
   }
 }
