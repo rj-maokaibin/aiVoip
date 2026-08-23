@@ -16,12 +16,8 @@ def capture_v2_enabled() -> bool:
     return resolve_capture_engine_version() == "V2"
 
 
-def assert_v1_live_capture_allowed() -> None:
-    if capture_v2_enabled():
-        raise CaptureV2Error(
-            "CAPTURE_V2_SELECTED_V1_AUTHORITY_FORBIDDEN",
-            details={"reason": "EXACTLY_ONE_CAPTURE_AUTHORITY"},
-        )
+def _truthy_env(name: str) -> bool:
+    return str(os.getenv(name, "false")).lower().strip() in {"1", "true", "yes", "on"}
 
 
 def _release_artifact_path() -> Path:
@@ -43,20 +39,12 @@ def assert_v2_live_capture_allowed() -> dict:
 
 
 def assert_v2_activation_rehearsal_allowed() -> dict:
-    """Allow real V2 authority only for the explicit pre-cutover rollback rehearsal.
-
-    This is intentionally narrower than Production activation.  It requires V2 to
-    be selected, Production V2 to remain disabled, an explicit process-level
-    ``CAPTURE_V2_ACTIVATION_REHEARSAL=true`` switch, and every release gate except
-    the very rollback gate this rehearsal exists to prove.  No code path may infer
-    rollback success from validation-scope rehearsals.
-    """
+    """Allow real V2 authority only for the explicit pre-cutover rollback rehearsal."""
     if not capture_v2_enabled():
         raise CaptureV2Error("CAPTURE_V2_NOT_SELECTED")
     if bool(getattr(settings, "capture_v2_production_enabled", False)):
         raise CaptureV2Error("CAPTURE_V2_REHEARSAL_REQUIRES_PRODUCTION_DISABLED")
-    enabled = str(os.getenv("CAPTURE_V2_ACTIVATION_REHEARSAL", "false")).lower().strip()
-    if enabled not in {"1", "true", "yes", "on"}:
+    if not _truthy_env("CAPTURE_V2_ACTIVATION_REHEARSAL"):
         raise CaptureV2Error("CAPTURE_V2_ACTIVATION_REHEARSAL_DISABLED")
 
     decision = CaptureV2CutoverGate.evaluate(_release_artifact_path())
@@ -89,6 +77,22 @@ def assert_selected_v2_live_capture_allowed() -> dict:
         return {"mode": "PRODUCTION", "artifact": artifact}
     artifact = assert_v2_activation_rehearsal_allowed()
     return {"mode": "ACTIVATION_REHEARSAL", "artifact": artifact}
+
+
+def assert_v1_live_capture_allowed() -> None:
+    if not capture_v2_enabled():
+        return
+    # Transitional compatibility for the already-proven V1.1 *business semantics*
+    # watcher.  When explicitly enabled, platform_factory guarantees that the
+    # watcher receives CaptureV2ProductionPlatform, so this does NOT authorize a
+    # V1 PCAP producer.  Default behavior remains fail-closed.
+    if _truthy_env("CAPTURE_V2_REUSE_LEGACY_REPRODUCTION_SEMANTICS"):
+        assert_selected_v2_live_capture_allowed()
+        return
+    raise CaptureV2Error(
+        "CAPTURE_V2_SELECTED_V1_AUTHORITY_FORBIDDEN",
+        details={"reason": "EXACTLY_ONE_CAPTURE_AUTHORITY"},
+    )
 
 
 def capture_authority_mode() -> str:
