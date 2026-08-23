@@ -1,14 +1,14 @@
 {
   "schema_version": "capture-v2-remote-action-v1",
-  "action_id": "RC71-PRODUCTION-DEPLOYMENT-PREFLIGHT-002",
-  "sequence": 202,
-  "created_at": "2026-08-23T15:35:00+00:00",
-  "expires_at": "2026-08-24T03:35:00+00:00",
+  "action_id": "RC72-PRODUCTION-DEPLOYMENT-PREFLIGHT-003",
+  "sequence": 203,
+  "created_at": "2026-08-23T15:36:00+00:00",
+  "expires_at": "2026-08-24T03:36:00+00:00",
   "action_type": "GATE_EVALUATE",
   "parameters": {
     "timeout_seconds": 300,
-    "bundle": "validation/capture_v2/PRODUCTION_CUTOVER_AUTHORIZATION_RC69.json",
-    "gate_id": "PRODUCTION-DEPLOYMENT-PREFLIGHT-RC71"
+    "bundle": "/home/dev/workspace/aiVoip/validation/capture_v2/PRODUCTION_CUTOVER_AUTHORIZATION_RC69.json",
+    "gate_id": "PRODUCTION-DEPLOYMENT-PREFLIGHT-RC72"
   },
   "safety": {
     "require_clean_git": true,
@@ -19,5 +19,5 @@
     "expected_head": "fe0ec5000e15d8ab832a92aebd4169d7c769781b"
   },
   "requested_by": "ChatGPT-remote-validation-controller",
-  "note": "Run the audited guarded production deployment preflight against the fixed production environment /etc/voip-ai/production.env. Require explicit authorization + all technical release gates; use sudo only for read-only production env/secrets/Compose inspection. Do not modify env, containers, DUT, or production authority."
+  "note": "Retry guarded production deployment preflight using the exact absolute audited authorization path so bounded dispatch is unambiguous from the backend runner cwd. Fixed production env remains /etc/voip-ai/production.env. Read-only only; no env/container/DUT mutation."
 }
