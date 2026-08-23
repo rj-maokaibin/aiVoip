@@ -1,11 +1,21 @@
 {
   "schema_version": "capture-v2-remote-action-v1",
-  "action_id": "RC49-REHEARSAL-REPRO-WORKER-LOG-RETENTION-SW-001",
-  "sequence": 166,
-  "created_at": "2026-08-23T10:35:00+00:00",
-  "expires_at": "2026-08-23T22:35:00+00:00",
-  "action_type": "SOFTWARE_REGRESSION",
-  "parameters": {"timeout_seconds": 1200},
+  "action_id": "R7-02-APF3260M-SERVICE-ACTIVATION-ROLLBACK-RC49",
+  "sequence": 167,
+  "created_at": "2026-08-23T10:39:00+00:00",
+  "expires_at": "2026-08-23T22:39:00+00:00",
+  "action_type": "ACTIVATION_REHEARSAL",
+  "parameters": {
+    "timeout_seconds": 3600,
+    "sn": "G1U060H000384",
+    "host": "10.48.8.74",
+    "port": 10002,
+    "username": "root",
+    "platform_id": "mt7981",
+    "model": "APF3260-M",
+    "profile_id": "VOIP_GENERIC_FULL_CAPTURE",
+    "observation_seconds": 20
+  },
   "safety": {
     "require_clean_git": true,
     "require_v1_authority": true,
@@ -15,5 +25,5 @@
     "expected_head": "8cc6b32177e7504738ec1a32098cdb5880ce41e8"
   },
   "requested_by": "ChatGPT-remote-validation-controller",
-  "note": "Regression after prioritizing reproduction-worker log tail in service-rehearsal timeout diagnostics. V1 remains authoritative and Production V2 remains disabled."
+  "note": "Guarded APF3260-M service rehearsal focused on preserving reproduction.start worker failure tail. Production V2 remains false; original env untouched; zero host ports; project cleanup is unconditional."
 }
