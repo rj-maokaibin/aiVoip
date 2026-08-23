@@ -1,23 +1,19 @@
 {
   "schema_version": "capture-v2-remote-action-v1",
-  "action_id": "RC76-PRODUCTION-CUTOVER-FINAL-INTEGRATION-002",
-  "sequence": 207,
-  "created_at": "2026-08-23T15:50:00+00:00",
-  "expires_at": "2026-08-24T03:50:00+00:00",
-  "action_type": "GATE_EVALUATE",
-  "parameters": {
-    "timeout_seconds": 7200,
-    "bundle": "391486c7a70f8e36c088dcb512397044a552c78c",
-    "gate_id": "MASTER-FIX-CANDIDATE-INTEGRATION-RC76"
-  },
+  "action_id": "RC77-SINGLE-EXECUTOR-CUTOVER-SW-001",
+  "sequence": 208,
+  "created_at": "2026-08-23T15:53:00+00:00",
+  "expires_at": "2026-08-24T03:53:00+00:00",
+  "action_type": "SOFTWARE_REGRESSION",
+  "parameters": {"timeout_seconds": 1800},
   "safety": {
     "require_clean_git": true,
     "require_v1_authority": true,
     "require_v2_disabled": true,
     "allow_worker_kill": false,
     "allow_server_quarantine": false,
-    "expected_head": "20a956093c338a1b10daec6c6424c1a2c9ca3e6c"
+    "expected_head": "a44cfd49da8a0ba82b0235bb7b2ccad3293b2d2c"
   },
   "requested_by": "ChatGPT-remote-validation-controller",
-  "note": "Final pre-production combined acceptance after all cutover/deployment safety fixes. Require audited candidate fetch via isolated ref, no-conflict merge simulation, Capture V2 regression, Frozen contracts, full software acceptance, and Real Offline Golden #001 142/142. No production or DUT mutation."
+  "note": "Supersede older-head RC76 for release purposes. Validate the final production cutover control source including host-local single-executor locking, concurrent-fetch isolation, full runtime service deployment, rollback evidence, and cutover guards. No production or DUT mutation."
 }
