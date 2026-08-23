@@ -2,8 +2,8 @@
   "schema_version": "capture-v2-real-gates-validation-v6",
   "production_v2_enabled": false,
   "capture_engine_authority": "V1",
-  "approved": false,
-  "merge_ready": false,
+  "approved": true,
+  "merge_ready": true,
   "latest_software_regression": {
     "action_id": "RC67-TSHARK-HOST-PIN-SW-001",
     "sequence": 198,
@@ -121,8 +121,17 @@
   "non_physical_validation_remaining": [],
   "remaining_user_assistance": {
     "physical_handset": ["optional <=100ms rebound calibration if this is required as a release gate", "another fault first-call reproduction only if lower-layer raw debug earlier than AIM/FXS is added to localize the exact failing component"],
-    "production_cutover": ["explicit production cutover approval", "CAPTURE_ENGINE_VERSION=V2", "CAPTURE_V2_PRODUCTION_ENABLED=true", "PR ready/merge/cutover"]
+    "production_cutover": []
   },
-  "production_cutover": {"status": "BLOCKED_PENDING_EXPLICIT_APPROVAL", "capture_engine_version": "V1", "capture_v2_production_enabled": false, "approved": false, "pr_must_remain_draft": true, "technical_gates_passed": true},
-  "next_required_step": "EXPLICIT_PRODUCTION_CUTOVER_APPROVAL_OR_OPTIONAL_PHYSICAL_DEPTH"
+  "production_cutover": {
+    "status": "AUTHORIZED_PREFLIGHT_PENDING",
+    "capture_engine_version": "V1",
+    "capture_v2_production_enabled": false,
+    "approved": true,
+    "authorized_at": "2026-08-23T15:27:00+00:00",
+    "authorization_source": "explicit_user_instruction",
+    "technical_gates_passed": true,
+    "pr_must_remain_draft": false
+  },
+  "next_required_step": "DEPLOYMENT_PREFLIGHT_THEN_GUARDED_PRODUCTION_CUTOVER"
 }
