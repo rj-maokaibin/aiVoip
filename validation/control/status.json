@@ -1,27 +1,33 @@
 {
   "schema_version": "capture-v2-remote-status-v1",
-  "action_id": "RC70-PRODUCTION-PREFLIGHT-CONTROL-SW-001",
-  "sequence": 201,
-  "action_type": "SOFTWARE_REGRESSION",
-  "state": "SUCCEEDED",
+  "action_id": "RC71-PRODUCTION-DEPLOYMENT-PREFLIGHT-002",
+  "sequence": 202,
+  "action_type": "GATE_EVALUATE",
+  "state": "FAILED",
   "runner_id": "srv:257142",
-  "action_sha256": "deb585a589f7e3a5ac36143bdc1d4b39bfca51b896795e8871abe9f4c29e744d",
-  "updated_at": "2026-08-23T15:34:30.962621+00:00",
+  "action_sha256": "176ae1b25f3e9e55af020c95c202accaa0f453cda29644f7a0a8b0922702b83e",
+  "updated_at": "2026-08-23T15:35:08.168987+00:00",
   "started_at": null,
-  "finished_at": "2026-08-23T15:34:30.962621+00:00",
-  "return_code": 0,
+  "finished_at": "2026-08-23T15:35:08.168987+00:00",
+  "return_code": 2,
   "verdict": null,
-  "result_path": "validation/control/results/RC70-PRODUCTION-PREFLIGHT-CONTROL-SW-001/result.json",
-  "stdout_sha256": "00729e86cb86fb46d08b3d0f8ac239e9077928cf6d1ef2f44cae2bb267ee9df8",
+  "result_path": "validation/control/results/RC71-PRODUCTION-DEPLOYMENT-PREFLIGHT-002/result.json",
+  "stdout_sha256": "5a8aec28a86559676c0dabac134f5d91e37ae133c1e68443f91570ad28e81634",
   "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "error": null,
   "detail": {
     "safety": {
       "capture_engine_version": "V1",
       "capture_v2_production_enabled": "false",
-      "git_head": "e8f30c5b78970e27b2ea66cfc88864ed202e9fc4",
+      "git_head": "faaf2ad6ccd91151610d8726759d387f04601123",
       "expected_product_head": "fe0ec5000e15d8ab832a92aebd4169d7c769781b"
     },
-    "parsed_output": null
+    "parsed_output": {
+      "details": {
+        "message": "[Errno 2] No such file or directory: 'validation/capture_v2/PRODUCTION_CUTOVER_AUTHORIZATION_RC69.json/manifest.json'"
+      },
+      "error": "GATE_COMMAND_EXCEPTION:FileNotFoundError",
+      "ok": false
+    }
   }
 }
