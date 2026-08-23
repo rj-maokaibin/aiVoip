@@ -517,6 +517,7 @@ def render_report_html(payload: dict) -> str:
     offline = context.get("analysis_mode") == "OFFLINE_IMPORTED"
     if offline:
         call_line = (
+            "<h3>4. 当前离线 Call 重建结果</h3>"
             f"<p>分析方式：离线证据导入｜复现 Session：不适用｜重建 Call：{_esc(context.get('reconstructed_call_count'))}。</p>"
             + (
                 f"<p>Call：{_esc(call.get('id') or call.get('call_no'))}｜SIP Call-ID：{_esc(call.get('sip_call_id') or call.get('external_call_ref'))}｜"
