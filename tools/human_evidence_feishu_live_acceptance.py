@@ -4,6 +4,7 @@ import argparse
 import asyncio
 import hashlib
 import json
+import os
 from pathlib import Path
 from urllib.parse import quote
 
@@ -22,6 +23,7 @@ from app.services.evidence_report import generate_evidence_report
 
 REAL_GOLDEN_001_SHA256 = "b038aa7c9a0644581f2815f654fcdee4620860796382265b178823fccba2e3f0"
 HUMAN_CONTRACT = "feishu-evidence-living-document-human-v2"
+PREFLIGHT_CONTRACT = "voip-live-acceptance-preflight-v1"
 REQUIRED_VISUAL_KINDS = {"DTMF_INSPECTOR", "SPECTRUM", "SPECTROGRAM"}
 EXPLANATION_KEYS = ("what_to_look_at", "meaning", "evidence_boundary", "plain_language_summary")
 LIVE_LABELS = (
@@ -52,6 +54,24 @@ def _ready_human(meta: dict | None) -> bool:
     if any(not str(explanation.get(key) or "").strip() for key in EXPLANATION_KEYS):
         return False
     return str(explanation.get("diagnostic_authority") or "NONE").upper() == "NONE"
+
+
+def _require_preflight(path: Path) -> dict:
+    if not path.is_file():
+        raise RuntimeError("LIVE_ACCEPTANCE_PREFLIGHT_RESULT_MISSING")
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if payload.get("contract") != PREFLIGHT_CONTRACT:
+        raise RuntimeError("LIVE_ACCEPTANCE_PREFLIGHT_CONTRACT_INVALID")
+    if payload.get("status") != "PASS" or payload.get("mutation_allowed") is not True:
+        blockers = ",".join(str(x) for x in (payload.get("blocking_keys") or [])[:12])
+        raise RuntimeError("LIVE_ACCEPTANCE_PREFLIGHT_BLOCKED:" + blockers)
+    expected_revision = str(os.getenv("LIVE_ACCEPTANCE_SOURCE_REVISION") or "").strip()
+    actual_revision = str(payload.get("source_revision") or "").strip()
+    if not expected_revision or actual_revision != expected_revision:
+        raise RuntimeError("LIVE_ACCEPTANCE_PREFLIGHT_REVISION_MISMATCH")
+    if not str(payload.get("runtime_fingerprint") or "").strip():
+        raise RuntimeError("LIVE_ACCEPTANCE_PREFLIGHT_RUNTIME_FINGERPRINT_MISSING")
+    return payload
 
 
 def _select_bound_golden(db):
@@ -138,7 +158,18 @@ def _human_sequence_count(blocks: list[dict]) -> int:
     return count
 
 
-async def run(result_path: Path) -> dict:
+async def run(result_path: Path, preflight_path: Path) -> dict:
+    try:
+        preflight = _require_preflight(preflight_path)
+    except Exception as exc:
+        return {
+            "status": "FAIL",
+            "contract": "human-evidence-feishu-live-acceptance-v1",
+            "error_code": type(exc).__name__,
+            "error_message": str(exc)[:300],
+            "feishu_projection_attempted": False,
+        }
+
     db = SessionLocal()
     projected = False
     try:
@@ -184,9 +215,12 @@ async def run(result_path: Path) -> dict:
         if human_sequences < 1:
             raise RuntimeError("FEISHU_LIVE_HUMAN_EXPLANATION_SEQUENCE_MISSING")
 
-        result = {
+        return {
             "status": "PASS",
             "contract": "human-evidence-feishu-live-acceptance-v1",
+            "preflight_contract": preflight.get("contract"),
+            "runtime_fingerprint": preflight.get("runtime_fingerprint"),
+            "source_revision": preflight.get("source_revision"),
             "golden_case": "OFFLINE_ANALYSIS_20260814_001",
             "golden_sha256_verified": True,
             "document_fingerprint": _fingerprint(original_document_id),
@@ -203,18 +237,19 @@ async def run(result_path: Path) -> dict:
             "image_then_five_explanations_verified": True,
             "diagnostic_authority_escalation": False,
         }
-        return result
     except Exception as exc:
         if not projected:
             db.rollback()
-        result = {
+        return {
             "status": "FAIL",
             "contract": "human-evidence-feishu-live-acceptance-v1",
+            "preflight_contract": preflight.get("contract"),
+            "runtime_fingerprint": preflight.get("runtime_fingerprint"),
+            "source_revision": preflight.get("source_revision"),
             "error_code": type(exc).__name__,
             "error_message": str(exc)[:300],
             "feishu_projection_attempted": projected,
         }
-        return result
     finally:
         db.close()
 
@@ -222,10 +257,11 @@ async def run(result_path: Path) -> dict:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--result", default="validation/human_evidence_feishu_live_acceptance.json")
+    parser.add_argument("--preflight-result", required=True)
     args = parser.parse_args()
     path = Path(args.result)
     path.parent.mkdir(parents=True, exist_ok=True)
-    result = asyncio.run(run(path))
+    result = asyncio.run(run(path, Path(args.preflight_result)))
     path.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
     print(json.dumps(result, ensure_ascii=False))
     return 0 if result.get("status") == "PASS" else 1
