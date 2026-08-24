@@ -46,4 +46,19 @@ def test_human_rtp_high_delta_keeps_delay_not_packet_loss_semantics():
     assert meta["semantic_rule"]=="HIGH_DELTA != PACKET_LOSS"
     assert meta["lost_packets"]==0
     assert meta["events"][0]["sequence_continuous"] is True
+    assert meta["event_scope"]=="CURRENT_FINDING_TYPE_ONLY"
     assert meta["authority"]=="PRESENTATION_ONLY"
+
+
+def test_human_rtp_packet_loss_does_not_mix_high_delta_events_from_same_stream():
+    stream={
+        "stream_id":"s1","start_time":10.0,"end_time":12.0,"src_ip":"1.1.1.1","src_port":10000,
+        "dst_ip":"2.2.2.2","dst_port":20000,"ssrc":1,"ptime_ms":20,"packet_count":100,"lost_packets":2,"loss_rate":.02,
+        "events":[
+            {"type":"HIGH_DELTA","start_time":10.5,"delta_ms":140.0,"sequence_continuous":True},
+            {"type":"PACKET_LOSS","start_time":11.0,"lost_packets":2},
+        ],
+    }
+    png,meta=render_human_rtp_timeline_png(stream,finding_type="PACKET_LOSS",finding_metrics={})
+    assert png.startswith(PNG)
+    assert [x["type"] for x in meta["events"]]==["PACKET_LOSS"]
