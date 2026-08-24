@@ -38,6 +38,13 @@ def test_runtime_fingerprint_is_deterministic_and_sensitive_to_inputs():
     assert a != d
 
 
+def test_runtime_supports_discovered_live_postgres_host_override():
+    text = (ROOT / "deploy/live_acceptance/runtime.py").read_text(encoding="utf-8")
+    assert "_discover_postgres_host_override" in text
+    assert '"host_overrides":host_overrides' in text
+    assert '"--add-host",f"{hostname}:{address}"' in text
+
+
 def test_preflight_collector_aggregates_all_blockers():
     preflight = _load(ROOT / "deploy/live_acceptance/preflight.py", "live_acceptance_preflight_test")
     collector = preflight.Collector()
