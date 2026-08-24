@@ -65,6 +65,41 @@ def _env_map(info: dict) -> dict[str, str]:
     return result
 
 
+def _network_ip(info: dict, network: str) -> str:
+    networks = info.get("NetworkSettings", {}).get("Networks") or {}
+    return str((networks.get(network) or {}).get("IPAddress") or "").strip()
+
+
+def _postgres_score(info: dict, hostname: str, network: str) -> int:
+    labels = info.get("Config", {}).get("Labels") or {}
+    env = _env_map(info)
+    image = str(info.get("Config", {}).get("Image") or "").lower()
+    service = str(labels.get("com.docker.compose.service") or "").lower()
+    name = str(info.get("Name") or "").lstrip("/").lower()
+    network_cfg = (info.get("NetworkSettings", {}).get("Networks") or {}).get(network) or {}
+    aliases = {str(x).lower() for x in (network_cfg.get("Aliases") or []) if x}
+    score = 0
+    if service == hostname.lower(): score += 20
+    if hostname.lower() in aliases: score += 15
+    if service == "postgres": score += 10
+    if "postgres" in image: score += 5
+    if "postgres" in name: score += 3
+    if env.get("POSTGRES_DB"): score += 2
+    if env.get("POSTGRES_USER"): score += 1
+    return score
+
+
+def _resolve_hostname_inside_backend(backend_id: str, hostname: str) -> str:
+    """Resolve through the exact production backend namespace when possible."""
+    script = "import socket,sys; print(socket.gethostbyname(sys.argv[1]))"
+    try:
+        value = _capture(["docker", "exec", backend_id, "python", "-c", script, hostname])
+    except Exception:
+        return ""
+    value = value.strip().splitlines()[-1] if value.strip() else ""
+    return value if re.fullmatch(r"[0-9a-fA-F:.]+", value) else ""
+
+
 def _discover_postgres_host_override(network: str, backend_info: dict) -> list[dict[str, str]]:
     database_url = _env_map(backend_info).get("DATABASE_URL", "")
     try:
@@ -74,14 +109,23 @@ def _discover_postgres_host_override(network: str, backend_info: dict) -> list[d
     if not hostname:
         return []
 
-    network_rows = json.loads(_capture(["docker", "network", "inspect", network]))
-    if not network_rows:
-        return []
-    containers = (network_rows[0].get("Containers") or {})
-    candidates: list[tuple[int, str, str, str]] = []
     backend_id = str(backend_info.get("Id") or "")
-    for cid, network_entry in containers.items():
-        if str(cid) == backend_id:
+    resolved = _resolve_hostname_inside_backend(backend_id, hostname)
+    if resolved:
+        return [{"hostname": hostname, "address": resolved, "container_id": "", "container_name": "backend-dns"}]
+
+    # Do not rely solely on `docker network inspect ... Containers`: on the
+    # controlled runner we observed Redis/MinIO aliases present while the live
+    # PostgreSQL container was omitted from that map. Scan every running
+    # container, then require the candidate to have an address on the exact
+    # backend network before injecting a runtime-only /etc/hosts override.
+    try:
+        ids = _capture(["docker", "ps", "-q"]).split()
+    except Exception:
+        ids = []
+    candidates: list[tuple[int, str, str, str]] = []
+    for cid in ids:
+        if str(cid) == backend_id or backend_id.startswith(str(cid)) or str(cid).startswith(backend_id):
             continue
         try:
             info = _docker_inspect(str(cid))
@@ -89,30 +133,23 @@ def _discover_postgres_host_override(network: str, backend_info: dict) -> list[d
             continue
         if not bool((info.get("State") or {}).get("Running")):
             continue
-        labels = info.get("Config", {}).get("Labels") or {}
-        env = _env_map(info)
-        image = str(info.get("Config", {}).get("Image") or "").lower()
-        service = str(labels.get("com.docker.compose.service") or "").lower()
-        score = 0
-        if service == "postgres": score += 10
-        if "postgres" in image: score += 5
-        if env.get("POSTGRES_DB"): score += 2
-        if env.get("POSTGRES_USER"): score += 1
+        address = _network_ip(info, network)
+        if not address:
+            continue
+        score = _postgres_score(info, hostname, network)
         if score <= 0:
             continue
-        address = str(network_entry.get("IPv4Address") or "").split("/", 1)[0].strip()
-        if not address:
-            networks = info.get("NetworkSettings", {}).get("Networks") or {}
-            address = str((networks.get(network) or {}).get("IPAddress") or "").strip()
-        if address:
-            candidates.append((score, str(cid), str(network_entry.get("Name") or service or cid), address))
+        name = str(info.get("Name") or "").lstrip("/") or str(cid)
+        candidates.append((score, str(cid), name, address))
+
     if not candidates:
         return []
-    candidates.sort(reverse=True)
+    candidates.sort(key=lambda row: (row[0], row[2], row[1]), reverse=True)
     top_score = candidates[0][0]
     top = [row for row in candidates if row[0] == top_score]
     if len(top) != 1:
-        raise RuntimeError(f"AMBIGUOUS_LIVE_POSTGRES_CONTAINERS_{len(top)}")
+        names = ",".join(sorted(row[2] for row in top))
+        raise RuntimeError(f"AMBIGUOUS_LIVE_POSTGRES_CONTAINERS_{len(top)}:{names}")
     _, cid, name, address = top[0]
     return [{"hostname": hostname, "address": address, "container_id": cid, "container_name": name}]
 
@@ -175,7 +212,7 @@ def _prepare(args: argparse.Namespace) -> int:
         runtime_info = _docker_inspect(runtime_image, image=True)
     context = {"schema_version":1,"contract":"voip-live-acceptance-runtime-context-v1","runtime_contract":contract["contract"],"runtime_version":contract["runtime_version"],"runtime_fingerprint":fingerprint,"runtime_image":runtime_image,"runtime_image_id":runtime_info.get("Id"),"base_image":base_image,"base_image_id":base_image_id,"backend_container_id":backend_info.get("Id"),"docker_network":network,"source_revision":_source_revision(),"secret_mounts":secret_mounts,"host_overrides":host_overrides}
     args.context.parent.mkdir(parents=True, exist_ok=True); args.context.write_text(json.dumps(context, ensure_ascii=False, indent=2)+"\n", encoding="utf-8"); os.chmod(args.context,0o600)
-    print(json.dumps({"status":"PASS","contract":context["runtime_contract"],"runtime_version":context["runtime_version"],"runtime_fingerprint":fingerprint[:16],"runtime_image":runtime_image,"cache_hit":cache_hit,"docker_network":network,"secret_mount_count":len(secret_mounts),"host_override_count":len(host_overrides),"source_revision":context["source_revision"]}, ensure_ascii=False)); return 0
+    print(json.dumps({"status":"PASS","contract":context["runtime_contract"],"runtime_version":context["runtime_version"],"runtime_fingerprint":fingerprint[:16],"runtime_image":runtime_image,"cache_hit":cache_hit,"docker_network":network,"secret_mount_count":len(secret_mounts),"host_override_count":len(host_overrides),"host_overrides":[{"hostname":x.get("hostname"),"container_name":x.get("container_name")} for x in host_overrides],"source_revision":context["source_revision"]}, ensure_ascii=False)); return 0
 
 
 def _load_context(path: Path) -> dict:
