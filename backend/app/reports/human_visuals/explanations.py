@@ -7,7 +7,10 @@ _LOOK_AT = {
     "WAVEFORM": "这张图用于查看音频波形随时间的变化，并定位证据窗口内是否出现突变、静音、削顶或明显能量变化。横轴是时间，纵轴是归一化 PCM 幅度。",
     "SPECTRUM": "这张图用于查看当前证据窗口中各频率成分的强弱。横轴是频率 Hz，纵轴是相对于数字满量程的频谱电平 dBFS；标记用于对应 Canonical Analyzer 已识别的主峰或参考频率。",
     "SPECTROGRAM": "这张图用于查看不同频率的能量如何随时间变化。横轴是时间，纵轴是频率，颜色越亮表示该时间和频率位置的相对能量越强。",
+    "DTMF_INSPECTOR": "这张图用于检查一个已由现有 DTMF Detector 接受的按键事件：左侧看双音主峰和周边杂散，右侧看理论/实测频率、dBFS、Twist、持续时间以及可用时的 PCM 序列与 SIP 目标对照。",
     "RTP_TIMELINE": "这张图用于查看 RTP 媒体包在同一时间轴上的异常事件，例如延迟突增、丢包或突发丢包；网络事件必须与其 Canonical 类型保持一致。",
+    "MULTI_TRACK": "这张图把可用的 PCM RX、RTP Uplink、RTP Downlink、PCM TX 波形放到同一绝对/相对时间轴上，用于直观看同一段媒体在不同层是否同时存在。",
+    "CROSS_LAYER": "这张图用于展示现有 Analyzer 已计算的跨层相关性、lag 和可用性，帮助理解证据边界；它不会自行决定物理根因。",
 }
 
 
@@ -61,6 +64,50 @@ def _periodic_observations(measurement: dict) -> list[str]:
     return out
 
 
+def _dtmf_observations(measurement: dict) -> list[str]:
+    if str(measurement.get("status") or "").upper() != "MEASURED":
+        return []
+    digit = str(measurement.get("digit") or "?")
+    out = [
+        f"按键 {digit} 的低频主音理论值为 {_number(measurement.get('row_expected_hz'), 1)} Hz，实测 {_number(measurement.get('row_measured_hz'), 3)} Hz，频偏 {_number(measurement.get('row_error_percent'), 5)}%。",
+        f"按键 {digit} 的高频主音理论值为 {_number(measurement.get('col_expected_hz'), 1)} Hz，实测 {_number(measurement.get('col_measured_hz'), 3)} Hz，频偏 {_number(measurement.get('col_error_percent'), 5)}%。",
+    ]
+    if measurement.get("row_level_dbfs") is not None and measurement.get("col_level_dbfs") is not None:
+        out.append(f"两路主音数字电平分别为 {_number(measurement.get('row_level_dbfs'), 3)} dBFS 和 {_number(measurement.get('col_level_dbfs'), 3)} dBFS，Twist 为 {_number(measurement.get('twist_db'), 3)} dB。")
+    if measurement.get("strongest_spur_hz") is not None:
+        out.append(f"当前事件窗口最强非主音杂散约为 {_number(measurement.get('strongest_spur_hz'), 3)} Hz / {_number(measurement.get('strongest_spur_dbfs'), 3)} dBFS，Spur Margin 为 {_number(measurement.get('spur_margin_db'), 3)} dB。")
+    if measurement.get("duration_ms") is not None:
+        out.append(f"该按键事件持续时间约 {_number(measurement.get('duration_ms'), 3)} ms。")
+    match = str(measurement.get("sequence_match") or "UNAVAILABLE").upper()
+    pcm_sequence = _clean(measurement.get("pcm_sequence"))
+    sip_target = _clean(measurement.get("sip_target"))
+    if pcm_sequence and sip_target:
+        if match == "MATCH":
+            out.append(f"PCM 检测序列为 {pcm_sequence}，权威 SIP 目标为 {sip_target}，两者一致。")
+        elif match == "MISMATCH":
+            out.append(f"PCM 检测序列为 {pcm_sequence}，权威 SIP 目标为 {sip_target}，两者不一致；仅描述跨层事实，不自动推断具体丢号环节。")
+    if str(measurement.get("threshold_status") or "").upper() == "UNVERIFIED_THRESHOLD":
+        out.append("频偏、最强杂散和 Spur Margin 当前仅作为测量事实展示；未绑定版本化 AnalyzerProfile/Golden 阈值的项目不判 PASS/FAIL。")
+    return out
+
+
+def _cross_layer_observations(measurement: dict) -> list[str]:
+    out = []
+    for item in measurement.get("correlations") or []:
+        if not isinstance(item, dict):
+            continue
+        label = str(item.get("label") or "跨层对比")
+        correlation = _number(item.get("absolute_correlation"), 3)
+        lag = _number(item.get("lag_ms"), 3)
+        quality = str(item.get("quality") or "UNKNOWN")
+        if correlation is not None:
+            out.append(f"{label}：相关系数绝对值 {correlation}，lag {lag or 'UNKNOWN'} ms，Analyzer 质量等级 {quality}。")
+    boundary = _clean(measurement.get("first_observable_boundary"))
+    if boundary:
+        out.append(boundary)
+    return out
+
+
 def _measurement_observations(visual_kind: str, measurement: dict | None) -> list[str]:
     if not isinstance(measurement, dict) or not measurement:
         return []
@@ -68,6 +115,10 @@ def _measurement_observations(visual_kind: str, measurement: dict | None) -> lis
     kind = str(visual_kind or "").upper()
     if measurement.get("periodic") or any(k in measurement for k in ("period_ms", "comb_hit_count", "harmonics_hz")):
         out.extend(_periodic_observations(measurement))
+    if kind == "DTMF_INSPECTOR":
+        out.extend(_dtmf_observations(measurement))
+    if kind in {"MULTI_TRACK", "CROSS_LAYER"}:
+        out.extend(_cross_layer_observations(measurement))
     source_strategy = _clean(measurement.get("evidence_source_strategy"))
     time_window = measurement.get("time_window_seconds")
     if source_strategy == "PERIODIC_AUDIO_CLIP":
