@@ -209,3 +209,49 @@ Human PNG 不作为字节级 Golden authority。
 - Real Offline Golden #001 预览入口。
 
 DTMF Inspector / Multi-track / Cross-Layer / Human RTP Timeline 独立后续 PR 实现。
+
+## 15. 中文图片语言与字体 P0 Contract
+
+正式飞书 / HTML Human Visual 使用 **中文为主、技术缩写与工程单位保留英文** 的语言策略。
+
+### 15.1 图片内中文范围
+
+必须中文化：
+- 主标题中的视觉类型，例如“连续频谱 / 聚焦波形 / 高分辨率时频图”；
+- X/Y 坐标语义，例如“时间（s）/ 频率（Hz）/ PCM 归一化幅度 / 频谱电平（dBFS）”；
+- Color Bar，例如“相对电平（dB）”；
+- 异常/证据标记，例如“证据窗口”；
+- 展示行为提示，例如“纵向自动放大”。
+
+保持原工程缩写/单位：
+- PCM / RTP / SIP / DTMF / STFT / FFT；
+- RX / TX / Uplink / Downlink（可在正文解释中文含义）；
+- Hz / ms / s / dB / dBFS / FS；
+- Frame / Seq 仅作为二级 Evidence Detail。
+
+### 15.2 字体治理
+
+Human Renderer 不在仓库中保存或分发字体文件。
+
+运行时按以下原则解析 CJK 字体：
+1. 显式 `HUMAN_EVIDENCE_CJK_FONT_PATH`（存在且通过 CJK glyph 检查）；
+2. 系统 Noto Sans CJK / Source Han Sans / WenQuanYi 等 CJK 字体；
+3. 若不可用，则安全回退英文图片，不允许输出中文方框，也不得导致 Canonical Report 失败。
+
+生产 Backend/Worker 镜像必须安装受系统包管理器管理的 CJK 字体；首版使用 `fonts-noto-cjk`。
+
+### 15.3 字体状态与 Gate
+
+Human Measurement metadata 必须能够记录：
+- `cjk_available`；
+- `font_family`；
+- `source=ENV|SYSTEM|FALLBACK`；
+- 缺失时 `reason=CJK_FONT_UNAVAILABLE`。
+
+不得把实际字体文件路径投影到飞书正文。
+
+必须有自动测试覆盖：
+- CJK 可用时视觉术语中文化；
+- CJK 不可用时英文 fallback；
+- Spectrum / WAV Spectrogram Measurement 带 presentation font status；
+- 字体能力不改变 Analyzer / Finding / Evidence Level / Root Cause Authority。
