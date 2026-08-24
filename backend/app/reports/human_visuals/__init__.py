@@ -1,7 +1,8 @@
 from .explanations import build_human_explanation
-from .renderers import (
+from .localized_renderers import (
     render_human_spectrum_png_from_wav,
     render_human_spectrogram_png,
+    render_human_spectrogram_png_from_wav,
     render_human_waveform_png,
 )
 from .theme import (
@@ -10,7 +11,11 @@ from .theme import (
     human_renderer_enabled,
     human_feishu_preferred,
 )
-from .wav_spectrogram import render_human_spectrogram_png_from_wav
+from .typography import (
+    human_cjk_font_available,
+    human_font_status,
+    reset_cjk_font_cache,
+)
 
 __all__ = [
     "HUMAN_RENDERER_VERSION",
@@ -18,6 +23,9 @@ __all__ = [
     "build_human_explanation",
     "human_renderer_enabled",
     "human_feishu_preferred",
+    "human_cjk_font_available",
+    "human_font_status",
+    "reset_cjk_font_cache",
     "render_human_spectrum_png_from_wav",
     "render_human_spectrogram_png",
     "render_human_spectrogram_png_from_wav",
