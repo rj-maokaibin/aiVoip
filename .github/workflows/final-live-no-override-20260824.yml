@@ -24,16 +24,46 @@ jobs:
       BASE_PRODUCT_SHA: ${{ github.event.pull_request.base.sha }}
       HELPER_SOURCE_SHA: 950c8a4dc8d03c3d07458b829f23c93fe9bf6575
     steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.base.sha }}
-          fetch-depth: 1
+      - name: Materialize exact current master base via GitHub API
+        shell: bash
+        timeout-minutes: 5
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/final-base.tar.gz"
+          tree="$RUNNER_TEMP/final-base-tree"
+          rm -rf "$archive" "$tree"
+          mkdir -p "$tree"
+          api_ok=0
+          for attempt in 1 2; do
+            echo "base API tarball attempt ${attempt}/2"
+            if timeout 90s curl --fail --location --silent --show-error \
+              --connect-timeout 10 --max-time 80 --retry 1 --retry-all-errors \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "https://api.github.com/repos/${GITHUB_REPOSITORY}/tarball/${BASE_PRODUCT_SHA}" \
+              -o "$archive"; then
+              api_ok=1
+              break
+            fi
+            sleep $((attempt * 3))
+          done
+          test "$api_ok" = 1
+          tar -xzf "$archive" --strip-components=1 -C "$tree"
+          mkdir -p "$GITHUB_WORKSPACE"
+          find "$GITHUB_WORKSPACE" -mindepth 1 -maxdepth 1 ! -name '.git' -exec rm -rf {} +
+          cp -a "$tree"/. "$GITHUB_WORKSPACE"/
+          cd "$GITHUB_WORKSPACE"
+          test -f backend/app/core/config.py
+          echo "MATERIALIZED_BASE_PRODUCT_SHA=$BASE_PRODUCT_SHA"
 
       - name: Validate current master permanent timeout contract
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = "$BASE_PRODUCT_SHA"
+          cd "$GITHUB_WORKSPACE"
           grep -q 'feishu_timeout_seconds: float = 120.0' backend/app/core/config.py
           grep -q 'max(120.0, float(self.feishu_timeout_seconds))' backend/app/core/config.py
           echo "BASE_PRODUCT_SHA=$BASE_PRODUCT_SHA"
@@ -73,17 +103,7 @@ jobs:
             fi
             sleep $((attempt * 3))
           done
-          if [ "$api_ok" != 1 ]; then
-            echo "Contents API unavailable; trying bounded git fallback"
-            for attempt in 1 2; do
-              echo "helper git attempt ${attempt}/2"
-              if timeout 45s git fetch --no-tags --depth=1 origin "$HELPER_SOURCE_SHA"; then
-                git show "FETCH_HEAD:scripts/fixed_master_live_refresh_20260823.py" > "$helper"
-                break
-              fi
-              sleep $((attempt * 3))
-            done
-          fi
+          test "$api_ok" = 1
           test -s "$helper"
           grep -q 'LOCAL_CAPTURE_TO_UPSTREAM_RTP' "$helper"
           grep -q 'LOCAL_CAPTURE_PATH' "$helper"
@@ -93,6 +113,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          cd "$GITHUB_WORKSPACE"
           fixture="$OFFLINE_PCAP"
           if [ ! -r "$fixture" ]; then
             fixture="$RUNNER_TEMP/final-live-input.pcap"
@@ -117,6 +138,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          cd "$GITHUB_WORKSPACE"
           test -f /home/github-runner/.config/voip-ai/.env
           test -f /home/github-runner/.config/voip-ai/feishu_app_secret
           set -a
