@@ -1,0 +1,62 @@
+from __future__ import annotations
+
+import importlib.util
+import json
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+
+
+def _load(path: Path, name: str):
+    spec = importlib.util.spec_from_file_location(name, path)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_live_acceptance_runtime_contract_is_versioned_and_cached():
+    contract = json.loads((ROOT / "deploy/live_acceptance/runtime_contract.json").read_text(encoding="utf-8"))
+    assert contract["schema_version"] == 1
+    assert contract["contract"] == "voip-live-acceptance-runtime-v1"
+    assert contract["runtime_version"] == "1.0.0"
+    assert contract["cache_policy"]["reuse"] is True
+    assert "base_image_id" in contract["cache_policy"]["key_inputs"]
+    assert contract["profiles"]["human-feishu-golden-001"]["golden_sha256"] == "b038aa7c9a0644581f2815f654fcdee4620860796382265b178823fccba2e3f0"
+
+
+def test_runtime_fingerprint_is_deterministic_and_sensitive_to_inputs():
+    runtime = _load(ROOT / "deploy/live_acceptance/runtime.py", "live_acceptance_runtime_test")
+    a = runtime.compute_fingerprint("sha256:base", [("a", b"1"), ("b", b"2")])
+    b = runtime.compute_fingerprint("sha256:base", [("b", b"2"), ("a", b"1")])
+    c = runtime.compute_fingerprint("sha256:base2", [("a", b"1"), ("b", b"2")])
+    d = runtime.compute_fingerprint("sha256:base", [("a", b"1"), ("b", b"3")])
+    assert a == b
+    assert a != c
+    assert a != d
+
+
+def test_preflight_collector_aggregates_all_blockers():
+    preflight = _load(ROOT / "deploy/live_acceptance/preflight.py", "live_acceptance_preflight_test")
+    collector = preflight.Collector()
+    collector.pass_("A", "RUNTIME", "ok")
+    collector.block("B", "DATABASE", "bad db")
+    collector.block("C", "FEISHU", "bad feishu")
+    assert collector.blocking_keys == ["B", "C"]
+
+
+def test_human_live_gate_requires_preflight_before_mutation():
+    text = (ROOT / "tools/human_evidence_feishu_live_acceptance.py").read_text(encoding="utf-8")
+    assert "--preflight-result" in text
+    assert "voip-live-acceptance-preflight-v1" in text
+    assert "mutation_allowed" in text
+
+
+def test_preliminary_workflow_uses_reusable_runtime_and_read_only_preflight():
+    text = (ROOT / ".github/workflows/preliminary-evidence-v1.yml").read_text(encoding="utf-8")
+    prepare = text.index("deploy/live_acceptance/runtime.py prepare")
+    preflight = text.index("deploy/live_acceptance/preflight.py")
+    mutation = text.index("tools/human_evidence_feishu_live_acceptance.py")
+    assert prepare < preflight < mutation
+    assert "docker build -t \"$image\" backend" not in text
+    assert "live_acceptance_preflight.json" in text
