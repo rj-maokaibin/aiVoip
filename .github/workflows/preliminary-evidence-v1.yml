@@ -176,3 +176,94 @@ jobs:
             offline-golden-artifacts
             offline-golden-human-artifacts
           if-no-files-found: ignore
+
+  # One-shot release-closure gate for PR #45 only. It is removed again after
+  # the live Feishu projection is verified so this temporary mutation path is
+  # not carried into master.
+  live-feishu-acceptance:
+    needs: full-software-acceptance
+    if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref == 'feat/human-evidence-renderer-v2' }}
+    runs-on:
+      - self-hosted
+      - linux
+      - x64
+      - voip-controlled-linux
+    timeout-minutes: 30
+    env:
+      LIVE_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 1
+
+      - name: Exact-head and controlled live environment
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$LIVE_HEAD_SHA"
+          set -a
+          loaded=0
+          for env_file in /home/dev/workspace/aiVoip/.env /home/dev/workspace/aiVoip/backend/.env; do
+            if [ -r "$env_file" ]; then
+              source "$env_file"
+              loaded=$((loaded+1))
+            fi
+          done
+          set +a
+          test "$loaded" -gt 0
+          printf 'LIVE_FEISHU_ACCEPTANCE_HEAD=%s\n' "$LIVE_HEAD_SHA"
+          printf 'CONTROLLED_ENV_FILES_LOADED=%s\n' "$loaded"
+          echo 'HUMAN_EVIDENCE_RENDERER_ENABLED=true' >> "$GITHUB_ENV"
+          echo 'HUMAN_EVIDENCE_FEISHU_PREFERRED=true' >> "$GITHUB_ENV"
+
+      - name: Prepare isolated live acceptance Python environment
+        run: |
+          set -euo pipefail
+          venv="$RUNNER_TEMP/voip-ai-human-feishu-live"
+          rm -rf "$venv"
+          python3 -m venv "$venv"
+          "$venv/bin/python" -m pip install --upgrade pip
+          "$venv/bin/pip" install -r backend/requirements.txt
+          echo "LIVE_ACCEPTANCE_VENV=$venv" >> "$GITHUB_ENV"
+
+      - name: Project and read back existing Real Golden 001 Feishu document
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$LIVE_HEAD_SHA"
+          export PYTHONPATH="$GITHUB_WORKSPACE/backend:$GITHUB_WORKSPACE"
+          export MPLCONFIGDIR="$RUNNER_TEMP/human-evidence-matplotlib"
+          mkdir -p "$MPLCONFIGDIR"
+          "$LIVE_ACCEPTANCE_VENV/bin/python" tools/human_evidence_feishu_live_acceptance.py \
+            --result validation/human_evidence_feishu_live_acceptance.json
+          "$LIVE_ACCEPTANCE_VENV/bin/python" - <<'PY'
+          import json
+          from pathlib import Path
+          p=json.loads(Path('validation/human_evidence_feishu_live_acceptance.json').read_text(encoding='utf-8'))
+          assert p['status']=='PASS', p
+          assert p['golden_sha256_verified'] is True, p
+          assert p['document_reused'] is True, p
+          assert p['required_visual_kinds_present'] is True, p
+          assert p['image_then_five_explanations_verified'] is True, p
+          assert p['diagnostic_authority_escalation'] is False, p
+          print('HUMAN_EVIDENCE_FEISHU_LIVE_ACCEPTANCE=PASS')
+          print(json.dumps({
+              'document_fingerprint': p.get('document_fingerprint'),
+              'previous_report_version': p.get('previous_report_version'),
+              'projected_report_version': p.get('projected_report_version'),
+              'projection_version': p.get('projection_version'),
+              'ready_human_visual_count': p.get('ready_human_visual_count'),
+              'ready_human_visual_kinds': p.get('ready_human_visual_kinds'),
+              'remote_image_block_count': p.get('remote_image_block_count'),
+              'remote_human_sequence_count': p.get('remote_human_sequence_count'),
+          }, ensure_ascii=False))
+          PY
+
+      - name: Upload sanitized live acceptance result
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: human-evidence-feishu-live-acceptance
+          path: validation/human_evidence_feishu_live_acceptance.json
+          if-no-files-found: warn
+          retention-days: 14
