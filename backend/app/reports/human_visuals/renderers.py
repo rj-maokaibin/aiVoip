@@ -30,14 +30,40 @@ def _finish_axis(ax, *, xlabel: str, ylabel: str) -> None:
     ax.spines["right"].set_visible(False)
 
 
+def _ascii_label(value: str | None, fallback: str) -> str:
+    """Keep PNG rendering independent from optional host CJK fonts.
+
+    Human-facing Chinese explanation is rendered by Feishu/HTML next to the
+    image.  PNG labels keep only portable ASCII so a minimal Linux runner does
+    not emit missing-glyph boxes or introduce a font deployment dependency.
+    """
+    raw = str(value or "")
+    clean = "".join(ch if 32 <= ord(ch) <= 126 else " " for ch in raw)
+    clean = " ".join(clean.split()).strip(" -|.")
+    return clean or fallback
+
+
 def _title(ax, title: str, subtitle: str | None) -> None:
-    # Keep the report title and provenance line visually separated.  The Human
-    # renderer intentionally avoids CJK text inside PNGs so it never depends on
-    # a host-specific Chinese font; the detailed Chinese explanation lives in
-    # the Feishu/HTML projection next to the image.
-    ax.set_title(title, loc="left", fontsize=16, fontweight="semibold", color=COLORS["text"], pad=28)
-    if subtitle:
-        ax.text(0.0, 1.015, subtitle, transform=ax.transAxes, fontsize=9.5, color=COLORS["muted"], va="bottom")
+    title_text = _ascii_label(title, "VOIP Audio Evidence")
+    subtitle_text = _ascii_label(subtitle, "") if subtitle else ""
+    ax.set_title(title_text, loc="left", fontsize=16, fontweight="semibold", color=COLORS["text"], pad=28)
+    if subtitle_text:
+        ax.text(0.0, 1.015, subtitle_text, transform=ax.transAxes, fontsize=9.5, color=COLORS["muted"], va="bottom")
+
+
+def _auto_focus(duration: float, anomaly_start: float | None, anomaly_end: float | None,
+                display_start: float | None, display_end: float | None) -> tuple[float, float, bool]:
+    if display_start is not None or display_end is not None:
+        lo = max(0.0, float(display_start or 0.0))
+        hi = min(duration, float(display_end if display_end is not None else duration))
+        return (lo, hi if hi > lo else max(duration, lo + 1e-6), False)
+    if anomaly_start is None:
+        return 0.0, max(duration, 1e-6), False
+    a = max(0.0, min(duration, float(anomaly_start)))
+    b = max(a, min(duration, float(anomaly_end if anomaly_end is not None else anomaly_start)))
+    span = max(0.02, b - a)
+    context = max(0.35, min(1.5, span * 0.75))
+    return max(0.0, a - context), min(duration, b + context), True
 
 
 def render_human_waveform_png(
@@ -47,24 +73,21 @@ def render_human_waveform_png(
     anomaly_end: float | None = None,
     display_start: float | None = None,
     display_end: float | None = None,
-    auto_vertical_scale: bool = False,
+    auto_vertical_scale: bool | None = None,
     title: str = "PCM Waveform",
     subtitle: str | None = None,
     width_px: int = 1800,
     height_px: int = 700,
 ) -> bytes:
     bins = list(waveform.get("bins") or [])
-    width_in = width_px / 160.0
-    height_in = height_px / 160.0
-    fig, ax = plt.subplots(figsize=(width_in, height_in), constrained_layout=True)
+    fig, ax = plt.subplots(figsize=(width_px / 160.0, height_px / 160.0), constrained_layout=True)
     fig.patch.set_facecolor(COLORS["background"])
     ax.set_facecolor(COLORS["panel"])
 
     duration = float(waveform.get("duration_seconds") or 1.0)
-    view_lo = max(0.0, float(display_start)) if display_start is not None else 0.0
-    view_hi = min(duration, float(display_end)) if display_end is not None else duration
-    if view_hi <= view_lo:
-        view_lo, view_hi = 0.0, max(duration, 1e-6)
+    view_lo, view_hi, auto_focused = _auto_focus(duration, anomaly_start, anomaly_end, display_start, display_end)
+    if auto_vertical_scale is None:
+        auto_vertical_scale = bool(auto_focused)
 
     selected_mins: np.ndarray | None = None
     selected_maxs: np.ndarray | None = None
@@ -95,8 +118,7 @@ def render_human_waveform_png(
 
     if anomaly_start is not None:
         start = max(0.0, float(anomaly_start))
-        end = float(anomaly_end if anomaly_end is not None else anomaly_start)
-        end = max(start, end)
+        end = max(start, float(anomaly_end if anomaly_end is not None else anomaly_start))
         if end <= start:
             end = start + max(0.01, duration * 0.002)
         ax.axvspan(start, min(end, duration), color=COLORS["anomaly"], alpha=0.12)
@@ -134,8 +156,6 @@ def render_human_spectrogram_png(
 
     image = None
     if raw.ndim == 2 and raw.size and times.size and freqs.size:
-        # Analyzer spectrogram stores FFT magnitude in dB but is not calibrated to
-        # absolute dBFS. Normalize to its own maximum and label it relative dB.
         relative = raw - float(np.nanmax(raw))
         max_freq = float(max_frequency_hz or min(4000.0, float(freqs[-1])))
         mask = freqs <= max_freq
@@ -154,11 +174,11 @@ def render_human_spectrogram_png(
                 interpolation="nearest",
             )
             ax.set_ylim(0.0, max_freq)
-            view_lo = max(float(times[0]), float(display_start)) if display_start is not None else float(times[0])
-            view_hi = min(float(times[-1]), float(display_end)) if display_end is not None else float(times[-1])
-            if view_hi <= view_lo:
-                view_lo, view_hi = float(times[0]), max(float(times[-1]), float(times[0]) + 1e-6)
-            ax.set_xlim(view_lo, view_hi)
+            duration = float(times[-1])
+            view_lo, view_hi, _ = _auto_focus(duration, anomaly_start, anomaly_end, display_start, display_end)
+            view_lo = max(float(times[0]), view_lo)
+            view_hi = min(float(times[-1]), view_hi)
+            ax.set_xlim(view_lo, max(view_hi, view_lo + 1e-6))
     if image is None:
         ax.text(0.5, 0.5, "No spectrogram data", transform=ax.transAxes, ha="center", va="center", color=COLORS["muted"])
 
