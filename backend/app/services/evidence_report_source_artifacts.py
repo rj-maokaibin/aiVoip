@@ -45,8 +45,6 @@ def _time_range(finding:EvidenceFinding)->tuple[float|None,float|None,float|None
 def _time_matches(meta:dict,finding:EvidenceFinding,*,tolerance_seconds:float=0.35)->bool:
     event_time=meta.get("event_time")
     if event_time is None:
-        # Session-wide waveform/spectrogram and PCM_WAV do not carry an event time;
-        # they may be used as source/detail only after tap/stream/session matching.
         return True
     try: event=float(event_time)
     except (TypeError,ValueError): return False
@@ -58,12 +56,7 @@ def _time_matches(meta:dict,finding:EvidenceFinding,*,tolerance_seconds:float=0.
 
 
 def artifact_matches_finding(artifact:Artifact,finding:EvidenceFinding,*,tolerance_seconds:float=0.35)->bool:
-    """Fail-closed Artifact↔Finding binding used by Evidence Card projection.
-
-    Matching a PCM tap alone is not enough for event clips: type and time must also
-    agree. This prevents a DTMF-adjacent click, silence clip, or another event on the
-    same tap from being shown as evidence for the wrong Finding.
-    """
+    """Fail-closed Artifact↔Finding binding used by Evidence Card projection."""
     atype=str(artifact.type or "").upper(); meta=_meta_scope(artifact.metadata_json or {}); scope=finding.scope_json or {}
     stream_id=meta.get("stream_id")
     if stream_id:
@@ -85,8 +78,6 @@ def artifact_matches_finding(artifact:Artifact,finding:EvidenceFinding,*,toleran
     if atype=="PERIODIC_METRICS_JSON":
         return artifact_event==finding_event and _time_matches(meta,finding,tolerance_seconds=2.0)
     if atype in {"WAVEFORM_JSON","SPECTROGRAM_JSON","PCM_WAV","AUDIO_WAV"}:
-        # Session-wide source media: only bind when at least one concrete source
-        # dimension matches. Event-specific visual cropping happens later.
         if pcm_tap:return pcm_tap==scope.get("pcm_tap") and (session_index is None or finding_session is None or int(session_index)==int(finding_session))
         if stream_id:return stream_id in {scope.get("rtp_stream_id"),scope.get("upstream_rtp_stream_id"),scope.get("downstream_rtp_stream_id")}
         return False
@@ -113,17 +104,23 @@ def link_source_artifacts(db:Session,*,report:PreliminaryEvidenceReport,runs:dic
     db.flush();return out
 
 
+def _human_visual_ready_meta(meta:dict)->bool:
+    if str(meta.get("renderer_family") or "").upper()!="HUMAN":return False
+    if not bool(meta.get("annotation_complete")):return False
+    explanation=meta.get("human_explanation")
+    if not isinstance(explanation,dict):return False
+    required=("what_to_look_at","meaning","evidence_boundary","plain_language_summary")
+    if any(not str(explanation.get(key) or "").strip() for key in required):return False
+    if str(explanation.get("diagnostic_authority") or "NONE").upper()!="NONE":return False
+    return True
+
+
 def _is_human_visual(artifact:Artifact)->bool:
-    meta=artifact.metadata_json or {}
-    return str(meta.get("renderer_family") or "").upper()=="HUMAN" and bool(meta.get("human_explanation"))
+    return _human_visual_ready_meta(artifact.metadata_json or {})
 
 
 def _prefer_human_visuals(artifacts:list[Artifact])->list[Artifact]:
-    """For each image type, project Human V2 when available; otherwise Machine.
-
-    This affects only Evidence Card presentation. Machine Artifacts remain linked,
-    persisted, included in the Evidence Bundle and available for Golden/Audit.
-    """
+    """Prefer only presentation-ready Human V2 images; otherwise keep Machine."""
     human_types={str(a.type or "").upper() for a in artifacts if str(a.type or "").upper() in _IMAGE_TYPES and _is_human_visual(a)}
     if not human_types:return artifacts
     out=[]
@@ -136,53 +133,37 @@ def _prefer_human_visuals(artifacts:list[Artifact])->list[Artifact]:
 
 
 def _human_caption(meta:dict)->str|None:
-    explanation=meta.get("human_explanation")
-    if not isinstance(explanation,dict):return None
-    what=str(explanation.get("what_to_look_at") or "").strip()
-    observations=[str(x).strip() for x in (explanation.get("observations") or []) if str(x).strip()]
-    meaning=str(explanation.get("meaning") or "").strip()
-    boundary=str(explanation.get("evidence_boundary") or "").strip()
+    if not _human_visual_ready_meta(meta):return None
+    explanation=meta.get("human_explanation") or {}
     summary=str(explanation.get("plain_language_summary") or "").strip()
-    if not (what and boundary):return None
-    parts=[f"图片解析｜这张图怎么看：{what}"]
-    if observations:parts.append("图中发现："+"；".join(observations))
-    if meaning:parts.append("这意味着："+meaning)
-    parts.append("证据边界："+boundary)
-    if summary:parts.append("一句话结论："+summary)
-    return "\n".join(parts)
+    visual_kind=str(meta.get("visual_kind") or meta.get("kind") or "Human Visual")
+    return f"{visual_kind}｜{summary}" if summary else visual_kind
 
 
 def _projection_metadata(artifact:Artifact)->dict:
     meta=dict(artifact.metadata_json or {})
     if _is_human_visual(artifact):
+        annotation=dict(meta.get("annotation_contract") or {})
         caption=_human_caption(meta)
-        if caption:
-            annotation=dict(meta.get("annotation_contract") or {})
-            annotation["caption"]=caption
-            annotation["human_explanation_rendered"]="FEISHU_COMPAT_CAPTION_V1"
-            meta["annotation_contract"]=annotation
+        if caption:annotation["caption"]=caption
+        annotation["human_explanation_rendered"]="STRUCTURED_POST_IMAGE_V2"
+        meta["annotation_contract"]=annotation
+        meta["human_visual_ready"]=True
     return meta
 
 
 def finding_artifact_refs(db:Session,*,report_id:str,finding_id:str) -> list[dict]:
     links=list(db.scalars(select(EvidenceReportArtifactLink).where(EvidenceReportArtifactLink.report_id==report_id).order_by(EvidenceReportArtifactLink.created_at.asc())))
-    artifacts=[]
-    roles={}
+    artifacts=[];roles={}
     for link in links:
         if finding_id not in (link.finding_ids_json or []):continue
         artifact=db.get(Artifact,link.artifact_id)
-        if artifact:
-            artifacts.append(artifact);roles[artifact.id]=link.role
+        if artifact:artifacts.append(artifact);roles[artifact.id]=link.role
     artifacts=_prefer_human_visuals(artifacts)
     refs=[]
     for artifact in artifacts:
         refs.append({
-            "artifact_id":artifact.id,
-            "type":artifact.type,
-            "filename":artifact.filename,
-            "content_type":artifact.content_type,
-            "role":roles.get(artifact.id),
-            "sha256":artifact.sha256,
-            "metadata":_projection_metadata(artifact),
+            "artifact_id":artifact.id,"type":artifact.type,"filename":artifact.filename,"content_type":artifact.content_type,
+            "role":roles.get(artifact.id),"sha256":artifact.sha256,"metadata":_projection_metadata(artifact),
         })
     return refs
