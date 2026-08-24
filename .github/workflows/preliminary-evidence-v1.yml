@@ -214,41 +214,73 @@ jobs:
           printf 'CONTROLLED_ENV_FILES_LOADED=1\n'
           printf 'REPRODUCTION_PLATFORM_MODE=%s\n' "$REPRODUCTION_PLATFORM_MODE"
 
-      - name: Prepare production Compose release-runner
+      - name: Prepare isolated live container on running backend network
         run: |
           set -euo pipefail
           set -a
           source "$CONTROLLED_ENV_FILE"
           set +a
-          test "${REPRODUCTION_PLATFORM_MODE:-}" = "real"
           project="${VOIP_PROJECT_NAME:-voip-ai}"
-          export VOIP_APP_ENV_FILE="$CONTROLLED_ENV_FILE"
-          export FEISHU_APP_SECRET_HOST_FILE="${FEISHU_APP_SECRET_HOST_FILE:-$FEISHU_SECRET_FILE}"
-          compose=(docker compose -p "$project" --env-file "$CONTROLLED_ENV_FILE" -f docker-compose.yml -f docker-compose.production.yml)
-          "${compose[@]}" config >/dev/null
-          "${compose[@]}" ps --status running postgres | grep -q postgres
-          "${compose[@]}" build release-runner
-          echo "LIVE_COMPOSE_PROJECT=$project" >> "$GITHUB_ENV"
-          printf 'LIVE_COMPOSE_PROJECT=%s\n' "$project"
+          backend_cid="$(docker ps \
+            --filter "label=com.docker.compose.project=$project" \
+            --filter 'label=com.docker.compose.service=backend' \
+            -q | head -n1)"
+          test -n "$backend_cid"
+          network="$(docker inspect "$backend_cid" \
+            --format '{{range $name,$cfg := .NetworkSettings.Networks}}{{$name}}{{"\n"}}{{end}}' \
+            | head -n1)"
+          test -n "$network"
+          secret_mounts="$RUNNER_TEMP/human-live-secret-mounts.txt"
+          python3 - "$backend_cid" "$secret_mounts" <<'PY'
+          import json
+          import subprocess
+          import sys
+          cid, out = sys.argv[1], sys.argv[2]
+          info = json.loads(subprocess.check_output(['docker', 'inspect', cid], text=True))[0]
+          rows = []
+          for mount in info.get('Mounts') or []:
+              destination = str(mount.get('Destination') or '')
+              source = str(mount.get('Source') or '')
+              if destination.startswith('/run/secrets/') and source:
+                  rows.append(f'{source}|{destination}')
+          with open(out, 'w', encoding='utf-8') as fh:
+              fh.write('\n'.join(rows) + ('\n' if rows else ''))
+          PY
+          grep -q '/run/secrets/feishu_app_secret' "$secret_mounts"
+          image="voip-human-live:${LIVE_HEAD_SHA:0:12}"
+          docker build -t "$image" backend
+          echo "LIVE_BACKEND_CID=$backend_cid" >> "$GITHUB_ENV"
+          echo "LIVE_DOCKER_NETWORK=$network" >> "$GITHUB_ENV"
+          echo "LIVE_DOCKER_IMAGE=$image" >> "$GITHUB_ENV"
+          echo "LIVE_SECRET_MOUNTS=$secret_mounts" >> "$GITHUB_ENV"
+          printf 'LIVE_BACKEND_NETWORK=%s\n' "$network"
+          printf 'LIVE_SECRET_MOUNT_COUNT=%s\n' "$(wc -l < "$secret_mounts")"
 
       - name: Project and read back existing Real Golden 001 Feishu document
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$LIVE_HEAD_SHA"
-          set -a
-          source "$CONTROLLED_ENV_FILE"
-          set +a
-          test "${REPRODUCTION_PLATFORM_MODE:-}" = "real"
-          export VOIP_APP_ENV_FILE="$CONTROLLED_ENV_FILE"
-          export FEISHU_APP_SECRET_HOST_FILE="${FEISHU_APP_SECRET_HOST_FILE:-$FEISHU_SECRET_FILE}"
-          compose=(docker compose -p "$LIVE_COMPOSE_PROJECT" --env-file "$CONTROLLED_ENV_FILE" -f docker-compose.yml -f docker-compose.production.yml)
+          test -n "$LIVE_DOCKER_NETWORK"
+          test -n "$LIVE_DOCKER_IMAGE"
+          test -s "$LIVE_SECRET_MOUNTS"
+          mount_args=(-v "$GITHUB_WORKSPACE:/workspace")
+          while IFS='|' read -r source destination; do
+            [ -n "$source" ] || continue
+            [ -n "$destination" ] || continue
+            mount_args+=(-v "$source:$destination:ro")
+          done < "$LIVE_SECRET_MOUNTS"
           rm -f validation/human_evidence_feishu_live_acceptance.json
-          "${compose[@]}" run --rm --no-deps \
+          trap 'docker image rm -f "$LIVE_DOCKER_IMAGE" >/dev/null 2>&1 || true' EXIT
+          docker run --rm \
+            --network "$LIVE_DOCKER_NETWORK" \
+            --env-file "$CONTROLLED_ENV_FILE" \
+            "${mount_args[@]}" \
+            -w /workspace \
+            -e PYTHONPATH=/workspace/backend:/workspace \
             -e HUMAN_EVIDENCE_RENDERER_ENABLED=true \
             -e HUMAN_EVIDENCE_FEISHU_PREFERRED=true \
             -e MPLCONFIGDIR=/tmp/human-evidence-matplotlib \
-            -e FEISHU_APP_SECRET_FILE=/run/secrets/feishu_app_secret \
-            release-runner \
+            "$LIVE_DOCKER_IMAGE" \
             python tools/human_evidence_feishu_live_acceptance.py \
               --result validation/human_evidence_feishu_live_acceptance.json
           python3 - <<'PY'
