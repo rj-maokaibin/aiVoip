@@ -104,10 +104,45 @@ def _human_visual_ready_meta(meta:dict)->bool:
 def _is_human_visual(artifact:Artifact)->bool:return _human_visual_ready_meta(artifact.metadata_json or {})
 
 
+def _priority(artifact:Artifact)->int:
+    try:return int((artifact.metadata_json or {}).get("presentation_priority") or 0)
+    except (TypeError,ValueError):return 0
+
+
+def _human_group_key(artifact:Artifact)->tuple[str,str,str]:
+    meta=artifact.metadata_json or {}
+    return (
+        str(artifact.type or "").upper(),
+        str(meta.get("visual_kind") or meta.get("kind") or artifact.type or "").upper(),
+        str(meta.get("visual_instance_id") or ""),
+    )
+
+
 def _prefer_human_visuals(artifacts:list[Artifact])->list[Artifact]:
-    human_types={str(a.type or "").upper() for a in artifacts if str(a.type or "").upper() in _IMAGE_TYPES and _is_human_visual(a)}
-    if not human_types:return artifacts
-    return [a for a in artifacts if not (str(a.type or "").upper() in human_types and str(a.type or "").upper() in _IMAGE_TYPES and not _is_human_visual(a))]
+    """Projection-only Human preference; complete DB links and Bundle remain untouched."""
+    ready=[a for a in artifacts if str(a.type or "").upper() in _IMAGE_TYPES and _is_human_visual(a)]
+    if not ready:return artifacts
+    winners={}
+    for artifact in ready:
+        key=_human_group_key(artifact)
+        current=winners.get(key)
+        if current is None or (_priority(artifact),str(artifact.filename or ""))>(_priority(current),str(current.filename or "")):
+            winners[key]=artifact
+    winner_ids={a.id for a in winners.values()}
+    human_types={str(a.type or "").upper() for a in winners.values()}
+    out=[]
+    for artifact in artifacts:
+        atype=str(artifact.type or "").upper()
+        if atype not in _IMAGE_TYPES:
+            out.append(artifact);continue
+        if artifact.id in winner_ids:
+            out.append(artifact);continue
+        if _is_human_visual(artifact):
+            continue
+        if atype in human_types:
+            continue
+        out.append(artifact)
+    return out
 
 
 def _human_caption(meta:dict)->str|None:
@@ -129,6 +164,14 @@ def _projection_metadata(artifact:Artifact)->dict:
     return meta
 
 
+def _presentation_images(artifacts:list[Artifact],limit:int=3)->set[str]:
+    images=[a for a in artifacts if str(a.type or "").upper() in _IMAGE_TYPES]
+    if not any(_is_human_visual(a) for a in images):
+        return {a.id for a in images}
+    images.sort(key=lambda a:(-_priority(a),str(a.filename or ""),a.id))
+    return {a.id for a in images[:limit]}
+
+
 def finding_artifact_refs(db:Session,*,report_id:str,finding_id:str)->list[dict]:
     links=list(db.scalars(select(EvidenceReportArtifactLink).where(EvidenceReportArtifactLink.report_id==report_id).order_by(EvidenceReportArtifactLink.created_at.asc())))
     artifacts=[];roles={}
@@ -137,4 +180,6 @@ def finding_artifact_refs(db:Session,*,report_id:str,finding_id:str)->list[dict]
         artifact=db.get(Artifact,link.artifact_id)
         if artifact:artifacts.append(artifact);roles[artifact.id]=link.role
     artifacts=_prefer_human_visuals(artifacts)
-    return [{"artifact_id":a.id,"type":a.type,"filename":a.filename,"content_type":a.content_type,"role":roles.get(a.id),"sha256":a.sha256,"metadata":_projection_metadata(a)} for a in artifacts]
+    visible_image_ids=_presentation_images(artifacts,limit=3)
+    projected=[a for a in artifacts if str(a.type or "").upper() not in _IMAGE_TYPES or a.id in visible_image_ids]
+    return [{"artifact_id":a.id,"type":a.type,"filename":a.filename,"content_type":a.content_type,"role":roles.get(a.id),"sha256":a.sha256,"metadata":_projection_metadata(a)} for a in projected]
