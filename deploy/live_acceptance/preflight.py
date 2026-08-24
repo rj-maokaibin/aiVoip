@@ -8,7 +8,6 @@ import importlib
 import importlib.metadata
 import json
 import os
-import re
 import socket
 import subprocess
 from dataclasses import asdict, dataclass
@@ -148,13 +147,15 @@ def _dns_check(name: str, value: str, default_port: int | None, collector: Colle
 
 
 def _resolve_secret(value: str, file_path: str, env_name: str) -> str:
-    if str(value or "").strip():
-        return str(value).strip()
+    # Production secret indirection is authoritative. Plain Settings values are
+    # only the final fallback because several fields intentionally have dev defaults.
     if str(file_path or "").strip():
         return Path(file_path).read_text(encoding="utf-8").strip()
     if str(env_name or "").strip():
-        return os.getenv(str(env_name).strip(), "").strip()
-    return ""
+        resolved = os.getenv(str(env_name).strip(), "").strip()
+        if resolved:
+            return resolved
+    return str(value or "").strip()
 
 
 def _check_database(settings, collector: Collector) -> None:
