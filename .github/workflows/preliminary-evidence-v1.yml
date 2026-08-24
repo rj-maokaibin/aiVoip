@@ -209,39 +209,49 @@ jobs:
           source "$CONTROLLED_ENV_FILE"
           set +a
           test "${REPRODUCTION_PLATFORM_MODE:-}" = "real"
+          test "${FEISHU_LIVE_ENABLED:-}" = "true"
           printf 'LIVE_FEISHU_ACCEPTANCE_HEAD=%s\n' "$LIVE_HEAD_SHA"
           printf 'CONTROLLED_ENV_FILES_LOADED=1\n'
           printf 'REPRODUCTION_PLATFORM_MODE=%s\n' "$REPRODUCTION_PLATFORM_MODE"
-          echo 'HUMAN_EVIDENCE_RENDERER_ENABLED=true' >> "$GITHUB_ENV"
-          echo 'HUMAN_EVIDENCE_FEISHU_PREFERRED=true' >> "$GITHUB_ENV"
 
-      - name: Prepare isolated live acceptance Python environment
+      - name: Prepare production Compose release-runner
         run: |
           set -euo pipefail
-          venv="$RUNNER_TEMP/voip-ai-human-feishu-live"
-          rm -rf "$venv"
-          python3 -m venv "$venv"
-          "$venv/bin/python" -m pip install --upgrade pip
-          "$venv/bin/pip" install -r backend/requirements.txt
-          echo "LIVE_ACCEPTANCE_VENV=$venv" >> "$GITHUB_ENV"
+          set -a
+          source "$CONTROLLED_ENV_FILE"
+          set +a
+          test "${REPRODUCTION_PLATFORM_MODE:-}" = "real"
+          project="${VOIP_PROJECT_NAME:-voip-ai}"
+          export VOIP_APP_ENV_FILE="$CONTROLLED_ENV_FILE"
+          export FEISHU_APP_SECRET_HOST_FILE="${FEISHU_APP_SECRET_HOST_FILE:-$FEISHU_SECRET_FILE}"
+          compose=(docker compose -p "$project" --env-file "$CONTROLLED_ENV_FILE" -f docker-compose.yml -f docker-compose.production.yml)
+          "${compose[@]}" config >/dev/null
+          "${compose[@]}" ps --status running postgres | grep -q postgres
+          "${compose[@]}" build release-runner
+          echo "LIVE_COMPOSE_PROJECT=$project" >> "$GITHUB_ENV"
+          printf 'LIVE_COMPOSE_PROJECT=%s\n' "$project"
 
       - name: Project and read back existing Real Golden 001 Feishu document
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$LIVE_HEAD_SHA"
-          test -r "$CONTROLLED_ENV_FILE"
-          test -r "$FEISHU_SECRET_FILE"
           set -a
           source "$CONTROLLED_ENV_FILE"
           set +a
           test "${REPRODUCTION_PLATFORM_MODE:-}" = "real"
-          export FEISHU_APP_SECRET_FILE="$FEISHU_SECRET_FILE"
-          export PYTHONPATH="$GITHUB_WORKSPACE/backend:$GITHUB_WORKSPACE"
-          export MPLCONFIGDIR="$RUNNER_TEMP/human-evidence-matplotlib"
-          mkdir -p "$MPLCONFIGDIR"
-          "$LIVE_ACCEPTANCE_VENV/bin/python" tools/human_evidence_feishu_live_acceptance.py \
-            --result validation/human_evidence_feishu_live_acceptance.json
-          "$LIVE_ACCEPTANCE_VENV/bin/python" - <<'PY'
+          export VOIP_APP_ENV_FILE="$CONTROLLED_ENV_FILE"
+          export FEISHU_APP_SECRET_HOST_FILE="${FEISHU_APP_SECRET_HOST_FILE:-$FEISHU_SECRET_FILE}"
+          compose=(docker compose -p "$LIVE_COMPOSE_PROJECT" --env-file "$CONTROLLED_ENV_FILE" -f docker-compose.yml -f docker-compose.production.yml)
+          rm -f validation/human_evidence_feishu_live_acceptance.json
+          "${compose[@]}" run --rm --no-deps \
+            -e HUMAN_EVIDENCE_RENDERER_ENABLED=true \
+            -e HUMAN_EVIDENCE_FEISHU_PREFERRED=true \
+            -e MPLCONFIGDIR=/tmp/human-evidence-matplotlib \
+            -e FEISHU_APP_SECRET_FILE=/run/secrets/feishu_app_secret \
+            release-runner \
+            python tools/human_evidence_feishu_live_acceptance.py \
+              --result validation/human_evidence_feishu_live_acceptance.json
+          python3 - <<'PY'
           import json
           from pathlib import Path
           p=json.loads(Path('validation/human_evidence_feishu_live_acceptance.json').read_text(encoding='utf-8'))
