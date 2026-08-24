@@ -112,13 +112,13 @@ def _fmt(value:Any,unit:str="")->str:
 
 
 def render_human_dtmf_inspector_png(wav_bytes:bytes,event:dict,*,sip_target:str|None=None,pcm_sequence:str|None=None,
-                                    title:str|None=None,width_px:int=1800,height_px:int=820)->tuple[bytes,dict]:
+                                    title:str|None=None,width_px:int=1800,height_px:int=900)->tuple[bytes,dict]:
     measurement=measure_dtmf_event(wav_bytes,event)
     if measurement.get("status")!="MEASURED":raise ValueError(str(measurement.get("reason") or "DTMF_MEASUREMENT_UNAVAILABLE"))
     freqs=np.asarray(measurement.pop("_plot_frequency_hz"),dtype=float);levels=np.asarray(measurement.pop("_plot_level_dbfs"),dtype=float)
     digit=measurement["digit"];mask=(freqs>=500.0)&(freqs<=min(1800.0,measurement["sample_rate"]/2.0))
     fig=plt.figure(figsize=(width_px/160.0,height_px/160.0),constrained_layout=True);fig.patch.set_facecolor(COLORS["background"])
-    gs=fig.add_gridspec(1,2,width_ratios=[1.7,1.0]);ax=fig.add_subplot(gs[0,0]);info=fig.add_subplot(gs[0,1])
+    gs=fig.add_gridspec(1,2,width_ratios=[1.55,1.15]);ax=fig.add_subplot(gs[0,0]);info=fig.add_subplot(gs[0,1])
     ax.set_facecolor(COLORS["panel"]);info.set_facecolor(COLORS["panel"])
     ax.plot(freqs[mask],levels[mask],color=COLORS["spectrum"],linewidth=1.0)
     floor=max(-120.0,float(np.nanpercentile(levels[mask],2))-5.0);ceiling=min(0.0,float(np.nanmax(levels[mask]))+6.0)
@@ -137,17 +137,19 @@ def render_human_dtmf_inspector_png(wav_bytes:bytes,event:dict,*,sip_target:str|
     match="UNAVAILABLE"
     if sip_target and pcm_sequence:match="MATCH" if str(sip_target)==str(pcm_sequence) else "MISMATCH"
     measurement["pcm_sequence"]=pcm_sequence;measurement["sip_target"]=sip_target;measurement["sequence_match"]=match
+    threshold_display=localized_text("已测量 / 阈值未冻结","MEASURED / UNVERIFIED_THRESHOLD")
     rows=[
         ("按键 / Digit",digit),("时间窗",f"{measurement['start_seconds']:.3f}–{measurement['end_seconds']:.3f} s"),("持续时间",_fmt(measurement["duration_ms"],"ms")),
         ("低频：期望 / 实测",f"{measurement['row_expected_hz']:.0f} / {measurement['row_measured_hz']:.3f} Hz"),("低频频偏",f"{measurement['row_error_percent']:+.4f}%"),("低频电平",_fmt(measurement["row_level_dbfs"],"dBFS")),
         ("高频：期望 / 实测",f"{measurement['col_expected_hz']:.0f} / {measurement['col_measured_hz']:.3f} Hz"),("高频频偏",f"{measurement['col_error_percent']:+.4f}%"),("高频电平",_fmt(measurement["col_level_dbfs"],"dBFS")),
         ("Twist",_fmt(measurement["twist_db"],"dB")),("最强杂散",f"{_fmt(measurement.get('strongest_spur_hz'),'Hz')} / {_fmt(measurement.get('strongest_spur_dbfs'),'dBFS')}"),("Spur Margin",_fmt(measurement.get("spur_margin_db"),"dB")),
-        ("PCM 序列",pcm_sequence or "UNAVAILABLE"),("SIP 目标",sip_target or "UNAVAILABLE"),("序列对比",match),("阈值状态","MEASURED / UNVERIFIED_THRESHOLD"),
+        ("PCM 序列",pcm_sequence or "UNAVAILABLE"),("SIP 目标",sip_target or "UNAVAILABLE"),("序列对比",match),("阈值状态",threshold_display),
     ]
-    y=.96
+    y=.965
     for label,value in rows:
-        info.text(.02,y,f"{label}",fontproperties=human_font_properties(size=9,weight="semibold"),va="top",color=COLORS["muted"])
-        info.text(.46,y,str(value),fontproperties=human_font_properties(size=9.4),va="top",color=COLORS["text"]);y-=.057
-    info.text(.02,.025,localized_text("说明：实测频偏、杂散和 Spur Margin 仅作为测量事实；未绑定版本化阈值时不判 PASS/FAIL。","Measured frequency error/spur metrics do not imply PASS/FAIL without versioned thresholds."),fontproperties=human_font_properties(size=8.5),va="bottom",wrap=True,color=COLORS["muted"])
+        info.text(.02,y,f"{label}",fontproperties=human_font_properties(size=8.8,weight="semibold"),va="top",color=COLORS["muted"])
+        info.text(.48,y,str(value),fontproperties=human_font_properties(size=9.1),va="top",color=COLORS["text"]);y-=.050
+    info.axhline(.135,xmin=.02,xmax=.98,color=COLORS["grid"],linewidth=.8,alpha=.55)
+    info.text(.02,.105,localized_text("说明：实测频偏、杂散和 Spur Margin 仅作为测量事实；未绑定版本化阈值时不判 PASS/FAIL。","Measured frequency error/spur metrics do not imply PASS/FAIL without versioned thresholds."),fontproperties=human_font_properties(size=8.0),va="top",wrap=True,color=COLORS["muted"])
     out=io.BytesIO();fig.savefig(out,format="png",dpi=160,bbox_inches="tight",facecolor=COLORS["background"]);plt.close(fig)
     return out.getvalue(),measurement
