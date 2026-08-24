@@ -11,6 +11,7 @@ import sys
 import tempfile
 from pathlib import Path
 from typing import Iterable
+from urllib.parse import urlparse
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONTRACT = ROOT / "deploy/live_acceptance/runtime_contract.json"
@@ -54,6 +55,68 @@ def _source_revision() -> str:
     return _capture(["git", "rev-parse", "HEAD"])
 
 
+def _env_map(info: dict) -> dict[str, str]:
+    result: dict[str, str] = {}
+    for row in info.get("Config", {}).get("Env") or []:
+        text = str(row)
+        if "=" in text:
+            key, value = text.split("=", 1)
+            result[key] = value
+    return result
+
+
+def _discover_postgres_host_override(network: str, backend_info: dict) -> list[dict[str, str]]:
+    database_url = _env_map(backend_info).get("DATABASE_URL", "")
+    try:
+        hostname = str(urlparse(database_url).hostname or "")
+    except Exception:
+        hostname = ""
+    if not hostname:
+        return []
+
+    network_rows = json.loads(_capture(["docker", "network", "inspect", network]))
+    if not network_rows:
+        return []
+    containers = (network_rows[0].get("Containers") or {})
+    candidates: list[tuple[int, str, str, str]] = []
+    backend_id = str(backend_info.get("Id") or "")
+    for cid, network_entry in containers.items():
+        if str(cid) == backend_id:
+            continue
+        try:
+            info = _docker_inspect(str(cid))
+        except Exception:
+            continue
+        if not bool((info.get("State") or {}).get("Running")):
+            continue
+        labels = info.get("Config", {}).get("Labels") or {}
+        env = _env_map(info)
+        image = str(info.get("Config", {}).get("Image") or "").lower()
+        service = str(labels.get("com.docker.compose.service") or "").lower()
+        score = 0
+        if service == "postgres": score += 10
+        if "postgres" in image: score += 5
+        if env.get("POSTGRES_DB"): score += 2
+        if env.get("POSTGRES_USER"): score += 1
+        if score <= 0:
+            continue
+        address = str(network_entry.get("IPv4Address") or "").split("/", 1)[0].strip()
+        if not address:
+            networks = info.get("NetworkSettings", {}).get("Networks") or {}
+            address = str((networks.get(network) or {}).get("IPAddress") or "").strip()
+        if address:
+            candidates.append((score, str(cid), str(network_entry.get("Name") or service or cid), address))
+    if not candidates:
+        return []
+    candidates.sort(reverse=True)
+    top_score = candidates[0][0]
+    top = [row for row in candidates if row[0] == top_score]
+    if len(top) != 1:
+        raise RuntimeError(f"AMBIGUOUS_LIVE_POSTGRES_CONTAINERS_{len(top)}")
+    _, cid, name, address = top[0]
+    return [{"hostname": hostname, "address": address, "container_id": cid, "container_name": name}]
+
+
 def _discover_real_backend(feishu_secret_file: Path) -> tuple[dict, str, str, list[dict[str, str]]]:
     ids = _capture(["docker", "ps", "--filter", "label=com.docker.compose.service=backend", "-q"]).split()
     matches: list[tuple[str, dict]] = []
@@ -94,6 +157,7 @@ def _runtime_tag(contract: dict, fingerprint: str) -> str:
 def _prepare(args: argparse.Namespace) -> int:
     contract_path = args.contract.resolve(); contract = _load_contract(contract_path)
     backend_info, network, base_image, secret_mounts = _discover_real_backend(args.feishu_secret_file.resolve())
+    host_overrides = _discover_postgres_host_override(network, backend_info)
     base_image_info = _docker_inspect(base_image, image=True); base_image_id = str(base_image_info.get("Id") or "")
     if not base_image_id: raise RuntimeError("BASE_IMAGE_ID_MISSING")
     inputs = []
@@ -109,9 +173,9 @@ def _prepare(args: argparse.Namespace) -> int:
         cache_hit = False
         _run(["docker", "build", "--pull=false", "--build-arg", f"BASE_IMAGE={base_image}", "--label", "io.ruijie.voip.live_acceptance.contract=voip-live-acceptance-runtime-v1", "--label", f"io.ruijie.voip.live_acceptance.version={contract.get('runtime_version')}", "--label", f"io.ruijie.voip.live_acceptance.fingerprint={fingerprint}", "-f", str(ROOT / "deploy/live_acceptance/Dockerfile"), "-t", runtime_image, str(ROOT)])
         runtime_info = _docker_inspect(runtime_image, image=True)
-    context = {"schema_version":1,"contract":"voip-live-acceptance-runtime-context-v1","runtime_contract":contract["contract"],"runtime_version":contract["runtime_version"],"runtime_fingerprint":fingerprint,"runtime_image":runtime_image,"runtime_image_id":runtime_info.get("Id"),"base_image":base_image,"base_image_id":base_image_id,"backend_container_id":backend_info.get("Id"),"docker_network":network,"source_revision":_source_revision(),"secret_mounts":secret_mounts}
+    context = {"schema_version":1,"contract":"voip-live-acceptance-runtime-context-v1","runtime_contract":contract["contract"],"runtime_version":contract["runtime_version"],"runtime_fingerprint":fingerprint,"runtime_image":runtime_image,"runtime_image_id":runtime_info.get("Id"),"base_image":base_image,"base_image_id":base_image_id,"backend_container_id":backend_info.get("Id"),"docker_network":network,"source_revision":_source_revision(),"secret_mounts":secret_mounts,"host_overrides":host_overrides}
     args.context.parent.mkdir(parents=True, exist_ok=True); args.context.write_text(json.dumps(context, ensure_ascii=False, indent=2)+"\n", encoding="utf-8"); os.chmod(args.context,0o600)
-    print(json.dumps({"status":"PASS","contract":context["runtime_contract"],"runtime_version":context["runtime_version"],"runtime_fingerprint":fingerprint[:16],"runtime_image":runtime_image,"cache_hit":cache_hit,"docker_network":network,"secret_mount_count":len(secret_mounts),"source_revision":context["source_revision"]}, ensure_ascii=False)); return 0
+    print(json.dumps({"status":"PASS","contract":context["runtime_contract"],"runtime_version":context["runtime_version"],"runtime_fingerprint":fingerprint[:16],"runtime_image":runtime_image,"cache_hit":cache_hit,"docker_network":network,"secret_mount_count":len(secret_mounts),"host_override_count":len(host_overrides),"source_revision":context["source_revision"]}, ensure_ascii=False)); return 0
 
 
 def _load_context(path: Path) -> dict:
@@ -139,6 +203,9 @@ def _run_in_runtime(args: argparse.Namespace) -> int:
                 if "=" in str(row): fh.write(str(row)+"\n")
         os.chmod(runtime_env_path,0o600)
         docker_args=["docker","run","--rm","--network",f"container:{backend_id}","--env-file",str(args.env_file.resolve()),"--env-file",str(runtime_env_path),"-v",f"{workspace}:/workspace","-w","/workspace","-e","PYTHONPATH=/workspace/backend:/workspace","-e","MPLCONFIGDIR=/tmp/voip-live-acceptance-matplotlib","-e",f"LIVE_ACCEPTANCE_RUNTIME_CONTRACT={context['runtime_contract']}","-e",f"LIVE_ACCEPTANCE_RUNTIME_VERSION={context['runtime_version']}","-e",f"LIVE_ACCEPTANCE_RUNTIME_FINGERPRINT={context['runtime_fingerprint']}","-e",f"LIVE_ACCEPTANCE_SOURCE_REVISION={context['source_revision']}","-e",f"LIVE_ACCEPTANCE_WORKSPACE_REVISION={workspace_revision}"]
+        for override in context.get("host_overrides") or []:
+            hostname=str(override.get("hostname") or "").strip(); address=str(override.get("address") or "").strip()
+            if hostname and address: docker_args += ["--add-host",f"{hostname}:{address}"]
         destinations=set()
         for mount in context.get("secret_mounts") or []:
             source=str(mount.get("source") or ""); destination=str(mount.get("destination") or "")
