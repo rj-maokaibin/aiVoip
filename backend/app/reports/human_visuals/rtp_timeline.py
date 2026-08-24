@@ -14,6 +14,7 @@ _EVENT_LABEL={
     "PACKET_LOSS":"RTP 丢包",
     "BURST_LOSS":"RTP 突发丢包",
     "PAYLOAD_CHANGE":"Payload Type 变化",
+    "ONE_WAY_RTP_MEDIA":"RTP 单向媒体",
 }
 
 
@@ -25,16 +26,20 @@ def _event_time(event:dict)->float|None:
     return None
 
 
-def _normalized_events(stream:dict,finding_metrics:dict|None)->list[dict]:
-    metrics=finding_metrics or {};events=[]
+def _normalized_events(stream:dict,finding_type:str|None,finding_metrics:dict|None)->list[dict]:
+    metrics=finding_metrics or {};target=str(finding_type or "").upper();events=[]
     if isinstance(metrics.get("events"),list):
         for item in metrics["events"]:
-            events.append({**item,"type":"HIGH_DELTA"})
+            events.append({**item,"type":str(item.get("type") or target or "HIGH_DELTA").upper()})
     else:
-        events.extend(stream.get("events") or [])
+        for item in stream.get("events") or []:
+            etype=str(item.get("type") or "").upper()
+            if target and etype!=target:
+                continue
+            events.append(item)
     out=[]
     for event in events:
-        etype=str(event.get("type") or "").upper();when=_event_time(event)
+        etype=str(event.get("type") or target or "").upper();when=_event_time(event)
         if when is None:continue
         row={"type":etype,"time":when,"label":_EVENT_LABEL.get(etype,etype or "RTP EVENT")}
         for key in ("delta_ms","expected_ptime_ms","sequence_continuous","previous_sequence","current_sequence","lost_packets","loss_count","classification","catch_up"):
@@ -46,7 +51,7 @@ def _normalized_events(stream:dict,finding_metrics:dict|None)->list[dict]:
 def render_human_rtp_timeline_png(stream:dict,*,finding_type:str|None=None,finding_metrics:dict|None=None,
                                   title:str="RTP 媒体时间线",width_px:int=1800,height_px:int=620)->tuple[bytes,dict]:
     start=float(stream.get("start_time") or 0.0);end=float(stream.get("end_time") or start+1.0)
-    events=_normalized_events(stream,finding_metrics);candidate_times=[x["time"] for x in events]
+    events=_normalized_events(stream,finding_type,finding_metrics);candidate_times=[x["time"] for x in events]
     if candidate_times:
         start=min(start,min(candidate_times));end=max(end,max(candidate_times))
     if end<=start:end=start+1.0
@@ -67,7 +72,7 @@ def render_human_rtp_timeline_png(stream:dict,*,finding_type:str|None=None,findi
     ax.set_title(localized_text(title,"RTP media timeline"),loc="left",fontproperties=human_font_properties(size=15,weight="semibold"),pad=24)
     ax.text(0,1.01,f"{direction}｜SSRC {stream.get('ssrc')}｜ptime {stream.get('ptime_ms')} ms",transform=ax.transAxes,fontproperties=human_font_properties(size=8.8),color=COLORS["muted"])
     ax.set_xlim(start,end);ax.set_ylim(.15,1.15);ax.set_yticks([])
-    ticks=ax.get_xticks();ax.set_xticklabels([f"{x-start:.3f}" for x in ticks],fontproperties=human_font_properties(size=8.5))
+    ticks=ax.get_xticks();ax.set_xticks(ticks);ax.set_xticklabels([f"{x-start:.3f}" for x in ticks],fontproperties=human_font_properties(size=8.5))
     ax.set_xlabel(localized_text("相对时间（s）","Relative time (s)"),fontproperties=human_font_properties(size=10));ax.grid(True,axis="x",alpha=.25)
     ax.spines["top"].set_visible(False);ax.spines["right"].set_visible(False);ax.spines["left"].set_visible(False)
     note=localized_text("HIGH_DELTA 只表示包间隔/节奏异常；Sequence 连续时不得表述为 RTP 丢包。","HIGH_DELTA is not packet loss when sequence is continuous.")
@@ -77,5 +82,5 @@ def render_human_rtp_timeline_png(stream:dict,*,finding_type:str|None=None,findi
         "measurement_method":"CANONICAL_RTP_EVENT_PROJECTION_V1","stream_id":stream.get("stream_id"),"direction":direction,
         "finding_type":finding_type,"events":semantic,"packet_count":stream.get("packet_count"),"lost_packets":stream.get("lost_packets",stream.get("lost")),
         "loss_rate":stream.get("loss_rate"),"ptime_ms":stream.get("ptime_ms"),"max_delta_ms":stream.get("max_delta_ms"),
-        "authority":"PRESENTATION_ONLY","semantic_rule":"HIGH_DELTA != PACKET_LOSS",
+        "authority":"PRESENTATION_ONLY","semantic_rule":"HIGH_DELTA != PACKET_LOSS","event_scope":"CURRENT_FINDING_TYPE_ONLY",
     }
