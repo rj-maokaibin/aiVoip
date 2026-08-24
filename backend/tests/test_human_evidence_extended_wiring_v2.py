@@ -52,8 +52,8 @@ def test_extended_projection_fails_closed_and_retains_machine_when_human_annotat
     machine = _Artifact("machine", "RTP_TIMELINE_PNG", "machine.png")
     projected = _prefer_human_visuals([machine, incomplete])
     assert machine in projected
-    assert incomplete in projected
-    assert _presentation_images(projected, limit=3) == {"human", "machine"}
+    assert incomplete not in projected
+    assert _presentation_images(projected, limit=3) == {"machine"}
 
 
 def test_dtmf_wiring_uses_authoritative_quality_event_index_before_nearest_time():
