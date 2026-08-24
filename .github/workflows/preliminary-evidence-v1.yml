@@ -195,7 +195,6 @@ jobs:
       LIVE_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
       CONTROLLED_ENV_FILE: /home/github-runner/.config/voip-ai/.env
       FEISHU_SECRET_FILE: /home/github-runner/.config/voip-ai/feishu_app_secret
-      LIVE_RUNTIME_CONTEXT: ${{ runner.temp }}/voip-live-acceptance-context.json
     steps:
       - uses: actions/checkout@v4
         with:
@@ -213,6 +212,7 @@ jobs:
           set +a
           test "${REPRODUCTION_PLATFORM_MODE:-}" = "real"
           test "${FEISHU_LIVE_ENABLED:-}" = "true"
+          echo "LIVE_RUNTIME_CONTEXT=$RUNNER_TEMP/voip-live-acceptance-context.json" >> "$GITHUB_ENV"
           printf 'LIVE_FEISHU_ACCEPTANCE_HEAD=%s\n' "$LIVE_HEAD_SHA"
           printf 'CONTROLLED_ENV_FILES_LOADED=1\n'
 
