@@ -240,6 +240,9 @@ jobs:
             --format '{{range $name,$cfg := .NetworkSettings.Networks}}{{$name}}{{"\n"}}{{end}}' \
             | head -n1)"
           test -n "$network"
+          image="$(docker inspect "$backend_cid" --format '{{.Config.Image}}')"
+          test -n "$image"
+          docker image inspect "$image" >/dev/null
           secret_mounts="$RUNNER_TEMP/human-live-secret-mounts.txt"
           python3 - "$backend_cid" "$secret_mounts" "$FEISHU_SECRET_FILE" <<'PY'
           import json
@@ -261,13 +264,12 @@ jobs:
               fh.write('\n'.join(rows) + '\n')
           PY
           grep -q '/run/secrets/feishu_app_secret' "$secret_mounts"
-          image="voip-human-live:${LIVE_HEAD_SHA:0:12}"
-          docker build -t "$image" backend
           echo "LIVE_BACKEND_CID=$backend_cid" >> "$GITHUB_ENV"
           echo "LIVE_DOCKER_NETWORK=$network" >> "$GITHUB_ENV"
           echo "LIVE_DOCKER_IMAGE=$image" >> "$GITHUB_ENV"
           echo "LIVE_SECRET_MOUNTS=$secret_mounts" >> "$GITHUB_ENV"
           printf 'LIVE_BACKEND_NETWORK=%s\n' "$network"
+          printf 'LIVE_BACKEND_IMAGE=%s\n' "$image"
           printf 'LIVE_SECRET_MOUNT_COUNT=%s\n' "$(wc -l < "$secret_mounts")"
 
       - name: Project and read back existing Real Golden 001 Feishu document
@@ -284,7 +286,6 @@ jobs:
             mount_args+=(-v "$source:$destination:ro")
           done < "$LIVE_SECRET_MOUNTS"
           rm -f validation/human_evidence_feishu_live_acceptance.json
-          trap 'docker image rm -f "$LIVE_DOCKER_IMAGE" >/dev/null 2>&1 || true' EXIT
           docker run --rm \
             --network "$LIVE_DOCKER_NETWORK" \
             --env-file "$CONTROLLED_ENV_FILE" \
