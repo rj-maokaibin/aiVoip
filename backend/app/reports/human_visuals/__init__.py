@@ -10,6 +10,7 @@ from .theme import (
     human_renderer_enabled,
     human_feishu_preferred,
 )
+from .wav_spectrogram import render_human_spectrogram_png_from_wav
 
 __all__ = [
     "HUMAN_RENDERER_VERSION",
@@ -19,5 +20,6 @@ __all__ = [
     "human_feishu_preferred",
     "render_human_spectrum_png_from_wav",
     "render_human_spectrogram_png",
+    "render_human_spectrogram_png_from_wav",
     "render_human_waveform_png",
 ]
