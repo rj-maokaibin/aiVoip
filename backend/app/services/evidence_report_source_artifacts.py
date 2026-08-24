@@ -104,6 +104,13 @@ def _human_visual_ready_meta(meta:dict)->bool:
 def _is_human_visual(artifact:Artifact)->bool:return _human_visual_ready_meta(artifact.metadata_json or {})
 
 
+def _declared_human_image(artifact:Artifact)->bool:
+    return (
+        str(artifact.type or "").upper() in _IMAGE_TYPES
+        and str((artifact.metadata_json or {}).get("renderer_family") or "").upper()=="HUMAN"
+    )
+
+
 def _priority(artifact:Artifact)->int:
     try:return int((artifact.metadata_json or {}).get("presentation_priority") or 0)
     except (TypeError,ValueError):return 0
@@ -119,9 +126,18 @@ def _human_group_key(artifact:Artifact)->tuple[str,str,str]:
 
 
 def _prefer_human_visuals(artifacts:list[Artifact])->list[Artifact]:
-    """Projection-only Human preference; complete DB links and Bundle remain untouched."""
-    ready=[a for a in artifacts if str(a.type or "").upper() in _IMAGE_TYPES and _is_human_visual(a)]
-    if not ready:return artifacts
+    """Projection-only Human preference; complete DB links and Bundle remain untouched.
+
+    Declared Human images that do not satisfy the full readiness contract are
+    removed from the presentation projection. This is fail-closed: they remain in
+    DB/Manifest/Bundle for audit, while the report falls back to Machine visuals.
+    """
+    candidates=[
+        a for a in artifacts
+        if not (_declared_human_image(a) and not _is_human_visual(a))
+    ]
+    ready=[a for a in candidates if str(a.type or "").upper() in _IMAGE_TYPES and _is_human_visual(a)]
+    if not ready:return candidates
     winners={}
     for artifact in ready:
         key=_human_group_key(artifact)
@@ -131,7 +147,7 @@ def _prefer_human_visuals(artifacts:list[Artifact])->list[Artifact]:
     winner_ids={a.id for a in winners.values()}
     human_types={str(a.type or "").upper() for a in winners.values()}
     out=[]
-    for artifact in artifacts:
+    for artifact in candidates:
         atype=str(artifact.type or "").upper()
         if atype not in _IMAGE_TYPES:
             out.append(artifact);continue
