@@ -217,34 +217,48 @@ jobs:
       - name: Prepare isolated live container on running backend network
         run: |
           set -euo pipefail
-          set -a
-          source "$CONTROLLED_ENV_FILE"
-          set +a
-          project="${VOIP_PROJECT_NAME:-voip-ai}"
-          backend_cid="$(docker ps \
-            --filter "label=com.docker.compose.project=$project" \
-            --filter 'label=com.docker.compose.service=backend' \
-            -q | head -n1)"
+          backend_cid="$(python3 - <<'PY'
+          import json
+          import subprocess
+          ids = subprocess.check_output(
+              ['docker', 'ps', '--filter', 'label=com.docker.compose.service=backend', '-q'],
+              text=True,
+          ).split()
+          matches = []
+          for cid in ids:
+              info = json.loads(subprocess.check_output(['docker', 'inspect', cid], text=True))[0]
+              env = set(info.get('Config', {}).get('Env') or [])
+              if 'REPRODUCTION_PLATFORM_MODE=real' in env and 'FEISHU_LIVE_ENABLED=true' in env:
+                  matches.append(cid)
+          if len(matches) != 1:
+              raise SystemExit(f'expected exactly one real Feishu backend, found {len(matches)}')
+          print(matches[0])
+          PY
+          )"
           test -n "$backend_cid"
           network="$(docker inspect "$backend_cid" \
             --format '{{range $name,$cfg := .NetworkSettings.Networks}}{{$name}}{{"\n"}}{{end}}' \
             | head -n1)"
           test -n "$network"
           secret_mounts="$RUNNER_TEMP/human-live-secret-mounts.txt"
-          python3 - "$backend_cid" "$secret_mounts" <<'PY'
+          python3 - "$backend_cid" "$secret_mounts" "$FEISHU_SECRET_FILE" <<'PY'
           import json
           import subprocess
           import sys
-          cid, out = sys.argv[1], sys.argv[2]
+          cid, out, feishu_fallback = sys.argv[1:4]
           info = json.loads(subprocess.check_output(['docker', 'inspect', cid], text=True))[0]
           rows = []
+          destinations = set()
           for mount in info.get('Mounts') or []:
               destination = str(mount.get('Destination') or '')
               source = str(mount.get('Source') or '')
               if destination.startswith('/run/secrets/') and source:
                   rows.append(f'{source}|{destination}')
+                  destinations.add(destination)
+          if '/run/secrets/feishu_app_secret' not in destinations:
+              rows.append(f'{feishu_fallback}|/run/secrets/feishu_app_secret')
           with open(out, 'w', encoding='utf-8') as fh:
-              fh.write('\n'.join(rows) + ('\n' if rows else ''))
+              fh.write('\n'.join(rows) + '\n')
           PY
           grep -q '/run/secrets/feishu_app_secret' "$secret_mounts"
           image="voip-human-live:${LIVE_HEAD_SHA:0:12}"
@@ -280,6 +294,7 @@ jobs:
             -e HUMAN_EVIDENCE_RENDERER_ENABLED=true \
             -e HUMAN_EVIDENCE_FEISHU_PREFERRED=true \
             -e MPLCONFIGDIR=/tmp/human-evidence-matplotlib \
+            -e FEISHU_APP_SECRET_FILE=/run/secrets/feishu_app_secret \
             "$LIVE_DOCKER_IMAGE" \
             python tools/human_evidence_feishu_live_acceptance.py \
               --result validation/human_evidence_feishu_live_acceptance.json
