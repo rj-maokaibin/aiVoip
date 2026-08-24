@@ -135,6 +135,35 @@ def _prefer_human_visuals(artifacts:list[Artifact])->list[Artifact]:
     return out
 
 
+def _human_caption(meta:dict)->str|None:
+    explanation=meta.get("human_explanation")
+    if not isinstance(explanation,dict):return None
+    what=str(explanation.get("what_to_look_at") or "").strip()
+    observations=[str(x).strip() for x in (explanation.get("observations") or []) if str(x).strip()]
+    meaning=str(explanation.get("meaning") or "").strip()
+    boundary=str(explanation.get("evidence_boundary") or "").strip()
+    summary=str(explanation.get("plain_language_summary") or "").strip()
+    if not (what and boundary):return None
+    parts=[f"图片解析｜这张图怎么看：{what}"]
+    if observations:parts.append("图中发现："+"；".join(observations))
+    if meaning:parts.append("这意味着："+meaning)
+    parts.append("证据边界："+boundary)
+    if summary:parts.append("一句话结论："+summary)
+    return "\n".join(parts)
+
+
+def _projection_metadata(artifact:Artifact)->dict:
+    meta=dict(artifact.metadata_json or {})
+    if _is_human_visual(artifact):
+        caption=_human_caption(meta)
+        if caption:
+            annotation=dict(meta.get("annotation_contract") or {})
+            annotation["caption"]=caption
+            annotation["human_explanation_rendered"]="FEISHU_COMPAT_CAPTION_V1"
+            meta["annotation_contract"]=annotation
+    return meta
+
+
 def finding_artifact_refs(db:Session,*,report_id:str,finding_id:str) -> list[dict]:
     links=list(db.scalars(select(EvidenceReportArtifactLink).where(EvidenceReportArtifactLink.report_id==report_id).order_by(EvidenceReportArtifactLink.created_at.asc())))
     artifacts=[]
@@ -154,6 +183,6 @@ def finding_artifact_refs(db:Session,*,report_id:str,finding_id:str) -> list[dic
             "content_type":artifact.content_type,
             "role":roles.get(artifact.id),
             "sha256":artifact.sha256,
-            "metadata":artifact.metadata_json or {},
+            "metadata":_projection_metadata(artifact),
         })
     return refs
