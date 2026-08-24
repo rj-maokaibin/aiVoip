@@ -153,6 +153,7 @@ jobs:
             --output offline-golden-human-artifacts
           test -s offline-golden-human-artifacts/pcm_rx_periodic_spectrum_human_v2.png
           test -s offline-golden-human-artifacts/pcm_rx_periodic_spectrogram_human_v2.png
+          test -s offline-golden-human-artifacts/pcm_rx_dtmf_first_digit_inspector_human_v2.png
           test -s offline-golden-human-artifacts/human-golden-result.json
           echo 'HUMAN_REAL_OFFLINE_GOLDEN_001=PASS'
 
