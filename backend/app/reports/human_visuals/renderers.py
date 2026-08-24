@@ -8,6 +8,7 @@ from typing import Iterable
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+from matplotlib.ticker import ScalarFormatter
 import numpy as np
 
 from .theme import COLORS
@@ -29,11 +30,24 @@ def _finish_axis(ax, *, xlabel: str, ylabel: str) -> None:
     ax.spines["right"].set_visible(False)
 
 
+def _title(ax, title: str, subtitle: str | None) -> None:
+    # Keep the report title and provenance line visually separated.  The Human
+    # renderer intentionally avoids CJK text inside PNGs so it never depends on
+    # a host-specific Chinese font; the detailed Chinese explanation lives in
+    # the Feishu/HTML projection next to the image.
+    ax.set_title(title, loc="left", fontsize=16, fontweight="semibold", color=COLORS["text"], pad=28)
+    if subtitle:
+        ax.text(0.0, 1.015, subtitle, transform=ax.transAxes, fontsize=9.5, color=COLORS["muted"], va="bottom")
+
+
 def render_human_waveform_png(
     waveform: dict,
     *,
     anomaly_start: float | None = None,
     anomaly_end: float | None = None,
+    display_start: float | None = None,
+    display_end: float | None = None,
+    auto_vertical_scale: bool = False,
     title: str = "PCM Waveform",
     subtitle: str | None = None,
     width_px: int = 1800,
@@ -46,22 +60,38 @@ def render_human_waveform_png(
     fig.patch.set_facecolor(COLORS["background"])
     ax.set_facecolor(COLORS["panel"])
 
+    duration = float(waveform.get("duration_seconds") or 1.0)
+    view_lo = max(0.0, float(display_start)) if display_start is not None else 0.0
+    view_hi = min(duration, float(display_end)) if display_end is not None else duration
+    if view_hi <= view_lo:
+        view_lo, view_hi = 0.0, max(duration, 1e-6)
+
+    selected_mins: np.ndarray | None = None
+    selected_maxs: np.ndarray | None = None
     if bins:
         times = np.asarray([float(x.get("t") or 0.0) for x in bins], dtype=float)
         mins = np.asarray([float(x.get("min") or 0.0) for x in bins], dtype=float) / 32768.0
         maxs = np.asarray([float(x.get("max") or 0.0) for x in bins], dtype=float) / 32768.0
-        ax.fill_between(times, mins, maxs, color=COLORS["waveform_fill"], alpha=0.72, linewidth=0)
-        ax.plot(times, maxs, color=COLORS["waveform"], linewidth=0.55, alpha=0.95)
-        ax.plot(times, mins, color=COLORS["waveform"], linewidth=0.55, alpha=0.95)
-        duration = float(waveform.get("duration_seconds") or times[-1] or 0.0)
-        ax.set_xlim(0.0, max(duration, 1e-6))
+        visible = (times >= view_lo) & (times <= view_hi)
+        if not np.any(visible):
+            visible = np.ones_like(times, dtype=bool)
+        vt = times[visible]; selected_mins = mins[visible]; selected_maxs = maxs[visible]
+        ax.fill_between(vt, selected_mins, selected_maxs, color=COLORS["waveform_fill"], alpha=0.72, linewidth=0)
+        ax.plot(vt, selected_maxs, color=COLORS["waveform"], linewidth=0.55, alpha=0.95)
+        ax.plot(vt, selected_mins, color=COLORS["waveform"], linewidth=0.55, alpha=0.95)
     else:
-        duration = float(waveform.get("duration_seconds") or 1.0)
         ax.text(0.5, 0.5, "No waveform data", transform=ax.transAxes, ha="center", va="center", color=COLORS["muted"])
-        ax.set_xlim(0.0, max(duration, 1e-6))
 
+    ax.set_xlim(view_lo, max(view_hi, view_lo + 1e-6))
     ax.axhline(0.0, color=COLORS["grid"], linewidth=0.8)
-    ax.set_ylim(-1.05, 1.05)
+    if auto_vertical_scale and selected_mins is not None and selected_maxs is not None and selected_mins.size:
+        peak = float(max(np.max(np.abs(selected_mins)), np.max(np.abs(selected_maxs))))
+        y_limit = min(1.05, max(0.005, peak * 1.18))
+        ax.set_ylim(-y_limit, y_limit)
+        ax.text(0.995, 0.965, f"vertical zoom: +/-{y_limit:.4f} FS", transform=ax.transAxes,
+                ha="right", va="top", fontsize=8.5, color=COLORS["muted"])
+    else:
+        ax.set_ylim(-1.05, 1.05)
 
     if anomaly_start is not None:
         start = max(0.0, float(anomaly_start))
@@ -72,11 +102,10 @@ def render_human_waveform_png(
         ax.axvspan(start, min(end, duration), color=COLORS["anomaly"], alpha=0.12)
         ax.axvline(start, color=COLORS["anomaly"], linewidth=1.3, alpha=0.9)
         ax.axvline(min(end, duration), color=COLORS["anomaly"], linewidth=1.3, alpha=0.9)
-        ax.text(start, 0.98, " anomaly window", color=COLORS["anomaly"], fontsize=9, va="top")
+        label_y = ax.get_ylim()[1] * 0.92
+        ax.text(max(start, view_lo), label_y, " evidence window", color=COLORS["anomaly"], fontsize=9, va="top")
 
-    ax.set_title(title, loc="left", fontsize=16, fontweight="semibold", color=COLORS["text"], pad=12)
-    if subtitle:
-        ax.text(0.0, 1.015, subtitle, transform=ax.transAxes, fontsize=9.5, color=COLORS["muted"], va="bottom")
+    _title(ax, title, subtitle)
     _finish_axis(ax, xlabel="Time (s)", ylabel="Normalized PCM amplitude")
     return _save_png(fig)
 
@@ -86,6 +115,8 @@ def render_human_spectrogram_png(
     *,
     anomaly_start: float | None = None,
     anomaly_end: float | None = None,
+    display_start: float | None = None,
+    display_end: float | None = None,
     title: str = "PCM Spectrogram",
     subtitle: str | None = None,
     max_frequency_hz: float | None = None,
@@ -123,7 +154,11 @@ def render_human_spectrogram_png(
                 interpolation="nearest",
             )
             ax.set_ylim(0.0, max_freq)
-            ax.set_xlim(float(times[0]), max(float(times[-1]), float(times[0]) + 1e-6))
+            view_lo = max(float(times[0]), float(display_start)) if display_start is not None else float(times[0])
+            view_hi = min(float(times[-1]), float(display_end)) if display_end is not None else float(times[-1])
+            if view_hi <= view_lo:
+                view_lo, view_hi = float(times[0]), max(float(times[-1]), float(times[0]) + 1e-6)
+            ax.set_xlim(view_lo, view_hi)
     if image is None:
         ax.text(0.5, 0.5, "No spectrogram data", transform=ax.transAxes, ha="center", va="center", color=COLORS["muted"])
 
@@ -136,9 +171,7 @@ def render_human_spectrogram_png(
         ax.axvline(start, color=COLORS["anomaly"], linewidth=1.2)
         ax.axvline(end, color=COLORS["anomaly"], linewidth=1.2)
 
-    ax.set_title(title, loc="left", fontsize=16, fontweight="semibold", color=COLORS["text"], pad=12)
-    if subtitle:
-        ax.text(0.0, 1.015, subtitle, transform=ax.transAxes, fontsize=9.5, color=COLORS["muted"], va="bottom")
+    _title(ax, title, subtitle)
     _finish_axis(ax, xlabel="Time (s)", ylabel="Frequency (Hz)")
     if image is not None:
         cbar = fig.colorbar(image, ax=ax, pad=0.015, fraction=0.025)
@@ -229,7 +262,7 @@ def render_human_spectrum_png_from_wav(
         ticks = [x for x in (30, 50, 100, 200, 500, 1000, 2000, 4000) if min_frequency_hz <= x <= upper]
         if ticks:
             ax.set_xticks(ticks)
-            ax.get_xaxis().set_major_formatter(matplotlib.ticker.ScalarFormatter())
+            ax.get_xaxis().set_major_formatter(ScalarFormatter())
     else:
         ax.text(0.5, 0.5, "No spectrum data", transform=ax.transAxes, ha="center", va="center", color=COLORS["muted"])
 
@@ -257,9 +290,7 @@ def render_human_spectrum_png_from_wav(
             color=COLORS["text"],
         )
 
-    ax.set_title(title, loc="left", fontsize=16, fontweight="semibold", color=COLORS["text"], pad=12)
-    if subtitle:
-        ax.text(0.0, 1.015, subtitle, transform=ax.transAxes, fontsize=9.5, color=COLORS["muted"], va="bottom")
+    _title(ax, title, subtitle)
     _finish_axis(ax, xlabel="Frequency (Hz, log scale)", ylabel="Spectrum level (dBFS)")
 
     png = _save_png(fig)
