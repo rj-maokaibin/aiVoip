@@ -191,6 +191,8 @@ jobs:
     timeout-minutes: 30
     env:
       LIVE_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      CONTROLLED_ENV_FILE: /home/github-runner/.config/voip-ai/.env
+      FEISHU_SECRET_FILE: /home/github-runner/.config/voip-ai/feishu_app_secret
     steps:
       - uses: actions/checkout@v4
         with:
@@ -201,18 +203,15 @@ jobs:
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$LIVE_HEAD_SHA"
+          test -r "$CONTROLLED_ENV_FILE"
+          test -r "$FEISHU_SECRET_FILE"
           set -a
-          loaded=0
-          for env_file in /home/dev/workspace/aiVoip/.env /home/dev/workspace/aiVoip/backend/.env; do
-            if [ -r "$env_file" ]; then
-              source "$env_file"
-              loaded=$((loaded+1))
-            fi
-          done
+          source "$CONTROLLED_ENV_FILE"
           set +a
-          test "$loaded" -gt 0
+          test "${REPRODUCTION_PLATFORM_MODE:-}" = "real"
           printf 'LIVE_FEISHU_ACCEPTANCE_HEAD=%s\n' "$LIVE_HEAD_SHA"
-          printf 'CONTROLLED_ENV_FILES_LOADED=%s\n' "$loaded"
+          printf 'CONTROLLED_ENV_FILES_LOADED=1\n'
+          printf 'REPRODUCTION_PLATFORM_MODE=%s\n' "$REPRODUCTION_PLATFORM_MODE"
           echo 'HUMAN_EVIDENCE_RENDERER_ENABLED=true' >> "$GITHUB_ENV"
           echo 'HUMAN_EVIDENCE_FEISHU_PREFERRED=true' >> "$GITHUB_ENV"
 
@@ -230,6 +229,13 @@ jobs:
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$LIVE_HEAD_SHA"
+          test -r "$CONTROLLED_ENV_FILE"
+          test -r "$FEISHU_SECRET_FILE"
+          set -a
+          source "$CONTROLLED_ENV_FILE"
+          set +a
+          test "${REPRODUCTION_PLATFORM_MODE:-}" = "real"
+          export FEISHU_APP_SECRET_FILE="$FEISHU_SECRET_FILE"
           export PYTHONPATH="$GITHUB_WORKSPACE/backend:$GITHUB_WORKSPACE"
           export MPLCONFIGDIR="$RUNNER_TEMP/human-evidence-matplotlib"
           mkdir -p "$MPLCONFIGDIR"
