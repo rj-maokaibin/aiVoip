@@ -22,6 +22,7 @@ _EVENT_ALIASES={
     "PERIODIC_LOW_FREQUENCY_INTERFERENCE":"PERIODIC_LOW_FREQUENCY_INTERFERENCE",
 }
 _AUDIO_TYPES={"AUDIO_CLIP","PERIODIC_AUDIO_CLIP"}
+_IMAGE_TYPES={"WAVEFORM_PNG","SPECTRUM_PNG","SPECTROGRAM_PNG","RTP_TIMELINE_PNG","SIP_CALL_FLOW_PNG"}
 
 
 def _event_type(value)->str|None:
@@ -112,20 +113,47 @@ def link_source_artifacts(db:Session,*,report:PreliminaryEvidenceReport,runs:dic
     db.flush();return out
 
 
+def _is_human_visual(artifact:Artifact)->bool:
+    meta=artifact.metadata_json or {}
+    return str(meta.get("renderer_family") or "").upper()=="HUMAN" and bool(meta.get("human_explanation"))
+
+
+def _prefer_human_visuals(artifacts:list[Artifact])->list[Artifact]:
+    """For each image type, project Human V2 when available; otherwise Machine.
+
+    This affects only Evidence Card presentation. Machine Artifacts remain linked,
+    persisted, included in the Evidence Bundle and available for Golden/Audit.
+    """
+    human_types={str(a.type or "").upper() for a in artifacts if str(a.type or "").upper() in _IMAGE_TYPES and _is_human_visual(a)}
+    if not human_types:return artifacts
+    out=[]
+    for artifact in artifacts:
+        atype=str(artifact.type or "").upper()
+        if atype in human_types and atype in _IMAGE_TYPES and not _is_human_visual(artifact):
+            continue
+        out.append(artifact)
+    return out
+
+
 def finding_artifact_refs(db:Session,*,report_id:str,finding_id:str) -> list[dict]:
     links=list(db.scalars(select(EvidenceReportArtifactLink).where(EvidenceReportArtifactLink.report_id==report_id).order_by(EvidenceReportArtifactLink.created_at.asc())))
-    refs=[]
+    artifacts=[]
+    roles={}
     for link in links:
         if finding_id not in (link.finding_ids_json or []):continue
         artifact=db.get(Artifact,link.artifact_id)
         if artifact:
-            refs.append({
-                "artifact_id":artifact.id,
-                "type":artifact.type,
-                "filename":artifact.filename,
-                "content_type":artifact.content_type,
-                "role":link.role,
-                "sha256":artifact.sha256,
-                "metadata":artifact.metadata_json or {},
-            })
+            artifacts.append(artifact);roles[artifact.id]=link.role
+    artifacts=_prefer_human_visuals(artifacts)
+    refs=[]
+    for artifact in artifacts:
+        refs.append({
+            "artifact_id":artifact.id,
+            "type":artifact.type,
+            "filename":artifact.filename,
+            "content_type":artifact.content_type,
+            "role":roles.get(artifact.id),
+            "sha256":artifact.sha256,
+            "metadata":artifact.metadata_json or {},
+        })
     return refs
