@@ -84,7 +84,7 @@ def test_human_visual_readiness_fails_closed_when_explanation_is_incomplete():
     assert _human_visual_ready_meta(incomplete) is False
     machine = _Artifact("m", "SPECTRUM_PNG", {"renderer_family": "MACHINE"}); human = _Artifact("h", "SPECTRUM_PNG", incomplete)
     projected = _prefer_human_visuals([machine, human])
-    assert machine in projected and human in projected
+    assert machine in projected and human not in projected
 
 
 def test_ready_human_visual_suppresses_same_type_machine_only_in_projection():
