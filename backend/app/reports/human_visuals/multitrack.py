@@ -6,6 +6,7 @@ from typing import Any
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+from matplotlib.ticker import FuncFormatter
 import numpy as np
 
 from .theme import COLORS
@@ -59,7 +60,8 @@ def render_human_multitrack_png(tracks:list[dict],*,window_start:float,window_en
         event_rows.append({"time":when,"label":label})
     ax.set_xlim(window_start,window_end);ax.set_ylim(.45,n+.75)
     ax.set_yticks([float(n-i) for i in range(len(tracks))]);ax.set_yticklabels([str(x.get("label") or f"Track {i+1}") for i,x in enumerate(tracks)],fontproperties=human_font_properties(size=9.5))
-    ticks=ax.get_xticks();ax.set_xticklabels([f"{x-window_start:.3f}" for x in ticks],fontproperties=human_font_properties(size=8.5))
+    ax.xaxis.set_major_formatter(FuncFormatter(lambda x,_pos:f"{x-window_start:.3f}"))
+    for label in ax.get_xticklabels():label.set_fontproperties(human_font_properties(size=8.5))
     ax.set_xlabel(localized_text("相对证据窗口时间（s）","Time from evidence-window start (s)"),fontproperties=human_font_properties(size=10))
     ax.set_title(localized_text(title,"Cross-layer aligned waveforms"),loc="left",fontproperties=human_font_properties(size=15,weight="semibold"),pad=22)
     ax.text(0,1.01,localized_text(f"绝对窗口 {window_start:.6f}～{window_end:.6f}｜各轨均按 PCM16 full-scale 显示，不做独立自动增益",f"Absolute window {window_start:.6f}-{window_end:.6f}"),transform=ax.transAxes,fontproperties=human_font_properties(size=8.5),color=COLORS["muted"])
