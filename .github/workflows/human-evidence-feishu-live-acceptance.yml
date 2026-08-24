@@ -12,10 +12,11 @@ on:
 
 permissions:
   contents: read
+  statuses: write
 
 concurrency:
   group: human-evidence-feishu-live-acceptance-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   gated-live-projection:
@@ -34,6 +35,28 @@ jobs:
         with:
           ref: ${{ github.sha }}
           fetch-depth: 1
+
+      - name: Mark live acceptance pending
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY' > "$RUNNER_TEMP/human-feishu-live-status.json"
+          import json, os
+          print(json.dumps({
+              "state": "pending",
+              "target_url": f"{os.environ['GITHUB_SERVER_URL']}/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['GITHUB_RUN_ID']}",
+              "description": "Human V2 live Feishu acceptance running",
+              "context": "Human Evidence Feishu Live",
+          }))
+          PY
+          curl -fsSL -X POST \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/statuses/$GITHUB_SHA" \
+            --data-binary @"$RUNNER_TEMP/human-feishu-live-status.json" >/dev/null
 
       - name: Controlled runner identity
         run: |
@@ -132,3 +155,35 @@ jobs:
           path: validation/human_evidence_feishu_live_acceptance.json
           if-no-files-found: warn
           retention-days: 14
+
+      - name: Publish live acceptance commit status
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          LIVE_JOB_STATUS: ${{ job.status }}
+        run: |
+          set -euo pipefail
+          if [ "$LIVE_JOB_STATUS" = "success" ]; then
+            state=success
+            description='Human V2 live Feishu acceptance passed'
+          else
+            state=failure
+            description='Human V2 live Feishu acceptance failed'
+          fi
+          export LIVE_STATUS_STATE="$state"
+          export LIVE_STATUS_DESCRIPTION="$description"
+          python3 - <<'PY' > "$RUNNER_TEMP/human-feishu-live-status.json"
+          import json, os
+          print(json.dumps({
+              "state": os.environ["LIVE_STATUS_STATE"],
+              "target_url": f"{os.environ['GITHUB_SERVER_URL']}/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['GITHUB_RUN_ID']}",
+              "description": os.environ["LIVE_STATUS_DESCRIPTION"],
+              "context": "Human Evidence Feishu Live",
+          }))
+          PY
+          curl -fsSL -X POST \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/statuses/$GITHUB_SHA" \
+            --data-binary @"$RUNNER_TEMP/human-feishu-live-status.json" >/dev/null
