@@ -12,6 +12,7 @@ from app.reports.human_visuals.renderers import (
     render_human_spectrogram_png,
     render_human_waveform_png,
 )
+from app.reports.human_visuals.wav_spectrogram import render_human_spectrogram_png_from_wav
 from app.services.evidence_report_source_artifacts import _prefer_human_visuals, _projection_metadata
 
 
@@ -50,7 +51,25 @@ def test_human_spectrum_is_continuous_dbfs_measurement():
     assert meta["fft_size"] >= 256
 
 
-def test_human_waveform_and_spectrogram_generate_png_without_new_diagnosis():
+def test_human_high_resolution_spectrogram_is_wav_grounded_relative_measurement():
+    png, meta = render_human_spectrogram_png_from_wav(
+        _tone_wav(),
+        start_seconds=0.25,
+        end_seconds=1.25,
+        max_frequency_hz=1200.0,
+        reference_frequencies_hz=[150, 250, 350],
+        title="Periodic spectrogram",
+    )
+    assert png.startswith(PNG)
+    assert meta["measurement_method"] == "NUMPY_STFT_HANN_RELATIVE_DB_V1"
+    assert meta["sample_rate"] == 8000
+    assert meta["level_unit"] == "relative dB"
+    assert meta["absolute_dbfs"] is False
+    assert meta["frequency_range_hz"] == [0.0, 1200.0]
+    assert meta["time_window_seconds"] == [0.25, 1.25]
+
+
+def test_human_waveform_and_legacy_spectrogram_generate_png_without_new_diagnosis():
     waveform = {
         "duration_seconds": 1.0,
         "bins": [
@@ -119,7 +138,6 @@ def test_human_visual_replaces_same_type_machine_only_in_presentation_projection
     projected = _prefer_human_visuals([machine_spectrum, human_spectrum, machine_wave])
     assert human_spectrum in projected
     assert machine_spectrum not in projected
-    # No Human waveform exists, therefore Machine waveform remains the fallback.
     assert machine_wave in projected
 
 
@@ -132,5 +150,4 @@ def test_human_projection_caption_contains_plain_language_sections():
     assert "这意味着" in caption
     assert "证据边界" in caption
     assert "一句话结论" in caption
-    # Stored Artifact metadata is not mutated by Feishu presentation projection.
     assert human.metadata_json["annotation_contract"]["caption"] == "original"
