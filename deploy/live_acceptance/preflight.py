@@ -52,8 +52,9 @@ def _check_runtime(contract,collector):
         found=next((str(m) for m in contract.get("font_family_markers") or [] if str(m).lower() in families.lower()),None)
         collector.pass_("CJK_FONT_RUNTIME","RUNTIME",f"CJK family available: {found}") if found else collector.block("CJK_FONT_RUNTIME","RUNTIME","no approved CJK font family found")
     except Exception as exc: collector.block("CJK_FONT_RUNTIME","RUNTIME",f"font discovery failed: {type(exc).__name__}")
-    contract_env=os.getenv("LIVE_ACCEPTANCE_RUNTIME_CONTRACT",""); fp=os.getenv("LIVE_ACCEPTANCE_RUNTIME_FINGERPRINT",""); source=os.getenv("LIVE_ACCEPTANCE_SOURCE_REVISION",""); workspace=os.getenv("LIVE_ACCEPTANCE_WORKSPACE_REVISION","")
+    contract_env=os.getenv("LIVE_ACCEPTANCE_RUNTIME_CONTRACT",""); fp=os.getenv("LIVE_ACCEPTANCE_RUNTIME_FINGERPRINT",""); source=os.getenv("LIVE_ACCEPTANCE_SOURCE_REVISION",""); workspace=os.getenv("LIVE_ACCEPTANCE_WORKSPACE_REVISION",""); orchestrator=os.getenv("LIVE_ACCEPTANCE_ORCHESTRATOR_VERSION","")
     collector.pass_("RUNTIME_IDENTITY","RUNTIME",f"contract={contract_env}; fingerprint={fp[:16]}; revision={source[:12]}") if contract_env==contract.get("contract") and fp and source else collector.block("RUNTIME_IDENTITY","RUNTIME","runtime contract/fingerprint/source revision is incomplete")
+    collector.pass_("ORCHESTRATOR_IDENTITY","RUNTIME",f"orchestrator={orchestrator}") if orchestrator else collector.block("ORCHESTRATOR_IDENTITY","RUNTIME","orchestrator version missing")
     collector.pass_("SOURCE_REVISION_EXACT","RUNTIME",source) if source and workspace and source==workspace else collector.block("SOURCE_REVISION_EXACT","RUNTIME",f"runtime={source}; workspace={workspace}")
 
 def _service_host(value,default_port=None):
@@ -65,6 +66,11 @@ def _dns_check(name,value,default_port,collector):
     try:
         rows=socket.getaddrinfo(host,port,type=socket.SOCK_STREAM); addresses=sorted({str(r[4][0]) for r in rows}); collector.pass_(f"DNS_{name.upper()}","NETWORK",f"{host} -> {','.join(addresses[:3])}")
     except Exception as exc: collector.block(f"DNS_{name.upper()}","NETWORK",f"{host}: {type(exc).__name__}")
+
+def _check_database_route(collector):
+    status=os.getenv("LIVE_ACCEPTANCE_DATABASE_ROUTE_STATUS","").strip()
+    allowed={"backend_dns","candidate_same_network","candidate_cross_network"}
+    collector.pass_("DATABASE_ROUTE","NETWORK",status) if status in allowed else collector.block("DATABASE_ROUTE","NETWORK",status or "route status missing")
 
 def _resolve_secret(value,file_path,env_name):
     if str(file_path or "").strip(): return Path(file_path).read_text(encoding="utf-8").strip()
@@ -147,7 +153,7 @@ async def run(contract,profile_name):
         for key,expected in (contract.get("required_environment") or {}).items():
             actual=os.getenv(str(key),""); collector.pass_(f"ENV_{key}","CONFIG",f"{key}={actual}") if actual.lower()==str(expected).lower() else collector.block(f"ENV_{key}","CONFIG",f"expected {expected}, got {actual}")
         services=set(profile.get("services") or [])
-        if "database" in services: _dns_check("database",settings.database_url,5432,collector); _check_database(settings,collector)
+        if "database" in services: _check_database_route(collector); _dns_check("database",settings.database_url,5432,collector); _check_database(settings,collector)
         if "redis" in services: _dns_check("redis",settings.redis_url,6379,collector); _check_redis(settings,collector)
         if "minio" in services: _dns_check("minio",settings.minio_endpoint,9000,collector); _check_minio(settings,collector)
         document_id=None
@@ -156,7 +162,7 @@ async def run(contract,profile_name):
             collector.pass_("FEISHU_CONFIG","FEISHU","live Feishu configuration enabled") if bool(settings.feishu_live_enabled) and str(settings.feishu_app_id or "").strip() else collector.block("FEISHU_CONFIG","FEISHU","live Feishu app configuration is incomplete")
             await _check_feishu(document_id,collector)
     blockers=collector.blocking_keys
-    return {"schema_version":1,"contract":"voip-live-acceptance-preflight-v1","runtime_contract":contract.get("contract"),"runtime_version":contract.get("runtime_version"),"runtime_fingerprint":os.getenv("LIVE_ACCEPTANCE_RUNTIME_FINGERPRINT","")[:16],"source_revision":os.getenv("LIVE_ACCEPTANCE_SOURCE_REVISION",""),"profile":profile_name,"status":"PASS" if not blockers else "BLOCKED","mutation_allowed":not blockers,"blocking_keys":blockers,"checks":[asdict(x) for x in collector.checks]}
+    return {"schema_version":1,"contract":"voip-live-acceptance-preflight-v1","runtime_contract":contract.get("contract"),"runtime_version":contract.get("runtime_version"),"orchestrator_version":os.getenv("LIVE_ACCEPTANCE_ORCHESTRATOR_VERSION",""),"runtime_fingerprint":os.getenv("LIVE_ACCEPTANCE_RUNTIME_FINGERPRINT","")[:16],"source_revision":os.getenv("LIVE_ACCEPTANCE_SOURCE_REVISION",""),"profile":profile_name,"status":"PASS" if not blockers else "BLOCKED","mutation_allowed":not blockers,"blocking_keys":blockers,"checks":[asdict(x) for x in collector.checks]}
 
 def main():
     p=argparse.ArgumentParser(description="Aggregated read-only preflight for VOIP AI live acceptance"); p.add_argument("--contract",type=Path,default=DEFAULT_CONTRACT); p.add_argument("--profile",default="base"); p.add_argument("--out",type=Path,required=True); args=p.parse_args(); payload=asyncio.run(run(_load_contract(args.contract.resolve()),args.profile)); args.out.parent.mkdir(parents=True,exist_ok=True); args.out.write_text(json.dumps(payload,ensure_ascii=False,indent=2)+"\n",encoding="utf-8"); print(json.dumps(payload,ensure_ascii=False,indent=2)); return 0 if payload["status"]=="PASS" else 2
