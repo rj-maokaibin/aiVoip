@@ -32,7 +32,7 @@ python deploy/live_acceptance/runtime.py run \
        --out validation/live_acceptance_preflight.json
 ```
 
-只有 `status=PASS` 且 `mutation_allowed=true` 才允许后续 mutation command。Human Feishu live acceptance 还会再次读取 preflight JSON 并 fail-closed，防止 workflow 误接线绕过 preflight。
+只有 `status=PASS` 且 `mutation_allowed=true` 才允许后续 mutation command。Human Feishu live acceptance 还会再次读取 preflight JSON 并 fail-closed，防止显式手工验收误接线绕过 preflight。
 
 ## Preflight 范围
 
@@ -47,6 +47,21 @@ Preflight 一次性聚合检查，不在第一个错误处退出：
 - Golden profile：绑定报告必须包含冻结 PCAP SHA256，且已有 Report Artifact / Case Evidence。
 
 所有输出都脱敏；飞书 document 只输出 SHA256 短 fingerprint，不输出 document_id，secret 内容和 host secret path 不进入验收 Artifact。
+
+## Human V2 Live Acceptance 闭环
+
+PR #45 在 exact head `612225e1b187d00af396e73de3a8645e21b67f6d` 的 workflow run #390 已完成一次真实 Human Feishu Live Acceptance PASS，形成发布闭环证据：
+
+- Runtime `voip-live-acceptance-runtime-v1@1.0.0` cache hit，fingerprint `d2ad663c47accf63`。
+- 聚合 Preflight PASS，`mutation_allowed=true`，数据库 migration head、Redis、MinIO、CJK、Feishu read-only 均通过。
+- Golden #001 的旧 PCM Analyzer `0.5.0` 与 Media Analyzer `0.4.0` 被 freshness gate 判定为 stale，并通过正式 Analyzer job 刷新为当前 `0.6.0` / `0.5.0`。
+- 刷新后 DTMF source readiness：PCM ready、Media ready、scope coherent 均为 true，且 exact Golden Evidence 绑定保持不变。
+- Evidence Report 从 v3 重建到 v4；Human ready visual 共 17 个，包含 `DTMF_INSPECTOR`、`SPECTRUM`、`SPECTROGRAM`、`MULTI_TRACK`、`CROSS_LAYER`、`RTP_TIMELINE`、`WAVEFORM`。
+- Feishu 使用原 living document 更新并 API read-back；远端读取到 Human 图片块与“图片 + 五段解释”序列，`diagnostic_authority_escalation=false`。
+
+该一次性真实 mutation PASS 捕获完成后，标准 PR workflow 已移除 Human-specific 自动 Feishu mutation job。后续普通 PR CI 只运行 Frozen / Full Software / Real Offline Golden / Human Golden，不自动修改真实飞书文档。
+
+需要再次执行 Live Acceptance 时，显式使用本页标准 Runtime + Preflight，再调用 `tools/human_evidence_feishu_live_acceptance.py --preflight-result ...`。不得为了验证 cache 或普通代码变更重新引入自动 Feishu mutation；只有明确需要真实 Live 验证时才执行该显式入口。
 
 ## 后续复用
 
