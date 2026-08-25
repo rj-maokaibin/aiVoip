@@ -1,0 +1,99 @@
+name: Acceptance Infrastructure V2 Gate
+
+on:
+  pull_request:
+    branches:
+      - master
+    paths:
+      - 'deploy/live_acceptance/**'
+      - 'tools/human_evidence_feishu_live_acceptance_v2.py'
+      - 'backend/tests/test_live_acceptance_infrastructure_v2.py'
+      - 'docs/LIVE_ACCEPTANCE_INFRASTRUCTURE_V2.md'
+      - '.github/workflows/acceptance-infrastructure-v2.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: acceptance-infrastructure-v2-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  acceptance-infrastructure-v2:
+    runs-on:
+      - self-hosted
+      - linux
+      - x64
+      - voip-controlled-linux
+    timeout-minutes: 10
+    env:
+      ACCEPTANCE_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.ACCEPTANCE_HEAD_SHA }}
+          fetch-depth: 1
+
+      - name: Verify exact acceptance head
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$ACCEPTANCE_HEAD_SHA"
+          printf 'ACCEPTANCE_INFRASTRUCTURE_V2_HEAD=%s\n' "$ACCEPTANCE_HEAD_SHA"
+
+      - name: Compile V2 acceptance entrypoints
+        run: |
+          set -euo pipefail
+          python3 --version
+          python3 -m compileall -q \
+            deploy/live_acceptance/runtime_v2.py \
+            deploy/live_acceptance/preflight_v2.py \
+            deploy/live_acceptance/acceptance_infrastructure_v2_gate.py \
+            tools/human_evidence_feishu_live_acceptance_v2.py \
+            backend/tests/test_live_acceptance_infrastructure_v2.py
+
+      - name: Acceptance Infrastructure V2 static contract gate
+        run: |
+          set -euo pipefail
+          python3 deploy/live_acceptance/acceptance_infrastructure_v2_gate.py \
+            | tee "$RUNNER_TEMP/acceptance-infrastructure-v2-gate.json"
+
+      - name: Verify V1 contracts remain frozen
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          root = Path('.')
+          v1 = json.loads((root / 'deploy/live_acceptance/runtime_contract.json').read_text(encoding='utf-8'))
+          v2 = json.loads((root / 'deploy/live_acceptance/runtime_contract_v2.json').read_text(encoding='utf-8'))
+          assert v1['schema_version'] == 1
+          assert v1['contract'] == 'voip-live-acceptance-runtime-v1'
+          assert v1['runtime_version'] == '1.0.0'
+          assert v2['schema_version'] == 2
+          assert v2['contract'] == 'voip-live-acceptance-runtime-v2'
+          assert v2['runtime_version'] == '2.0.0'
+          assert v2['compatibility']['v1_live_evidence_remains_valid'] is True
+          print('V1_CONTRACTS_PRESERVED=PASS')
+          print('V2_FORMAL_CONTRACT=PASS')
+          PY
+
+      - name: Verify ordinary PR acceptance remains non-mutating
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          workflow = Path('.github/workflows/preliminary-evidence-v1.yml').read_text(encoding='utf-8')
+          assert 'live-feishu-acceptance:' not in workflow
+          assert 'tools/human_evidence_feishu_live_acceptance.py' not in workflow
+          print('NORMAL_PR_CI_NON_MUTATING=PASS')
+          PY
+
+      - name: Acceptance Infrastructure V2 summary
+        run: |
+          set -euo pipefail
+          printf 'ACCEPTANCE_INFRASTRUCTURE_V2_STATIC_GATE=PASS\n'
+          printf 'V1_BACKWARD_COMPATIBILITY=PASS\n'
+          printf 'NORMAL_PR_CI_NON_MUTATING=PASS\n'
+          printf 'REAL_LIVE_MUTATION=EXPLICIT_ONLY\n'
+          printf 'ACCEPTANCE_COMMIT=%s\n' "$(git rev-parse HEAD)"
