@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -147,6 +148,24 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     def model_post_init(self, __context) -> None:
+        # Live Acceptance mounts the exact Git head at the container working
+        # directory while the reusable runtime image may contain an older /app
+        # source tree. Bind all source-controlled data roots to that mounted head
+        # only when the runtime identity is explicitly present. Normal production
+        # processes do not set LIVE_ACCEPTANCE_SOURCE_REVISION and keep /app roots.
+        if str(os.getenv("LIVE_ACCEPTANCE_SOURCE_REVISION") or "").strip():
+            workspace = Path(os.getenv("LIVE_ACCEPTANCE_WORKSPACE_ROOT") or Path.cwd()).resolve()
+            live_roots = {
+                "profile_root": workspace / "profiles",
+                "rule_root": workspace / "rules" / "diagnosis",
+                "knowledge_root": workspace / "knowledge" / "seed",
+            }
+            missing = [name for name, path in live_roots.items() if not path.is_dir()]
+            if missing:
+                raise ValueError("LIVE_ACCEPTANCE_SOURCE_ROOT_INVALID:" + ",".join(sorted(missing)))
+            for name, path in live_roots.items():
+                setattr(self, name, path)
+
         capture_version = str(self.capture_engine_version or "V1").upper().strip()
         if capture_version not in {"V1", "V2"}:
             raise ValueError("CAPTURE_ENGINE_VERSION_INVALID")
