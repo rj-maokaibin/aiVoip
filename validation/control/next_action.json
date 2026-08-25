@@ -1,12 +1,12 @@
 {
   "schema_version": "capture-v2-remote-action-v1",
-  "action_id": "RC84G-PRODUCTION-DEPLOYMENT-PREFLIGHT-010",
-  "sequence": 221,
-  "created_at": "2026-08-26T00:00:30+00:00",
-  "expires_at": "2026-08-26T12:00:30+00:00",
-  "action_type": "PRODUCTION_DEPLOYMENT_PREFLIGHT",
+  "action_id": "RC85-PRODUCTION-CUTOVER-011",
+  "sequence": 222,
+  "created_at": "2026-08-26T00:01:30+00:00",
+  "expires_at": "2026-08-26T12:01:30+00:00",
+  "action_type": "PRODUCTION_CUTOVER",
   "parameters": {
-    "timeout_seconds": 300
+    "timeout_seconds": 7200
   },
   "safety": {
     "require_clean_git": true,
@@ -14,8 +14,8 @@
     "require_v2_disabled": true,
     "allow_worker_kill": false,
     "allow_server_quarantine": false,
-    "expected_head": "2a99f08b5a734c8024d8ef3abc5d657999d03d1d"
+    "expected_head": "94d659ed919a3727d21e13ccfbc4f712542993fb"
   },
   "requested_by": "ChatGPT-remote-validation-controller",
-  "note": "Fresh explicit guarded production deployment preflight immediately after RC84F successfully enabled only FEISHU_IDENTITY_RBAC_ENABLED=true. Read the canonical authorization and real /etc/voip-ai/production.env, verify V1 prestate, deploy blockers, accepted source and production compose requirements. Perform no additional production or DUT mutation. RC85 PRODUCTION_CUTOVER must not be issued unless this action returns PASS."
+  "note": "Execute the authorized guarded Capture Engine V2 production cutover after RC84G production deployment preflight PASS with no deploy blockers. Use the canonical authorization and audited guarded cutover module only. Back up production env, switch to V2/real mode, deploy current accepted source, run migrations and runtime verification, validate required services/queues/storage/frontend/backend authority, and fail closed with verified rollback to V1 on any error. No DUT mutation is allowed. Production V2 may be declared active only if the action returns PASS and runtime authority verifies CAPTURE_AUTHORITY=V2."
 }
