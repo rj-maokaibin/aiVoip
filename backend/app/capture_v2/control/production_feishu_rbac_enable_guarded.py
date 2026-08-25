@@ -17,6 +17,10 @@ from app.capture_v2.control.production_deployment_preflight_guarded import (
 
 
 TARGET_KEY = "FEISHU_IDENTITY_RBAC_ENABLED"
+_LEGACY_DEFAULTS = {
+    "CAPTURE_ENGINE_VERSION": "V1",
+    "CAPTURE_V2_PRODUCTION_ENABLED": "false",
+}
 
 
 def _parse_safe_env(path: Path) -> dict[str, str]:
@@ -51,6 +55,17 @@ def _bool_false(value: str | None) -> bool:
 
 def _bool_true(value: str | None) -> bool:
     return str(value or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _effective_prestate(values: dict[str, str]) -> tuple[dict[str, str], list[str]]:
+    effective = dict(values)
+    defaulted: list[str] = []
+    for key, default in _LEGACY_DEFAULTS.items():
+        raw = effective.get(key)
+        if raw is None or str(raw).strip() == "":
+            effective[key] = default
+            defaulted.append(key)
+    return effective, sorted(defaulted)
 
 
 def _write_only_target(path: Path) -> None:
@@ -116,21 +131,26 @@ def run(*, repo_root: Path, authorization_path: Path) -> tuple[int, dict[str, An
         return 1, {**payload, "verdict": "FAIL", "reason": "PRODUCTION_ENV_PERMISSIONS_NOT_PRIVATE"}
 
     before = _parse_safe_env(PRODUCTION_ENV)
+    effective_before, defaulted_keys = _effective_prestate(before)
     payload["prestate"] = {
-        "app_env": before.get("APP_ENV"),
-        "capture_engine_version": before.get("CAPTURE_ENGINE_VERSION"),
-        "capture_v2_production_enabled": before.get("CAPTURE_V2_PRODUCTION_ENABLED"),
-        "reproduction_platform_mode": before.get("REPRODUCTION_PLATFORM_MODE"),
-        "feishu_identity_rbac_enabled": _bool_true(before.get(TARGET_KEY)),
+        "app_env": effective_before.get("APP_ENV"),
+        "capture_engine_version": effective_before.get("CAPTURE_ENGINE_VERSION"),
+        "capture_v2_production_enabled": effective_before.get("CAPTURE_V2_PRODUCTION_ENABLED"),
+        "reproduction_platform_mode": effective_before.get("REPRODUCTION_PLATFORM_MODE"),
+        "feishu_identity_rbac_enabled": _bool_true(effective_before.get(TARGET_KEY)),
     }
-    if str(before.get("APP_ENV") or "").lower() != "production":
+    if defaulted_keys:
+        payload["prestate_defaulted_keys"] = defaulted_keys
+        payload["prestate_defaults_source"] = "APPLICATION_RUNTIME_DEFAULTS"
+
+    if str(effective_before.get("APP_ENV") or "").lower() != "production":
         return 1, {**payload, "verdict": "FAIL", "reason": "PRODUCTION_PRESTATE_APP_ENV_INVALID"}
-    if str(before.get("CAPTURE_ENGINE_VERSION") or "").upper() != "V1":
+    if str(effective_before.get("CAPTURE_ENGINE_VERSION") or "").upper() != "V1":
         return 1, {**payload, "verdict": "FAIL", "reason": "PRODUCTION_PRESTATE_NOT_V1"}
-    if not _bool_false(before.get("CAPTURE_V2_PRODUCTION_ENABLED")):
+    if not _bool_false(effective_before.get("CAPTURE_V2_PRODUCTION_ENABLED")):
         return 1, {**payload, "verdict": "FAIL", "reason": "PRODUCTION_PRESTATE_V2_ALREADY_ENABLED"}
 
-    if _bool_true(before.get(TARGET_KEY)):
+    if _bool_true(effective_before.get(TARGET_KEY)):
         return 0, {
             **payload,
             "verdict": "PASS",
@@ -150,7 +170,7 @@ def run(*, repo_root: Path, authorization_path: Path) -> tuple[int, dict[str, An
         after = _parse_safe_env(PRODUCTION_ENV)
         if not _bool_true(after.get(TARGET_KEY)):
             raise RuntimeError("TARGET_VALUE_VERIFY_FAILED")
-        # Prove no V1/V2 authority prestate key changed as part of this prerequisite.
+        # Prove no raw V1/V2 authority or platform key changed as part of this prerequisite.
         for key in ("APP_ENV", "CAPTURE_ENGINE_VERSION", "CAPTURE_V2_PRODUCTION_ENABLED", "REPRODUCTION_PLATFORM_MODE"):
             if before.get(key) != after.get(key):
                 raise RuntimeError(f"UNEXPECTED_ENV_CHANGE:{key}")
