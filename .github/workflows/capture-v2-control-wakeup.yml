@@ -1,0 +1,50 @@
+name: Capture V2 Control Wakeup
+
+on:
+  push:
+    branches:
+      - ci/capture-v2-control-wakeup-20260825
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: capture-v2-control-wakeup
+  cancel-in-progress: false
+
+jobs:
+  control-once:
+    runs-on:
+      - self-hosted
+      - linux
+      - x64
+      - voip-controlled-linux
+    timeout-minutes: 120
+    steps:
+      - name: Persistent control workspace identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT=/home/dev/workspace/aiVoip
+          test -d "$ROOT/.git"
+          cd "$ROOT"
+          printf 'HOST=%s\n' "$(hostname)"
+          printf 'BRANCH=%s\n' "$(git branch --show-current)"
+          printf 'HEAD=%s\n' "$(git rev-parse HEAD)"
+          test "$(git branch --show-current)" = "feat/capture-v2.1.1-real-gates"
+
+      - name: Execute exactly one audited control action
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT=/home/dev/workspace/aiVoip
+          cd "$ROOT"
+          export PYTHONPATH="$ROOT/backend"
+          python3 -m app.capture_v2.control_cli run \
+            --repo-root "$ROOT" \
+            --branch feat/capture-v2.1.1-real-gates \
+            --remote origin \
+            --git-sync \
+            --once \
+            --runner-id "gha-control-wakeup-${GITHUB_RUN_ID}"
