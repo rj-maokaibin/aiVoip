@@ -58,44 +58,45 @@ jobs:
           echo "path=$source_path" >> "$GITHUB_OUTPUT"
           echo "SOURCE_MD=$source_path"
 
-      - name: Load controlled Feishu environment and publish
+      - name: Publish through controlled live Feishu backend
         id: publish
         shell: bash
         run: |
           set -euo pipefail
-          loaded=0
-          set -a
-          for env_file in /home/dev/workspace/aiVoip/.env /home/dev/workspace/aiVoip/backend/.env; do
-            if [ -r "$env_file" ]; then
-              source "$env_file"
-              loaded=$((loaded+1))
-              echo "ENV_SOURCE=direct"
-            elif [ -e "$env_file" ] && sudo -n test -r "$env_file" 2>/dev/null; then
-              staged_env="$RUNNER_TEMP/$(basename "$(dirname "$env_file")")-$(basename "$env_file")"
-              sudo -n cat "$env_file" > "$staged_env"
-              chmod 600 "$staged_env"
-              source "$staged_env"
-              loaded=$((loaded+1))
-              echo "ENV_SOURCE=sudo-staged"
-            fi
-          done
-          set +a
-          echo "ENV_FILES_LOADED=$loaded"
-          test "$loaded" -gt 0
-
-          export PYTHONPATH="$GITHUB_WORKSPACE/backend:$GITHUB_WORKSPACE"
+          source_path='${{ steps.source.outputs.path }}'
           result="$RUNNER_TEMP/feishu_markdown_publish_result.json"
-          python3 - <<'PY'
-          import importlib.util
-          required = ['httpx', 'pydantic_settings']
-          missing = [m for m in required if importlib.util.find_spec(m) is None]
-          print('PYTHON_DEPENDENCIES=' + ('OK' if not missing else 'MISSING:' + ','.join(missing)))
-          if missing:
-              raise SystemExit(2)
-          PY
-          python3 tools/publish_markdown_to_feishu.py \
-            --source '${{ steps.source.outputs.path }}' \
-            --result "$result" | tee "$RUNNER_TEMP/feishu_publish.log"
+          log="$RUNNER_TEMP/feishu_publish.log"
+
+          backend_ids=()
+          while IFS= read -r cid; do
+            [ -n "$cid" ] || continue
+            env_dump="$(docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$cid")"
+            if grep -qx 'REPRODUCTION_PLATFORM_MODE=real' <<<"$env_dump" \
+              && grep -qx 'FEISHU_LIVE_ENABLED=true' <<<"$env_dump"; then
+              backend_ids+=("$cid")
+            fi
+          done < <(docker ps --filter label=com.docker.compose.service=backend -q)
+
+          echo "CONTROLLED_FEISHU_BACKEND_COUNT=${#backend_ids[@]}"
+          test "${#backend_ids[@]}" -eq 1
+          backend_id="${backend_ids[0]}"
+          remote_root="/tmp/feishu-markdown-publish-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+
+          docker exec "$backend_id" mkdir -p "$remote_root"
+          cleanup() {
+            docker exec "$backend_id" rm -rf "$remote_root" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          docker cp tools/publish_markdown_to_feishu.py "$backend_id:$remote_root/publisher.py"
+          docker cp "$source_path" "$backend_id:$remote_root/report.md"
+
+          docker exec -w /app -e PYTHONPATH=/app "$backend_id" \
+            python "$remote_root/publisher.py" \
+              --source "$remote_root/report.md" \
+              --result "$remote_root/result.json" | tee "$log"
+
+          docker cp "$backend_id:$remote_root/result.json" "$result"
 
           python3 - "$result" <<'PY' >> "$GITHUB_OUTPUT"
           import json, sys
