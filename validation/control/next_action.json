@@ -1,12 +1,12 @@
 {
   "schema_version": "capture-v2-remote-action-v1",
-  "action_id": "RC84D-PRODUCTION-DEPLOYMENT-PREFLIGHT-007",
-  "sequence": 218,
-  "created_at": "2026-08-25T17:33:30+00:00",
-  "expires_at": "2026-08-26T05:33:30+00:00",
-  "action_type": "PRODUCTION_DEPLOYMENT_PREFLIGHT",
+  "action_id": "RC84E-PRODUCTION-FEISHU-RBAC-PREREQ-008",
+  "sequence": 219,
+  "created_at": "2026-08-25T17:45:30+00:00",
+  "expires_at": "2026-08-26T05:45:30+00:00",
+  "action_type": "PRODUCTION_FEISHU_RBAC_ENABLE",
   "parameters": {
-    "timeout_seconds": 300
+    "timeout_seconds": 120
   },
   "safety": {
     "require_clean_git": true,
@@ -14,8 +14,8 @@
     "require_v2_disabled": true,
     "allow_worker_kill": false,
     "allow_server_quarantine": false,
-    "expected_head": "9cdd69ad2401a5917407445dce2fe1abcffb2525"
+    "expected_head": "1d6aa4eb9b7365241f680a8d41f4291250caf83d"
   },
   "requested_by": "ChatGPT-remote-validation-controller",
-  "note": "RC84D explicit guarded production deployment preflight. Safety anchor is the control merge commit that contains accepted master d384e8f44ea4769a6cfb99dab34894854d517b86 plus the preserved canonical production authorization audit history. Only validation/control audit commits may follow this anchor. The guarded module independently validates canonical authorization, accepted release gate, merged validated source and /etc/voip-ai/production.env. Read-only only; no production or DUT mutation. RC85 cutover remains blocked unless PASS."
+  "note": "Apply the single audited production prerequisite required by RC84D: enable FEISHU_IDENTITY_RBAC_ENABLED=true in /etc/voip-ai/production.env. Guard must verify authorized/cutover-ready state, approved release gate, private env permissions and V1/V2-disabled prestate; back up the env; change only this key; verify authority/platform keys are unchanged; restore on any post-write failure. Do not restart services, do not switch Capture Authority, and do not mutate DUT state. A fresh production preflight is required afterward before RC85 cutover."
 }
