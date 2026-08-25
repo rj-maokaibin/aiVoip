@@ -20,55 +20,42 @@ jobs:
       - linux
       - x64
       - voip-controlled-linux
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
-      - name: Read-only persistent Git refs probe
+      - name: Build ephemeral Git helper
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat <<'EOF' | docker build -t capture-v2-git-helper:20260825 -
+          FROM python:3.12-slim
+          RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends git ca-certificates && rm -rf /var/lib/apt/lists/*
+          EOF
+
+      - name: Verify persistent worktree is safe for branch restore
         shell: bash
         run: |
           set -euo pipefail
           ROOT=/home/dev/workspace/aiVoip
           DEV_UID="$(stat -c %u "$ROOT")"
           DEV_GID="$(stat -c %g "$ROOT")"
-          docker image inspect python:3.12-slim >/dev/null
-          docker run --rm -i \
+          docker run --rm \
             --user "$DEV_UID:$DEV_GID" \
             -v "$ROOT:$ROOT:ro" \
             -w "$ROOT" \
-            python:3.12-slim \
-            python - <<'PY'
-          from pathlib import Path
-          repo = Path('/home/dev/workspace/aiVoip')
-          gitdir = repo / '.git'
-          def ref_value(name: str) -> str:
-              p = gitdir / name
-              if p.is_file():
-                  return p.read_text(encoding='utf-8').strip()
-              packed = gitdir / 'packed-refs'
-              if packed.is_file():
-                  for line in packed.read_text(encoding='utf-8').splitlines():
-                      if line and not line.startswith(('#', '^')):
-                          sha, ref = line.split(' ', 1)
-                          if ref == name:
-                              return sha
-              return ''
-          print('HEAD=' + (gitdir/'HEAD').read_text(encoding='utf-8').strip())
-          for name in [
-              'refs/heads/master',
-              'refs/heads/feat/capture-v2.1.1-real-gates',
-              'refs/remotes/origin/master',
-              'refs/remotes/origin/feat/capture-v2.1.1-real-gates',
-          ]:
-              print(name + '=' + ref_value(name))
-          fh = gitdir / 'FETCH_HEAD'
-          print('FETCH_HEAD_BEGIN')
-          if fh.is_file():
-              for line in fh.read_text(encoding='utf-8', errors='replace').splitlines()[:8]:
-                  print(line)
-          print('FETCH_HEAD_END')
-          print('MERGE_IN_PROGRESS=' + str((gitdir/'MERGE_HEAD').exists()).lower())
-          print('REBASE_IN_PROGRESS=' + str((gitdir/'rebase-merge').exists() or (gitdir/'rebase-apply').exists()).lower())
-          print('INDEX_LOCK=' + str((gitdir/'index.lock').exists()).lower())
-          PY
-          echo 'CONTROL_PROCESS_STATE_BEGIN'
-          ps -o user,pid,ppid,stat,etime,wchan:32,args -p 257142,611900 || true
-          echo 'CONTROL_PROCESS_STATE_END'
+            capture-v2-git-helper:20260825 \
+            sh -lc '
+              set -eu
+              echo "BRANCH=$(git branch --show-current)"
+              echo "HEAD=$(git rev-parse HEAD)"
+              echo "STATUS_BEGIN"
+              git status --porcelain --untracked-files=all
+              echo "STATUS_END"
+              LOCAL_CONTROL=$(git rev-parse refs/heads/feat/capture-v2.1.1-real-gates)
+              REMOTE_CONTROL=$(git rev-parse refs/remotes/origin/feat/capture-v2.1.1-real-gates)
+              echo "LOCAL_CONTROL=$LOCAL_CONTROL"
+              echo "REMOTE_CONTROL=$REMOTE_CONTROL"
+              git merge-base --is-ancestor "$LOCAL_CONTROL" "$REMOTE_CONTROL"
+              echo "CONTROL_FAST_FORWARD_SAFE=true"
+              test -z "$(git status --porcelain --untracked-files=all)"
+              echo "WORKTREE_CLEAN=true"
+            '
