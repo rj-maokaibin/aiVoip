@@ -22,7 +22,7 @@ jobs:
       - voip-controlled-linux
     timeout-minutes: 10
     steps:
-      - name: Read-only persistent Git identity probe
+      - name: Read-only persistent Git refs probe
         shell: bash
         run: |
           set -euo pipefail
@@ -38,47 +38,36 @@ jobs:
             python - <<'PY'
           from pathlib import Path
           repo = Path('/home/dev/workspace/aiVoip')
-          marker = repo / '.git'
-          if marker.is_file():
-              raw = marker.read_text(encoding='utf-8').strip()
-              print('GIT_MARKER=file')
-              print('GIT_MARKER_VALUE=' + raw)
-              if not raw.startswith('gitdir:'):
-                  raise SystemExit('INVALID_GIT_MARKER')
-              gitdir = Path(raw.split(':', 1)[1].strip())
-              if not gitdir.is_absolute():
-                  gitdir = (repo / gitdir).resolve()
-          elif marker.is_dir():
-              print('GIT_MARKER=directory')
-              gitdir = marker
-          else:
-              raise SystemExit('GIT_MARKER_MISSING')
-          print('GITDIR=' + str(gitdir))
-          head = (gitdir / 'HEAD').read_text(encoding='utf-8').strip()
-          print('HEAD_RAW=' + head)
-          if head.startswith('ref: '):
-              ref = head[5:].strip()
-              print('BRANCH=' + ref.removeprefix('refs/heads/'))
-              ref_path = gitdir / ref
-              if ref_path.is_file():
-                  sha = ref_path.read_text(encoding='utf-8').strip()
-              else:
-                  sha = ''
-                  packed = gitdir / 'packed-refs'
-                  if packed.is_file():
-                      for line in packed.read_text(encoding='utf-8').splitlines():
-                          if line and not line.startswith(('#', '^')):
-                              val, name = line.split(' ', 1)
-                              if name == ref:
-                                  sha = val
-                                  break
-              print('LOCAL_HEAD=' + sha)
-          else:
-              print('BRANCH=DETACHED')
-              print('LOCAL_HEAD=' + head)
-          print('MERGE_IN_PROGRESS=' + str((gitdir / 'MERGE_HEAD').exists()).lower())
-          print('REBASE_IN_PROGRESS=' + str((gitdir / 'rebase-merge').exists() or (gitdir / 'rebase-apply').exists()).lower())
-          print('INDEX_LOCK=' + str((gitdir / 'index.lock').exists()).lower())
+          gitdir = repo / '.git'
+          def ref_value(name: str) -> str:
+              p = gitdir / name
+              if p.is_file():
+                  return p.read_text(encoding='utf-8').strip()
+              packed = gitdir / 'packed-refs'
+              if packed.is_file():
+                  for line in packed.read_text(encoding='utf-8').splitlines():
+                      if line and not line.startswith(('#', '^')):
+                          sha, ref = line.split(' ', 1)
+                          if ref == name:
+                              return sha
+              return ''
+          print('HEAD=' + (gitdir/'HEAD').read_text(encoding='utf-8').strip())
+          for name in [
+              'refs/heads/master',
+              'refs/heads/feat/capture-v2.1.1-real-gates',
+              'refs/remotes/origin/master',
+              'refs/remotes/origin/feat/capture-v2.1.1-real-gates',
+          ]:
+              print(name + '=' + ref_value(name))
+          fh = gitdir / 'FETCH_HEAD'
+          print('FETCH_HEAD_BEGIN')
+          if fh.is_file():
+              for line in fh.read_text(encoding='utf-8', errors='replace').splitlines()[:8]:
+                  print(line)
+          print('FETCH_HEAD_END')
+          print('MERGE_IN_PROGRESS=' + str((gitdir/'MERGE_HEAD').exists()).lower())
+          print('REBASE_IN_PROGRESS=' + str((gitdir/'rebase-merge').exists() or (gitdir/'rebase-apply').exists()).lower())
+          print('INDEX_LOCK=' + str((gitdir/'index.lock').exists()).lower())
           PY
           echo 'CONTROL_PROCESS_STATE_BEGIN'
           ps -o user,pid,ppid,stat,etime,wchan:32,args -p 257142,611900 || true
