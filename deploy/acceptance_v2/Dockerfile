@@ -8,8 +8,9 @@ RUN apt-get update \
        python3 python3-venv python3-pip \
        nodejs npm \
        docker.io docker-compose-v2 \
-       tshark=4.2.2-1.1build3 \
+       tshark \
        ffmpeg fontconfig fonts-noto-cjk \
+    && tshark -v | head -n1 | grep -q '4.2.2' \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /workspace

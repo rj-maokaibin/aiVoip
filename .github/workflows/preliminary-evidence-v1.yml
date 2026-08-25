@@ -25,7 +25,6 @@ concurrency:
 env:
   VOIP_ACCEPTANCE_ROOT: /opt/voip-acceptance
   OFFLINE_GOLDEN_SHA256: b038aa7c9a0644581f2815f654fcdee4620860796382265b178823fccba2e3f0
-  ACCEPTANCE_RUNTIME_ID: host-prepared-v2
 
 jobs:
   infra-preflight:
@@ -36,14 +35,25 @@ jobs:
       - voip-controlled-linux
     timeout-minutes: 10
     steps:
-      - name: Fast host network probe before checkout
+      - name: Observe host network before checkout
+        id: network_probe
+        continue-on-error: true
         run: |
-          set -euo pipefail
-          getent ahosts github.com >/dev/null
-          timeout 8 bash -c '</dev/tcp/github.com/443'
-          timeout 20 git -c http.lowSpeedLimit=1024 -c http.lowSpeedTime=10 \
-            ls-remote https://github.com/actions/checkout.git HEAD >/dev/null
-          echo 'PRECHECK_NETWORK=PASS'
+          set +e
+          ok=0
+          for attempt in 1 2; do
+            getent ahosts github.com >/dev/null || { sleep 3; continue; }
+            timeout 8 bash -c '</dev/tcp/github.com/443' || { sleep 3; continue; }
+            timeout 20 git -c http.lowSpeedLimit=1024 -c http.lowSpeedTime=10 \
+              ls-remote https://github.com/actions/checkout.git HEAD >/dev/null && { ok=1; break; }
+            sleep 5
+          done
+          if [ "$ok" -eq 1 ]; then
+            echo 'PRECHECK_NETWORK=PASS'
+            exit 0
+          fi
+          echo 'PRECHECK_NETWORK=DEGRADED transient probe failed; actual checkout will retry'
+          exit 1
 
       - name: Checkout exact head attempt 1
         id: checkout1
@@ -64,14 +74,13 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 1
 
-      - name: Runner Doctor
+      - name: Runner Doctor - merge gate prerequisites only
         run: |
           set -euo pipefail
           mkdir -p validation
           python3 tools/acceptance_runner_doctor.py \
             --root "$VOIP_ACCEPTANCE_ROOT" \
-            --require-network --deep-network \
-            --require-docker --require-golden --require-tshark \
+            --require-docker --require-golden --require-tshark --require-runtime \
             --out validation/runner-doctor.json
 
       - name: Upload sanitized infrastructure evidence
@@ -150,11 +159,19 @@ jobs:
           tshark_bin="$VOIP_ACCEPTANCE_ROOT/runtime/bin/tshark"
           test -x "$tshark_bin"
           "$tshark_bin" -v | head -n1 | grep -q '4.2.2'
+          python3 tools/acceptance_runtime.py verify --root "$VOIP_ACCEPTANCE_ROOT" >/dev/null
+          runtime_env="$(python3 tools/acceptance_runtime.py env --root "$VOIP_ACCEPTANCE_ROOT")"
+          printf '%s\n' "$runtime_env" >> "$GITHUB_ENV"
+          prepared_venv="$(printf '%s\n' "$runtime_env" | awk -F= '$1=="VOIP_AI_PREPARED_VENV"{print substr($0,index($0,"=")+1)}')"
+          runtime_fp="$(printf '%s\n' "$runtime_env" | awk -F= '$1=="ACCEPTANCE_RUNTIME_FINGERPRINT"{print substr($0,index($0,"=")+1)}')"
+          test -x "$prepared_venv/bin/python"
+          test -n "$runtime_fp"
           echo "OFFLINE_GOLDEN_PCAP=$golden_path" >> "$GITHUB_ENV"
           echo "TSHARK_BINARY=$tshark_bin" >> "$GITHUB_ENV"
-          echo "VOIP_AI_GATE_VENV=$RUNNER_TEMP/voip-ai-release-gate" >> "$GITHUB_ENV"
+          echo "VOIP_AI_GATE_VENV=$prepared_venv" >> "$GITHUB_ENV"
           printf 'PREPARED_PCAP_SHA256=%s\n' "$actual_sha"
           printf 'TSHARK=%s\n' "$("$tshark_bin" -v | head -n1)"
+          printf 'ACCEPTANCE_RUNTIME_FINGERPRINT=%s\n' "$runtime_fp"
 
       - name: Check exact-SHA software evidence cache
         id: evidence
@@ -164,7 +181,7 @@ jobs:
             --root "$VOIP_ACCEPTANCE_ROOT" \
             --commit "$(git rev-parse HEAD)" \
             --golden-sha "$OFFLINE_GOLDEN_SHA256" \
-            --runtime-id "$ACCEPTANCE_RUNTIME_ID")"
+            --runtime-id "$ACCEPTANCE_RUNTIME_FINGERPRINT")"
           rc=$?
           set -e
           echo "$result"
@@ -220,7 +237,7 @@ jobs:
             --root "$VOIP_ACCEPTANCE_ROOT" \
             --commit "$(git rev-parse HEAD)" \
             --golden-sha "$OFFLINE_GOLDEN_SHA256" \
-            --runtime-id "$ACCEPTANCE_RUNTIME_ID"
+            --runtime-id "$ACCEPTANCE_RUNTIME_FINGERPRINT"
 
       - name: Acceptance summary
         run: |
@@ -256,7 +273,8 @@ jobs:
       - voip-controlled-linux
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout exact head
+        uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 1

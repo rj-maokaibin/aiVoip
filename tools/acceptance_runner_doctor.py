@@ -8,6 +8,7 @@ import os
 import shutil
 import socket
 import subprocess
+import sys
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
@@ -15,6 +16,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_ROOT = Path(os.environ.get("VOIP_ACCEPTANCE_ROOT", "/opt/voip-acceptance"))
 MANIFEST = REPO_ROOT / "golden_registry/real_offline_001/manifest.json"
 COMPOSE = REPO_ROOT / "deploy/acceptance_v2/docker-compose.yml"
+RUNTIME_TOOL = REPO_ROOT / "tools/acceptance_runtime.py"
 EXPECTED_TSHARK = "4.2.2"
 
 
@@ -32,7 +34,7 @@ def run(command: list[str], timeout: int = 20) -> subprocess.CompletedProcess[st
 
 
 def add(probes: list[Probe], key: str, ok: bool, detail: str, classification: str = "INFRA_BLOCKED", repaired: bool = False) -> None:
-    probes.append(Probe(key, "PASS" if ok else "FAIL", detail[-400:], "NONE" if ok else classification, repaired))
+    probes.append(Probe(key, "PASS" if ok else "FAIL", detail[-600:], "NONE" if ok else classification, repaired))
 
 
 def sha256_file(path: Path) -> str:
@@ -76,13 +78,13 @@ def check_network(probes: list[Probe], root: Path, deep: bool) -> None:
     except Exception as exc:
         add(probes, "GITHUB_TCP_443", False, str(exc), "TRANSIENT_INFRA_RETRYING")
         return
-    result = run(["git", "-c", "http.lowSpeedLimit=1024", "-c", "http.lowSpeedTime=10", "ls-remote", "https://github.com/actions/checkout.git", "HEAD"], timeout=20)
+    result = run(["git", "-c", "http.lowSpeedLimit=1024", "-c", "http.lowSpeedTime=10", "ls-remote", "https://github.com/actions/checkout.git", "HEAD"], timeout=30)
     add(probes, "GITHUB_GIT_REMOTE", result.returncode == 0, result.stdout.strip() or f"rc={result.returncode}", "TRANSIENT_INFRA_RETRYING")
     if deep and result.returncode == 0:
         probe_dir = root / "state" / "github-transfer-probe"
         shutil.rmtree(probe_dir, ignore_errors=True)
         probe_dir.parent.mkdir(parents=True, exist_ok=True)
-        result = run(["git", "clone", "--depth=1", "--filter=blob:none", "https://github.com/actions/checkout.git", str(probe_dir)], timeout=60)
+        result = run(["git", "clone", "--depth=1", "--filter=blob:none", "https://github.com/actions/checkout.git", str(probe_dir)], timeout=90)
         add(probes, "GITHUB_PACK_TRANSFER", result.returncode == 0, result.stdout.strip() or f"rc={result.returncode}", "TRANSIENT_INFRA_RETRYING")
         shutil.rmtree(probe_dir, ignore_errors=True)
 
@@ -116,6 +118,12 @@ def check_tshark(probes: list[Probe], root: Path) -> None:
     add(probes, "TSHARK_RUNTIME", result.returncode == 0 and EXPECTED_TSHARK in first, first or f"rc={result.returncode}")
 
 
+def check_prepared_runtime(probes: list[Probe], root: Path) -> None:
+    result = run([sys.executable, str(RUNTIME_TOOL), "verify", "--root", str(root)], timeout=120)
+    detail = result.stdout.strip() or f"rc={result.returncode}"
+    add(probes, "PREPARED_RUNTIME", result.returncode == 0, detail)
+
+
 def compose_cmd(*args: str) -> list[str]:
     return ["docker", "compose", "-p", "voip-acceptance-v2", "-f", str(COMPOSE), *args]
 
@@ -128,6 +136,7 @@ def repair_stack(probes: list[Probe]) -> bool:
 
 def check_stack(probes: list[Probe], repair: bool) -> None:
     services = ["postgres", "redis", "minio"]
+
     def unhealthy() -> list[str]:
         failed: list[str] = []
         for service in services:
@@ -140,6 +149,7 @@ def check_stack(probes: list[Probe], repair: bool) -> None:
             if inspect.returncode != 0 or inspect.stdout.strip() not in {"healthy", "running"}:
                 failed.append(service)
         return failed
+
     failed = unhealthy()
     if failed and repair and repair_stack(probes):
         failed = unhealthy()
@@ -156,6 +166,7 @@ def main() -> int:
     parser.add_argument("--require-docker", action="store_true")
     parser.add_argument("--require-golden", action="store_true")
     parser.add_argument("--require-tshark", action="store_true")
+    parser.add_argument("--require-runtime", action="store_true")
     parser.add_argument("--require-stack", action="store_true")
     args = parser.parse_args()
     root = Path(args.root)
@@ -165,12 +176,14 @@ def main() -> int:
     if args.require_network:
         check_network(probes, root, args.deep_network)
     docker_ok = True
-    if args.require_docker or args.require_stack:
+    if args.require_docker or args.require_stack or args.require_runtime:
         docker_ok = check_docker(probes)
     if args.require_golden:
         check_golden(probes, root)
     if args.require_tshark:
         check_tshark(probes, root)
+    if args.require_runtime:
+        check_prepared_runtime(probes, root)
     if args.require_stack:
         if docker_ok:
             check_stack(probes, args.repair)

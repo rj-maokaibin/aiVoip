@@ -2,24 +2,26 @@
 
 ## 目标
 
-把“代码失败”和“基础设施阻塞”彻底分开。非代码问题必须在重型 Gate 前发现；安全可恢复的问题自动恢复；同一 exact SHA 已通过的软件 Gate 可以复用，不因 Live/网络故障重复执行。
+把“代码失败”和“基础设施阻塞”彻底分开。非代码问题在重型 Gate 前发现；安全可恢复的问题自动恢复；同一 exact SHA 已通过的软件 Gate 可复用，不因网络/Live 故障重复执行。
 
 状态模型：
 
 - `READY`：基础设施满足当前 Gate。
-- `INFRA_RECOVERED`：发现并自动恢复了安全基础设施问题。
-- `TRANSIENT_INFRA_RETRYING`：网络等瞬态问题，尚未进入代码判定。
+- `INFRA_RECOVERED`：安全基础设施问题已自动恢复。
+- `TRANSIENT_INFRA_RETRYING`：网络等瞬态问题正在重试，尚未进入代码判定。
 - `INFRA_BLOCKED`：基础设施无法自动恢复；不得标记为代码失败。
-- `CODE_FAIL`：Runner Doctor 已 READY 后的软件/Golden Gate 失败。
+- `CODE_FAIL`：Runner Doctor READY 后的软件/Golden Gate 失败。
 
 ## 持久目录
-
-默认根目录：
 
 ```text
 /opt/voip-acceptance/
 ├── golden-cache/
 ├── runtime/
+│   ├── python/
+│   ├── npm-cache/
+│   ├── bin/tshark
+│   └── state.json
 ├── state/
 │   └── software-evidence/
 ├── logs/
@@ -30,20 +32,42 @@
 
 ## Golden Registry
 
-仓库只保存 immutable manifest：
+仓库只保存 immutable manifest：`golden_registry/real_offline_001/manifest.json`。
 
-`golden_registry/real_offline_001/manifest.json`
+PCAP 位于持久 cache 或外部 registry。任何来源进入 cache 前必须进行 SHA256 校验；cache 损坏会先隔离再重新拉取。
 
-二进制 PCAP 位于持久 cache 或外部 registry。任何来源进入 cache 前都必须 SHA256 校验；cache 损坏时隔离并重新拉取。
+## Prepared Runtime
+
+`tools/acceptance_runtime.py` 对以下输入计算 fingerprint：
+
+- `backend/requirements.txt`
+- `frontend/package-lock.json`
+- Acceptance Runtime Dockerfile
+- Acceptance V2 contract
+
+Bootstrap 阶段一次性准备：
+
+- Python virtualenv + exact backend requirements；
+- npm package cache；
+- `postgres:16` / `redis:7-alpine` / MinIO image；
+- `voip-acceptance-runtime:v2.0.0` image。
+
+PR 测试只调用 `acceptance_runtime.py verify/env`，不执行 pip install、不在线 npm audit、不动态拉 Docker image。Frontend 使用 `npm ci --offline`。依赖变更导致 fingerprint stale 时会在 Runner Doctor 阶段明确 `INFRA_BLOCKED: PREPARED_RUNTIME`，而不是跑到 Full Gate 中途失败。
 
 ## Runner Doctor
 
-普通 Offline Gate：
+普通 Offline Merge Gate：
 
 ```bash
 python3 tools/acceptance_runner_doctor.py \
-  --require-network --deep-network \
-  --require-docker --require-golden --require-tshark
+  --require-docker --require-golden --require-tshark --require-runtime
+```
+
+深度网络检查只用于 bootstrap/周期健康检查，不作为已成功 checkout 后的重复 Merge Gate：
+
+```bash
+python3 tools/acceptance_runner_doctor.py \
+  --require-network --deep-network
 ```
 
 需要 Integration Stack 时：
@@ -53,17 +77,28 @@ python3 tools/acceptance_runner_doctor.py \
   --require-docker --require-stack --repair
 ```
 
-`--repair` 仅允许受控启动独立 Acceptance Stack，不操作生产 Compose。
+`--repair` 仅允许启动独立 Acceptance Stack，不操作生产 Compose。
+
+## Checkout 策略
+
+workflow 在 checkout 前做网络观测，但该 probe 本身是 `continue-on-error`：它不能因为一次公共 `ls-remote` 超时就阻断测试。
+
+真正的 source contract 是 exact-head checkout：
+
+1. checkout attempt 1；
+2. 失败则 cooldown；
+3. checkout attempt 2；
+4. 两次都失败才视为基础设施阻塞。
+
+只要 exact-head checkout 已成功，Offline Gate 后续依赖都来自本地 prepared runtime/cache，不再要求额外公网传输。
 
 ## Acceptance Stack
 
-`deploy/acceptance_v2/docker-compose.yml` 是独立 PostgreSQL/Redis/MinIO 测试栈：
+`deploy/acceptance_v2/docker-compose.yml` 提供独立 PostgreSQL/Redis/MinIO：
 
 - project/network：`voip-acceptance-v2`
-- 数据使用 tmpfs；reset 后无历史 Case/AnalyzerRun 漂移。
+- 数据使用 tmpfs，reset 后没有历史 Case/AnalyzerRun 漂移；
 - 不发现、不启动、不连接生产 `aivoip` Compose。
-
-命令：
 
 ```bash
 python3 tools/acceptance_stack.py reset
@@ -71,41 +106,28 @@ python3 tools/acceptance_stack.py status
 python3 tools/acceptance_stack.py down
 ```
 
+当前 stack smoke 是 non-blocking observability job。先证明隔离栈稳定，再升级为 Integration Merge Gate，避免新的基础设施组件反向阻塞 Offline Gate。
+
 ## Exact-SHA Software Evidence
 
-`tools/acceptance_evidence.py` 将 workflow、Frozen/Release Gate、Golden/Human Gate、Acceptance Contract、Golden manifest 和 backend requirements 一起计算 contract fingerprint。
+`tools/acceptance_evidence.py` 将 workflow、Frozen/Release Gate、Golden/Human Gate、Acceptance Contract、Golden manifest 和 backend requirements 计算 contract fingerprint。
 
-只有 exact commit + exact fingerprint + exact Golden SHA + runtime identity 全匹配时才复用 PASS。任一输入变化都会自动 cache miss 并重跑软件 Gate。
+只有 exact commit + exact contract fingerprint + exact Golden SHA + prepared runtime fingerprint 全匹配时才允许复用 PASS。任一输入变化自动 cache miss 并重跑。
 
 ## Host Bootstrap
 
-宿主机只需要执行一次：
+宿主机只需要一次：
 
 ```bash
 sudo VOIP_GOLDEN_001_SOURCE=/path/or/url/to/golden001.pcap \
   bash tools/bootstrap_acceptance_host.sh
 ```
 
-如果首次迁移时旧 `/tmp/tcpdump-2026-08-14.pcap` 仍存在，可省略 `VOIP_GOLDEN_001_SOURCE`；bootstrap 会迁移到持久 cache。普通测试不再使用 `/tmp`。
+若旧 `/tmp/tcpdump-2026-08-14.pcap` 仍存在，可首次省略 `VOIP_GOLDEN_001_SOURCE`；bootstrap 会迁移到持久 cache。普通 CI 不再读取 `/tmp`。
 
-Bootstrap 会：
+Bootstrap 负责所有允许联网的准备动作：持久目录、Golden、TShark 4.2.2、Python deps、npm cache、Docker images、Acceptance Runtime image、Acceptance Stack 和完整 Doctor。
 
-1. 创建持久目录并配置 runner 权限；
-2. 初始化/验证 Golden cache；
-3. 准备固定 TShark 4.2.2 userspace runtime；
-4. 构建 `voip-acceptance-runtime:v2.0.0`；
-5. 启动独立 Acceptance Stack；
-6. 运行完整 Runner Doctor。
-
-## Workflow 策略
-
-PR Gate 在 checkout 前先做快速 GitHub DNS/TCP/git transport 探测，避免等待十几分钟后才发现网络不可用。`actions/checkout` 有两次受控尝试；Runner Doctor READY 后才进入 Frozen/Full/Golden。
-
-普通测试期间禁止 `apt-get install/download` 来临时补依赖；Golden 只从持久 cache 读取；TShark 只从 bootstrap 准备好的 runtime 读取。
-
-独立 Acceptance Stack smoke 暂时是 non-blocking observability job：目的是先证明隔离栈的稳定性，不让其基础设施问题反向阻塞 Offline Merge Gate。稳定后再升级为 Integration Gate。
-
-## 非代码人工介入边界
+## 人工介入边界
 
 正常只在以下情况需要人工：
 
@@ -114,4 +136,4 @@ PR Gate 在 checkout 前先做快速 GitHub DNS/TCP/git transport 探测，避�
 3. secret/token 被撤销或过期；
 4. DUT/物理环境不可用。
 
-PostgreSQL/Redis/MinIO 停止、Golden cache miss（有 registry source 时）、Acceptance network/service 未启动等应由基础设施层自动处理或 fail-fast 分类。
+PostgreSQL/Redis/MinIO 停止、Golden cache、prepared runtime、Acceptance network/service 等问题应在 Doctor 阶段自动恢复或 fail-fast 分类，不再混入代码失败。

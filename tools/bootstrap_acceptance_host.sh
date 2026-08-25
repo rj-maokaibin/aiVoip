@@ -79,10 +79,9 @@ fi
   exit 2
 }
 
-docker build \
-  -t voip-acceptance-runtime:v2.0.0 \
-  -f "$REPO_ROOT/deploy/acceptance_v2/Dockerfile" \
-  "$REPO_ROOT"
+# All network-dependent dependency preparation happens here, never in PR tests.
+env VOIP_ACCEPTANCE_ROOT="$ROOT" \
+  python3 "$REPO_ROOT/tools/acceptance_runtime.py" prepare --root "$ROOT"
 
 python3 "$REPO_ROOT/tools/acceptance_stack.py" up
 
@@ -91,7 +90,7 @@ chown -R "$RUNNER_USER:$RUNNER_USER" "$ROOT"
 sudo -u "$RUNNER_USER" -H env VOIP_ACCEPTANCE_ROOT="$ROOT" \
   python3 "$REPO_ROOT/tools/acceptance_runner_doctor.py" \
     --require-network --deep-network \
-    --require-docker --require-golden --require-tshark --require-stack --repair
+    --require-docker --require-golden --require-tshark --require-runtime --require-stack --repair
 
 echo "VOIP_ACCEPTANCE_BOOTSTRAP=PASS"
 echo "NOTE: docker group membership may require restarting the github-runner service/session."

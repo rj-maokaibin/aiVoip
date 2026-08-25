@@ -36,6 +36,15 @@ def test_golden_cache_path_is_persistent_not_tmp():
     assert "/tmp/" not in str(path)
 
 
+def test_prepared_runtime_fingerprint_covers_python_frontend_and_image_contract():
+    runtime = _load(ROOT / "tools/acceptance_runtime.py", "acceptance_runtime_test")
+    fp = runtime.fingerprint()
+    assert len(fp) == 64
+    assert "backend/requirements.txt" in runtime.INPUTS
+    assert "frontend/package-lock.json" in runtime.INPUTS
+    assert "deploy/acceptance_v2/Dockerfile" in runtime.INPUTS
+
+
 def test_software_evidence_fingerprint_covers_gate_contracts():
     evidence = _load(ROOT / "tools/acceptance_evidence.py", "acceptance_evidence_test")
     fp = evidence.contract_fingerprint()
@@ -45,18 +54,31 @@ def test_software_evidence_fingerprint_covers_gate_contracts():
     assert "backend/requirements.txt" in evidence.CONTRACT_INPUTS
 
 
-def test_pr_workflow_fail_fast_and_has_no_dynamic_package_install():
+def test_pr_workflow_fail_fast_without_network_probe_becoming_a_gate():
     text = (ROOT / ".github/workflows/preliminary-evidence-v1.yml").read_text(encoding="utf-8")
     assert "infra-preflight:" in text
-    assert "Fast host network probe before checkout" in text
+    assert "Observe host network before checkout" in text
+    assert "continue-on-error: true" in text
     assert "Checkout exact head attempt 2" in text
-    assert "acceptance_runner_doctor.py" in text
+    assert "Runner Doctor - merge gate prerequisites only" in text
+    assert "--require-runtime" in text
+    assert "--deep-network" not in text
     assert "acceptance_golden.py ensure" in text
+    assert "acceptance_runtime.py env" in text
     assert "acceptance_evidence.py check" in text
     assert "acceptance_evidence.py record" in text
     assert "/tmp/tcpdump-2026-08-14.pcap" not in text
     assert "apt-get download" not in text
     assert "apt-get install" not in text
+
+
+def test_release_gate_can_consume_prepared_offline_runtime():
+    text = (ROOT / "tools/voip_ai_release_gate.sh").read_text(encoding="utf-8")
+    assert "VOIP_AI_PREPARED_VENV" in text
+    assert "prepared Python runtime" in text
+    assert "VOIP_AI_OFFLINE_GATE" in text
+    assert "npm ci --offline" in text
+    assert 'if [[ "${VOIP_AI_OFFLINE_GATE:-0}" != "1" ]]' in text
 
 
 def test_acceptance_stack_is_isolated_and_ephemeral():
@@ -71,5 +93,6 @@ def test_bootstrap_is_only_tmp_migration_compatibility_path():
     text = (ROOT / "tools/bootstrap_acceptance_host.sh").read_text(encoding="utf-8")
     assert "/tmp/tcpdump-2026-08-14.pcap" in text
     assert "One-time migration compatibility only" in text
+    assert "acceptance_runtime.py\" prepare" in text
     workflow = (ROOT / ".github/workflows/preliminary-evidence-v1.yml").read_text(encoding="utf-8")
     assert "/tmp/tcpdump-2026-08-14.pcap" not in workflow
