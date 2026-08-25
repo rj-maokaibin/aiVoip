@@ -1,0 +1,36 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "RC84C-PRODUCTION-DEPLOYMENT-PREFLIGHT-006",
+    "sequence": 217,
+    "created_at": "2026-08-25T17:31:30+00:00",
+    "expires_at": "2026-08-26T05:31:30+00:00",
+    "action_type": "PRODUCTION_DEPLOYMENT_PREFLIGHT",
+    "parameters": {
+      "timeout_seconds": 300
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "d384e8f44ea4769a6cfb99dab34894854d517b86"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "RC84C explicit guarded production deployment preflight after PR #51 passed full CI/Golden and was merged to master then synchronized to the dedicated control branch. Read-only only: use the canonical production authorization and /etc/voip-ai/production.env through the audited guarded module; verify V1 prestate, production prerequisites, accepted source and compose requirements. Perform no production or DUT mutation. RC85 PRODUCTION_CUTOVER must not be issued unless this action returns PASS."
+  },
+  "action_sha256": "87ec72f461105f3f8c4c07e3b76218cc4c8db90316f122b2b7af3195419d3dd2",
+  "runner_id": "srv:2203168",
+  "state": "REJECTED",
+  "return_code": null,
+  "verdict": null,
+  "error": "CONTROL_COMMITS_TOUCHED_PRODUCT_CODE:validation/capture_v2/PRODUCTION_CUTOVER_AUTHORIZATION_RC69.json",
+  "finished_at": "2026-08-25T17:32:54.583940+00:00",
+  "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "local_stdout": ".capture-v2-control/logs/RC84C-PRODUCTION-DEPLOYMENT-PREFLIGHT-006/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/RC84C-PRODUCTION-DEPLOYMENT-PREFLIGHT-006/stderr.log",
+  "detail": {}
+}

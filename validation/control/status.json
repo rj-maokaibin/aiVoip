@@ -1,53 +1,19 @@
 {
   "schema_version": "capture-v2-remote-status-v1",
-  "action_id": "RC84B-PRODUCTION-DEPLOYMENT-PREFLIGHT-005",
-  "sequence": 216,
-  "action_type": "DEPLOYMENT_PREFLIGHT",
-  "state": "INCONCLUSIVE",
+  "action_id": "RC84C-PRODUCTION-DEPLOYMENT-PREFLIGHT-006",
+  "sequence": 217,
+  "action_type": "PRODUCTION_DEPLOYMENT_PREFLIGHT",
+  "state": "REJECTED",
   "runner_id": "srv:2203168",
-  "action_sha256": "2c719f1a8b6d129d1bdb3b8ba20094721cf93c2f91aaf3186f7dfd8637b3ec6e",
-  "updated_at": "2026-08-25T17:07:36.164826+00:00",
+  "action_sha256": "87ec72f461105f3f8c4c07e3b76218cc4c8db90316f122b2b7af3195419d3dd2",
+  "updated_at": "2026-08-25T17:32:54.583940+00:00",
   "started_at": null,
-  "finished_at": "2026-08-25T17:07:36.164826+00:00",
-  "return_code": 2,
-  "verdict": "INCONCLUSIVE",
-  "result_path": "validation/control/results/RC84B-PRODUCTION-DEPLOYMENT-PREFLIGHT-005/result.json",
-  "stdout_sha256": "bd3922518f823218dc277216340f88710949467be9fa7256192e4f9d3a74ff15",
+  "finished_at": "2026-08-25T17:32:54.583940+00:00",
+  "return_code": null,
+  "verdict": null,
+  "result_path": "validation/control/results/RC84C-PRODUCTION-DEPLOYMENT-PREFLIGHT-006/result.json",
+  "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-  "error": null,
-  "detail": {
-    "safety": {
-      "capture_engine_version": "V1",
-      "capture_v2_production_enabled": "false",
-      "git_head": "2ed391ebe8e1e3be5d06abbdeae0e397bed9a839",
-      "expected_product_head": "ccf04511c44330a5a2cd3b1b8a6c34e2bf5e9c57"
-    },
-    "parsed_output": {
-      "verdict": "INCONCLUSIVE",
-      "checks": [
-        {
-          "name": "compose_available",
-          "passed": true
-        },
-        {
-          "name": "env_file_present",
-          "passed": false
-        },
-        {
-          "name": "compose_config_valid",
-          "passed": false
-        }
-      ],
-      "facts": {
-        "scope": "READ_ONLY_DEPLOYMENT_PREFLIGHT",
-        "repo_root": "/home/dev/workspace/aiVoip-control",
-        "mutations_performed": false,
-        "compose_version": "Docker Compose version 2.40.3+ds1-0ubuntu1~24.04.1",
-        "env_file": "/home/dev/workspace/aiVoip-control/.env",
-        "env_file_safe": {},
-        "compose_config_error": "error while interpolating services.postgres.environment.POSTGRES_PASSWORD: required variable POSTGRES_PASSWORD is missing a value: POSTGRES_PASSWORD is required"
-      },
-      "reason": "COMPOSE_CONFIG_UNAVAILABLE"
-    }
-  }
+  "error": "CONTROL_COMMITS_TOUCHED_PRODUCT_CODE:validation/capture_v2/PRODUCTION_CUTOVER_AUTHORIZATION_RC69.json",
+  "detail": {}
 }
