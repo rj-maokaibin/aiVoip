@@ -1,14 +1,14 @@
 {
   "schema_version": "capture-v2-remote-action-v1",
-  "action_id": "RC83-PRODUCTION-CUTOVER-003",
-  "sequence": 214,
-  "created_at": "2026-08-23T16:25:00+00:00",
-  "expires_at": "2026-08-24T04:25:00+00:00",
+  "action_id": "RC84-PRODUCTION-DEPLOYMENT-PREFLIGHT-004",
+  "sequence": 215,
+  "created_at": "2026-08-25T15:44:00+00:00",
+  "expires_at": "2026-08-26T03:44:00+00:00",
   "action_type": "GATE_EVALUATE",
   "parameters": {
     "timeout_seconds": 7200,
     "bundle": "/home/dev/workspace/aiVoip/validation/capture_v2/PRODUCTION_CUTOVER_AUTHORIZATION_RC69.json",
-    "gate_id": "PRODUCTION-CUTOVER-RC83"
+    "gate_id": "PRODUCTION-DEPLOYMENT-PREFLIGHT-RC84"
   },
   "safety": {
     "require_clean_git": true,
@@ -16,8 +16,8 @@
     "require_v2_disabled": true,
     "allow_worker_kill": false,
     "allow_server_quarantine": false,
-    "expected_head": "c44b7e31625847f9ec60e695378033354267c4fd"
+    "expected_head": "ccf04511c44330a5a2cd3b1b8a6c34e2bf5e9c57"
   },
   "requested_by": "ChatGPT-remote-validation-controller",
-  "note": "Execute the authorized guarded production cutover after RC82 full Capture V2 regression PASS and after the legacy production.env effective-default hotfix plus wrapper/base contract test are both merged to master and mirrored exactly to the control branch. Require validated source merged to master, effective prestate V1/false/false, production env backup, strict release preflight, switch to REPRODUCTION_PLATFORM_MODE=real + CAPTURE_ENGINE_VERSION=V2 + CAPTURE_V2_PRODUCTION_ENABLED=true, full production deployment with control-high/watch/beat, runtime and V2 authority verification, and automatic rollback on any failed postcheck. No DUT mutation."
+  "note": "Read-only production deployment preflight after syncing current accepted master (PR41 deployment hardening + PR47 Acceptance Infrastructure V2) to the production control branch. Confirm production prestate remains V1/false, current /etc/voip-ai/production.env satisfies latest deploy preflight requirements, Compose contains required Capture V2 control services, and no production/DUT mutation occurs."
 }
