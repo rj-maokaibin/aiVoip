@@ -20,31 +20,28 @@ jobs:
       - linux
       - x64
       - voip-controlled-linux
-    timeout-minutes: 120
+    timeout-minutes: 10
     steps:
-      - name: Persistent control workspace identity
+      - name: Read-only runner identity and capability probe
         shell: bash
         run: |
-          set -euo pipefail
-          ROOT=/home/dev/workspace/aiVoip
-          sudo -n -u dev /usr/bin/git -C "$ROOT" rev-parse --is-inside-work-tree | grep -qx true
+          set -u
           printf 'HOST=%s\n' "$(hostname)"
-          printf 'TOPLEVEL=%s\n' "$(sudo -n -u dev /usr/bin/git -C "$ROOT" rev-parse --show-toplevel)"
-          printf 'BRANCH=%s\n' "$(sudo -n -u dev /usr/bin/git -C "$ROOT" branch --show-current)"
-          printf 'HEAD=%s\n' "$(sudo -n -u dev /usr/bin/git -C "$ROOT" rev-parse HEAD)"
-          test "$(sudo -n -u dev /usr/bin/git -C "$ROOT" branch --show-current)" = "feat/capture-v2.1.1-real-gates"
-
-      - name: Execute exactly one audited control action
-        shell: bash
-        run: |
-          set -euo pipefail
-          ROOT=/home/dev/workspace/aiVoip
-          sudo -n -u dev /usr/bin/env \
-            PYTHONPATH="$ROOT/backend" \
-            /usr/bin/python3 -m app.capture_v2.control_cli run \
-            --repo-root "$ROOT" \
-            --branch feat/capture-v2.1.1-real-gates \
-            --remote origin \
-            --git-sync \
-            --once \
-            --runner-id "gha-control-wakeup-${GITHUB_RUN_ID}"
+          printf 'USER=%s\n' "$(id -un)"
+          printf 'UID_GID=%s\n' "$(id)"
+          printf 'HOME=%s\n' "${HOME:-}"
+          printf 'PWD=%s\n' "$PWD"
+          for p in /home/dev /home/dev/workspace /home/dev/workspace/aiVoip /etc/voip-ai /etc/voip-ai/production.env; do
+            if test -e "$p"; then
+              stat -c 'PATH=%n MODE=%a OWNER=%U GROUP=%G TYPE=%F' "$p" || true
+            else
+              printf 'PATH=%s MISSING_OR_NOT_TRAVERSABLE\n' "$p"
+            fi
+          done
+          if test -r /etc/voip-ai/production.env; then echo 'PRODUCTION_ENV_READABLE=true'; else echo 'PRODUCTION_ENV_READABLE=false'; fi
+          if test -w /etc/voip-ai/production.env; then echo 'PRODUCTION_ENV_WRITABLE=true'; else echo 'PRODUCTION_ENV_WRITABLE=false'; fi
+          if sudo -n true >/dev/null 2>&1; then echo 'PASSWORDLESS_SUDO=true'; else echo 'PASSWORDLESS_SUDO=false'; fi
+          if docker info >/dev/null 2>&1; then echo 'DOCKER_ACCESS=true'; else echo 'DOCKER_ACCESS=false'; fi
+          echo 'CONTROL_PROCESSES_BEGIN'
+          ps -eo user,pid,ppid,args | grep -E 'capture_v2\.control_cli|capture-v2-control' | grep -v grep || true
+          echo 'CONTROL_PROCESSES_END'
