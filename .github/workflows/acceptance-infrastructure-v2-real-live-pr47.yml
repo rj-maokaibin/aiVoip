@@ -27,7 +27,7 @@ jobs:
       ACCEPTANCE_TARGET_SHA: db3e8012a9569d9508e9d2cd920baf1de6bac866
       CONTROLLED_ENV_FILE: /home/github-runner/.config/voip-ai/.env
       FEISHU_SECRET_FILE: /home/github-runner/.config/voip-ai/feishu_app_secret
-      LIVE_CONTEXT: ${{ runner.temp }}/voip-live-acceptance-v2-context.json
+      LIVE_CONTEXT: /tmp/voip-live-acceptance-v2-context-${{ github.run_id }}.json
       PREFLIGHT_RESULT: validation/live_acceptance_preflight_v2.json
       LIVE_RESULT: validation/human_evidence_feishu_live_acceptance_v2.json
 
