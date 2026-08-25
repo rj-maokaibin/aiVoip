@@ -11,7 +11,7 @@ permissions:
 
 concurrency:
   group: capture-v2-control-wakeup
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   control-once:
@@ -20,18 +20,40 @@ jobs:
       - linux
       - x64
       - voip-controlled-linux
-    timeout-minutes: 15
+    timeout-minutes: 10
     steps:
-      - name: Build ephemeral Git helper
+      - name: Verify worktree and control branch ancestry
         shell: bash
         run: |
           set -euo pipefail
-          cat <<'EOF' | docker build -t capture-v2-git-helper:20260825 -
-          FROM python:3.12-slim
-          RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends git ca-certificates && rm -rf /var/lib/apt/lists/*
-          EOF
+          ROOT=/home/dev/workspace/aiVoip
+          DEV_UID="$(stat -c %u "$ROOT")"
+          DEV_GID="$(stat -c %g "$ROOT")"
+          docker image inspect python:3.12-slim >/dev/null
+          docker run --rm \
+            --user "$DEV_UID:$DEV_GID" \
+            -v /usr/bin/git:/usr/local/bin/git-host:ro \
+            -v "$ROOT:$ROOT:ro" \
+            -w "$ROOT" \
+            python:3.12-slim \
+            sh -lc '
+              set -eu
+              git-host --version
+              echo "BRANCH=$(git-host branch --show-current)"
+              echo "HEAD=$(git-host rev-parse HEAD)"
+              echo "STATUS_BEGIN"
+              git-host status --porcelain --untracked-files=all
+              echo "STATUS_END"
+              test -z "$(git-host status --porcelain --untracked-files=all)"
+              LOCAL_CONTROL=$(git-host rev-parse refs/heads/feat/capture-v2.1.1-real-gates)
+              REMOTE_CONTROL=$(git-host rev-parse refs/remotes/origin/feat/capture-v2.1.1-real-gates)
+              echo "LOCAL_CONTROL=$LOCAL_CONTROL"
+              echo "REMOTE_CONTROL=$REMOTE_CONTROL"
+              git-host merge-base --is-ancestor "$LOCAL_CONTROL" "$REMOTE_CONTROL"
+              echo "CONTROL_FAST_FORWARD_SAFE=true"
+            '
 
-      - name: Verify persistent worktree is safe for branch restore
+      - name: Restore dedicated control branch only
         shell: bash
         run: |
           set -euo pipefail
@@ -40,22 +62,16 @@ jobs:
           DEV_GID="$(stat -c %g "$ROOT")"
           docker run --rm \
             --user "$DEV_UID:$DEV_GID" \
-            -v "$ROOT:$ROOT:ro" \
+            -v /usr/bin/git:/usr/local/bin/git-host:ro \
+            -v "$ROOT:$ROOT" \
             -w "$ROOT" \
-            capture-v2-git-helper:20260825 \
+            python:3.12-slim \
             sh -lc '
               set -eu
-              echo "BRANCH=$(git branch --show-current)"
-              echo "HEAD=$(git rev-parse HEAD)"
-              echo "STATUS_BEGIN"
-              git status --porcelain --untracked-files=all
-              echo "STATUS_END"
-              LOCAL_CONTROL=$(git rev-parse refs/heads/feat/capture-v2.1.1-real-gates)
-              REMOTE_CONTROL=$(git rev-parse refs/remotes/origin/feat/capture-v2.1.1-real-gates)
-              echo "LOCAL_CONTROL=$LOCAL_CONTROL"
-              echo "REMOTE_CONTROL=$REMOTE_CONTROL"
-              git merge-base --is-ancestor "$LOCAL_CONTROL" "$REMOTE_CONTROL"
-              echo "CONTROL_FAST_FORWARD_SAFE=true"
-              test -z "$(git status --porcelain --untracked-files=all)"
-              echo "WORKTREE_CLEAN=true"
+              test "$(git-host branch --show-current)" = master
+              test -z "$(git-host status --porcelain --untracked-files=all)"
+              git-host switch feat/capture-v2.1.1-real-gates
+              echo "RESTORED_BRANCH=$(git-host branch --show-current)"
+              echo "RESTORED_HEAD=$(git-host rev-parse HEAD)"
             '
+          echo 'Branch restored. Existing dev control daemon owns the subsequent fetch/ff-only/reexec/action execution.'
