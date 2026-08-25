@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "golden_id": "REAL_OFFLINE_GOLDEN_001",
+  "version": "1.0.0",
+  "description": "Real Offline Golden #001 captured PCAP used by VOIP release acceptance.",
+  "artifacts": {
+    "pcap": {
+      "cache_name": "input.pcap",
+      "sha256": "b038aa7c9a0644581f2815f654fcdee4620860796382265b178823fccba2e3f0"
+    }
+  },
+  "analyzer_profile": "voip_v1@1.3.0",
+  "immutability": "SHA256_REQUIRED",
+  "source_policy": "EXTERNAL_REGISTRY_OR_PERSISTENT_CACHE_ONLY"
+}
