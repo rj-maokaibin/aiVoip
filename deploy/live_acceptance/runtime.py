@@ -9,6 +9,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import time
 import uuid
 from pathlib import Path
 from typing import Iterable
@@ -16,7 +17,7 @@ from urllib.parse import urlparse
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONTRACT = ROOT / "deploy/live_acceptance/runtime_contract.json"
-ORCHESTRATOR_VERSION = "1.2.0"
+ORCHESTRATOR_VERSION = "1.3.0"
 
 
 def _run(args: list[str], *, capture: bool = False, check: bool = True) -> subprocess.CompletedProcess[str]:
@@ -128,8 +129,11 @@ def _discover_postgres_route(primary_network: str, backend_info: dict) -> dict:
         "status": "hostname_missing" if not hostname else "not_found",
         "hostname": hostname,
         "backend_project": backend_project,
+        "candidate_id": "",
         "candidate_name": "",
         "candidate_project": "",
+        "candidate_state": "",
+        "candidate_exit_code": None,
         "candidate_count": 0,
         "trusted_candidate_count": 0,
         "external_candidate_count": 0,
@@ -143,7 +147,7 @@ def _discover_postgres_route(primary_network: str, backend_info: dict) -> dict:
     backend_id = str(backend_info.get("Id") or "")
     resolved = _resolve_hostname_inside_backend(backend_id, hostname)
     if resolved:
-        route.update(status="backend_dns", candidate_name="backend-dns", candidate_project=backend_project, running_candidate_count=1, trusted_candidate_count=1,
+        route.update(status="backend_dns", candidate_name="backend-dns", candidate_project=backend_project, candidate_state="running", running_candidate_count=1, trusted_candidate_count=1,
                      host_overrides=[{"hostname": hostname, "address": resolved, "container_id": "", "container_name": "backend-dns"}])
         return route
 
@@ -158,12 +162,13 @@ def _discover_postgres_route(primary_network: str, backend_info: dict) -> dict:
             route["excluded_transient_count"] += 1; continue
         score = _postgres_score(info, hostname)
         if score <= 0: continue
-        networks = _network_rows(info); project = _compose_project(info)
+        networks = _network_rows(info); project = _compose_project(info); state = info.get("State") or {}
         trusted = bool(backend_project and project == backend_project)
         if not backend_project:
             trusted = bool(primary_network in networks and hostname.lower() in _network_aliases(info, primary_network))
         candidates.append({"score": score, "id": cid, "name": str(info.get("Name") or "").lstrip("/") or cid,
-                           "project": project, "trusted": trusted, "running": bool((info.get("State") or {}).get("Running")),
+                           "project": project, "trusted": trusted, "running": bool(state.get("Running")),
+                           "state": str(state.get("Status") or ""), "exit_code": state.get("ExitCode"),
                            "networks": networks, "info": info})
 
     route["candidate_count"] = len(candidates)
@@ -173,14 +178,14 @@ def _discover_postgres_route(primary_network: str, backend_info: dict) -> dict:
     if not trusted_candidates:
         if candidates:
             top = sorted(candidates, key=lambda x: (x["running"], x["score"], x["name"]), reverse=True)[0]
-            route.update(status="external_candidate_untrusted", candidate_name=top["name"], candidate_project=top["project"])
+            route.update(status="external_candidate_untrusted", candidate_name=top["name"], candidate_project=top["project"], candidate_state=top["state"], candidate_exit_code=top["exit_code"])
         return route
 
     running = [row for row in trusted_candidates if row["running"] and row["networks"]]
     route["running_candidate_count"] = len(running)
     if not running:
         top = sorted(trusted_candidates, key=lambda x: (x["score"], x["name"]), reverse=True)[0]
-        route.update(status="candidate_stopped", candidate_name=top["name"], candidate_project=top["project"])
+        route.update(status="candidate_stopped", candidate_id=top["id"], candidate_name=top["name"], candidate_project=top["project"], candidate_state=top["state"], candidate_exit_code=top["exit_code"])
         return route
 
     running.sort(key=lambda x: (x["score"], x["name"], x["id"]), reverse=True)
@@ -189,7 +194,8 @@ def _discover_postgres_route(primary_network: str, backend_info: dict) -> dict:
         route.update(status="ambiguous", candidate_name=",".join(sorted(row["name"] for row in top)))
         return route
 
-    candidate = top[0]; route["candidate_name"] = candidate["name"]; route["candidate_project"] = candidate["project"]
+    candidate = top[0]
+    route.update(candidate_id=candidate["id"], candidate_name=candidate["name"], candidate_project=candidate["project"], candidate_state=candidate["state"], candidate_exit_code=candidate["exit_code"])
     networks = list(candidate["networks"].keys())
     if primary_network in networks: target_network = primary_network
     else:
@@ -244,13 +250,43 @@ def _prepare(args: argparse.Namespace) -> int:
         cache_hit=False; _run(["docker","build","--pull=false","--build-arg",f"BASE_IMAGE={base_image}","--label","io.ruijie.voip.live_acceptance.contract=voip-live-acceptance-runtime-v1","--label",f"io.ruijie.voip.live_acceptance.version={contract.get('runtime_version')}","--label",f"io.ruijie.voip.live_acceptance.fingerprint={fingerprint}","-f",str(ROOT/"deploy/live_acceptance/Dockerfile"),"-t",runtime_image,str(ROOT)]); runtime_info=_docker_inspect(runtime_image,image=True)
     context={"schema_version":1,"contract":"voip-live-acceptance-runtime-context-v1","runtime_contract":contract["contract"],"runtime_version":contract["runtime_version"],"orchestrator_version":ORCHESTRATOR_VERSION,"runtime_fingerprint":fingerprint,"runtime_image":runtime_image,"runtime_image_id":runtime_info.get("Id"),"base_image":base_image,"base_image_id":base_image_id,"backend_container_id":backend_info.get("Id"),"docker_network":network,"source_revision":_source_revision(),"secret_mounts":secret_mounts,"host_overrides":database_route.get("host_overrides") or [],"additional_networks":database_route.get("additional_networks") or [],"database_route":database_route}
     args.context.parent.mkdir(parents=True,exist_ok=True); args.context.write_text(json.dumps(context,ensure_ascii=False,indent=2)+"\n",encoding="utf-8"); os.chmod(args.context,0o600)
-    print(json.dumps({"status":"PASS","contract":context["runtime_contract"],"runtime_version":context["runtime_version"],"orchestrator_version":ORCHESTRATOR_VERSION,"runtime_fingerprint":fingerprint[:16],"runtime_image":runtime_image,"cache_hit":cache_hit,"docker_network":network,"secret_mount_count":len(secret_mounts),"database_route_status":database_route.get("status"),"database_candidate":database_route.get("candidate_name"),"database_candidate_project":database_route.get("candidate_project"),"database_candidate_count":database_route.get("candidate_count"),"database_trusted_candidate_count":database_route.get("trusted_candidate_count"),"database_external_candidate_count":database_route.get("external_candidate_count"),"excluded_transient_count":database_route.get("excluded_transient_count"),"additional_networks":database_route.get("additional_networks") or [],"host_override_count":len(database_route.get("host_overrides") or []),"source_revision":context["source_revision"]},ensure_ascii=False)); return 0
+    print(json.dumps({"status":"PASS","contract":context["runtime_contract"],"runtime_version":context["runtime_version"],"orchestrator_version":ORCHESTRATOR_VERSION,"runtime_fingerprint":fingerprint[:16],"runtime_image":runtime_image,"cache_hit":cache_hit,"docker_network":network,"secret_mount_count":len(secret_mounts),"database_route_status":database_route.get("status"),"database_candidate":database_route.get("candidate_name"),"database_candidate_project":database_route.get("candidate_project"),"database_candidate_state":database_route.get("candidate_state"),"database_candidate_exit_code":database_route.get("candidate_exit_code"),"database_candidate_count":database_route.get("candidate_count"),"database_trusted_candidate_count":database_route.get("trusted_candidate_count"),"database_external_candidate_count":database_route.get("external_candidate_count"),"excluded_transient_count":database_route.get("excluded_transient_count"),"additional_networks":database_route.get("additional_networks") or [],"host_override_count":len(database_route.get("host_overrides") or []),"source_revision":context["source_revision"]},ensure_ascii=False)); return 0
 
 
 def _load_context(path:Path)->dict:
     data=json.loads(path.read_text(encoding="utf-8"))
     if data.get("contract")!="voip-live-acceptance-runtime-context-v1": raise RuntimeError("LIVE_ACCEPTANCE_RUNTIME_CONTEXT_INVALID")
     return data
+
+
+def _recover_database(args: argparse.Namespace) -> int:
+    context=_load_context(args.context.resolve()); route=context.get("database_route") or {}
+    if route.get("status")!="candidate_stopped":
+        print(json.dumps({"status":"PASS","action":"NOOP","reason":str(route.get("status") or "unknown"),"candidate_name":route.get("candidate_name") or ""},ensure_ascii=False)); return 0
+    candidate_id=str(route.get("candidate_id") or ""); hostname=str(route.get("hostname") or ""); backend_project=str(route.get("backend_project") or "")
+    if not candidate_id or not hostname or not backend_project:
+        print(json.dumps({"status":"BLOCKED","action":"NOOP","reason":"RECOVERY_CONTEXT_INCOMPLETE","candidate_name":route.get("candidate_name") or ""},ensure_ascii=False)); return 0
+    info=_docker_inspect(candidate_id); state=info.get("State") or {}; name=str(info.get("Name") or "").lstrip("/") or str(route.get("candidate_name") or "")
+    project=_compose_project(info); status=str(state.get("Status") or ""); exit_code=int(state.get("ExitCode") or 0)
+    trusted=bool(project and project==backend_project and not _is_transient_postgres_candidate(info) and _postgres_score(info,hostname)>0)
+    if not trusted:
+        print(json.dumps({"status":"BLOCKED","action":"NOOP","reason":"DATABASE_RECOVERY_TRUST_CHECK_FAILED","candidate_name":name,"candidate_project":project,"state":status,"exit_code":exit_code},ensure_ascii=False)); return 0
+    if bool(state.get("Running")):
+        print(json.dumps({"status":"PASS","action":"NOOP_ALREADY_RUNNING","candidate_name":name,"candidate_project":project},ensure_ascii=False)); return 0
+    if status not in {"created","exited"} or exit_code!=0:
+        print(json.dumps({"status":"BLOCKED","action":"NOOP","reason":"DATABASE_NOT_CLEAN_STOPPED","candidate_name":name,"candidate_project":project,"state":status,"exit_code":exit_code},ensure_ascii=False)); return 0
+    _run(["docker","start",candidate_id])
+    ready=False; final_state={}
+    for _ in range(60):
+        info=_docker_inspect(candidate_id); final_state=info.get("State") or {}
+        if not bool(final_state.get("Running")): break
+        probe=_run(["docker","exec",candidate_id,"pg_isready"],capture=True,check=False)
+        if probe.returncode==0:
+            ready=True; break
+        time.sleep(1)
+    if ready:
+        print(json.dumps({"status":"PASS","action":"STARTED_TRUSTED_DATABASE","candidate_name":name,"candidate_project":project,"state":"running","previous_exit_code":exit_code},ensure_ascii=False)); return 0
+    print(json.dumps({"status":"BLOCKED","action":"START_ATTEMPTED","reason":"DATABASE_DID_NOT_BECOME_READY","candidate_name":name,"candidate_project":project,"state":str(final_state.get("Status") or ""),"exit_code":final_state.get("ExitCode")},ensure_ascii=False)); return 0
 
 
 def _run_in_runtime(args:argparse.Namespace)->int:
@@ -296,6 +332,7 @@ def _run_in_runtime(args:argparse.Namespace)->int:
 def main()->int:
     parser=argparse.ArgumentParser(description="Reusable VOIP AI live acceptance runtime"); sub=parser.add_subparsers(dest="action",required=True)
     prepare=sub.add_parser("prepare",help="discover production topology and prepare cached runtime image"); prepare.add_argument("--contract",type=Path,default=DEFAULT_CONTRACT); prepare.add_argument("--context",type=Path,required=True); prepare.add_argument("--feishu-secret-file",type=Path,required=True); prepare.set_defaults(func=_prepare)
+    recover=sub.add_parser("recover-database",help="safely start a trusted clean-stopped database discovered by prepare"); recover.add_argument("--context",type=Path,required=True); recover.set_defaults(func=_recover_database)
     run=sub.add_parser("run",help="run a command inside the prepared live acceptance runtime"); run.add_argument("--context",type=Path,required=True); run.add_argument("--env-file",type=Path,required=True); run.add_argument("--workspace",type=Path,default=ROOT); run.add_argument("--set-env",action="append",default=[]); run.add_argument("command",nargs=argparse.REMAINDER); run.set_defaults(func=_run_in_runtime)
     args=parser.parse_args()
     try: return int(args.func(args))
