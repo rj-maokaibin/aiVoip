@@ -1,5 +1,6 @@
 name: Publish Markdown To Feishu
 
+# PR observability trigger: this workflow also serves as the quick-use publishing path.
 on:
   push:
     branches:
