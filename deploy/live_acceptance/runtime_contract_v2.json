@@ -1,0 +1,97 @@
+{
+  "schema_version": 2,
+  "contract": "voip-live-acceptance-runtime-v2",
+  "runtime_version": "2.0.0",
+  "acceptance_infrastructure_version": "2.0",
+  "python_major_minor": "3.12",
+  "requirements_file": "backend/requirements.txt",
+  "runtime_dockerfile": "deploy/live_acceptance/Dockerfile",
+  "system_packages": [
+    "fontconfig",
+    "fonts-noto-cjk"
+  ],
+  "font_family_markers": [
+    "Noto Sans CJK",
+    "Noto Serif CJK",
+    "Source Han",
+    "WenQuanYi"
+  ],
+  "required_imports": [
+    "numpy",
+    "matplotlib",
+    "sqlalchemy",
+    "psycopg",
+    "redis",
+    "minio",
+    "httpx",
+    "lark_oapi",
+    "app.reports.human_visuals",
+    "app.integrations.feishu.evidence_document_human_v2"
+  ],
+  "required_environment": {
+    "REPRODUCTION_PLATFORM_MODE": "real",
+    "FEISHU_LIVE_ENABLED": "true"
+  },
+  "profiles": {
+    "base": {
+      "services": [
+        "database",
+        "redis",
+        "minio"
+      ]
+    },
+    "human-feishu-golden-001": {
+      "services": [
+        "database",
+        "redis",
+        "minio",
+        "feishu"
+      ],
+      "golden_case": "OFFLINE_ANALYSIS_20260814_001",
+      "golden_sha256": "b038aa7c9a0644581f2815f654fcdee4620860796382265b178823fccba2e3f0"
+    }
+  },
+  "cache_policy": {
+    "reuse": true,
+    "key_inputs": [
+      "base_image_id",
+      "runtime_contract_v2.json",
+      "Dockerfile",
+      "backend/requirements.txt"
+    ]
+  },
+  "compatibility": {
+    "v1_runtime_preserved": true,
+    "v1_preflight_preserved": true,
+    "v1_live_evidence_remains_valid": true,
+    "legacy_mutation_bridge": "tools/human_evidence_feishu_live_acceptance_v2.py"
+  },
+  "acceptance_gates": [
+    "FROZEN_CONTRACTS",
+    "FULL_SOFTWARE_RELEASE",
+    "MIGRATION_AND_FRONTEND",
+    "REAL_OFFLINE_GOLDEN_001",
+    "HUMAN_REAL_OFFLINE_GOLDEN_001",
+    "READ_ONLY_LIVE_PREFLIGHT",
+    "EXPLICIT_REAL_LIVE_ACCEPTANCE",
+    "HUMAN_VISUAL_CONFIRMATION"
+  ],
+  "safety_invariants": [
+    "EXACT_SOURCE_REVISION",
+    "FAIL_CLOSED_BEFORE_MUTATION",
+    "NORMAL_PR_CI_NON_MUTATING",
+    "REAL_SECRETS_NEVER_EMITTED",
+    "REAL_BACKEND_NOT_RESTARTED",
+    "GOLDEN_EVIDENCE_SHA_BOUND",
+    "DIAGNOSTIC_AUTHORITY_NOT_ESCALATED"
+  ],
+  "definition_of_done": {
+    "runtime_contract_versioned": true,
+    "preflight_contract_versioned": true,
+    "v1_backward_compatible": true,
+    "exact_head_required": true,
+    "golden_replay_required": true,
+    "real_live_mutation_explicit_only": true,
+    "normal_pr_ci_mutation_forbidden": true
+  }
+}
