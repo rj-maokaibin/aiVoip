@@ -16,17 +16,19 @@ _CANONICAL_PRODUCTION_AUTHORIZATION = Path(
 class ControlPolicy(_BaseControlPolicy):
     """Fail-closed extension for explicit production control actions.
 
-    All legacy actions are delegated byte-for-byte to ``policy_base``.  The
-    elevated production surface is intentionally limited to the two existing,
-    audited guarded Python modules below.  Remote actions cannot override the
+    All legacy actions are delegated byte-for-byte to ``policy_base``. The
+    elevated production surface is intentionally limited to the existing
+    audited guarded Python modules below. Remote actions cannot override the
     production env path, authorization path, module, interpreter, or command.
     """
 
     def prepare(self, action: RemoteAction) -> PreparedCommand | None:
-        if action.action_type not in {
+        production_actions = {
             ControlActionType.PRODUCTION_DEPLOYMENT_PREFLIGHT,
+            ControlActionType.PRODUCTION_FEISHU_RBAC_ENABLE,
             ControlActionType.PRODUCTION_CUTOVER,
-        }:
+        }
+        if action.action_type not in production_actions:
             return super().prepare(action)
 
         p = action.parameters
@@ -39,13 +41,8 @@ class ControlPolicy(_BaseControlPolicy):
 
         unknown = set(p) - {"timeout_seconds"}
         if unknown:
-            prefix = (
-                "PRODUCTION_DEPLOYMENT_PREFLIGHT"
-                if action.action_type == ControlActionType.PRODUCTION_DEPLOYMENT_PREFLIGHT
-                else "PRODUCTION_CUTOVER"
-            )
             raise ControlPolicyError(
-                f"{prefix}_PARAMETERS_NOT_ALLOWED:" + ",".join(sorted(unknown))
+                f"{action.action_type.value}_PARAMETERS_NOT_ALLOWED:" + ",".join(sorted(unknown))
             )
 
         sudo = Path("/usr/bin/sudo")
@@ -61,6 +58,9 @@ class ControlPolicy(_BaseControlPolicy):
         if action.action_type == ControlActionType.PRODUCTION_DEPLOYMENT_PREFLIGHT:
             module = "app.capture_v2.control.production_deployment_preflight_guarded"
             effective_timeout = min(timeout, 300.0)
+        elif action.action_type == ControlActionType.PRODUCTION_FEISHU_RBAC_ENABLE:
+            module = "app.capture_v2.control.production_feishu_rbac_enable_guarded"
+            effective_timeout = min(timeout, 120.0)
         else:
             module = "app.capture_v2.control.production_cutover_guarded"
             effective_timeout = timeout
