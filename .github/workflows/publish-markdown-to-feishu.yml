@@ -6,6 +6,11 @@ on:
       - master
     paths:
       - 'feishu_publish/requests/*.md'
+  pull_request:
+    branches:
+      - master
+    paths:
+      - '.github/workflows/publish-markdown-to-feishu.yml'
   workflow_dispatch:
     inputs:
       source:
@@ -41,6 +46,8 @@ jobs:
           set -euo pipefail
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             source_path='${{ github.event.inputs.source }}'
+          elif [ "${{ github.event_name }}" = "pull_request" ]; then
+            source_path='feishu_publish/requests/PON_84B_1260Mbps_最终定性报告_2026-08-25.md'
           else
             source_path="$(git diff-tree --no-commit-id --name-only -r "$GITHUB_SHA" | grep '^feishu_publish/requests/.*\.md$' | head -n1 || true)"
           fi
@@ -80,6 +87,7 @@ jobs:
           print('block_count=' + str(p['block_count']))
           PY
 
+          mkdir -p validation
           cp "$result" validation/feishu_markdown_publish_result.json
 
       - name: Publish job summary
