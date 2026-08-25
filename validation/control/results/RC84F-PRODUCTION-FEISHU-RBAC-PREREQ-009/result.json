@@ -1,20 +1,37 @@
 {
-  "schema_version": "capture-v2-remote-status-v1",
-  "action_id": "RC84F-PRODUCTION-FEISHU-RBAC-PREREQ-009",
-  "sequence": 220,
-  "action_type": "PRODUCTION_FEISHU_RBAC_ENABLE",
-  "state": "SUCCEEDED",
-  "runner_id": "srv:2203168",
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "RC84F-PRODUCTION-FEISHU-RBAC-PREREQ-009",
+    "sequence": 220,
+    "created_at": "2026-08-25T23:59:00+00:00",
+    "expires_at": "2026-08-26T11:59:00+00:00",
+    "action_type": "PRODUCTION_FEISHU_RBAC_ENABLE",
+    "parameters": {
+      "timeout_seconds": 120
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "19ac691f480c945ab5cbd286c210c406711986f0"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "Retry the single audited production prerequisite after PR #55 full CI/Golden PASS and sync to the dedicated control branch. Treat missing legacy V2 keys only as their effective safe runtime defaults (V1/false); explicit unsafe values must fail closed. Back up /etc/voip-ai/production.env, change only FEISHU_IDENTITY_RBAC_ENABLED=true, verify no other safe prestate key changes, restore on post-write failure, do not restart services, do not switch Capture Authority, and do not mutate DUT state. A fresh explicit production deployment preflight is required afterward before RC85."
+  },
   "action_sha256": "d52696f2e48a787bc52de6dc3fbaee21324ef1e19161513d1aa73708a278fe7e",
-  "updated_at": "2026-08-25T23:58:30.715714+00:00",
-  "started_at": null,
-  "finished_at": "2026-08-25T23:58:30.715714+00:00",
+  "runner_id": "srv:2203168",
+  "state": "SUCCEEDED",
   "return_code": 0,
   "verdict": "PASS",
-  "result_path": "validation/control/results/RC84F-PRODUCTION-FEISHU-RBAC-PREREQ-009/result.json",
+  "error": null,
+  "finished_at": "2026-08-25T23:58:30.715714+00:00",
   "stdout_sha256": "34190f16de88c211fb3f046bfec9f6e2ab4e18b39b849a5bbbaf2251672da54c",
   "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-  "error": null,
+  "local_stdout": ".capture-v2-control/logs/RC84F-PRODUCTION-FEISHU-RBAC-PREREQ-009/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/RC84F-PRODUCTION-FEISHU-RBAC-PREREQ-009/stderr.log",
   "detail": {
     "safety": {
       "capture_engine_version": "V1",
