@@ -1,54 +1,53 @@
 {
   "schema_version": "capture-v2-remote-status-v1",
-  "action_id": "RC84D-PRODUCTION-DEPLOYMENT-PREFLIGHT-007",
-  "sequence": 218,
-  "action_type": "PRODUCTION_DEPLOYMENT_PREFLIGHT",
-  "state": "INCONCLUSIVE",
+  "action_id": "RC84E-PRODUCTION-FEISHU-RBAC-PREREQ-008",
+  "sequence": 219,
+  "action_type": "PRODUCTION_FEISHU_RBAC_ENABLE",
+  "state": "FAILED",
   "runner_id": "srv:2203168",
-  "action_sha256": "cdc69908fc3dacb65e3922fad88d33bbeaf051fe4d7dcd44ac37ffe796b8504f",
-  "updated_at": "2026-08-25T17:33:54.790689+00:00",
+  "action_sha256": "c89f7cc778ee5b5d2a34d0e578d6d825c111edb7ef2e1701e96228a8dc404cea",
+  "updated_at": "2026-08-25T17:45:34.250075+00:00",
   "started_at": null,
-  "finished_at": "2026-08-25T17:33:54.790689+00:00",
-  "return_code": 2,
-  "verdict": "INCONCLUSIVE",
-  "result_path": "validation/control/results/RC84D-PRODUCTION-DEPLOYMENT-PREFLIGHT-007/result.json",
-  "stdout_sha256": "8d9a59021c9d866786b1d24ad59c87920cd9d1b679d5f5d7a24e826526facc1c",
+  "finished_at": "2026-08-25T17:45:34.250075+00:00",
+  "return_code": 1,
+  "verdict": "FAIL",
+  "result_path": "validation/control/results/RC84E-PRODUCTION-FEISHU-RBAC-PREREQ-008/result.json",
+  "stdout_sha256": "43df417cae8abc39d6be404da7343ba0f63380ef8960bf189258a29a0671f620",
   "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "error": null,
   "detail": {
     "safety": {
       "capture_engine_version": "V1",
       "capture_v2_production_enabled": "false",
-      "git_head": "d739b927942e0ad228ca7c632c68cff9a9ee687b",
-      "expected_product_head": "9cdd69ad2401a5917407445dce2fe1abcffb2525"
+      "git_head": "8f3226061ba9c581d81c974e135c2d9fef0a376e",
+      "expected_product_head": "1d6aa4eb9b7365241f680a8d41f4291250caf83d"
     },
     "parsed_output": {
-      "scope": "GUARDED_PRODUCTION_DEPLOYMENT_PREFLIGHT",
+      "scope": "GUARDED_PRODUCTION_FEISHU_RBAC_ENABLE",
       "production_env": "/etc/voip-ai/production.env",
+      "target_key": "FEISHU_IDENTITY_RBAC_ENABLED",
+      "target_value": true,
       "mutations_performed": false,
-      "runtime_cutover_performed": false,
+      "runtime_restart_performed": false,
+      "dut_mutation": false,
       "authorization": {
         "authorized": true,
+        "cutover_ready": true,
         "final_acceptance_action": "RC68-MASTER-FIX-CANDIDATE-INTEGRATION-005"
       },
       "release_gate": {
         "approved": true,
-        "production_cutover_approved": true,
-        "capture_engine_version": "V1",
-        "production_v2_enabled": false
+        "production_cutover_approved": true
       },
-      "deployment_preflight": {
-        "return_code": 2,
-        "stdout_tail": "      \"status\": \"PASS\",\n      \"category\": \"SECURITY\",\n      \"detail\": \"non-default bootstrap credentials configured\",\n      \"blocks_deploy\": false,\n      \"blocks_release\": false\n    },\n    {\n      \"key\": \"DATABASE_URL_MATCH\",\n      \"status\": \"PASS\",\n      \"category\": \"CONFIG\",\n      \"detail\": \"DATABASE_URL contains configured PostgreSQL credential\",\n      \"blocks_deploy\": false,\n      \"blocks_release\": false\n    },\n    {\n      \"key\": \"PRODUCTION_STORAGE_MODE\",\n      \"status\": \"PASS\",\n      \"category\": \"STORAGE\",\n      \"detail\": \"minio\",\n      \"blocks_deploy\": false,\n      \"blocks_release\": false\n    },\n    {\n      \"key\": \"CREDENTIAL_PROVIDER\",\n      \"status\": \"PASS\",\n      \"category\": \"SECURITY\",\n      \"detail\": \"API provider configured\",\n      \"blocks_deploy\": false,\n      \"blocks_release\": false\n    },\n    {\n[REDACTED_SENSITIVE_LINE]\n      \"status\": \"PASS\",\n[REDACTED_SENSITIVE_LINE]\n[REDACTED_SENSITIVE_LINE]\n      \"blocks_deploy\": false,\n      \"blocks_release\": false\n    },\n    {\n[REDACTED_SENSITIVE_LINE]\n      \"status\": \"PASS\",\n[REDACTED_SENSITIVE_LINE]\n[REDACTED_SENSITIVE_LINE]\n      \"blocks_deploy\": false,\n      \"blocks_release\": false\n    },\n    {\n[REDACTED_SENSITIVE_LINE]\n      \"status\": \"PASS\",\n[REDACTED_SENSITIVE_LINE]\n[REDACTED_SENSITIVE_LINE]\n      \"blocks_deploy\": false,\n      \"blocks_release\": false\n    },\n    {\n[REDACTED_SENSITIVE_LINE]\n      \"status\": \"PASS\",\n[REDACTED_SENSITIVE_LINE]\n[REDACTED_SENSITIVE_LINE]\n      \"blocks_deploy\": false,\n      \"blocks_release\": false\n    },\n    {\n[REDACTED_SENSITIVE_LINE]\n      \"status\": \"PASS\",\n[REDACTED_SENSITIVE_LINE]\n[REDACTED_SENSITIVE_LINE]\n      \"blocks_deploy\": false,\n      \"blocks_release\": false\n    },\n    {\n[REDACTED_SENSITIVE_LINE]\n      \"status\": \"PASS\",\n[REDACTED_SENSITIVE_LINE]\n[REDACTED_SENSITIVE_LINE]\n      \"blocks_deploy\": false,\n      \"blocks_release\": false\n    },\n    {\n      \"key\": \"FEISHU_LIVE_CONFIG\",\n      \"status\": \"PASS\",\n      \"category\": \"INTEGRATION\",\n      \"detail\": \"live target configured\",\n      \"blocks_deploy\": false,\n      \"blocks_release\": false\n    },\n    {\n      \"key\": \"FEISHU_IDENTITY_RBAC\",\n      \"status\": \"BLOCKED\",\n      \"category\": \"SECURITY\",\n      \"detail\": \"FEISHU_IDENTITY_RBAC_ENABLED=true is required for production Feishu live transport\",\n      \"blocks_deploy\": true,\n      \"blocks_release\": true\n    },\n    {\n      \"key\": \"EC02_REAL_PLATFORM\",\n      \"status\": \"BLOCKED\",\n      \"category\": \"PLATFORM\",\n      \"detail\": \"REPRODUCTION_PLATFORM_MODE=mock; EC-02 remains pending\",\n      \"blocks_deploy\": false,\n      \"blocks_release\": true\n    },\n    {\n      \"key\": \"FRONTEND_LOCKFILE\",\n      \"status\": \"PASS\",\n      \"category\": \"BUILD\",\n      \"detail\": \"source-controlled package-lock.json present\",\n      \"blocks_deploy\": false,\n      \"blocks_release\": false\n    },\n    {\n      \"key\": \"SOURCE_MANIFEST\",\n      \"status\": \"PASS\",\n      \"category\": \"BUILD\",\n      \"detail\": \"/home/dev/workspace/aiVoip-control/release/source_manifest.json\",\n      \"blocks_deploy\": false,\n      \"blocks_release\": false\n    }\n  ]\n}",
-        "stderr_tail": "",
-        "status": "BLOCKED",
-        "deployment_status": "BLOCKED",
-        "deploy_blocking_keys": [
-          "FEISHU_IDENTITY_RBAC"
-        ]
+      "prestate": {
+        "app_env": "production",
+        "capture_engine_version": null,
+        "capture_v2_production_enabled": null,
+        "reproduction_platform_mode": "mock",
+        "feishu_identity_rbac_enabled": false
       },
-      "verdict": "INCONCLUSIVE",
-      "reason": "PRODUCTION_ENV_PREFLIGHT_BLOCKED"
+      "verdict": "FAIL",
+      "reason": "PRODUCTION_PRESTATE_NOT_V1"
     }
   }
 }
