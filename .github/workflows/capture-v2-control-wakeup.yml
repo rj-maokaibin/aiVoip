@@ -27,22 +27,21 @@ jobs:
         run: |
           set -euo pipefail
           ROOT=/home/dev/workspace/aiVoip
-          test -e "$ROOT"
-          git -C "$ROOT" rev-parse --is-inside-work-tree | grep -qx true
+          sudo -n -u dev /usr/bin/git -C "$ROOT" rev-parse --is-inside-work-tree | grep -qx true
           printf 'HOST=%s\n' "$(hostname)"
-          printf 'TOPLEVEL=%s\n' "$(git -C "$ROOT" rev-parse --show-toplevel)"
-          printf 'BRANCH=%s\n' "$(git -C "$ROOT" branch --show-current)"
-          printf 'HEAD=%s\n' "$(git -C "$ROOT" rev-parse HEAD)"
-          test "$(git -C "$ROOT" branch --show-current)" = "feat/capture-v2.1.1-real-gates"
+          printf 'TOPLEVEL=%s\n' "$(sudo -n -u dev /usr/bin/git -C "$ROOT" rev-parse --show-toplevel)"
+          printf 'BRANCH=%s\n' "$(sudo -n -u dev /usr/bin/git -C "$ROOT" branch --show-current)"
+          printf 'HEAD=%s\n' "$(sudo -n -u dev /usr/bin/git -C "$ROOT" rev-parse HEAD)"
+          test "$(sudo -n -u dev /usr/bin/git -C "$ROOT" branch --show-current)" = "feat/capture-v2.1.1-real-gates"
 
       - name: Execute exactly one audited control action
         shell: bash
         run: |
           set -euo pipefail
           ROOT=/home/dev/workspace/aiVoip
-          cd "$ROOT"
-          export PYTHONPATH="$ROOT/backend"
-          python3 -m app.capture_v2.control_cli run \
+          sudo -n -u dev /usr/bin/env \
+            PYTHONPATH="$ROOT/backend" \
+            /usr/bin/python3 -m app.capture_v2.control_cli run \
             --repo-root "$ROOT" \
             --branch feat/capture-v2.1.1-real-gates \
             --remote origin \
