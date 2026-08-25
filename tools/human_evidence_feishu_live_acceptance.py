@@ -18,10 +18,16 @@ from app.db.evidence_report_models import (
 from app.db.models import AnalyzerRun, Artifact, Evidence
 from app.db.session import SessionLocal
 from app.integrations.feishu.evidence_document_human_v2 import HumanFeishuEvidenceDocumentService
+from app.integrations.storage import ObjectStorage
+from app.services.analysis import create_media_analysis_job, create_pcm_analysis_job
 from app.services.evidence_report import generate_evidence_report
+from app.workers.media_tasks import analyze_media_evidence
+from app.workers.pcm_tasks import analyze_pcm_evidence
 
 
 REAL_GOLDEN_001_SHA256 = "b038aa7c9a0644581f2815f654fcdee4620860796382265b178823fccba2e3f0"
+GOLDEN_PCM_PROFILE_ID = "ruijie_aim_diag_v1"
+GOLDEN_DTMF_DIGITS = "601"
 HUMAN_CONTRACT = "feishu-evidence-living-document-human-v2"
 PREFLIGHT_CONTRACT = "voip-live-acceptance-preflight-v1"
 REQUIRED_VISUAL_KINDS = {"DTMF_INSPECTOR", "SPECTRUM", "SPECTROGRAM"}
@@ -38,6 +44,18 @@ LIVE_LABELS = (
 
 def _fingerprint(value: str | None) -> str | None:
     return hashlib.sha256(str(value or "").encode("utf-8")).hexdigest()[:12] if value else None
+
+
+def _golden_evidence(db, case_id: str) -> Evidence:
+    evidence = db.scalar(
+        select(Evidence)
+        .where(Evidence.case_id == case_id, Evidence.sha256 == REAL_GOLDEN_001_SHA256)
+        .order_by(Evidence.created_at.asc())
+        .limit(1)
+    )
+    if evidence is None:
+        raise RuntimeError("REAL_GOLDEN_001_EVIDENCE_MISSING")
+    return evidence
 
 
 def _case_has_exact_golden(db, case_id: str) -> bool:
@@ -57,6 +75,160 @@ def _case_has_required_analyzers(db, case_id: str) -> bool:
         )
     ))
     return REQUIRED_GOLDEN_ANALYZERS.issubset({str(x) for x in successful})
+
+
+def _latest_successful_run_for_evidence(db, *, case_id: str, analyzer_name: str, evidence_id: str) -> AnalyzerRun | None:
+    rows = list(db.scalars(
+        select(AnalyzerRun).where(
+            AnalyzerRun.case_id == case_id,
+            AnalyzerRun.analyzer_name == analyzer_name,
+            AnalyzerRun.status == "SUCCESS",
+        ).order_by(AnalyzerRun.created_at.desc())
+    ))
+    for row in rows:
+        if str(evidence_id) in {str(x) for x in (row.input_evidence_ids or [])}:
+            return row
+    return None
+
+
+def _load_run_result(storage: ObjectStorage, run: AnalyzerRun | None) -> dict:
+    if run is None or not str(run.result_object_key or "").strip():
+        return {}
+    try:
+        return json.loads(storage.get_bytes(run.result_object_key).decode("utf-8"))
+    except Exception:
+        return {}
+
+
+def _pcm_601_candidates(pcm: dict) -> set[tuple[str, int]]:
+    candidates: set[tuple[str, int]] = set()
+    for stream in pcm.get("streams", []) or []:
+        tap = stream.get("tap") or {}
+        if str(tap.get("direction") or "").upper() != "RX":
+            continue
+        tap_name = str(tap.get("name") or "")
+        if not tap_name:
+            continue
+        for session in stream.get("sessions", []) or []:
+            sequences = [str(x.get("digits") or "") for x in (session.get("dtmf_sequences") or [])]
+            if GOLDEN_DTMF_DIGITS not in sequences:
+                continue
+            events = list(session.get("dtmf_events") or [])
+            if not any(str(x.get("digit") or "") == GOLDEN_DTMF_DIGITS[0] for x in events):
+                continue
+            candidates.add((tap_name, int(session.get("session_index") or 0)))
+    return candidates
+
+
+def _media_601_matches(media: dict) -> set[tuple[str, int]]:
+    matches: set[tuple[str, int]] = set()
+    for event in media.get("cross_layer_events", []) or []:
+        if str(event.get("type") or "") != "DTMF_SIP_DIAL_MATCH":
+            continue
+        details = event.get("details") or {}
+        if str(details.get("pcm_digits") or "") != GOLDEN_DTMF_DIGITS:
+            continue
+        if str(details.get("sip_target") or "") != GOLDEN_DTMF_DIGITS:
+            continue
+        scope = event.get("scope") or {}
+        tap = str(scope.get("pcm_tap") or details.get("pcm_tap") or "")
+        idx = scope.get("pcm_session_index", details.get("pcm_session_index"))
+        if not tap or idx is None:
+            continue
+        matches.add((tap, int(idx)))
+    return matches
+
+
+def _media_pcm_wav_scopes(db, media_run: AnalyzerRun | None) -> set[tuple[str, int]]:
+    if media_run is None:
+        return set()
+    rows = list(db.scalars(select(Artifact).where(
+        Artifact.analyzer_run_id == media_run.id,
+        Artifact.type == "PCM_WAV",
+    )))
+    scopes: set[tuple[str, int]] = set()
+    for row in rows:
+        meta = row.metadata_json or {}
+        tap = str(meta.get("pcm_tap") or "")
+        if tap:
+            scopes.add((tap, int(meta.get("session_index") or 0)))
+    return scopes
+
+
+def _dtmf_source_readiness(db, storage: ObjectStorage, *, case_id: str, evidence: Evidence) -> dict:
+    pcm_run = _latest_successful_run_for_evidence(
+        db, case_id=case_id, analyzer_name="pcm_intelligence", evidence_id=str(evidence.id)
+    )
+    media_run = _latest_successful_run_for_evidence(
+        db, case_id=case_id, analyzer_name="media_intelligence", evidence_id=str(evidence.id)
+    )
+    pcm = _load_run_result(storage, pcm_run)
+    media = _load_run_result(storage, media_run)
+    pcm_candidates = _pcm_601_candidates(pcm)
+    media_matches = _media_601_matches(media)
+    media_wavs = _media_pcm_wav_scopes(db, media_run)
+    coherent = pcm_candidates & media_matches & media_wavs
+    reasons: list[str] = []
+    if pcm_run is None:
+        reasons.append("PCM_RUN_MISSING")
+    elif not pcm_candidates:
+        reasons.append("PCM_601_ACCEPTED_EVENT_MISSING")
+    if media_run is None:
+        reasons.append("MEDIA_RUN_MISSING")
+    elif not media_matches:
+        reasons.append("MEDIA_601_SIP_MATCH_MISSING")
+    elif not (media_matches & media_wavs):
+        reasons.append("MEDIA_601_PCM_WAV_MISSING")
+    if pcm_candidates and media_matches and media_wavs and not coherent:
+        reasons.append("DTMF_SCOPE_COHERENCE_MISSING")
+    return {
+        "ready": bool(coherent) and not reasons,
+        "pcm_ready": bool(pcm_candidates),
+        "media_ready": bool(media_matches & media_wavs),
+        "scope_coherent": bool(coherent),
+        "reason_codes": reasons,
+        "pcm_analyzer_version": str(pcm_run.analyzer_version) if pcm_run is not None else None,
+        "media_analyzer_version": str(media_run.analyzer_version) if media_run is not None else None,
+    }
+
+
+def _refresh_stale_golden_dtmf(db, *, case_id: str) -> dict:
+    evidence = _golden_evidence(db, case_id)
+    storage = ObjectStorage()
+    before = _dtmf_source_readiness(db, storage, case_id=case_id, evidence=evidence)
+    components: list[str] = []
+
+    if not before["pcm_ready"]:
+        job = create_pcm_analysis_job(
+            db, case_id=case_id, evidence_id=str(evidence.id), profile_id=GOLDEN_PCM_PROFILE_ID
+        )
+        result = analyze_pcm_evidence.run(str(job.id), str(evidence.id), GOLDEN_PCM_PROFILE_ID, False)
+        if str((result or {}).get("status") or "") != "SUCCESS":
+            raise RuntimeError("GOLDEN_PCM_REFRESH_FAILED")
+        components.append("pcm_intelligence")
+        db.expire_all()
+
+    intermediate = _dtmf_source_readiness(db, storage, case_id=case_id, evidence=evidence)
+    if not intermediate["media_ready"] or not intermediate["scope_coherent"]:
+        job = create_media_analysis_job(
+            db, case_id=case_id, evidence_id=str(evidence.id), profile_id=GOLDEN_PCM_PROFILE_ID
+        )
+        result = analyze_media_evidence.run(str(job.id), str(evidence.id), GOLDEN_PCM_PROFILE_ID, False)
+        if str((result or {}).get("status") or "") != "SUCCESS":
+            raise RuntimeError("GOLDEN_MEDIA_REFRESH_FAILED")
+        components.append("media_intelligence")
+        db.expire_all()
+
+    after = _dtmf_source_readiness(db, storage, case_id=case_id, evidence=evidence)
+    if not after["ready"]:
+        reasons = ",".join(after.get("reason_codes") or ["UNKNOWN"])
+        raise RuntimeError("GOLDEN_DTMF_SOURCE_NOT_READY:" + reasons)
+    return {
+        "performed": bool(components),
+        "components": components,
+        "before": before,
+        "after": after,
+    }
 
 
 def _verify_rebuilt_golden_identity(db, *, binding, previous_report, report, payload: dict) -> None:
@@ -214,10 +386,13 @@ async def run(result_path: Path, preflight_path: Path) -> dict:
 
     db = SessionLocal()
     projected = False
+    refresh = {"performed": False, "components": [], "before": None, "after": None}
     try:
         binding, previous_report = _select_bound_golden(db)
         original_document_id = str(binding.document_id)
         original_projection_version = int(binding.projection_version or 0)
+
+        refresh = _refresh_stale_golden_dtmf(db, case_id=str(binding.case_id))
 
         report, payload, _reused = generate_evidence_report(
             db,
@@ -272,6 +447,10 @@ async def run(result_path: Path, preflight_path: Path) -> dict:
             "golden_identity_source": "BOUND_CASE_EVIDENCE_SHA256",
             "golden_sha256_verified": True,
             "rebuilt_golden_identity_verified": True,
+            "analyzer_refresh_performed": refresh["performed"],
+            "analyzer_refresh_components": refresh["components"],
+            "dtmf_source_readiness_before": refresh["before"],
+            "dtmf_source_readiness_after": refresh["after"],
             "document_fingerprint": _fingerprint(original_document_id),
             "document_reused": True,
             "previous_report_version": previous_report.version,
@@ -297,6 +476,10 @@ async def run(result_path: Path, preflight_path: Path) -> dict:
             "source_revision": preflight.get("source_revision"),
             "error_code": type(exc).__name__,
             "error_message": str(exc)[:300],
+            "analyzer_refresh_performed": refresh.get("performed", False),
+            "analyzer_refresh_components": refresh.get("components") or [],
+            "dtmf_source_readiness_before": refresh.get("before"),
+            "dtmf_source_readiness_after": refresh.get("after"),
             "feishu_projection_attempted": projected,
         }
     finally:

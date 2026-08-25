@@ -48,7 +48,7 @@ def _notify_reports(case_id:str,reason:str) -> None:
 
 
 @celery_app.task(name='media.analyze_evidence', bind=True, autoretry_for=(), max_retries=0)
-def analyze_media_evidence(self, job_id: str, evidence_id: str, profile_id: str = 'ruijie_aim_diag_v1'):
+def analyze_media_evidence(self, job_id: str, evidence_id: str, profile_id: str = 'ruijie_aim_diag_v1', notify: bool = True):
     db = SessionLocal(); run = None
     try:
         job = db.get(Job, job_id); evidence = db.get(Evidence, evidence_id)
@@ -115,8 +115,9 @@ def analyze_media_evidence(self, job_id: str, evidence_id: str, profile_id: str 
                       'candidate_decision':(result.get('summary') or {}).get('candidate_decision'),
                       'candidate_audio_artifacts':(result.get('summary') or {}).get('candidate_audio_artifacts')})
         db.commit()
-        from app.workers.diagnosis_tasks import notify_case_changed
-        notify_case_changed(job.case_id); _notify_reports(job.case_id,'media_analysis_complete')
+        if notify:
+            from app.workers.diagnosis_tasks import notify_case_changed
+            notify_case_changed(job.case_id); _notify_reports(job.case_id,'media_analysis_complete')
         return {'status':final_status,'job_id':job.id,'analyzer_run_id':run.id,'summary':result.get('summary')}
     except Exception as exc:
         log.exception('media analysis failed')
@@ -127,7 +128,7 @@ def analyze_media_evidence(self, job_id: str, evidence_id: str, profile_id: str 
         if run:
             run.status=RunStatus.FAILED.value; run.finished_at=utcnow(); run.error_code=type(exc).__name__; run.error_message=str(exc)
         db.commit()
-        if 'job' in locals() and job:
+        if notify and 'job' in locals() and job:
             from app.workers.diagnosis_tasks import notify_case_changed
             notify_case_changed(job.case_id); _notify_reports(job.case_id,'media_analysis_failed')
         raise
