@@ -1,12 +1,12 @@
 {
   "schema_version": "capture-v2-remote-action-v1",
-  "action_id": "RC84F-PRODUCTION-FEISHU-RBAC-PREREQ-009",
-  "sequence": 220,
-  "created_at": "2026-08-25T23:59:00+00:00",
-  "expires_at": "2026-08-26T11:59:00+00:00",
-  "action_type": "PRODUCTION_FEISHU_RBAC_ENABLE",
+  "action_id": "RC84G-PRODUCTION-DEPLOYMENT-PREFLIGHT-010",
+  "sequence": 221,
+  "created_at": "2026-08-26T00:00:30+00:00",
+  "expires_at": "2026-08-26T12:00:30+00:00",
+  "action_type": "PRODUCTION_DEPLOYMENT_PREFLIGHT",
   "parameters": {
-    "timeout_seconds": 120
+    "timeout_seconds": 300
   },
   "safety": {
     "require_clean_git": true,
@@ -14,8 +14,8 @@
     "require_v2_disabled": true,
     "allow_worker_kill": false,
     "allow_server_quarantine": false,
-    "expected_head": "19ac691f480c945ab5cbd286c210c406711986f0"
+    "expected_head": "2a99f08b5a734c8024d8ef3abc5d657999d03d1d"
   },
   "requested_by": "ChatGPT-remote-validation-controller",
-  "note": "Retry the single audited production prerequisite after PR #55 full CI/Golden PASS and sync to the dedicated control branch. Treat missing legacy V2 keys only as their effective safe runtime defaults (V1/false); explicit unsafe values must fail closed. Back up /etc/voip-ai/production.env, change only FEISHU_IDENTITY_RBAC_ENABLED=true, verify no other safe prestate key changes, restore on post-write failure, do not restart services, do not switch Capture Authority, and do not mutate DUT state. A fresh explicit production deployment preflight is required afterward before RC85."
+  "note": "Fresh explicit guarded production deployment preflight immediately after RC84F successfully enabled only FEISHU_IDENTITY_RBAC_ENABLED=true. Read the canonical authorization and real /etc/voip-ai/production.env, verify V1 prestate, deploy blockers, accepted source and production compose requirements. Perform no additional production or DUT mutation. RC85 PRODUCTION_CUTOVER must not be issued unless this action returns PASS."
 }
