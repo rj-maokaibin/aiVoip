@@ -1,9 +1,9 @@
 {
   "schema_version": "capture-v2-remote-action-v1",
-  "action_id": "RC84C-PRODUCTION-DEPLOYMENT-PREFLIGHT-006",
-  "sequence": 217,
-  "created_at": "2026-08-25T17:31:30+00:00",
-  "expires_at": "2026-08-26T05:31:30+00:00",
+  "action_id": "RC84D-PRODUCTION-DEPLOYMENT-PREFLIGHT-007",
+  "sequence": 218,
+  "created_at": "2026-08-25T17:33:30+00:00",
+  "expires_at": "2026-08-26T05:33:30+00:00",
   "action_type": "PRODUCTION_DEPLOYMENT_PREFLIGHT",
   "parameters": {
     "timeout_seconds": 300
@@ -14,8 +14,8 @@
     "require_v2_disabled": true,
     "allow_worker_kill": false,
     "allow_server_quarantine": false,
-    "expected_head": "d384e8f44ea4769a6cfb99dab34894854d517b86"
+    "expected_head": "9cdd69ad2401a5917407445dce2fe1abcffb2525"
   },
   "requested_by": "ChatGPT-remote-validation-controller",
-  "note": "RC84C explicit guarded production deployment preflight after PR #51 passed full CI/Golden and was merged to master then synchronized to the dedicated control branch. Read-only only: use the canonical production authorization and /etc/voip-ai/production.env through the audited guarded module; verify V1 prestate, production prerequisites, accepted source and compose requirements. Perform no production or DUT mutation. RC85 PRODUCTION_CUTOVER must not be issued unless this action returns PASS."
+  "note": "RC84D explicit guarded production deployment preflight. Safety anchor is the control merge commit that contains accepted master d384e8f44ea4769a6cfb99dab34894854d517b86 plus the preserved canonical production authorization audit history. Only validation/control audit commits may follow this anchor. The guarded module independently validates canonical authorization, accepted release gate, merged validated source and /etc/voip-ai/production.env. Read-only only; no production or DUT mutation. RC85 cutover remains blocked unless PASS."
 }
