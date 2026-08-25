@@ -6,6 +6,7 @@ from pathlib import Path
 from urllib.parse import quote, urlparse
 ROOT=Path(__file__).resolve().parents[2]
 DEFAULT_CONTRACT=ROOT/"deploy/live_acceptance/runtime_contract.json"
+REQUIRED_GOLDEN_ANALYZERS={"packet_intelligence","media_intelligence","pcm_intelligence"}
 
 @dataclass
 class Check:
@@ -116,19 +117,28 @@ def _bound_golden(profile,collector):
     try:
         from sqlalchemy import func,select
         from app.db.evidence_report_models import EvidenceReportArtifactLink,FeishuEvidenceDocumentBinding,PreliminaryEvidenceReport
-        from app.db.models import Evidence
+        from app.db.models import AnalyzerRun,Evidence
         from app.db.session import SessionLocal
         db=SessionLocal()
         try:
             bindings=list(db.scalars(select(FeishuEvidenceDocumentBinding).where(FeishuEvidenceDocumentBinding.document_id.is_not(None),FeishuEvidenceDocumentBinding.projected_report_id.is_not(None)).order_by(FeishuEvidenceDocumentBinding.updated_at.desc())))
-            selected=report=None
+            selected=report=None; report_snapshot_has_sha=False
             for binding in bindings:
-                candidate=db.get(PreliminaryEvidenceReport,binding.projected_report_id); material=json.dumps(candidate.snapshot_json or {},ensure_ascii=False,sort_keys=True) if candidate else ""
-                if candidate is not None and golden_sha and golden_sha in material: selected,report=binding,candidate; break
-            if selected is None or report is None: raise RuntimeError("NO_BOUND_REAL_GOLDEN_REPORT")
+                candidate=db.get(PreliminaryEvidenceReport,binding.projected_report_id)
+                exact=int(db.scalar(select(func.count()).select_from(Evidence).where(Evidence.case_id==binding.case_id,Evidence.sha256==golden_sha)) or 0)
+                if candidate is not None and golden_sha and exact>0:
+                    selected,report=binding,candidate
+                    report_snapshot_has_sha=golden_sha in json.dumps(candidate.snapshot_json or {},ensure_ascii=False,sort_keys=True)
+                    break
+            if selected is None or report is None: raise RuntimeError("NO_BOUND_REAL_GOLDEN_CASE_EVIDENCE")
+            successful=set(str(x) for x in db.scalars(select(AnalyzerRun.analyzer_name).where(AnalyzerRun.case_id==report.case_id,AnalyzerRun.status=="SUCCESS",AnalyzerRun.analyzer_name.in_(REQUIRED_GOLDEN_ANALYZERS))))
+            missing=sorted(REQUIRED_GOLDEN_ANALYZERS-successful)
+            if missing: raise RuntimeError("GOLDEN_REQUIRED_ANALYZERS_MISSING:"+",".join(missing))
             links=int(db.scalar(select(func.count()).select_from(EvidenceReportArtifactLink).where(EvidenceReportArtifactLink.report_id==report.id)) or 0); evidence=int(db.scalar(select(func.count()).select_from(Evidence).where(Evidence.case_id==report.case_id)) or 0)
             if links<=0 or evidence<=0: raise RuntimeError(f"GOLDEN_SOURCE_EMPTY:links={links},evidence={evidence}")
-            collector.pass_("GOLDEN_DOCUMENT_BINDING","PROFILE",f"document={_fingerprint(selected.document_id)}; report_version={report.version}"); collector.pass_("GOLDEN_SOURCE_EVIDENCE","PROFILE",f"report_artifacts={links}; case_evidence={evidence}"); return str(selected.document_id),str(report.id)
+            collector.pass_("GOLDEN_DOCUMENT_BINDING","PROFILE",f"document={_fingerprint(selected.document_id)}; report_version={report.version}; identity=CASE_EVIDENCE_SHA; snapshot_sha={report_snapshot_has_sha}")
+            collector.pass_("GOLDEN_SOURCE_EVIDENCE","PROFILE",f"exact_sha=1+; report_artifacts={links}; case_evidence={evidence}; analyzers={','.join(sorted(successful))}")
+            return str(selected.document_id),str(report.id)
         finally: db.close()
     except Exception as exc: collector.block("GOLDEN_DOCUMENT_BINDING","PROFILE",f"{type(exc).__name__}: {str(exc)[:180]}"); return None,None
 
