@@ -225,6 +225,17 @@ jobs:
             --feishu-secret-file "$FEISHU_SECRET_FILE"
           test -s "$LIVE_RUNTIME_CONTEXT"
 
+      - name: Recover trusted clean-stopped database when required
+        run: |
+          set -euo pipefail
+          python3 deploy/live_acceptance/runtime.py recover-database \
+            --context "$LIVE_RUNTIME_CONTEXT"
+          # Re-discover after the guarded recovery so Preflight consumes fresh
+          # topology. If recovery was refused, this remains fail-closed.
+          python3 deploy/live_acceptance/runtime.py prepare \
+            --context "$LIVE_RUNTIME_CONTEXT" \
+            --feishu-secret-file "$FEISHU_SECRET_FILE"
+
       - name: Aggregated read-only Live Acceptance preflight
         run: |
           set -euo pipefail
