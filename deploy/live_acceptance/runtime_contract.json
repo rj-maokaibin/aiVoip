@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "contract": "voip-live-acceptance-runtime-v1",
+  "runtime_version": "1.0.0",
+  "python_major_minor": "3.12",
+  "requirements_file": "backend/requirements.txt",
+  "runtime_dockerfile": "deploy/live_acceptance/Dockerfile",
+  "system_packages": [
+    "fontconfig",
+    "fonts-noto-cjk"
+  ],
+  "font_family_markers": [
+    "Noto Sans CJK",
+    "Noto Serif CJK",
+    "Source Han",
+    "WenQuanYi"
+  ],
+  "required_imports": [
+    "numpy",
+    "matplotlib",
+    "sqlalchemy",
+    "psycopg",
+    "redis",
+    "minio",
+    "httpx",
+    "lark_oapi",
+    "app.reports.human_visuals",
+    "app.integrations.feishu.evidence_document_human_v2"
+  ],
+  "required_environment": {
+    "REPRODUCTION_PLATFORM_MODE": "real",
+    "FEISHU_LIVE_ENABLED": "true"
+  },
+  "profiles": {
+    "base": {
+      "services": ["database", "redis", "minio"]
+    },
+    "human-feishu-golden-001": {
+      "services": ["database", "redis", "minio", "feishu"],
+      "golden_case": "OFFLINE_ANALYSIS_20260814_001",
+      "golden_sha256": "b038aa7c9a0644581f2815f654fcdee4620860796382265b178823fccba2e3f0"
+    }
+  },
+  "cache_policy": {
+    "reuse": true,
+    "key_inputs": [
+      "base_image_id",
+      "runtime_contract.json",
+      "Dockerfile",
+      "backend/requirements.txt"
+    ]
+  }
+}

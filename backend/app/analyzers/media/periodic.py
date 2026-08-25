@@ -23,7 +23,6 @@ def _reverse_track(track: RenderedRtpTrack, tracks: Iterable[RenderedRtpTrack]) 
     ]
     if not candidates:
         return None
-    # Prefer maximum temporal overlap.
     candidates.sort(
         key=lambda t: min(track.end_time, t.end_time) - max(track.start_time, t.start_time),
         reverse=True,
@@ -55,9 +54,7 @@ def _scope_window(pcm: dict, upstream: RenderedRtpTrack, downstream: RenderedRtp
 
 
 def _analyze_signal(signal: dict, start: float, end: float) -> dict:
-    samples = slice_by_absolute_time(
-        signal['samples'], signal['sample_rate'], signal['start_time'], start, end
-    )
+    samples = slice_by_absolute_time(signal['samples'], signal['sample_rate'], signal['start_time'], start, end)
     result = analyze_low_energy_periodicity(samples, signal['sample_rate'])
     result['analysis_window'] = {'start_time': start, 'end_time': end, 'duration_seconds': round(end-start, 6)}
     if result.get('representative'):
@@ -74,6 +71,27 @@ def _analyze_track(track: RenderedRtpTrack, start: float, end: float) -> dict:
         rel = float(result['representative'].get('start_seconds', 0.0))
         result['representative']['absolute_start_time'] = round(start + rel, 6)
     return result
+
+
+def _representative_window(periodic: dict, fallback_start: float, fallback_end: float) -> tuple[float, float, float]:
+    """Return the low-energy evidence window used for human review.
+
+    The full active-media analysis interval remains available under details.*.analysis_window.
+    Finding time instead points at the representative low-energy window so report/UI
+    does not misrepresent a persistent periodic feature as a zero-duration instant.
+    """
+    rep = periodic.get('representative') or {}
+    start = rep.get('absolute_start_time')
+    duration = rep.get('duration_seconds')
+    if start is None:
+        start = fallback_start
+    start = float(start)
+    if duration is None:
+        duration = min(1.0, max(0.0, fallback_end-start))
+    end = min(float(fallback_end), start + max(0.001, float(duration)))
+    if end <= start:
+        end = min(float(fallback_end), start + 0.001)
+    return start, end, start
 
 
 def build_periodic_path_analysis(
@@ -136,9 +154,13 @@ def build_periodic_path_analysis(
         level = 'HIGH' if local_pattern else 'MEDIUM' if pcm_strength >= medium_pcm_strength and up_strength >= medium_upstream_strength else 'LOW'
         event_type = 'LOCAL_CAPTURE_PERIODIC_INTERFERENCE' if local_pattern else 'PERIODIC_INTERFERENCE_PATH_COMPARISON'
         call_id = call.get('call_id') if call else None
+        evidence_start, evidence_end, representative_time = _representative_window(pcm_periodic, start, end)
         out.append({
             'type': event_type,
-            'time': start,
+            'time': representative_time,
+            'start_time': evidence_start,
+            'end_time': evidence_end,
+            'representative_time': representative_time,
             'severity': 'HIGH' if local_pattern else 'INFO',
             'scope': {
                 'call_id': call_id,
@@ -147,6 +169,7 @@ def build_periodic_path_analysis(
                 'upstream_rtp_stream_id': upstream.stream_id,
                 'downstream_rtp_stream_id': downstream.stream_id if downstream else None,
                 'active_media_window': {'start_time': start, 'end_time': end, 'duration_seconds': round(end-start, 6)},
+                'representative_evidence_window': {'start_time': evidence_start, 'end_time': evidence_end, 'duration_seconds': round(evidence_end-evidence_start, 6)},
             },
             'details': {
                 'level': level,

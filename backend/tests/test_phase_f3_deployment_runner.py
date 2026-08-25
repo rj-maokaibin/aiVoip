@@ -43,6 +43,16 @@ def test_production_compose_mounts_required_secrets_and_release_runner():
     assert required <= set(payload["secrets"])
     backend_secrets = set(payload["services"]["backend"]["secrets"])
     assert required <= backend_secrets
+    release_runner_volumes = set(payload["services"]["release-runner"]["volumes"])
+    assert "./validation:/app/validation:ro" in release_runner_volumes
+
+
+def test_production_feishu_rbac_is_declared_and_preflight_enforced():
+    template = (ROOT / "deploy/production.env.example").read_text(encoding="utf-8")
+    preflight = (ROOT / "deploy/deployment_preflight.py").read_text(encoding="utf-8")
+    assert "FEISHU_IDENTITY_RBAC_ENABLED=true" in template
+    assert '"FEISHU_IDENTITY_RBAC"' in preflight
+    assert 'values.get("FEISHU_IDENTITY_RBAC_ENABLED", "false")' in preflight
 
 
 def test_production_cli_is_fail_closed_and_non_destructive():
@@ -83,3 +93,5 @@ def test_runtime_verifier_is_source_bound_and_checks_all_service_layers():
         "evidence_envelope",
     ]:
         assert token in text
+    assert '"text/html" not in content_type' in text
+    assert "'<html'" not in text

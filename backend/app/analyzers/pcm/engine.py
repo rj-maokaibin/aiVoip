@@ -18,11 +18,32 @@ from app.analyzers.profile import get_default_analyzer_profile
 
 class PcmIntelligenceEngine:
     analyzer_name = "pcm_intelligence"
-    analyzer_version = "0.5.0"
+    analyzer_version = "0.6.0"
 
     def __init__(self, profile: PcmProfile):
         self.profile = profile
         self.analyzer_profile = get_default_analyzer_profile()
+
+    @staticmethod
+    def _source_endpoints(packets: list[UdpDatagram]) -> list[dict]:
+        counts: dict[tuple[str, int], int] = defaultdict(int)
+        first: dict[tuple[str, int], float] = {}
+        last: dict[tuple[str, int], float] = {}
+        for packet in packets:
+            key = (str(packet.src_ip), int(packet.src_port))
+            counts[key] += 1
+            first[key] = min(first.get(key, packet.timestamp), packet.timestamp)
+            last[key] = max(last.get(key, packet.timestamp), packet.timestamp)
+        return [
+            {
+                "ip": ip,
+                "port": port,
+                "packet_count": counts[(ip, port)],
+                "first_timestamp": first[(ip, port)],
+                "last_timestamp": last[(ip, port)],
+            }
+            for ip, port in sorted(counts, key=lambda item: (-counts[item], item[0], item[1]))
+        ]
 
     def analyze_pcap(self, path: str | Path) -> dict:
         tap_by_port = {tap.dst_port: tap for tap in self.profile.taps}
@@ -45,7 +66,21 @@ class PcmIntelligenceEngine:
                 session_results = [self._analyze_session(i, s) for i, s in enumerate(sessions)]
             else:
                 session_results = [self._raw_session(i, s) for i, s in enumerate(sessions)]
-            streams.append({"tap": asdict(tap), "packet_count": len(packets), "sessions": session_results})
+            streams.append({
+                "tap": asdict(tap),
+                "packet_count": len(packets),
+                "source_endpoints": self._source_endpoints(packets),
+                "sessions": session_results,
+            })
+
+        source_ip_counts: dict[str, int] = defaultdict(int)
+        for stream in streams:
+            for endpoint in stream.get("source_endpoints", []):
+                source_ip_counts[str(endpoint["ip"])] += int(endpoint["packet_count"])
+        source_ips = [
+            {"ip": ip, "packet_count": count}
+            for ip, count in sorted(source_ip_counts.items(), key=lambda item: (-item[1], item[0]))
+        ]
 
         return {
             "analyzer": self.analyzer_name,
@@ -71,6 +106,8 @@ class PcmIntelligenceEngine:
                 "total_packets": sum(s["packet_count"] for s in streams),
                 "session_count": sum(len(s["sessions"]) for s in streams),
                 "ignored_size_mismatch_packets": ignored_size,
+                "source_ips": source_ips,
+                "source_ip_count": len(source_ips),
             },
             "streams": streams,
         }
@@ -98,6 +135,7 @@ class PcmIntelligenceEngine:
             "start_time": packets[0].timestamp,
             "end_time": packets[-1].timestamp,
             "packet_count": len(packets),
+            "source_endpoints": self._source_endpoints(packets),
             "payload_bytes": sum(len(p.payload) for p in packets),
             "analysis_availability": "UNAVAILABLE",
             "unavailable_reason": "PCM_FORMAT_NOT_VERIFIED",
@@ -128,6 +166,7 @@ class PcmIntelligenceEngine:
             "start_time": packets[0].timestamp,
             "end_time": packets[-1].timestamp,
             "packet_count": len(packets),
+            "source_endpoints": self._source_endpoints(packets),
             "payload_bytes": len(raw),
             "analysis_availability": "AVAILABLE",
             "audio_duration_seconds": round(samples.size / self.profile.sample_rate / self.profile.channels, 6),

@@ -114,24 +114,27 @@ def test_gate_sftp_adapter_scp_get_uses_native_method(monkeypatch, tmp_path):
     assert (tmp_path / "seg.pcap").read_bytes() == b"NATIVE"
 
 
-def test_fault_injecting_adapter_scp_before_get_failpoint(monkeypatch):
+def test_fault_injecting_adapter_scp_before_get_failpoint(tmp_path):
     from app.capture_v2.gate.faults import FaultInjectingAdapter, GateFaultPlan
 
     plan = GateFaultPlan(sftp_fail_before_get_count=1)
     adapter = FaultInjectingAdapter(_ScpAdapter(), plan)
+    target = tmp_path / "seg-before.pcap"
     with pytest.raises(CaptureV2Error) as exc:
-        asyncio.run(adapter.scp_get("/r/seg.pcap", "/tmp/seg.pcap"))
+        asyncio.run(adapter.scp_get("/r/seg.pcap", str(target)))
     assert exc.value.code == "GATE_INJECTED_SCP_FAILURE"
+    assert not target.exists()
 
 
-def test_fault_injecting_adapter_scp_after_get_failpoint():
+def test_fault_injecting_adapter_scp_after_get_failpoint(tmp_path):
     plan = GateFaultPlan(sftp_fail_after_get_count=1)
     adapter = FaultInjectingAdapter(_ScpAdapter(), plan)
+    target = tmp_path / "seg-after.pcap"
     with pytest.raises(CaptureV2Error) as exc:
-        asyncio.run(adapter.scp_get("/r/seg.pcap", "/tmp/seg.pcap"))
+        asyncio.run(adapter.scp_get("/r/seg.pcap", str(target)))
     assert exc.value.code == "GATE_INJECTED_SCP_FAILURE"
     # underlying transfer happened (payload written) before the injected failure
-    assert Path("/tmp/seg.pcap").read_bytes() == b"SCP-PAYLOAD"
+    assert target.read_bytes() == b"SCP-PAYLOAD"
 
 
 def test_build_capture_v2_c_transport_scp_selects_scp_downloader(monkeypatch):

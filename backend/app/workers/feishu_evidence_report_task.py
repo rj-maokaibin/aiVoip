@@ -8,7 +8,7 @@ from sqlalchemy import select
 from app.core.config import settings
 from app.db.evidence_report_models import FeishuEvidenceDocumentBinding, PreliminaryEvidenceReport
 from app.db.session import SessionLocal
-from app.integrations.feishu.evidence_document import FeishuEvidenceDocumentService
+from app.integrations.feishu.evidence_document_human_v2 import HumanFeishuEvidenceDocumentService
 from app.integrations.feishu.service import FeishuCaseCardService
 from app.services.audit import audit
 from app.workers.celery_app import celery_app
@@ -25,7 +25,7 @@ def project_case_evidence_document(self,case_id:str,report_id:str):
         report=db.get(PreliminaryEvidenceReport,report_id)
         if not report or report.case_id!=case_id:
             return {"status":"NOT_FOUND","case_id":case_id,"report_id":report_id}
-        binding=asyncio.run(FeishuEvidenceDocumentService().project(db,case_id=case_id,report_id=report_id))
+        binding=asyncio.run(HumanFeishuEvidenceDocumentService().project(db,case_id=case_id,report_id=report_id))
         card_status="NOT_BOUND"
         try:
             asyncio.run(FeishuCaseCardService().sync_case_card(db,case_id=case_id))

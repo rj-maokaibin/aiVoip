@@ -19,11 +19,15 @@ class ProductionConfigItem:
         return asdict(self)
 
 
-def _secret_configured(ref: SecretRef, *, name: str) -> bool:
+def _resolved_secret(ref: SecretRef, *, name: str) -> str:
     try:
-        return bool(SecretResolver.resolve(ref, name=name, required=False))
+        return SecretResolver.resolve(ref, name=name, required=False)
     except SecretResolutionError:
-        return False
+        return ""
+
+
+def _secret_configured(ref: SecretRef, *, name: str) -> bool:
+    return bool(_resolved_secret(ref, name=name))
 
 
 def production_config_readiness() -> dict[str, Any]:
@@ -48,13 +52,11 @@ def production_config_readiness() -> dict[str, Any]:
     items.append(ProductionConfigItem("PRODUCTION_CREDENTIAL_PROVIDER", "PASS" if credential_ok else "BLOCKED", "API credential provider configured" if credential_ok else "CREDENTIAL_PROVIDER=api and CREDENTIAL_API_URL are required"))
 
     storage_ok = str(settings.reproduction_storage_mode).lower() == "minio"
-    minio_access = _secret_configured(SecretRef(settings.minio_access_key, settings.minio_access_key_file, settings.minio_access_key_env), name="MINIO_ACCESS_KEY")
-    minio_secret = _secret_configured(SecretRef(settings.minio_secret_key, settings.minio_secret_key_file, settings.minio_secret_key_env), name="MINIO_SECRET_KEY")
+    minio_access = _resolved_secret(SecretRef(settings.minio_access_key, settings.minio_access_key_file, settings.minio_access_key_env), name="MINIO_ACCESS_KEY")
+    minio_secret = _resolved_secret(SecretRef(settings.minio_secret_key, settings.minio_secret_key_file, settings.minio_secret_key_env), name="MINIO_SECRET_KEY")
     defaults = {"voipminio", "voipminiosecret", "change-me", "minioadmin"}
-    direct_access = str(settings.minio_access_key or "").strip()
-    direct_secret = str(settings.minio_secret_key or "").strip()
-    non_default = (not direct_access or direct_access not in defaults) and (not direct_secret or direct_secret not in defaults)
-    storage_config_ok = storage_ok and minio_access and minio_secret and non_default and bool(settings.minio_bucket)
+    non_default = SecretResolver.is_non_default(minio_access, defaults) and SecretResolver.is_non_default(minio_secret, defaults)
+    storage_config_ok = storage_ok and bool(minio_access) and bool(minio_secret) and non_default and bool(settings.minio_bucket)
     items.append(ProductionConfigItem("PRODUCTION_STORAGE_CONFIG", "PASS" if storage_config_ok else "BLOCKED", "MinIO backend and non-default secret refs configured" if storage_config_ok else "production MinIO backend, bucket and non-default credentials are required"))
 
     feishu_ok = bool(settings.feishu_live_enabled and FeishuLiveTransport().configured())

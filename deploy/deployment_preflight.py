@@ -150,6 +150,14 @@ def main() -> int:
     feishu_ok = bool_value(values.get("FEISHU_LIVE_ENABLED", "false")) and bool(values.get("FEISHU_APP_ID", "").strip()) and bool(values.get("FEISHU_DEFAULT_RECEIVE_ID", "").strip())
     checks.append(Check("FEISHU_LIVE_CONFIG", "PASS" if feishu_ok else "BLOCKED", "INTEGRATION", "live target configured" if feishu_ok else "FEISHU_LIVE_ENABLED, FEISHU_APP_ID and FEISHU_DEFAULT_RECEIVE_ID are required", not feishu_ok, not feishu_ok))
 
+    feishu_rbac_ok = bool_value(values.get("FEISHU_IDENTITY_RBAC_ENABLED", "false"))
+    checks.append(Check(
+        "FEISHU_IDENTITY_RBAC", "PASS" if feishu_rbac_ok else "BLOCKED", "SECURITY",
+        "Feishu identity RBAC enabled" if feishu_rbac_ok else
+        "FEISHU_IDENTITY_RBAC_ENABLED=true is required for production Feishu live transport",
+        not feishu_rbac_ok, not feishu_rbac_ok,
+    ))
+
     platform_mode = values.get("REPRODUCTION_PLATFORM_MODE", "mock").lower()
     platform_ready = platform_mode not in {"", "mock", "pending"}
     checks.append(Check(

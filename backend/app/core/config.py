@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -113,7 +114,10 @@ class Settings(BaseSettings):
     feishu_verification_token: str = ""
     feishu_verification_token_file: str = ""
     feishu_verification_token_env: str = ""
-    feishu_timeout_seconds: float = 8.0
+    # Live Evidence Bundle/media uploads regularly exceed the generic 8s request
+    # budget. Keep a bounded but production-safe floor so a valid multi-MB upload
+    # is not classified as a report failure solely because of socket write time.
+    feishu_timeout_seconds: float = 120.0
     feishu_attachment_max_bytes: int = 100 * 1024 * 1024
     feishu_identity_rbac_enabled: bool = False
     feishu_identity_discover_unmapped: bool = True
@@ -144,6 +148,24 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     def model_post_init(self, __context) -> None:
+        # Live Acceptance mounts the exact Git head at the container working
+        # directory while the reusable runtime image may contain an older /app
+        # source tree. Bind all source-controlled data roots to that mounted head
+        # only when the runtime identity is explicitly present. Normal production
+        # processes do not set LIVE_ACCEPTANCE_SOURCE_REVISION and keep /app roots.
+        if str(os.getenv("LIVE_ACCEPTANCE_SOURCE_REVISION") or "").strip():
+            workspace = Path(os.getenv("LIVE_ACCEPTANCE_WORKSPACE_ROOT") or Path.cwd()).resolve()
+            live_roots = {
+                "profile_root": workspace / "profiles",
+                "rule_root": workspace / "rules" / "diagnosis",
+                "knowledge_root": workspace / "knowledge" / "seed",
+            }
+            missing = [name for name, path in live_roots.items() if not path.is_dir()]
+            if missing:
+                raise ValueError("LIVE_ACCEPTANCE_SOURCE_ROOT_INVALID:" + ",".join(sorted(missing)))
+            for name, path in live_roots.items():
+                setattr(self, name, path)
+
         capture_version = str(self.capture_engine_version or "V1").upper().strip()
         if capture_version not in {"V1", "V2"}:
             raise ValueError("CAPTURE_ENGINE_VERSION_INVALID")
@@ -162,6 +184,10 @@ class Settings(BaseSettings):
         self.ai_semantic_router_mode = semantic_mode
         if not 0.0 <= float(self.ai_semantic_router_min_confidence) <= 1.0:
             raise ValueError("AI_SEMANTIC_ROUTER_MIN_CONFIDENCE_INVALID")
+        # Do not allow a stale/deployment-level FEISHU_TIMEOUT_SECONDS=8 override
+        # to re-introduce the real 6MB Evidence Bundle WriteTimeout seen in the
+        # final acceptance run. The timeout remains finite and configurable upward.
+        self.feishu_timeout_seconds = max(120.0, float(self.feishu_timeout_seconds))
         mode = str(self.feishu_document_acl_mode or "AUTO").upper()
         if mode not in {"AUTO", "CHAT_SCOPE", "MEMBER_MIRROR"}:
             raise ValueError("FEISHU_DOCUMENT_ACL_MODE_INVALID")

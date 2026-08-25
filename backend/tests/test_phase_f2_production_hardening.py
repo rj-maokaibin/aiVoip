@@ -75,6 +75,24 @@ def test_production_config_gate_is_conservative_by_default():
     assert feishu_status in {"PASS", "BLOCKED"}
 
 
+def test_production_storage_config_uses_resolved_file_secrets(tmp_path, monkeypatch):
+    access_file = tmp_path / "minio-access"
+    secret_file = tmp_path / "minio-secret"
+    access_file.write_text("production-access\n", encoding="utf-8")
+    secret_file.write_text("production-secret\n", encoding="utf-8")
+    monkeypatch.setattr(settings, "reproduction_storage_mode", "minio")
+    monkeypatch.setattr(settings, "minio_access_key", "voipminio")
+    monkeypatch.setattr(settings, "minio_access_key_file", str(access_file))
+    monkeypatch.setattr(settings, "minio_access_key_env", "")
+    monkeypatch.setattr(settings, "minio_secret_key", "voipminiosecret")
+    monkeypatch.setattr(settings, "minio_secret_key_file", str(secret_file))
+    monkeypatch.setattr(settings, "minio_secret_key_env", "")
+    monkeypatch.setattr(settings, "minio_bucket", "voip-evidence")
+
+    items = {item["key"]: item for item in production_config_readiness()["items"]}
+    assert items["PRODUCTION_STORAGE_CONFIG"]["status"] == "PASS"
+
+
 def test_production_app_rejects_insecure_startup_in_fresh_process():
     code = "from pathlib import Path; import sys; sys.path.insert(0, str(Path.cwd()/'tools')); from offline_import_bootstrap import install; install(); import app.main"
     env = {

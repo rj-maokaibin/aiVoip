@@ -12,10 +12,12 @@
           "anomalies": [
             {"type": "SIP_REGISTRATION_FAILED", "severity": "HIGH", "start_time": 0.2, "evidence": {"status_code": 403}},
             {"type": "SIP_CALL_FAILED", "severity": "HIGH", "start_time": 0.4, "evidence": {"call_id": "call-1", "status_code": 503}},
+            {"type": "SIP_CONFLICTING_FINAL_RESPONSE", "severity": "HIGH", "start_time": 0.5, "evidence": {"call_id": "call-1", "first_status_code": 486, "second_status_code": 200}},
             {"type": "CODEC_NEGOTIATION_MISMATCH", "severity": "MEDIUM", "start_time": 0.6, "evidence": {"call_id": "call-1", "negotiated_codec": "PCMU", "observed_codec": "PCMA"}},
             {"type": "ONE_WAY_RTP_MEDIA", "severity": "HIGH", "start_time": 0.8, "evidence": {"call_id": "call-1", "stream_id": "rtp-core"}},
             {"type": "PACKET_LOSS", "severity": "MEDIUM", "start_time": 1.0, "evidence": {"stream_id": "rtp-core", "lost_packets": 1, "previous_frame_number": 50, "next_frame_number": 51}},
-            {"type": "HIGH_DELTA", "severity": "MEDIUM", "start_time": 1.2, "evidence": {"stream_id": "rtp-core", "delta_ms": 80.0, "previous_frame_number": 60, "current_frame_number": 61}}
+            {"type": "HIGH_DELTA", "severity": "MEDIUM", "start_time": 1.2, "evidence": {"stream_id": "rtp-core", "delta_ms": 80.0, "previous_frame_number": 60, "current_frame_number": 61}},
+            {"type": "PAYLOAD_CHANGE", "severity": "MEDIUM", "start_time": 1.4, "evidence": {"call_id": "call-1", "stream_id": "rtp-core", "previous_payload_type": 0, "current_payload_type": 8, "previous_frame_number": 70, "current_frame_number": 71}}
           ]
         }
       },
@@ -23,10 +25,12 @@
         "finding_types": [
           "SIP_REGISTRATION_FAILED",
           "SIP_CALL_FAILED",
+          "SIP_CONFLICTING_FINAL_RESPONSE",
           "CODEC_NEGOTIATION_MISMATCH",
           "ONE_WAY_RTP_MEDIA",
           "PACKET_LOSS",
-          "HIGH_DELTA"
+          "HIGH_DELTA",
+          "PAYLOAD_CHANGE"
         ]
       }
     },

@@ -88,6 +88,7 @@ services:
       - ./profiles:/app/profiles:ro
       - ./rules:/app/rules:ro
       - ./knowledge:/app/knowledge:ro
+      - ./validation:/app/validation:ro
     secrets: *app_secrets
     command: ["python", "-c", "print('release-runner-ready')"]
 

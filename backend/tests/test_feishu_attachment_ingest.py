@@ -38,6 +38,9 @@ def test_attachment_ingest_creates_evidence_and_diagnosis_without_reproduction(m
     monkeypatch.setattr('app.workers.diagnosis_tasks.run_diagnosis.apply_async',
                         lambda args, queue=None: dispatched.__setitem__('n', dispatched['n'] + 1),
                         raising=False)
+    replies = []
+    monkeypatch.setattr('app.integrations.feishu.feedback.enqueue_reply',
+                        lambda message_id, text: replies.append((message_id, text)) or True)
 
     result = ingest_feishu_attachments.run(
         '单通无声', 'oc_A', 'group',
@@ -49,6 +52,7 @@ def test_attachment_ingest_creates_evidence_and_diagnosis_without_reproduction(m
     assert result['status'] == 'OK'
     assert result['reproduction_started'] is False
     assert dispatched['n'] == 1
+    assert replies and replies[-1][0] == 'msg-file'
     with Session(eng) as db:
         evidence = db.scalar(select(Evidence))
         assert evidence is not None and evidence.type == 'PCAP'

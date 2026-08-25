@@ -1,0 +1,199 @@
+name: Human Evidence Feishu Live Acceptance One Shot
+
+on:
+  pull_request:
+    branches:
+      - master
+    paths:
+      - 'tools/human_evidence_feishu_live_acceptance.py'
+      - 'backend/tests/test_human_feishu_projection_contract_v2.py'
+      - '.github/workflows/human-evidence-feishu-live-acceptance.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  statuses: write
+
+concurrency:
+  # Keep the same effective key as the former push workflow
+  # (refs/heads/feat/...) so an older one-shot can finish safely first.
+  group: human-evidence-feishu-live-acceptance-refs/heads/${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  gated-live-projection:
+    runs-on:
+      - self-hosted
+      - linux
+      - x64
+      - voip-controlled-linux
+    timeout-minutes: 75
+    env:
+      LIVE_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      OFFLINE_GOLDEN_PCAP: /tmp/tcpdump-2026-08-14.pcap
+      OFFLINE_GOLDEN_SHA256: b038aa7c9a0644581f2815f654fcdee4620860796382265b178823fccba2e3f0
+      VOIP_AI_GATE_VENV: ${{ runner.temp }}/voip-ai-release-gate
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.LIVE_HEAD_SHA }}
+          fetch-depth: 1
+
+      - name: Verify exact live acceptance head
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$LIVE_HEAD_SHA"
+          printf 'LIVE_ACCEPTANCE_HEAD=%s\n' "$LIVE_HEAD_SHA"
+
+      - name: Mark live acceptance pending
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY' > "$RUNNER_TEMP/human-feishu-live-status.json"
+          import json, os
+          print(json.dumps({
+              "state": "pending",
+              "target_url": f"{os.environ['GITHUB_SERVER_URL']}/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['GITHUB_RUN_ID']}",
+              "description": "Human V2 live Feishu acceptance running",
+              "context": "Human Evidence Feishu Live",
+          }))
+          PY
+          curl -fsSL -X POST \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/statuses/$LIVE_HEAD_SHA" \
+            --data-binary @"$RUNNER_TEMP/human-feishu-live-status.json" >/dev/null
+
+      - name: Controlled runner identity
+        run: |
+          set -euo pipefail
+          python3 --version
+          node --version
+          npm --version
+          docker info >/dev/null
+
+      - name: Exact-head software and Real Golden gates before live mutation
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$LIVE_HEAD_SHA"
+          fixture="$OFFLINE_GOLDEN_PCAP"
+          if [ ! -r "$fixture" ]; then
+            staged="$RUNNER_TEMP/human-feishu-live-golden.pcap"
+            rm -f "$staged"
+            docker run --rm \
+              -v /tmp:/source:ro \
+              -v "$RUNNER_TEMP":/output \
+              --entrypoint sh postgres:16 \
+              -c "cp /source/tcpdump-2026-08-14.pcap /output/human-feishu-live-golden.pcap && chmod 0644 /output/human-feishu-live-golden.pcap"
+            fixture="$staged"
+          fi
+          test -r "$fixture"
+          test "$(sha256sum "$fixture" | awk '{print $1}')" = "$OFFLINE_GOLDEN_SHA256"
+          export OFFLINE_GOLDEN_PCAP="$fixture"
+
+          tshark_bin="$(command -v tshark)"
+          tshark_version="$($tshark_bin -v | head -n1)"
+          printf 'TSHARK=%s\n' "$tshark_version"
+          [[ "$tshark_version" == *"4.2.2"* ]]
+          export TSHARK_BINARY="$tshark_bin"
+
+          bash tools/voip_ai_release_gate.sh
+          source "$VOIP_AI_GATE_VENV/bin/activate"
+          rm -rf offline-golden-artifacts offline-golden-human-artifacts offline-golden-result.json
+          TSHARK_BINARY="$TSHARK_BINARY" python tools/offline_analysis_golden_replay.py \
+            --pcap "$OFFLINE_GOLDEN_PCAP" \
+            --require-fixture \
+            --artifacts offline-golden-artifacts \
+            --result offline-golden-result.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=json.loads(Path('offline-golden-result.json').read_text(encoding='utf-8'))
+          assert p['status']=='PASS' and p['passed'] is True, p
+          assert p['checks_passed']==142 and p['checks_total']==142, p
+          print('PRE_LIVE_REAL_OFFLINE_GOLDEN_001=PASS 142/142')
+          PY
+          python tools/human_evidence_real_golden_gate.py \
+            --artifacts offline-golden-artifacts \
+            --output offline-golden-human-artifacts
+          test -s offline-golden-human-artifacts/pcm_rx_periodic_spectrum_human_v2.png
+          test -s offline-golden-human-artifacts/pcm_rx_periodic_spectrogram_human_v2.png
+          test -s offline-golden-human-artifacts/pcm_rx_dtmf_first_digit_inspector_human_v2.png
+          echo 'PRE_LIVE_HUMAN_REAL_OFFLINE_GOLDEN_001=PASS'
+
+      - name: Load controlled live environment and project same bound document
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$LIVE_HEAD_SHA"
+          set -a
+          loaded=0
+          for env_file in /home/dev/workspace/aiVoip/.env /home/dev/workspace/aiVoip/backend/.env; do
+            if [ -r "$env_file" ]; then
+              source "$env_file"
+              loaded=$((loaded+1))
+            fi
+          done
+          set +a
+          test "$loaded" -gt 0
+          export PYTHONPATH="$GITHUB_WORKSPACE/backend:$GITHUB_WORKSPACE"
+          export MPLCONFIGDIR="$RUNNER_TEMP/human-evidence-matplotlib"
+          mkdir -p "$MPLCONFIGDIR"
+          source "$VOIP_AI_GATE_VENV/bin/activate"
+          python tools/human_evidence_feishu_live_acceptance.py \
+            --result validation/human_evidence_feishu_live_acceptance.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=json.loads(Path('validation/human_evidence_feishu_live_acceptance.json').read_text(encoding='utf-8'))
+          assert p['status']=='PASS', p
+          assert p['golden_sha256_verified'] is True, p
+          assert p['document_reused'] is True, p
+          assert p['required_visual_kinds_present'] is True, p
+          assert p['image_then_five_explanations_verified'] is True, p
+          assert p['diagnostic_authority_escalation'] is False, p
+          print('HUMAN_EVIDENCE_FEISHU_LIVE_ACCEPTANCE=PASS')
+          PY
+
+      - name: Upload sanitized live acceptance result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: human-evidence-feishu-live-acceptance
+          path: validation/human_evidence_feishu_live_acceptance.json
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Publish live acceptance commit status
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          LIVE_JOB_STATUS: ${{ job.status }}
+        run: |
+          set -euo pipefail
+          if [ "$LIVE_JOB_STATUS" = "success" ]; then
+            state=success
+            description='Human V2 live Feishu acceptance passed'
+          else
+            state=failure
+            description='Human V2 live Feishu acceptance failed'
+          fi
+          export LIVE_STATUS_STATE="$state"
+          export LIVE_STATUS_DESCRIPTION="$description"
+          python3 - <<'PY' > "$RUNNER_TEMP/human-feishu-live-status.json"
+          import json, os
+          print(json.dumps({
+              "state": os.environ["LIVE_STATUS_STATE"],
+              "target_url": f"{os.environ['GITHUB_SERVER_URL']}/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['GITHUB_RUN_ID']}",
+              "description": os.environ["LIVE_STATUS_DESCRIPTION"],
+              "context": "Human Evidence Feishu Live",
+          }))
+          PY
+          curl -fsSL -X POST \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/statuses/$LIVE_HEAD_SHA" \
+            --data-binary @"$RUNNER_TEMP/human-feishu-live-status.json" >/dev/null

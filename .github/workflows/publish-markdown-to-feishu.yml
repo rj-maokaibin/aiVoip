@@ -1,0 +1,134 @@
+name: Publish Markdown To Feishu
+
+# PR observability trigger: this workflow also serves as the quick-use publishing path.
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - 'feishu_publish/requests/*.md'
+  pull_request:
+    branches:
+      - master
+    paths:
+      - '.github/workflows/publish-markdown-to-feishu.yml'
+      - 'feishu_publish/requests/*.md'
+  workflow_dispatch:
+    inputs:
+      source:
+        description: 'Repository-relative Markdown path'
+        required: true
+        default: 'feishu_publish/requests/PON_84B_1260Mbps_最终定性报告_2026-08-25.md'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-markdown-to-feishu-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on:
+      - self-hosted
+      - linux
+      - x64
+      - voip-controlled-linux
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 8
+
+      - name: Resolve source Markdown
+        id: source
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            source_path='${{ github.event.inputs.source }}'
+          elif [ "${{ github.event_name }}" = "pull_request" ]; then
+            source_path='feishu_publish/requests/PON_84B_1260Mbps_最终定性报告_2026-08-25.md'
+          else
+            source_path="$(git diff-tree --no-commit-id --name-only -r "$GITHUB_SHA" | grep '^feishu_publish/requests/.*\.md$' | head -n1 || true)"
+          fi
+          test -n "$source_path"
+          test -f "$source_path"
+          echo "path=$source_path" >> "$GITHUB_OUTPUT"
+          echo "SOURCE_MD=$source_path"
+
+      - name: Publish through controlled live Feishu backend
+        id: publish
+        shell: bash
+        run: |
+          set -euo pipefail
+          source_path='${{ steps.source.outputs.path }}'
+          result="$RUNNER_TEMP/feishu_markdown_publish_result.json"
+          log="$RUNNER_TEMP/feishu_publish.log"
+
+          backend_ids=()
+          while IFS= read -r cid; do
+            [ -n "$cid" ] || continue
+            env_dump="$(docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$cid")"
+            if grep -qx 'REPRODUCTION_PLATFORM_MODE=real' <<<"$env_dump" \
+              && grep -qx 'FEISHU_LIVE_ENABLED=true' <<<"$env_dump"; then
+              backend_ids+=("$cid")
+            fi
+          done < <(docker ps --filter label=com.docker.compose.service=backend -q)
+
+          echo "CONTROLLED_FEISHU_BACKEND_COUNT=${#backend_ids[@]}"
+          test "${#backend_ids[@]}" -eq 1
+          backend_id="${backend_ids[0]}"
+          remote_root="/tmp/feishu-markdown-publish-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+
+          docker exec "$backend_id" mkdir -p "$remote_root"
+          cleanup() {
+            docker exec "$backend_id" rm -rf "$remote_root" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          docker cp tools/publish_markdown_to_feishu.py "$backend_id:$remote_root/publisher.py"
+          docker cp "$source_path" "$backend_id:$remote_root/report.md"
+
+          docker exec -w /app -e PYTHONPATH=/app "$backend_id" \
+            python "$remote_root/publisher.py" \
+              --source "$remote_root/report.md" \
+              --result "$remote_root/result.json" | tee "$log"
+
+          docker cp "$backend_id:$remote_root/result.json" "$result"
+
+          python3 - "$result" <<'PY' >> "$GITHUB_OUTPUT"
+          import json, sys
+          p = json.load(open(sys.argv[1], encoding='utf-8'))
+          assert p['status'] == 'PASS', p
+          print('url=' + p['url'])
+          print('document_id=' + p['document_id'])
+          print('block_count=' + str(p['block_count']))
+          PY
+
+          mkdir -p validation
+          cp "$result" validation/feishu_markdown_publish_result.json
+
+      - name: Publish job summary
+        if: success()
+        shell: bash
+        run: |
+          {
+            echo '## Feishu Markdown Publish'
+            echo
+            echo '- Source: `${{ steps.source.outputs.path }}`'
+            echo '- Document ID: `${{ steps.publish.outputs.document_id }}`'
+            echo '- Blocks: `${{ steps.publish.outputs.block_count }}`'
+            echo '- Document: ${{ steps.publish.outputs.url }}'
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo 'FEISHU_DOC_URL=${{ steps.publish.outputs.url }}'
+
+      - name: Upload publish result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: feishu-markdown-publish-result
+          path: validation/feishu_markdown_publish_result.json
+          if-no-files-found: warn
+          retention-days: 14

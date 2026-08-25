@@ -98,6 +98,11 @@ def test_gate_server_copy_loss_is_real_quarantine_before_delete(tmp_path):
     persisted = base.persist(source_path=src, storage_key="capture-v2/D/E/seg_1.pcap", sha256=digest)
     plan = GateFaultPlan(persist_fail_count=1, metadata={"mode": "SERVER_COPY_LOSS_BEFORE_DELETE"})
     wrapped = FaultInjectingStore(base, plan)
+    # FaultInjectingStore defaults to a shared /tmp quarantine for real gate runs.
+    # Unit tests must not depend on ownership/permissions left by another runner
+    # invocation, so isolate the quarantine while preserving the exact move-before-delete behavior.
+    wrapped.quarantine_root = tmp_path / "quarantine"
+    wrapped.quarantine_root.mkdir(parents=True, exist_ok=True)
     assert wrapped.verify(storage_key=persisted.storage_key, size=persisted.size, sha256=persisted.sha256) is False
     assert not (base.root / persisted.storage_key).exists()
     assert plan.persist_fail_count == 0
