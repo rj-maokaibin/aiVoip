@@ -16,6 +16,18 @@ from app.reports.evidence_visuals import (
     render_rtp_timeline_png, render_spectrum_png,
     render_spectrogram_png, render_waveform_png, visual_metadata,
 )
+from app.reports.human_visuals import (
+    HUMAN_RENDERER_VERSION,
+    PRESENTATION_PROFILE,
+    build_human_explanation,
+    human_renderer_enabled,
+    render_human_spectrum_png_from_wav,
+    render_human_spectrogram_png,
+    render_human_spectrogram_png_from_wav,
+    render_human_waveform_png,
+)
+from app.reports.human_visuals.periodic_measurements import merge_visual_measurement, periodic_measurement
+from app.reports.human_visuals.wav_window import slice_pcm16_wav_bytes
 from app.reports.sip_flow_visual import render_sip_call_flow_png
 from app.services.audit import audit
 
@@ -23,6 +35,9 @@ from app.services.audit import audit
 _PCM_FOCUSED_VISUAL_TYPES={
     "PCM_GAP","UNEXPECTED_SILENCE","CLICK_POP","PERIODIC_LOW_FREQUENCY_INTERFERENCE",
     "LOCAL_CAPTURE_PERIODIC_INTERFERENCE","PERIODIC_INTERFERENCE_PATH_COMPARISON","ECHO_PATH_DETECTED","DTMF_ABNORMAL",
+}
+_PERIODIC_VISUAL_TYPES={
+    "PERIODIC_LOW_FREQUENCY_INTERFERENCE","LOCAL_CAPTURE_PERIODIC_INTERFERENCE","PERIODIC_INTERFERENCE_PATH_COMPARISON",
 }
 
 
@@ -59,6 +74,23 @@ def _media_json_artifacts(db: Session, storage, media_run: AnalyzerRun | None) -
         try:out.append((row,json.loads(storage.get_bytes(row.object_key).decode("utf-8"))))
         except Exception:continue
     return out
+
+
+def _media_pcm_wav_artifacts(db: Session, media_run: AnalyzerRun | None) -> list[Artifact]:
+    if not media_run:return []
+    return list(db.scalars(select(Artifact).where(
+        Artifact.analyzer_run_id==media_run.id,
+        Artifact.type=="PCM_WAV",
+    ).order_by(Artifact.created_at.asc())))
+
+
+def _media_periodic_artifacts(db: Session, media_run: AnalyzerRun | None) -> tuple[list[Artifact],list[Artifact]]:
+    if not media_run:return [],[]
+    rows=list(db.scalars(select(Artifact).where(
+        Artifact.analyzer_run_id==media_run.id,
+        Artifact.type.in_(["PERIODIC_AUDIO_CLIP","PERIODIC_METRICS_JSON"]),
+    ).order_by(Artifact.created_at.asc())))
+    return [a for a in rows if a.type=="PERIODIC_AUDIO_CLIP"],[a for a in rows if a.type=="PERIODIC_METRICS_JSON"]
 
 
 def _current_findings(db:Session,report:PreliminaryEvidenceReport)->list[EvidenceFinding]:
@@ -121,9 +153,196 @@ def _focused_rtp_stream(stream:dict,f:EvidenceFinding)->dict:
     return {**stream,"start_time":window_start,"end_time":window_end,"events":events}
 
 
+def _artifact_scope(artifact:Artifact)->dict:
+    meta=artifact.metadata_json or {}
+    nested=meta.get("scope") if isinstance(meta.get("scope"),dict) else {}
+    return {**nested,**{k:v for k,v in meta.items() if k!="scope"}}
+
+
+def _periodic_match(artifact:Artifact,finding:EvidenceFinding,*,source:str|None=None)->bool:
+    meta=_artifact_scope(artifact);scope=finding.scope_json or {}
+    if source and str(meta.get("source") or "").lower()!=source.lower():return False
+    if meta.get("pcm_tap") and scope.get("pcm_tap") and meta.get("pcm_tap")!=scope.get("pcm_tap"):return False
+    a_idx=meta.get("pcm_session_index",meta.get("session_index"));f_idx=scope.get("pcm_session_index")
+    if a_idx is not None and f_idx is not None and int(a_idx)!=int(f_idx):return False
+    call_id=meta.get("call_id");f_call=scope.get("call_id")
+    if call_id and f_call and call_id!=f_call:return False
+    return bool(meta.get("pcm_tap") or meta.get("path_index") is not None)
+
+
+def _load_json_artifact(storage,artifact:Artifact|None)->dict:
+    if artifact is None:return {}
+    try:return json.loads(storage.get_bytes(artifact.object_key).decode("utf-8"))
+    except Exception:return {}
+
+
+def _human_metadata(kind:str,*,base:dict,finding:EvidenceFinding,measurement:dict|None=None)->dict:
+    measurement=measurement or {}
+    explanation=build_human_explanation(finding,kind,measurement=measurement)
+    out={
+        **base,
+        "renderer_family":"HUMAN",
+        "renderer_version":HUMAN_RENDERER_VERSION,
+        "presentation_profile":PRESENTATION_PROFILE,
+        "presentation_priority":100,
+        "visual_kind":kind,
+        "human_explanation":explanation,
+        "measurement":measurement,
+    }
+    annotation=dict(out.get("annotation_contract") or {})
+    annotation["human_explanation_required"]=True
+    annotation["human_explanation_contract"]="human-visual-explanation-v1"
+    out["annotation_contract"]=annotation
+    out["annotation_complete"]=bool(
+        out.get("annotation_complete")
+        and explanation.get("what_to_look_at")
+        and explanation.get("meaning")
+        and explanation.get("evidence_boundary")
+        and explanation.get("plain_language_summary")
+    )
+    return out
+
+
+def _periodic_sources(storage,*,finding:EvidenceFinding,session:dict,wav:Artifact|None,
+                      clips:list[Artifact],metrics_rows:list[Artifact])->tuple[Artifact|None,bytes|None,dict,dict,str]:
+    clip=next((a for a in clips if _periodic_match(a,finding,source="pcm_rx")),None)
+    metrics_art=next((a for a in metrics_rows if _periodic_match(a,finding)),None)
+    metrics_json=_load_json_artifact(storage,metrics_art)
+    if not metrics_json and finding.metrics_json:
+        metrics_json={"details":dict(finding.metrics_json or {})}
+    periodic=periodic_measurement(metrics_json,source="pcm_rx")
+    if clip:
+        try:return clip,storage.get_bytes(clip.object_key),periodic,{"start":finding.start_time,"end":finding.end_time},"PERIODIC_AUDIO_CLIP"
+        except Exception:pass
+    if not wav:return None,None,periodic,{},"UNAVAILABLE"
+    try:
+        raw=storage.get_bytes(wav.object_key)
+        duration=max(0.001,float(session.get("end_time") or 0)-float(session.get("start_time") or 0))
+        a,b,anomaly=_anomaly_relative(finding,session,duration)
+        if a is None or b is None:
+            return wav,raw,periodic,{"start":session.get("start_time"),"end":session.get("end_time")},"PCM_WAV_FULL_FALLBACK"
+        sliced,slice_meta=slice_pcm16_wav_bytes(raw,a,b)
+        periodic["wav_slice"]=slice_meta
+        return wav,sliced,periodic,{"start":finding.start_time,"end":finding.end_time},"PCM_WAV_FINDING_WINDOW"
+    except Exception:
+        return None,None,periodic,{},"UNAVAILABLE"
+
+
+def _generate_human_visual_artifacts(db:Session,storage,*,report:PreliminaryEvidenceReport,
+                                     pcm:dict,media_run:AnalyzerRun|None,findings:list[EvidenceFinding])->list[Artifact]:
+    if not human_renderer_enabled() or not media_run:return []
+    created=[]
+    pcm_sessions=_pcm_session_lookup(pcm)
+    wav_lookup={}
+    for wav in _media_pcm_wav_artifacts(db,media_run):
+        meta=wav.metadata_json or {};tap=str(meta.get("pcm_tap") or "");idx=int(meta.get("session_index") or 0)
+        if tap:wav_lookup[(tap,idx)]=wav
+    periodic_clips,periodic_metrics=_media_periodic_artifacts(db,media_run)
+
+    # Periodic Finding Human visuals share one representative Evidence Window.
+    periodic_done:set[str]=set()
+    for finding in findings:
+        if len(periodic_done)>=8 or finding.finding_type not in _PERIODIC_VISUAL_TYPES:continue
+        scope=finding.scope_json or {};tap=str(scope.get("pcm_tap") or "")
+        if not tap:continue
+        idx=int(scope.get("pcm_session_index") or 0);session=pcm_sessions.get((tap,idx));wav=wav_lookup.get((tap,idx))
+        if not session:continue
+        source_art,wav_bytes,periodic,absolute_window,strategy=_periodic_sources(
+            storage,finding=finding,session=session,wav=wav,clips=periodic_clips,metrics_rows=periodic_metrics)
+        if source_art is None or wav_bytes is None:continue
+        refs=periodic.get("harmonics_hz") or [50,60,100,120,150,180,250,350,450,550,650,750,850,950]
+        source_meta={
+            "source_artifact_id":source_art.id,"source_artifact_type":source_art.type,"pcm_tap":tap,
+            "session_index":idx,"direction":session.get("direction"),"evidence_source_strategy":strategy,
+        }
+        title=f"{finding.title} · Continuous Spectrum";subtitle=f"{tap.upper()} · Session {idx} · {session.get('direction') or 'UNKNOWN'}"
+        try:
+            png,renderer_measurement=render_human_spectrum_png_from_wav(
+                wav_bytes,canonical_spectral=session.get("spectral") or {},reference_frequencies_hz=refs,
+                title=title,subtitle=subtitle,max_frequency_hz=1200.0,max_seconds=2.0)
+            measurement=merge_visual_measurement(renderer_measurement,periodic,evidence_source_strategy=strategy,
+                time_window_seconds=[0.0,periodic.get("representative_duration_seconds") or 1.0])
+            base=visual_metadata("SPECTRUM",source=source_meta,window=absolute_window,title=title,x_axis="Frequency",y_axis="Spectrum level",
+                units={"x":"Hz","y":"dBFS"},legend=["continuous FFT","canonical Analyzer peaks","periodic harmonic references"],finding_ids=[finding.id],
+                call_id=scope.get("call_id") or report.call_id,direction=session.get("direction"),
+                anomaly_window={"start":finding.start_time,"end":finding.end_time,"representative":finding.representative_time},
+                caption=f"{finding.title}：代表性证据窗口连续 FFT 频谱；主峰标记来自 Canonical Analyzer。")
+            created.append(persist_artifact(db,storage,report=report,artifact_type=EvidenceReportArtifactType.SPECTRUM_PNG.value,
+                filename=f"human_finding_{finding.id[:8]}_{tap}_{idx}_spectrum.png",data=png,content_type="image/png",
+                metadata=_human_metadata("SPECTRUM",base=base,finding=finding,measurement=measurement),
+                analyzer_run_id=source_art.analyzer_run_id,evidence_id=source_art.evidence_id,finding_ids=[finding.id],role="FINDING"))
+        except Exception as exc:
+            audit(db,case_id=report.case_id,event_type="HUMAN_EVIDENCE_VISUAL_FAILED",target_type="evidence_finding",target_id=finding.id,
+                  detail={"visual_kind":"SPECTRUM","error_code":type(exc).__name__,"fallback":"MACHINE"})
+
+        try:
+            spec_png,spec_measurement=render_human_spectrogram_png_from_wav(
+                wav_bytes,start_seconds=0.0,end_seconds=None,max_frequency_hz=1200.0,
+                reference_frequencies_hz=[float(x) for x in refs if x is not None],title=f"{finding.title} · High Resolution Spectrogram",subtitle=subtitle)
+            measurement=merge_visual_measurement(spec_measurement,periodic,evidence_source_strategy=strategy)
+            base=visual_metadata("SPECTROGRAM",source=source_meta,window=absolute_window,title=f"{finding.title} · High Resolution Spectrogram",
+                x_axis="Time",y_axis="Frequency",units={"x":"s","y":"Hz","magnitude":"relative dB"},
+                legend=["representative evidence window","periodic harmonic references"],finding_ids=[finding.id],
+                call_id=scope.get("call_id") or report.call_id,direction=session.get("direction"),
+                anomaly_window={"start":finding.start_time,"end":finding.end_time,"representative":finding.representative_time},
+                caption=f"{finding.title}：从同一代表性 WAV 证据窗口直接生成高分辨率 STFT 时频图。")
+            created.append(persist_artifact(db,storage,report=report,artifact_type=EvidenceReportArtifactType.SPECTROGRAM_PNG.value,
+                filename=f"human_finding_{finding.id[:8]}_{tap}_{idx}_spectrogram_highres.png",data=spec_png,content_type="image/png",
+                metadata=_human_metadata("SPECTROGRAM",base=base,finding=finding,measurement=measurement),
+                analyzer_run_id=source_art.analyzer_run_id,evidence_id=source_art.evidence_id,finding_ids=[finding.id],role="FINDING"))
+            periodic_done.add(finding.id)
+        except Exception as exc:
+            audit(db,case_id=report.case_id,event_type="HUMAN_EVIDENCE_VISUAL_FAILED",target_type="evidence_finding",target_id=finding.id,
+                  detail={"visual_kind":"SPECTROGRAM_HIGHRES","error_code":type(exc).__name__,"fallback":"MACHINE"})
+
+    # Other Finding-scoped Human visuals reuse Analyzer JSON. Periodic spectrograms
+    # are intentionally skipped here because their high-resolution WAV view above
+    # is the preferred Human representation.
+    visual_count=0
+    for source,data_json in _media_json_artifacts(db,storage,media_run)[:24]:
+        meta=source.metadata_json or {};tap=str(meta.get("pcm_tap") or "");idx=int(meta.get("session_index") or 0)
+        if not tap:continue
+        session=pcm_sessions.get((tap,idx))
+        if not session:continue
+        duration=float(data_json.get("duration_seconds") or (data_json.get("times") or [0])[-1] or 0.0)
+        if duration<=0 and session.get("start_time") is not None and session.get("end_time") is not None:
+            duration=max(0.001,float(session["end_time"])-float(session["start_time"]))
+        for finding in findings:
+            if visual_count>=24:break
+            if finding.finding_type not in _PCM_FOCUSED_VISUAL_TYPES or not _scope_matches_pcm(finding,tap,idx):continue
+            fstart,fend,_=_finding_window(finding)
+            if not _overlaps(fstart,fend,session.get("start_time"),session.get("end_time")):continue
+            visual_kind="WAVEFORM" if source.type=="WAVEFORM_JSON" else "SPECTROGRAM"
+            if visual_kind=="SPECTROGRAM" and finding.id in periodic_done:continue
+            a,b,anomaly=_anomaly_relative(finding,session,duration);direction=session.get("direction")
+            scope=finding.scope_json or {};title=f"{finding.title} · {'Waveform' if visual_kind=='WAVEFORM' else 'Spectrogram'}"
+            subtitle=f"{tap.upper()} · Session {idx} · {direction or 'UNKNOWN'}"
+            try:
+                if visual_kind=="WAVEFORM":
+                    data=render_human_waveform_png(data_json,anomaly_start=a,anomaly_end=b,title=title,subtitle=subtitle)
+                    atype=EvidenceReportArtifactType.WAVEFORM_PNG.value;units={"x":"s","y":"normalized PCM"};y_axis="Normalized PCM amplitude";suffix="waveform"
+                else:
+                    data=render_human_spectrogram_png(data_json,anomaly_start=a,anomaly_end=b,title=title,subtitle=subtitle)
+                    atype=EvidenceReportArtifactType.SPECTROGRAM_PNG.value;units={"x":"s","y":"Hz","magnitude":"relative dB"};y_axis="Frequency";suffix="spectrogram"
+                base=visual_metadata(visual_kind,source={"source_artifact_id":source.id,"pcm_tap":tap,"session_index":idx,"direction":direction},
+                    window={"start":session.get("start_time"),"end":session.get("end_time")},title=title,x_axis="Time",y_axis=y_axis,units=units,
+                    legend=["Finding evidence window"],finding_ids=[finding.id],call_id=scope.get("call_id") or report.call_id,direction=direction,
+                    anomaly_window=anomaly,caption=f"{finding.title}：Human V2 {suffix}，红色半透明区域为当前 Finding 对应证据窗口。")
+                measurement={"evidence_source_strategy":source.type,"time_window_seconds":[a,b] if a is not None else None}
+                created.append(persist_artifact(db,storage,report=report,artifact_type=atype,
+                    filename=f"human_finding_{finding.id[:8]}_{tap}_{idx}_{suffix}.png",data=data,content_type="image/png",
+                    metadata=_human_metadata(visual_kind,base=base,finding=finding,measurement=measurement),
+                    analyzer_run_id=source.analyzer_run_id,evidence_id=source.evidence_id,finding_ids=[finding.id],role="FINDING"))
+                visual_count+=1
+            except Exception as exc:
+                audit(db,case_id=report.case_id,event_type="HUMAN_EVIDENCE_VISUAL_FAILED",target_type="evidence_finding",target_id=finding.id,
+                      detail={"visual_kind":visual_kind,"error_code":type(exc).__name__,"fallback":"MACHINE"})
+    return created
+
+
 def generate_visual_artifacts(db: Session, storage, *, report: PreliminaryEvidenceReport,
                               results: dict[str,dict|None], runs: dict[str,AnalyzerRun]) -> list[Artifact]:
-    """Generate deterministic summary visuals and exact Finding-scoped views."""
+    """Generate frozen Machine Evidence plus additive Human Evidence V2 visuals."""
     created=[];packet=results.get("packet_intelligence") or {};pcm=results.get("pcm_intelligence") or {}
     packet_run=runs.get("packet_intelligence");pcm_run=runs.get("pcm_intelligence");media_run=runs.get("media_intelligence")
     findings=_current_findings(db,report);streams={str(x.get("stream_id")):x for x in packet.get("rtp_streams",[]) or []}
@@ -164,7 +383,7 @@ def generate_visual_artifacts(db: Session, storage, *, report: PreliminaryEviden
         for sess in stream.get("sessions",[]) or []:
             hum=sess.get("hum") or {};spectral=sess.get("spectral") or {}
             if str(hum.get("level") or "LOW").upper() not in {"MEDIUM","HIGH"} or not spectral or spectra>=4:continue
-            related=[f.id for f in findings if f.finding_type in {"PERIODIC_LOW_FREQUENCY_INTERFERENCE","LOCAL_CAPTURE_PERIODIC_INTERFERENCE","PERIODIC_INTERFERENCE_PATH_COMPARISON"} and _scope_matches_pcm(f,str(tap),int(sess.get("session_index") or 0))]
+            related=[f.id for f in findings if f.finding_type in _PERIODIC_VISUAL_TYPES and _scope_matches_pcm(f,str(tap),int(sess.get("session_index") or 0))]
             if not related:continue
             title=f"SPECTRUM {str(tap).upper()} PERIODIC INTERFERENCE";subtitle=f"SESSION {sess.get('session_index',0)} | {direction or 'UNKNOWN'}"
             created.append(persist_artifact(db,storage,report=report,artifact_type=EvidenceReportArtifactType.SPECTRUM_PNG.value,
@@ -203,6 +422,12 @@ def generate_visual_artifacts(db: Session, storage, *, report: PreliminaryEviden
                     legend=["ANOMALY window"],finding_ids=[finding.id],call_id=(finding.scope_json or {}).get("call_id") or report.call_id,direction=direction,
                     anomaly_window=anomaly,caption=f"{finding.title} 对应 {tap} {suffix}；ANOMALY 标记为 Finding 时间窗。"),
                 analyzer_run_id=source.analyzer_run_id,evidence_id=source.evidence_id,finding_ids=[finding.id],role="FINDING"));visual_count+=1
+
+    try:
+        created.extend(_generate_human_visual_artifacts(db,storage,report=report,pcm=pcm,media_run=media_run,findings=findings))
+    except Exception as exc:
+        audit(db,case_id=report.case_id,event_type="HUMAN_EVIDENCE_RENDERER_FAILED",target_type="preliminary_evidence_report",target_id=report.id,
+              detail={"error_code":type(exc).__name__,"fallback":"MACHINE","renderer_version":HUMAN_RENDERER_VERSION})
     return created
 
 

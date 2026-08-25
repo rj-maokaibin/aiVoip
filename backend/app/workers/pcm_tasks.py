@@ -40,7 +40,7 @@ def _notify_reports(case_id:str,reason:str) -> None:
     notify_evidence_report_changed(case_id,reason)
 
 @celery_app.task(name="pcm.analyze_evidence", bind=True, autoretry_for=(), max_retries=0)
-def analyze_pcm_evidence(self, job_id: str, evidence_id: str, profile_id: str):
+def analyze_pcm_evidence(self, job_id: str, evidence_id: str, profile_id: str, notify: bool = True):
     db = SessionLocal(); run = None
     try:
         job = db.get(Job, job_id); evidence = db.get(Evidence, evidence_id)
@@ -70,8 +70,9 @@ def analyze_pcm_evidence(self, job_id: str, evidence_id: str, profile_id: str):
         audit(db, case_id=job.case_id, event_type="PCM_ANALYSIS_FINISHED", target_type="analyzer_run", target_id=run.id,
               detail={"evidence_id": evidence.id, "profile_id": profile.id, "summary": result.get("summary"), "analyzer_version": run.analyzer_version})
         db.commit()
-        from app.workers.diagnosis_tasks import notify_case_changed
-        notify_case_changed(job.case_id); _notify_reports(job.case_id,'pcm_analysis_complete')
+        if notify:
+            from app.workers.diagnosis_tasks import notify_case_changed
+            notify_case_changed(job.case_id); _notify_reports(job.case_id,'pcm_analysis_complete')
         return {"status": final_status, "job_id": job.id, "analyzer_run_id": run.id, "summary": result.get("summary")}
     except Exception as exc:
         log.exception("pcm analysis failed")
@@ -82,7 +83,7 @@ def analyze_pcm_evidence(self, job_id: str, evidence_id: str, profile_id: str):
         if run:
             run.status = RunStatus.FAILED.value; run.finished_at = utcnow(); run.error_code = type(exc).__name__; run.error_message = str(exc)
         db.commit()
-        if "job" in locals() and job:
+        if notify and "job" in locals() and job:
             from app.workers.diagnosis_tasks import notify_case_changed
             notify_case_changed(job.case_id); _notify_reports(job.case_id,'pcm_analysis_failed')
         raise

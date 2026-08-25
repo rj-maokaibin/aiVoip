@@ -8,12 +8,18 @@ on:
       - 'tools/**'
       - 'golden_cases/**'
       - 'profiles/**'
+      - 'deploy/live_acceptance/**'
+      - 'docs/LIVE_ACCEPTANCE_RUNTIME_V1.md'
       - 'docs/02_Core_Documents/Preliminary_Evidence_Report_V1.0/**'
       - '.github/workflows/preliminary-evidence-v1.yml'
   workflow_dispatch:
 
 permissions:
   contents: read
+
+concurrency:
+  group: preliminary-evidence-v1-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   frozen-contracts:
@@ -139,12 +145,27 @@ jobs:
           print('REAL_OFFLINE_GOLDEN_001=PASS 142/142')
           PY
 
+      - name: Real Offline Golden 001 Human Evidence Gate
+        run: |
+          set -euo pipefail
+          source "$VOIP_AI_GATE_VENV/bin/activate"
+          rm -rf offline-golden-human-artifacts
+          python tools/human_evidence_real_golden_gate.py \
+            --artifacts offline-golden-artifacts \
+            --output offline-golden-human-artifacts
+          test -s offline-golden-human-artifacts/pcm_rx_periodic_spectrum_human_v2.png
+          test -s offline-golden-human-artifacts/pcm_rx_periodic_spectrogram_human_v2.png
+          test -s offline-golden-human-artifacts/pcm_rx_dtmf_first_digit_inspector_human_v2.png
+          test -s offline-golden-human-artifacts/human-golden-result.json
+          echo 'HUMAN_REAL_OFFLINE_GOLDEN_001=PASS'
+
       - name: Acceptance summary
         run: |
           set -euo pipefail
           printf 'PRD_SPEC_V1_FROZEN_CONTRACTS=PASS\n'
           printf 'VOIP_AI_SOFTWARE_RELEASE_GATE=PASS\n'
           printf 'REAL_OFFLINE_GOLDEN_001=PASS 142/142\n'
+          printf 'HUMAN_REAL_OFFLINE_GOLDEN_001=PASS\n'
           printf 'ACCEPTANCE_COMMIT=%s\n' "$(git rev-parse HEAD)"
 
       - name: Upload Golden evidence
@@ -155,4 +176,10 @@ jobs:
           path: |
             offline-golden-result.json
             offline-golden-artifacts
+            offline-golden-human-artifacts
           if-no-files-found: ignore
+
+  # Human Feishu live mutation was intentionally removed after the captured
+  # PR #45 live acceptance PASS. Reusable runtime/preflight and the explicit
+  # fail-closed manual acceptance helper remain in the repository; normal PR CI
+  # must not mutate a real Feishu document.
