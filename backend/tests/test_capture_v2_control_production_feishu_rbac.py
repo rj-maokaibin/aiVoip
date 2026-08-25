@@ -78,6 +78,59 @@ def test_guarded_enable_changes_only_feishu_rbac_key(tmp_path: Path, monkeypatch
     assert Path(payload["backup_path"]).is_file()
 
 
+def test_guarded_enable_accepts_legacy_missing_v2_keys_as_safe_defaults(tmp_path: Path, monkeypatch) -> None:
+    repo, auth = _repo_with_authorization_and_gate(tmp_path)
+    env = tmp_path / "production.env"
+    env.write_text(
+        "APP_ENV=production\n"
+        "REPRODUCTION_PLATFORM_MODE=mock\n"
+        "POSTGRES_PASSWORD=do-not-touch\n"
+        "FEISHU_IDENTITY_RBAC_ENABLED=false\n",
+        encoding="utf-8",
+    )
+    os.chmod(env, 0o600)
+    monkeypatch.setattr(guarded, "PRODUCTION_ENV", env)
+
+    rc, payload = guarded.run(repo_root=repo, authorization_path=auth)
+
+    assert rc == 0
+    assert payload["verdict"] == "PASS"
+    assert payload["mutations_performed"] is True
+    assert payload["prestate"]["capture_engine_version"] == "V1"
+    assert payload["prestate"]["capture_v2_production_enabled"] == "false"
+    assert payload["prestate_defaulted_keys"] == [
+        "CAPTURE_ENGINE_VERSION",
+        "CAPTURE_V2_PRODUCTION_ENABLED",
+    ]
+    assert payload["prestate_defaults_source"] == "APPLICATION_RUNTIME_DEFAULTS"
+    text = env.read_text(encoding="utf-8")
+    assert "FEISHU_IDENTITY_RBAC_ENABLED=true" in text
+    assert "CAPTURE_ENGINE_VERSION=" not in text
+    assert "CAPTURE_V2_PRODUCTION_ENABLED=" not in text
+    assert "POSTGRES_PASSWORD=do-not-touch" in text
+
+
+def test_guarded_enable_rejects_explicit_unsafe_engine_even_with_legacy_other_key(tmp_path: Path, monkeypatch) -> None:
+    repo, auth = _repo_with_authorization_and_gate(tmp_path)
+    env = tmp_path / "production.env"
+    env.write_text(
+        "APP_ENV=production\n"
+        "CAPTURE_ENGINE_VERSION=V2\n"
+        "REPRODUCTION_PLATFORM_MODE=mock\n"
+        "FEISHU_IDENTITY_RBAC_ENABLED=false\n",
+        encoding="utf-8",
+    )
+    os.chmod(env, 0o600)
+    monkeypatch.setattr(guarded, "PRODUCTION_ENV", env)
+
+    rc, payload = guarded.run(repo_root=repo, authorization_path=auth)
+
+    assert rc == 1
+    assert payload["reason"] == "PRODUCTION_PRESTATE_NOT_V1"
+    assert payload["mutations_performed"] is False
+    assert "FEISHU_IDENTITY_RBAC_ENABLED=false" in env.read_text(encoding="utf-8")
+
+
 def test_guarded_enable_rejects_non_private_production_env(tmp_path: Path, monkeypatch) -> None:
     repo, auth = _repo_with_authorization_and_gate(tmp_path)
     env = tmp_path / "production.env"
