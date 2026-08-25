@@ -41,12 +41,12 @@ def test_runtime_fingerprint_is_deterministic_and_sensitive_to_inputs():
 def test_runtime_orchestrator_supports_cross_network_database_topology_without_rebuilding_image():
     runtime = _load(ROOT / "deploy/live_acceptance/runtime.py", "live_acceptance_runtime_topology_test")
     text = (ROOT / "deploy/live_acceptance/runtime.py").read_text(encoding="utf-8")
-    assert runtime.ORCHESTRATOR_VERSION == "1.1.0"
+    assert runtime.ORCHESTRATOR_VERSION == "1.2.0"
     assert "_discover_postgres_route" in text
-    assert '"additional_networks": database_route.get("additional_networks") or []' in text
-    assert '["docker", "network", "connect", str(network), container_name]' in text
-    assert '"docker", "create", "--name", container_name' in text
-    assert '["docker", "start", "-a", container_name]' in text
+    assert '"additional_networks":database_route.get("additional_networks") or []' in text
+    assert '["docker","network","connect",str(network),container_name]' in text
+    assert '["docker","create","--name",container_name' in text
+    assert '["docker","start","-a",container_name]' in text
     assert '"--network",f"container:{backend_id}"' not in text
 
 
@@ -57,7 +57,7 @@ def test_database_route_score_recognizes_postgres_across_any_network():
         "Config": {
             "Image": "postgres:16",
             "Env": ["POSTGRES_DB=voip", "POSTGRES_USER=voip"],
-            "Labels": {"com.docker.compose.service": "database"},
+            "Labels": {"com.docker.compose.service": "database", "com.docker.compose.project": "aivoip"},
         },
         "NetworkSettings": {
             "Networks": {
@@ -67,6 +67,23 @@ def test_database_route_score_recognizes_postgres_across_any_network():
     }
     assert runtime._postgres_score(info, "postgres") >= 25
     assert runtime._network_aliases(info, "db-net") == {"postgres", "prod-db"}
+    assert runtime._compose_project(info) == "aivoip"
+
+
+def test_release_gate_postgres_is_never_trusted_as_live_database():
+    runtime = _load(ROOT / "deploy/live_acceptance/runtime.py", "live_acceptance_runtime_transient_test")
+    gate = {
+        "Name": "/voip-ai-gate-pg-12345",
+        "Config": {"Image": "postgres:16", "Env": ["POSTGRES_DB=voip"], "Labels": {}},
+        "NetworkSettings": {"Networks": {"bridge": {"IPAddress": "172.17.0.2", "Aliases": []}}},
+    }
+    production = {
+        "Name": "/aivoip-postgres-1",
+        "Config": {"Image": "postgres:16", "Env": ["POSTGRES_DB=voip"], "Labels": {"com.docker.compose.service": "postgres", "com.docker.compose.project": "aivoip"}},
+        "NetworkSettings": {"Networks": {"aivoip_default": {"IPAddress": "172.18.0.4", "Aliases": ["postgres"]}}},
+    }
+    assert runtime._is_transient_postgres_candidate(gate) is True
+    assert runtime._is_transient_postgres_candidate(production) is False
 
 
 def test_preflight_collector_aggregates_all_blockers():
