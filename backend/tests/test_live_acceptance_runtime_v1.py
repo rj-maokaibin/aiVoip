@@ -138,13 +138,17 @@ def test_golden_identity_uses_bound_case_exact_evidence_sha_and_successful_analy
     assert '"rebuilt_golden_identity_verified": True' in live
 
 
-def test_preliminary_workflow_recovers_before_read_only_preflight_and_mutation():
-    text = (ROOT / ".github/workflows/preliminary-evidence-v1.yml").read_text(encoding="utf-8")
-    prepare = text.index("deploy/live_acceptance/runtime.py prepare")
-    recover = text.index("deploy/live_acceptance/runtime.py recover-database")
-    preflight = text.index("deploy/live_acceptance/preflight.py")
-    mutation = text.index("tools/human_evidence_feishu_live_acceptance.py")
-    assert prepare < recover < preflight < mutation
-    assert text.count("deploy/live_acceptance/runtime.py prepare") >= 2
-    assert "docker build -t \"$image\" backend" not in text
-    assert "live_acceptance_preflight.json" in text
+def test_preliminary_workflow_is_non_mutating_after_captured_live_acceptance():
+    workflow = (ROOT / ".github/workflows/preliminary-evidence-v1.yml").read_text(encoding="utf-8")
+    helper = (ROOT / "tools/human_evidence_feishu_live_acceptance.py").read_text(encoding="utf-8")
+    assert "live-feishu-acceptance:" not in workflow
+    assert "tools/human_evidence_feishu_live_acceptance.py" not in workflow
+    assert "CONTROLLED_ENV_FILE" not in workflow
+    assert "FEISHU_SECRET_FILE" not in workflow
+    assert "deploy/live_acceptance/**" in workflow
+    assert "docs/LIVE_ACCEPTANCE_RUNTIME_V1.md" in workflow
+    assert "Full VOIP AI software release gate" in workflow
+    assert "Prepared-PCAP Real Offline Golden 001" in workflow
+    assert "Real Offline Golden 001 Human Evidence Gate" in workflow
+    assert "--preflight-result" in helper
+    assert "mutation_allowed" in helper
