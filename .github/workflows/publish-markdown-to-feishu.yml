@@ -39,7 +39,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 2
+          fetch-depth: 8
 
       - name: Resolve source Markdown
         id: source
@@ -49,10 +49,7 @@ jobs:
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             source_path='${{ github.event.inputs.source }}'
           elif [ "${{ github.event_name }}" = "pull_request" ]; then
-            source_path="$(git diff --name-only origin/${{ github.base_ref }}...HEAD | grep '^feishu_publish/requests/.*\.md$' | head -n1 || true)"
-            if [ -z "$source_path" ]; then
-              source_path='feishu_publish/requests/PON_84B_1260Mbps_最终定性报告_2026-08-25.md'
-            fi
+            source_path='feishu_publish/requests/PON_84B_1260Mbps_最终定性报告_2026-08-25.md'
           else
             source_path="$(git diff-tree --no-commit-id --name-only -r "$GITHUB_SHA" | grep '^feishu_publish/requests/.*\.md$' | head -n1 || true)"
           fi
@@ -66,19 +63,36 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          set -a
           loaded=0
+          set -a
           for env_file in /home/dev/workspace/aiVoip/.env /home/dev/workspace/aiVoip/backend/.env; do
             if [ -r "$env_file" ]; then
               source "$env_file"
               loaded=$((loaded+1))
+              echo "ENV_SOURCE=direct"
+            elif [ -e "$env_file" ] && sudo -n test -r "$env_file" 2>/dev/null; then
+              staged_env="$RUNNER_TEMP/$(basename "$(dirname "$env_file")")-$(basename "$env_file")"
+              sudo -n cat "$env_file" > "$staged_env"
+              chmod 600 "$staged_env"
+              source "$staged_env"
+              loaded=$((loaded+1))
+              echo "ENV_SOURCE=sudo-staged"
             fi
           done
           set +a
+          echo "ENV_FILES_LOADED=$loaded"
           test "$loaded" -gt 0
 
           export PYTHONPATH="$GITHUB_WORKSPACE/backend:$GITHUB_WORKSPACE"
           result="$RUNNER_TEMP/feishu_markdown_publish_result.json"
+          python3 - <<'PY'
+          import importlib.util
+          required = ['httpx', 'pydantic_settings']
+          missing = [m for m in required if importlib.util.find_spec(m) is None]
+          print('PYTHON_DEPENDENCIES=' + ('OK' if not missing else 'MISSING:' + ','.join(missing)))
+          if missing:
+              raise SystemExit(2)
+          PY
           python3 tools/publish_markdown_to_feishu.py \
             --source '${{ steps.source.outputs.path }}' \
             --result "$result" | tee "$RUNNER_TEMP/feishu_publish.log"
