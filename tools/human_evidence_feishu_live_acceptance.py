@@ -15,7 +15,7 @@ from app.db.evidence_report_models import (
     FeishuEvidenceDocumentBinding,
     PreliminaryEvidenceReport,
 )
-from app.db.models import Artifact
+from app.db.models import AnalyzerRun, Artifact, Evidence
 from app.db.session import SessionLocal
 from app.integrations.feishu.evidence_document_human_v2 import HumanFeishuEvidenceDocumentService
 from app.services.evidence_report import generate_evidence_report
@@ -25,6 +25,7 @@ REAL_GOLDEN_001_SHA256 = "b038aa7c9a0644581f2815f654fcdee4620860796382265b178823
 HUMAN_CONTRACT = "feishu-evidence-living-document-human-v2"
 PREFLIGHT_CONTRACT = "voip-live-acceptance-preflight-v1"
 REQUIRED_VISUAL_KINDS = {"DTMF_INSPECTOR", "SPECTRUM", "SPECTROGRAM"}
+REQUIRED_GOLDEN_ANALYZERS = {"packet_intelligence", "media_intelligence", "pcm_intelligence"}
 EXPLANATION_KEYS = ("what_to_look_at", "meaning", "evidence_boundary", "plain_language_summary")
 LIVE_LABELS = (
     "📖 这张图怎么看：",
@@ -42,6 +43,25 @@ def _fingerprint(value: str | None) -> str | None:
 def _snapshot_contains_golden(report: PreliminaryEvidenceReport) -> bool:
     material = json.dumps(report.snapshot_json or {}, ensure_ascii=False, sort_keys=True)
     return REAL_GOLDEN_001_SHA256 in material
+
+
+def _case_has_exact_golden(db, case_id: str) -> bool:
+    return db.scalar(
+        select(Evidence.id)
+        .where(Evidence.case_id == case_id, Evidence.sha256 == REAL_GOLDEN_001_SHA256)
+        .limit(1)
+    ) is not None
+
+
+def _case_has_required_analyzers(db, case_id: str) -> bool:
+    successful = set(db.scalars(
+        select(AnalyzerRun.analyzer_name).where(
+            AnalyzerRun.case_id == case_id,
+            AnalyzerRun.status == "SUCCESS",
+            AnalyzerRun.analyzer_name.in_(REQUIRED_GOLDEN_ANALYZERS),
+        )
+    ))
+    return REQUIRED_GOLDEN_ANALYZERS.issubset({str(x) for x in successful})
 
 
 def _ready_human(meta: dict | None) -> bool:
@@ -81,9 +101,16 @@ def _select_bound_golden(db):
     ).order_by(FeishuEvidenceDocumentBinding.updated_at.desc())))
     for binding in bindings:
         report = db.get(PreliminaryEvidenceReport, binding.projected_report_id)
-        if report is not None and _snapshot_contains_golden(report):
-            return binding, report
-    raise RuntimeError("NO_BOUND_REAL_GOLDEN_001_REPORT")
+        if report is None:
+            continue
+        if str(report.case_id) != str(binding.case_id):
+            continue
+        if not _case_has_exact_golden(db, str(binding.case_id)):
+            continue
+        if not _case_has_required_analyzers(db, str(binding.case_id)):
+            continue
+        return binding, report
+    raise RuntimeError("NO_BOUND_REAL_GOLDEN_001_CASE_EVIDENCE")
 
 
 def _ready_human_artifacts(db, report_id: str) -> list[Artifact]:
@@ -222,6 +249,7 @@ async def run(result_path: Path, preflight_path: Path) -> dict:
             "runtime_fingerprint": preflight.get("runtime_fingerprint"),
             "source_revision": preflight.get("source_revision"),
             "golden_case": "OFFLINE_ANALYSIS_20260814_001",
+            "golden_identity_source": "BOUND_CASE_EVIDENCE_SHA256",
             "golden_sha256_verified": True,
             "document_fingerprint": _fingerprint(original_document_id),
             "document_reused": True,
