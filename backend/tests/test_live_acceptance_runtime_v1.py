@@ -129,8 +129,13 @@ def test_golden_identity_uses_bound_case_exact_evidence_sha_and_successful_analy
     assert "REQUIRED_GOLDEN_ANALYZERS" in preflight
     assert "_case_has_exact_golden" in live
     assert "_case_has_required_analyzers" in live
+    assert "_verify_rebuilt_golden_identity" in live
+    assert "REBUILT_REPORT_GOLDEN_EVIDENCE_MISSING" in live
+    assert "REBUILT_REPORT_INPUT_SNAPSHOT_HASH_MISSING" in live
+    assert "_snapshot_contains_golden" not in live
+    assert "REBUILT_REPORT_LOST_REAL_GOLDEN_001_BINDING" not in live
     assert '"golden_identity_source": "BOUND_CASE_EVIDENCE_SHA256"' in live
-    assert "REBUILT_REPORT_LOST_REAL_GOLDEN_001_BINDING" in live
+    assert '"rebuilt_golden_identity_verified": True' in live
 
 
 def test_preliminary_workflow_recovers_before_read_only_preflight_and_mutation():

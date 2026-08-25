@@ -40,11 +40,6 @@ def _fingerprint(value: str | None) -> str | None:
     return hashlib.sha256(str(value or "").encode("utf-8")).hexdigest()[:12] if value else None
 
 
-def _snapshot_contains_golden(report: PreliminaryEvidenceReport) -> bool:
-    material = json.dumps(report.snapshot_json or {}, ensure_ascii=False, sort_keys=True)
-    return REAL_GOLDEN_001_SHA256 in material
-
-
 def _case_has_exact_golden(db, case_id: str) -> bool:
     return db.scalar(
         select(Evidence.id)
@@ -62,6 +57,26 @@ def _case_has_required_analyzers(db, case_id: str) -> bool:
         )
     ))
     return REQUIRED_GOLDEN_ANALYZERS.issubset({str(x) for x in successful})
+
+
+def _verify_rebuilt_golden_identity(db, *, binding, previous_report, report, payload: dict) -> None:
+    if str(previous_report.case_id) != str(binding.case_id):
+        raise RuntimeError("PREVIOUS_REPORT_CASE_BINDING_MISMATCH")
+    if str(report.case_id) != str(binding.case_id):
+        raise RuntimeError("REBUILT_REPORT_CASE_CHANGED")
+    if str(report.scope_type) != str(previous_report.scope_type) or str(report.scope_id) != str(previous_report.scope_id):
+        raise RuntimeError("REBUILT_REPORT_SCOPE_CHANGED")
+    if int(report.version or 0) <= int(previous_report.version or 0):
+        raise RuntimeError("REBUILT_REPORT_VERSION_NOT_ADVANCED")
+    if not _case_has_exact_golden(db, str(report.case_id)):
+        raise RuntimeError("REBUILT_REPORT_GOLDEN_EVIDENCE_MISSING")
+    if not _case_has_required_analyzers(db, str(report.case_id)):
+        raise RuntimeError("REBUILT_REPORT_GOLDEN_ANALYZERS_MISSING")
+    scope = payload.get("scope") or {}
+    if str(scope.get("type") or "") != str(report.scope_type) or str(scope.get("id") or "") != str(report.scope_id):
+        raise RuntimeError("REBUILT_REPORT_PAYLOAD_SCOPE_MISMATCH")
+    if not str(payload.get("input_snapshot_hash") or "").strip():
+        raise RuntimeError("REBUILT_REPORT_INPUT_SNAPSHOT_HASH_MISSING")
 
 
 def _ready_human(meta: dict | None) -> bool:
@@ -211,8 +226,13 @@ async def run(result_path: Path, preflight_path: Path) -> dict:
             actor="human-evidence-feishu-live-acceptance",
             force=True,
         )
-        if not _snapshot_contains_golden(report):
-            raise RuntimeError("REBUILT_REPORT_LOST_REAL_GOLDEN_001_BINDING")
+        _verify_rebuilt_golden_identity(
+            db,
+            binding=binding,
+            previous_report=previous_report,
+            report=report,
+            payload=payload,
+        )
 
         ready = _ready_human_artifacts(db, report.id)
         kinds = sorted({str((a.metadata_json or {}).get("visual_kind") or "") for a in ready if (a.metadata_json or {}).get("visual_kind")})
@@ -251,6 +271,7 @@ async def run(result_path: Path, preflight_path: Path) -> dict:
             "golden_case": "OFFLINE_ANALYSIS_20260814_001",
             "golden_identity_source": "BOUND_CASE_EVIDENCE_SHA256",
             "golden_sha256_verified": True,
+            "rebuilt_golden_identity_verified": True,
             "document_fingerprint": _fingerprint(original_document_id),
             "document_reused": True,
             "previous_report_version": previous_report.version,
