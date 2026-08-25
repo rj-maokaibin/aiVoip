@@ -27,12 +27,13 @@ jobs:
         run: |
           set -euo pipefail
           ROOT=/home/dev/workspace/aiVoip
-          test -d "$ROOT/.git"
-          cd "$ROOT"
+          test -e "$ROOT"
+          git -C "$ROOT" rev-parse --is-inside-work-tree | grep -qx true
           printf 'HOST=%s\n' "$(hostname)"
-          printf 'BRANCH=%s\n' "$(git branch --show-current)"
-          printf 'HEAD=%s\n' "$(git rev-parse HEAD)"
-          test "$(git branch --show-current)" = "feat/capture-v2.1.1-real-gates"
+          printf 'TOPLEVEL=%s\n' "$(git -C "$ROOT" rev-parse --show-toplevel)"
+          printf 'BRANCH=%s\n' "$(git -C "$ROOT" branch --show-current)"
+          printf 'HEAD=%s\n' "$(git -C "$ROOT" rev-parse HEAD)"
+          test "$(git -C "$ROOT" branch --show-current)" = "feat/capture-v2.1.1-real-gates"
 
       - name: Execute exactly one audited control action
         shell: bash
