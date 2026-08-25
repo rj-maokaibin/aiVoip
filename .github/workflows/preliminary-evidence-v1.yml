@@ -25,6 +25,11 @@ concurrency:
 env:
   VOIP_ACCEPTANCE_ROOT: /opt/voip-acceptance
   OFFLINE_GOLDEN_SHA256: b038aa7c9a0644581f2815f654fcdee4620860796382265b178823fccba2e3f0
+  GIT_CONFIG_COUNT: '2'
+  GIT_CONFIG_KEY_0: http.lowSpeedLimit
+  GIT_CONFIG_VALUE_0: '1024'
+  GIT_CONFIG_KEY_1: http.lowSpeedTime
+  GIT_CONFIG_VALUE_1: '15'
 
 jobs:
   infra-preflight:
@@ -273,7 +278,17 @@ jobs:
       - voip-controlled-linux
     timeout-minutes: 10
     steps:
-      - name: Checkout exact head
+      - name: Checkout exact head attempt 1
+        id: stack_checkout1
+        continue-on-error: true
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 1
+      - if: steps.stack_checkout1.outcome == 'failure'
+        run: sleep 10
+      - name: Checkout exact head attempt 2
+        if: steps.stack_checkout1.outcome == 'failure'
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}

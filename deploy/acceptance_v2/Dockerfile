@@ -7,7 +7,6 @@ RUN apt-get update \
        ca-certificates curl git jq \
        python3 python3-venv python3-pip \
        nodejs npm \
-       docker.io docker-compose-v2 \
        tshark \
        ffmpeg fontconfig fonts-noto-cjk \
     && tshark -v | head -n1 | grep -q '4.2.2' \

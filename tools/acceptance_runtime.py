@@ -25,8 +25,16 @@ INPUTS = [
 ]
 
 
-def run(command: list[str], timeout: int = 900) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(command, cwd=REPO_ROOT, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=timeout, check=False)
+def run(command: list[str], timeout: int = 900, cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        command,
+        cwd=cwd or REPO_ROOT,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        timeout=timeout,
+        check=False,
+    )
 
 
 def fingerprint() -> str:
@@ -50,8 +58,7 @@ def paths(root: Path) -> dict[str, Path]:
 
 
 def inspect_image(image: str) -> bool:
-    result = run(["docker", "image", "inspect", image], timeout=30)
-    return result.returncode == 0
+    return run(["docker", "image", "inspect", image], timeout=30).returncode == 0
 
 
 def verify(root: Path) -> tuple[bool, dict]:
@@ -69,12 +76,11 @@ def verify(root: Path) -> tuple[bool, dict]:
             errors.append("RUNTIME_STATE_INVALID")
     if data.get("fingerprint") != fp:
         errors.append("RUNTIME_FINGERPRINT_STALE")
-    if not (p["venv"] / "bin" / "python").is_file():
+    python = p["venv"] / "bin" / "python"
+    if not python.is_file():
         errors.append("PYTHON_VENV_MISSING")
-    else:
-        result = run([str(p["venv"] / "bin" / "python"), "-m", "pip", "check"], timeout=60)
-        if result.returncode != 0:
-            errors.append("PYTHON_VENV_BROKEN")
+    elif run([str(python), "-m", "pip", "check"], timeout=60).returncode != 0:
+        errors.append("PYTHON_VENV_BROKEN")
     if not p["npm_cache"].is_dir() or not any(p["npm_cache"].iterdir()):
         errors.append("NPM_CACHE_MISSING")
     if not inspect_image(RUNTIME_IMAGE):
@@ -110,7 +116,7 @@ def prepare(root: Path) -> dict:
     result = run([str(p["venv"] / "bin" / "pip"), "install", "-r", "backend/requirements.txt"], timeout=900)
     if result.returncode != 0:
         raise RuntimeError("PIP_REQUIREMENTS_FAILED:" + result.stdout[-500:])
-    result = run(["npm", "ci", "--cache", str(p["npm_cache"])], timeout=900)
+    result = run(["npm", "ci", "--cache", str(p["npm_cache"])], timeout=900, cwd=REPO_ROOT / "frontend")
     if result.returncode != 0:
         raise RuntimeError("NPM_CACHE_PREPARE_FAILED:" + result.stdout[-500:])
     shutil.rmtree(REPO_ROOT / "frontend" / "node_modules", ignore_errors=True)
