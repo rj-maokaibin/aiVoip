@@ -121,6 +121,18 @@ def test_human_live_gate_requires_preflight_before_mutation():
     assert "mutation_allowed" in text
 
 
+def test_golden_identity_uses_bound_case_exact_evidence_sha_and_successful_analyzers():
+    preflight = (ROOT / "deploy/live_acceptance/preflight.py").read_text(encoding="utf-8")
+    live = (ROOT / "tools/human_evidence_feishu_live_acceptance.py").read_text(encoding="utf-8")
+    assert "Evidence.sha256==golden_sha" in preflight
+    assert "identity=CASE_EVIDENCE_SHA" in preflight
+    assert "REQUIRED_GOLDEN_ANALYZERS" in preflight
+    assert "_case_has_exact_golden" in live
+    assert "_case_has_required_analyzers" in live
+    assert '"golden_identity_source": "BOUND_CASE_EVIDENCE_SHA256"' in live
+    assert "REBUILT_REPORT_LOST_REAL_GOLDEN_001_BINDING" in live
+
+
 def test_preliminary_workflow_recovers_before_read_only_preflight_and_mutation():
     text = (ROOT / ".github/workflows/preliminary-evidence-v1.yml").read_text(encoding="utf-8")
     prepare = text.index("deploy/live_acceptance/runtime.py prepare")
