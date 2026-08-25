@@ -1,10 +1,10 @@
 {
   "schema_version": "capture-v2-remote-action-v1",
-  "action_id": "RC84B-PRODUCTION-DEPLOYMENT-PREFLIGHT-005",
-  "sequence": 216,
-  "created_at": "2026-08-25T16:17:00+00:00",
-  "expires_at": "2026-08-26T04:17:00+00:00",
-  "action_type": "DEPLOYMENT_PREFLIGHT",
+  "action_id": "RC84C-PRODUCTION-DEPLOYMENT-PREFLIGHT-006",
+  "sequence": 217,
+  "created_at": "2026-08-25T17:31:30+00:00",
+  "expires_at": "2026-08-26T05:31:30+00:00",
+  "action_type": "PRODUCTION_DEPLOYMENT_PREFLIGHT",
   "parameters": {
     "timeout_seconds": 300
   },
@@ -14,8 +14,8 @@
     "require_v2_disabled": true,
     "allow_worker_kill": false,
     "allow_server_quarantine": false,
-    "expected_head": "ccf04511c44330a5a2cd3b1b8a6c34e2bf5e9c57"
+    "expected_head": "d384e8f44ea4769a6cfb99dab34894854d517b86"
   },
   "requested_by": "ChatGPT-remote-validation-controller",
-  "note": "Retry RC84 using the dedicated DEPLOYMENT_PREFLIGHT action introduced by the current control policy. Read-only production preflight only: verify current production prestate remains V1 with Capture V2 disabled, validate the guarded production deployment prerequisites against /etc/voip-ai/production.env and current accepted source, and perform no production or DUT mutation. RC85 cutover must not be issued unless this action returns PASS."
+  "note": "RC84C explicit guarded production deployment preflight after PR #51 passed full CI/Golden and was merged to master then synchronized to the dedicated control branch. Read-only only: use the canonical production authorization and /etc/voip-ai/production.env through the audited guarded module; verify V1 prestate, production prerequisites, accepted source and compose requirements. Perform no production or DUT mutation. RC85 PRODUCTION_CUTOVER must not be issued unless this action returns PASS."
 }
