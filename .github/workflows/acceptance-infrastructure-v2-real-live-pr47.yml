@@ -1,0 +1,155 @@
+name: Acceptance Infrastructure V2 Real Live PR47
+
+on:
+  push:
+    branches:
+      - acceptance/live-v2-pr47-20260825
+    paths:
+      - '.github/workflows/acceptance-infrastructure-v2-real-live-pr47.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: acceptance-infrastructure-v2-real-live-pr47
+  cancel-in-progress: false
+
+jobs:
+  real-live-acceptance-v2:
+    runs-on:
+      - self-hosted
+      - linux
+      - x64
+      - voip-controlled-linux
+    timeout-minutes: 30
+    env:
+      ACCEPTANCE_TARGET_SHA: db3e8012a9569d9508e9d2cd920baf1de6bac866
+      CONTROLLED_ENV_FILE: /home/github-runner/.config/voip-ai/.env
+      FEISHU_SECRET_FILE: /home/github-runner/.config/voip-ai/feishu_app_secret
+      LIVE_CONTEXT: ${{ runner.temp }}/voip-live-acceptance-v2-context.json
+      PREFLIGHT_RESULT: validation/live_acceptance_preflight_v2.json
+      LIVE_RESULT: validation/human_evidence_feishu_live_acceptance_v2.json
+
+    steps:
+      - name: Checkout exact acceptance target
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.ACCEPTANCE_TARGET_SHA }}
+          fetch-depth: 1
+
+      - name: Verify exact target and controlled inputs
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$ACCEPTANCE_TARGET_SHA"
+          test -r "$CONTROLLED_ENV_FILE"
+          test -r "$FEISHU_SECRET_FILE"
+          test -f deploy/live_acceptance/runtime_contract_v2.json
+          test -f deploy/live_acceptance/runtime_v2.py
+          test -f deploy/live_acceptance/preflight_v2.py
+          test -f tools/human_evidence_feishu_live_acceptance_v2.py
+          printf 'REAL_LIVE_TARGET_SHA=%s\n' "$ACCEPTANCE_TARGET_SHA"
+          printf 'CONTROLLED_INPUTS=AVAILABLE\n'
+
+      - name: Prepare Acceptance Runtime V2
+        run: |
+          set -euo pipefail
+          python3 deploy/live_acceptance/runtime_v2.py prepare \
+            --context "$LIVE_CONTEXT" \
+            --feishu-secret-file "$FEISHU_SECRET_FILE" \
+            | tee "$RUNNER_TEMP/live-acceptance-v2-prepare.json"
+          test -s "$LIVE_CONTEXT"
+
+      - name: Recover trusted database if clean-stopped
+        run: |
+          set -euo pipefail
+          python3 deploy/live_acceptance/runtime_v2.py recover-database \
+            --context "$LIVE_CONTEXT" \
+            | tee "$RUNNER_TEMP/live-acceptance-v2-db-recovery.json"
+
+      - name: Read-only Preflight V2
+        run: |
+          set -euo pipefail
+          rm -f "$PREFLIGHT_RESULT"
+          python3 deploy/live_acceptance/runtime_v2.py run \
+            --context "$LIVE_CONTEXT" \
+            --env-file "$CONTROLLED_ENV_FILE" \
+            -- python deploy/live_acceptance/preflight_v2.py \
+                 --profile human-feishu-golden-001 \
+                 --out "$PREFLIGHT_RESULT"
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          p = json.loads(Path('validation/live_acceptance_preflight_v2.json').read_text(encoding='utf-8'))
+          assert p['contract'] == 'voip-live-acceptance-preflight-v2', p
+          assert p['status'] == 'PASS', p
+          assert p['mutation_allowed'] is True, p
+          assert p['source_revision'] == 'db3e8012a9569d9508e9d2cd920baf1de6bac866', p
+          assert p.get('runtime_fingerprint'), p
+          print('V2_READ_ONLY_PREFLIGHT=PASS')
+          print('MUTATION_ALLOWED=true')
+          print('BLOCKING_KEYS=0')
+          PY
+
+      - name: Explicit Real Human Feishu Live Acceptance V2
+        run: |
+          set -euo pipefail
+          rm -f "$LIVE_RESULT"
+          python3 deploy/live_acceptance/runtime_v2.py run \
+            --context "$LIVE_CONTEXT" \
+            --env-file "$CONTROLLED_ENV_FILE" \
+            -- python tools/human_evidence_feishu_live_acceptance_v2.py \
+                 --preflight-result "$PREFLIGHT_RESULT" \
+                 --result "$LIVE_RESULT"
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          p = json.loads(Path('validation/human_evidence_feishu_live_acceptance_v2.json').read_text(encoding='utf-8'))
+          assert p['status'] == 'PASS', p
+          assert p.get('preflight_contract') == 'voip-live-acceptance-preflight-v2', p
+          assert p.get('source_revision') == 'db3e8012a9569d9508e9d2cd920baf1de6bac866', p
+          assert p.get('document_reused') is True, p
+          assert p.get('golden_sha256_verified') is True, p
+          assert p.get('rebuilt_golden_identity_verified') is True, p
+          assert p.get('required_visual_kinds_present') is True, p
+          assert p.get('image_then_five_explanations_verified') is True, p
+          assert p.get('diagnostic_authority_escalation') is False, p
+          assert int(p.get('remote_image_block_count') or 0) >= 1, p
+          assert int(p.get('remote_human_sequence_count') or 0) >= 1, p
+          print('V2_REAL_FEISHU_LIVE_ACCEPTANCE=PASS')
+          print('REMOTE_READBACK=PASS')
+          print('DOCUMENT_REUSED=true')
+          print('DIAGNOSTIC_AUTHORITY_ESCALATION=false')
+          PY
+
+      - name: Sanitized result summary
+        if: always()
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          for path in [Path('validation/live_acceptance_preflight_v2.json'), Path('validation/human_evidence_feishu_live_acceptance_v2.json')]:
+              if not path.is_file():
+                  print(f'{path.name}=MISSING')
+                  continue
+              p = json.loads(path.read_text(encoding='utf-8'))
+              out = {
+                  'file': path.name,
+                  'contract': p.get('contract'),
+                  'status': p.get('status'),
+                  'source_revision': p.get('source_revision'),
+                  'runtime_fingerprint': p.get('runtime_fingerprint'),
+                  'mutation_allowed': p.get('mutation_allowed'),
+                  'blocking_keys': p.get('blocking_keys'),
+                  'document_fingerprint': p.get('document_fingerprint'),
+                  'document_reused': p.get('document_reused'),
+                  'projected_report_version': p.get('projected_report_version'),
+                  'projection_version': p.get('projection_version'),
+                  'ready_human_visual_count': p.get('ready_human_visual_count'),
+                  'remote_image_block_count': p.get('remote_image_block_count'),
+                  'remote_human_sequence_count': p.get('remote_human_sequence_count'),
+                  'diagnostic_authority_escalation': p.get('diagnostic_authority_escalation'),
+              }
+              print(json.dumps(out, ensure_ascii=False))
+          PY
