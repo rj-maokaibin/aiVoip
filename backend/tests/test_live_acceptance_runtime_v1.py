@@ -41,7 +41,7 @@ def test_runtime_fingerprint_is_deterministic_and_sensitive_to_inputs():
 def test_runtime_orchestrator_supports_cross_network_database_topology_without_rebuilding_image():
     runtime = _load(ROOT / "deploy/live_acceptance/runtime.py", "live_acceptance_runtime_topology_test")
     text = (ROOT / "deploy/live_acceptance/runtime.py").read_text(encoding="utf-8")
-    assert runtime.ORCHESTRATOR_VERSION == "1.2.0"
+    assert runtime.ORCHESTRATOR_VERSION == "1.3.0"
     assert "_discover_postgres_route" in text
     assert '"additional_networks":database_route.get("additional_networks") or []' in text
     assert '["docker","network","connect",str(network),container_name]' in text
@@ -86,6 +86,18 @@ def test_release_gate_postgres_is_never_trusted_as_live_database():
     assert runtime._is_transient_postgres_candidate(production) is False
 
 
+def test_database_recovery_is_guarded_by_trust_clean_exit_and_readiness():
+    text = (ROOT / "deploy/live_acceptance/runtime.py").read_text(encoding="utf-8")
+    assert "def _recover_database" in text
+    assert 'project==backend_project' in text
+    assert 'not _is_transient_postgres_candidate(info)' in text
+    assert 'status not in {"created","exited"} or exit_code!=0' in text
+    assert '["docker","start",candidate_id]' in text
+    assert '["docker","exec",candidate_id,"pg_isready"]' in text
+    assert '"DATABASE_NOT_CLEAN_STOPPED"' in text
+    assert '"STARTED_TRUSTED_DATABASE"' in text
+
+
 def test_preflight_collector_aggregates_all_blockers():
     preflight = _load(ROOT / "deploy/live_acceptance/preflight.py", "live_acceptance_preflight_test")
     collector = preflight.Collector()
@@ -109,11 +121,13 @@ def test_human_live_gate_requires_preflight_before_mutation():
     assert "mutation_allowed" in text
 
 
-def test_preliminary_workflow_uses_reusable_runtime_and_read_only_preflight():
+def test_preliminary_workflow_recovers_before_read_only_preflight_and_mutation():
     text = (ROOT / ".github/workflows/preliminary-evidence-v1.yml").read_text(encoding="utf-8")
     prepare = text.index("deploy/live_acceptance/runtime.py prepare")
+    recover = text.index("deploy/live_acceptance/runtime.py recover-database")
     preflight = text.index("deploy/live_acceptance/preflight.py")
     mutation = text.index("tools/human_evidence_feishu_live_acceptance.py")
-    assert prepare < preflight < mutation
+    assert prepare < recover < preflight < mutation
+    assert text.count("deploy/live_acceptance/runtime.py prepare") >= 2
     assert "docker build -t \"$image\" backend" not in text
     assert "live_acceptance_preflight.json" in text
