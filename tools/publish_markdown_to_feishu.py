@@ -224,7 +224,8 @@ async def publish(source: Path, result_path: Path) -> dict:
         await asyncio.sleep(0.4)
 
     acl: list[str] = []
-    admin_ids = [x.strip() for x in str(settings.feishu_document_acl_admin_open_ids or "").split(",") if x.strip()]
+    admin_raw = str(getattr(settings, "feishu_document_acl_admin_open_ids", "") or "")
+    admin_ids = [x.strip() for x in admin_raw.split(",") if x.strip()]
     for open_id in admin_ids:
         try:
             await _add_collaborator(
@@ -238,13 +239,15 @@ async def publish(source: Path, result_path: Path) -> dict:
         except Exception as exc:
             print(f"WARN_ACL_ADMIN={type(exc).__name__}")
 
-    if settings.feishu_receive_id_type == "chat_id" and settings.feishu_default_receive_id:
+    receive_id_type = str(getattr(settings, "feishu_receive_id_type", "") or "")
+    default_receive_id = str(getattr(settings, "feishu_default_receive_id", "") or "")
+    if receive_id_type == "chat_id" and default_receive_id:
         try:
             await _add_collaborator(
                 transport,
                 document_id,
                 member_type="openchat",
-                member_id=str(settings.feishu_default_receive_id),
+                member_id=default_receive_id,
                 perm=str(os.getenv("FEISHU_PUBLISH_CHAT_PERMISSION") or "edit"),
             )
             acl.append("default_chat")
