@@ -1,0 +1,106 @@
+name: Publish Markdown To Feishu
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - 'feishu_publish/requests/*.md'
+  workflow_dispatch:
+    inputs:
+      source:
+        description: 'Repository-relative Markdown path'
+        required: true
+        default: 'feishu_publish/requests/PON_84B_1260Mbps_最终定性报告_2026-08-25.md'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-markdown-to-feishu-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on:
+      - self-hosted
+      - linux
+      - x64
+      - voip-controlled-linux
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Resolve source Markdown
+        id: source
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            source_path='${{ github.event.inputs.source }}'
+          else
+            source_path="$(git diff-tree --no-commit-id --name-only -r "$GITHUB_SHA" | grep '^feishu_publish/requests/.*\.md$' | head -n1 || true)"
+          fi
+          test -n "$source_path"
+          test -f "$source_path"
+          echo "path=$source_path" >> "$GITHUB_OUTPUT"
+          echo "SOURCE_MD=$source_path"
+
+      - name: Load controlled Feishu environment and publish
+        id: publish
+        shell: bash
+        run: |
+          set -euo pipefail
+          set -a
+          loaded=0
+          for env_file in /home/dev/workspace/aiVoip/.env /home/dev/workspace/aiVoip/backend/.env; do
+            if [ -r "$env_file" ]; then
+              source "$env_file"
+              loaded=$((loaded+1))
+            fi
+          done
+          set +a
+          test "$loaded" -gt 0
+
+          export PYTHONPATH="$GITHUB_WORKSPACE/backend:$GITHUB_WORKSPACE"
+          result="$RUNNER_TEMP/feishu_markdown_publish_result.json"
+          python3 tools/publish_markdown_to_feishu.py \
+            --source '${{ steps.source.outputs.path }}' \
+            --result "$result" | tee "$RUNNER_TEMP/feishu_publish.log"
+
+          python3 - "$result" <<'PY' >> "$GITHUB_OUTPUT"
+          import json, sys
+          p = json.load(open(sys.argv[1], encoding='utf-8'))
+          assert p['status'] == 'PASS', p
+          print('url=' + p['url'])
+          print('document_id=' + p['document_id'])
+          print('block_count=' + str(p['block_count']))
+          PY
+
+          cp "$result" validation/feishu_markdown_publish_result.json
+
+      - name: Publish job summary
+        if: success()
+        shell: bash
+        run: |
+          {
+            echo '## Feishu Markdown Publish'
+            echo
+            echo '- Source: `${{ steps.source.outputs.path }}`'
+            echo '- Document ID: `${{ steps.publish.outputs.document_id }}`'
+            echo '- Blocks: `${{ steps.publish.outputs.block_count }}`'
+            echo '- Document: ${{ steps.publish.outputs.url }}'
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo 'FEISHU_DOC_URL=${{ steps.publish.outputs.url }}'
+
+      - name: Upload publish result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: feishu-markdown-publish-result
+          path: validation/feishu_markdown_publish_result.json
+          if-no-files-found: warn
+          retention-days: 14
