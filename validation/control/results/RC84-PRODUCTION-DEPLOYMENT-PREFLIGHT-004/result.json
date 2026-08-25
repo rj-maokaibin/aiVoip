@@ -1,0 +1,52 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "RC84-PRODUCTION-DEPLOYMENT-PREFLIGHT-004",
+    "sequence": 215,
+    "created_at": "2026-08-25T15:44:00+00:00",
+    "expires_at": "2026-08-26T03:44:00+00:00",
+    "action_type": "GATE_EVALUATE",
+    "parameters": {
+      "timeout_seconds": 7200,
+      "bundle": "/home/dev/workspace/aiVoip/validation/capture_v2/PRODUCTION_CUTOVER_AUTHORIZATION_RC69.json",
+      "gate_id": "PRODUCTION-DEPLOYMENT-PREFLIGHT-RC84"
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "ccf04511c44330a5a2cd3b1b8a6c34e2bf5e9c57"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "Read-only production deployment preflight after syncing current accepted master (PR41 deployment hardening + PR47 Acceptance Infrastructure V2) to the production control branch. Confirm production prestate remains V1/false, current /etc/voip-ai/production.env satisfies latest deploy preflight requirements, Compose contains required Capture V2 control services, and no production/DUT mutation occurs."
+  },
+  "action_sha256": "2e3affceba5e5c279d5977191aef3e918ca5c3c572053b72fd8972b7ec97822e",
+  "runner_id": "srv:2203168",
+  "state": "FAILED",
+  "return_code": 2,
+  "verdict": null,
+  "error": null,
+  "finished_at": "2026-08-25T17:01:59.466493+00:00",
+  "stdout_sha256": "6b4566567c825223da7b8c82e51b1c355948b387e22faa4eabb370f8b038d43f",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "local_stdout": ".capture-v2-control/logs/RC84-PRODUCTION-DEPLOYMENT-PREFLIGHT-004/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/RC84-PRODUCTION-DEPLOYMENT-PREFLIGHT-004/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "6326285c536203fb8f4ce580548fbc0bff759087",
+      "expected_product_head": "ccf04511c44330a5a2cd3b1b8a6c34e2bf5e9c57"
+    },
+    "parsed_output": {
+      "details": {
+        "message": "[Errno 2] No such file or directory: '/home/dev/workspace/aiVoip/validation/capture_v2/PRODUCTION_CUTOVER_AUTHORIZATION_RC69.json/manifest.json'"
+      },
+      "error": "GATE_COMMAND_EXCEPTION:FileNotFoundError",
+      "ok": false
+    }
+  }
+}

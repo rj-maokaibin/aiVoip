@@ -1,93 +1,33 @@
 {
   "schema_version": "capture-v2-remote-status-v1",
-  "action_id": "RC83-PRODUCTION-CUTOVER-003",
-  "sequence": 214,
+  "action_id": "RC84-PRODUCTION-DEPLOYMENT-PREFLIGHT-004",
+  "sequence": 215,
   "action_type": "GATE_EVALUATE",
   "state": "FAILED",
-  "runner_id": "srv:257142",
-  "action_sha256": "014f13bb8fdad73c765cd5916b2cda8edce66db4a3de5478f9468ce8af04326e",
-  "updated_at": "2026-08-23T16:25:03.241024+00:00",
+  "runner_id": "srv:2203168",
+  "action_sha256": "2e3affceba5e5c279d5977191aef3e918ca5c3c572053b72fd8972b7ec97822e",
+  "updated_at": "2026-08-25T17:01:59.466493+00:00",
   "started_at": null,
-  "finished_at": "2026-08-23T16:25:03.241024+00:00",
-  "return_code": 1,
-  "verdict": "FAIL",
-  "result_path": "validation/control/results/RC83-PRODUCTION-CUTOVER-003/result.json",
-  "stdout_sha256": "efbb67ee2758deeef3a97145e369e795bd6936a9102eab780c5c361625c1a75a",
+  "finished_at": "2026-08-25T17:01:59.466493+00:00",
+  "return_code": 2,
+  "verdict": null,
+  "result_path": "validation/control/results/RC84-PRODUCTION-DEPLOYMENT-PREFLIGHT-004/result.json",
+  "stdout_sha256": "6b4566567c825223da7b8c82e51b1c355948b387e22faa4eabb370f8b038d43f",
   "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "error": null,
   "detail": {
     "safety": {
       "capture_engine_version": "V1",
       "capture_v2_production_enabled": "false",
-      "git_head": "541c7fb1e3836cf048ed2d5a1e2cb55c18f85060",
-      "expected_product_head": "c44b7e31625847f9ec60e695378033354267c4fd"
+      "git_head": "6326285c536203fb8f4ce580548fbc0bff759087",
+      "expected_product_head": "ccf04511c44330a5a2cd3b1b8a6c34e2bf5e9c57"
     },
     "parsed_output": {
-      "scope": "GUARDED_PRODUCTION_CAPTURE_V2_CUTOVER",
-      "project": "voip-ai",
-      "production_env": "/etc/voip-ai/production.env",
-      "production_mutation": true,
-      "dut_mutation": false,
-      "rollback_on_failure": true,
-      "stages": {
-        "validated_source_merged": {
-          "passed": true,
-          "validated_feature_head": "3e41f8a82580a6ca73607983326edd9cc4151998"
-        },
-        "source_manifest": {
-          "passed": true,
-          "file_count": 574,
-          "aggregate_sha256": "7cf1778b3cb3d9ed44041a63405991978d5fabd281e277c316787b2190d7f4ff"
-        },
-        "env_switch": {
-          "return_code": 0,
-          "backup_path": "/etc/voip-ai/production.env.capture-v2-pre-20260823T162457Z",
-          "overrides": {
-            "CAPTURE_ENGINE_VERSION": "V2",
-            "CAPTURE_V2_ACTIVATION_REHEARSAL": "false",
-            "CAPTURE_V2_PRODUCTION_ENABLED": "true",
-            "CAPTURE_V2_RELEASE_GATE_ARTIFACT": "/app/validation/capture_v2_release_gate.json",
-            "CAPTURE_V2_REUSE_LEGACY_REPRODUCTION_SEMANTICS": "false",
-            "REPRODUCTION_PLATFORM_MODE": "real"
-          }
-        },
-        "strict_release_preflight": {
-          "return_code": 0,
-          "release_status": "PASS",
-          "release_blocking_keys": []
-        },
-        "production_deploy": {
-          "return_code": 1,
-          "stdout_tail": "    },\n    {\n[REDACTED_SENSITIVE_LINE]\n      \"status\": \"PASS\",\n[REDACTED_SENSITIVE_LINE]\n[REDACTED_SENSITIVE_LINE]\n      \"blocks_deploy\": false,\n      \"blocks_release\": false\n    },\n    {\n[REDACTED_SENSITIVE_LINE]\n      \"status\": \"PASS\",\n[REDACTED_SENSITIVE_LINE]\n[REDACTED_SENSITIVE_LINE]\n      \"blocks_deploy\": false,\n      \"blocks_release\": false\n    },\n    {\n[REDACTED_SENSITIVE_LINE]\n      \"status\": \"PASS\",\n[REDACTED_SENSITIVE_LINE]\n[REDACTED_SENSITIVE_LINE]\n      \"blocks_deploy\": false,\n      \"blocks_release\": false\n    },\n    {\n[REDACTED_SENSITIVE_LINE]\n      \"status\": \"PASS\",\n[REDACTED_SENSITIVE_LINE]\n[REDACTED_SENSITIVE_LINE]\n      \"blocks_deploy\": false,\n      \"blocks_release\": false\n    },\n    {\n[REDACTED_SENSITIVE_LINE]\n      \"status\": \"PASS\",\n[REDACTED_SENSITIVE_LINE]\n[REDACTED_SENSITIVE_LINE]\n      \"blocks_deploy\": false,\n      \"blocks_release\": false\n    },\n    {\n[REDACTED_SENSITIVE_LINE]\n      \"status\": \"PASS\",\n[REDACTED_SENSITIVE_LINE]\n[REDACTED_SENSITIVE_LINE]\n      \"blocks_deploy\": false,\n      \"blocks_release\": false\n    },\n    {\n      \"key\": \"FEISHU_LIVE_CONFIG\",\n      \"status\": \"PASS\",\n      \"category\": \"INTEGRATION\",\n      \"detail\": \"live target configured\",\n      \"blocks_deploy\": false,\n      \"blocks_release\": false\n    },\n    {\n      \"key\": \"EC02_REAL_PLATFORM\",\n      \"status\": \"PASS\",\n      \"category\": \"PLATFORM\",\n      \"detail\": \"real platform mode=real\",\n      \"blocks_deploy\": false,\n      \"blocks_release\": false\n    },\n    {\n      \"key\": \"FRONTEND_LOCKFILE\",\n      \"status\": \"PASS\",\n      \"category\": \"BUILD\",\n      \"detail\": \"source-controlled package-lock.json present\",\n      \"blocks_deploy\": false,\n      \"blocks_release\": false\n    },\n    {\n      \"key\": \"SOURCE_MANIFEST\",\n      \"status\": \"PASS\",\n      \"category\": \"BUILD\",\n      \"detail\": \"/home/dev/workspace/aiVoip/release/source_manifest.json\",\n      \"blocks_deploy\": false,\n      \"blocks_release\": false\n    }\n  ]\n}\nDocker/Compose configuration: PASS\nBuilding production images for source manifest:\n{\n  \"status\": \"PASS\",\n  \"file_count\": 574,\n  \"aggregate_sha256\": \"7cf1778b3cb3d9ed44041a63405991978d5fabd281e277c316787b2190d7f4ff\",\n  \"errors\": []\n}\n#1 [internal] load local bake definitions\n#1 reading from stdin 6.02kB done\n#1 DONE 0.0s\n\n#2 [beat internal] load build definition from Dockerfile\n#2 transferring dockerfile: 443B done\n#2 DONE 0.0s\n\n#3 [frontend internal] load build definition from Dockerfile\n#3 transferring dockerfile: 437B done\n#3 DONE 0.0s\n\n#4 [reproduction-control-high-worker internal] load metadata for docker.io/library/python:3.12-slim\n#4 ERROR: failed to do request: Head \"http://mirror.ruijie.com.cn:8090/v2/library/python/manifests/3.12-slim?ns=docker.io\": dial tcp 172.18.34.132:8090: connect: no route to host\n\n#5 [frontend internal] load metadata for docker.io/library/node:22-alpine\n#5 ERROR: failed to do request: Head \"http://mirror.ruijie.com.cn:8090/v2/library/node/manifests/22-alpine?ns=docker.io\": dial tcp 172.18.34.132:8090: connect: no route to host\n\n#6 [frontend internal] load metadata for docker.io/library/nginx:1.27-alpine\n#6 ERROR: failed to do request: Head \"http://mirror.ruijie.com.cn:8090/v2/library/nginx/manifests/1.27-alpine?ns=docker.io\": dial tcp 172.18.34.132:8090: connect: no route to host\n------\n > [beat internal] load metadata for docker.io/library/python:3.12-slim:\n------\n------\n > [frontend internal] load metadata for docker.io/library/nginx:1.27-alpine:\n------\n------\n > [frontend internal] load metadata for docker.io/library/node:22-alpine:\n------",
-          "stderr_tail": "Dockerfile:1\n\n--------------------\n\n   1 | >>> FROM python:3.12-slim\n\n   2 |     ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1\n\n   3 |     WORKDIR /app\n\n--------------------\n\ntarget collector-worker: failed to solve: python:3.12-slim: failed to resolve source metadata for docker.io/library/python:3.12-slim: failed to do request: Head \"http://mirror.ruijie.com.cn:8090/v2/library/python/manifests/3.12-slim?ns=docker.io\": dial tcp 172.18.34.132:8090: connect: no route to host\n"
-        }
+      "details": {
+        "message": "[Errno 2] No such file or directory: '/home/dev/workspace/aiVoip/validation/capture_v2/PRODUCTION_CUTOVER_AUTHORIZATION_RC69.json/manifest.json'"
       },
-      "pre_env": {
-        "APP_ENV": "production",
-        "BUILD_REVISION": "88c326a2255ade17cda5ce466b55a0058f335496",
-        "REPRODUCTION_PLATFORM_MODE": "mock",
-        "VOIP_DATA_ROOT": "/data/voip",
-        "VOIP_PROJECT_NAME": "voip-ai",
-        "CAPTURE_ENGINE_VERSION": "V1",
-        "CAPTURE_V2_PRODUCTION_ENABLED": "false",
-        "CAPTURE_V2_ACTIVATION_REHEARSAL": "false"
-      },
-      "pre_running_services": [],
-      "rollback": {
-        "attempted": true,
-        "env_restored": true,
-        "runtime_restored": true,
-        "rollback_command": "compose down --remove-orphans",
-        "rollback_return_code": 0
-      },
-      "verdict": "FAIL",
-      "reason": "PRODUCTION_DEPLOY_FAILED",
-      "pre_env_defaulted_keys": [
-        "CAPTURE_ENGINE_VERSION",
-        "CAPTURE_V2_ACTIVATION_REHEARSAL",
-        "CAPTURE_V2_PRODUCTION_ENABLED"
-      ],
-      "pre_env_defaults_source": "APPLICATION_RUNTIME_DEFAULTS"
+      "error": "GATE_COMMAND_EXCEPTION:FileNotFoundError",
+      "ok": false
     }
   }
 }
