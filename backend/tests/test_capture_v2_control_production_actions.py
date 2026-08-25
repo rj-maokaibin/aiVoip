@@ -57,6 +57,19 @@ def test_explicit_production_preflight_uses_fixed_guarded_surface(tmp_path: Path
     ]
 
 
+def test_explicit_feishu_rbac_enable_uses_fixed_guarded_surface(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _pretend_sudo_exists(monkeypatch)
+    policy = ControlPolicy(tmp_path)
+    command = policy.prepare(
+        _action(ControlActionType.PRODUCTION_FEISHU_RBAC_ENABLE, parameters={"timeout_seconds": 300})
+    )
+
+    assert command is not None
+    assert command.timeout_seconds == 120
+    assert command.argv[4] == "app.capture_v2.control.production_feishu_rbac_enable_guarded"
+    assert command.argv[-1].endswith("validation/capture_v2/PRODUCTION_CUTOVER_AUTHORIZATION_RC69.json")
+
+
 def test_explicit_production_cutover_uses_fixed_guarded_surface(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _pretend_sudo_exists(monkeypatch)
     policy = ControlPolicy(tmp_path)
@@ -74,6 +87,7 @@ def test_explicit_production_cutover_uses_fixed_guarded_surface(tmp_path: Path, 
     "action_type",
     [
         ControlActionType.PRODUCTION_DEPLOYMENT_PREFLIGHT,
+        ControlActionType.PRODUCTION_FEISHU_RBAC_ENABLE,
         ControlActionType.PRODUCTION_CUTOVER,
     ],
 )
@@ -102,6 +116,7 @@ def test_remote_action_schema_accepts_explicit_production_types() -> None:
     now = datetime.now(timezone.utc)
     for action_type in (
         ControlActionType.PRODUCTION_DEPLOYMENT_PREFLIGHT,
+        ControlActionType.PRODUCTION_FEISHU_RBAC_ENABLE,
         ControlActionType.PRODUCTION_CUTOVER,
     ):
         parsed = RemoteAction.from_dict(
