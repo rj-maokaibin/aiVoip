@@ -38,11 +38,35 @@ def test_runtime_fingerprint_is_deterministic_and_sensitive_to_inputs():
     assert a != d
 
 
-def test_runtime_supports_discovered_live_postgres_host_override():
+def test_runtime_orchestrator_supports_cross_network_database_topology_without_rebuilding_image():
+    runtime = _load(ROOT / "deploy/live_acceptance/runtime.py", "live_acceptance_runtime_topology_test")
     text = (ROOT / "deploy/live_acceptance/runtime.py").read_text(encoding="utf-8")
-    assert "_discover_postgres_host_override" in text
-    assert '"host_overrides":host_overrides' in text
-    assert '"--add-host",f"{hostname}:{address}"' in text
+    assert runtime.ORCHESTRATOR_VERSION == "1.1.0"
+    assert "_discover_postgres_route" in text
+    assert '"additional_networks": database_route.get("additional_networks") or []' in text
+    assert '["docker", "network", "connect", str(network), container_name]' in text
+    assert '"docker", "create", "--name", container_name' in text
+    assert '["docker", "start", "-a", container_name]' in text
+    assert '"--network",f"container:{backend_id}"' not in text
+
+
+def test_database_route_score_recognizes_postgres_across_any_network():
+    runtime = _load(ROOT / "deploy/live_acceptance/runtime.py", "live_acceptance_runtime_score_test")
+    info = {
+        "Name": "/prod-db",
+        "Config": {
+            "Image": "postgres:16",
+            "Env": ["POSTGRES_DB=voip", "POSTGRES_USER=voip"],
+            "Labels": {"com.docker.compose.service": "database"},
+        },
+        "NetworkSettings": {
+            "Networks": {
+                "db-net": {"IPAddress": "172.30.0.2", "Aliases": ["postgres", "prod-db"]}
+            }
+        },
+    }
+    assert runtime._postgres_score(info, "postgres") >= 25
+    assert runtime._network_aliases(info, "db-net") == {"postgres", "prod-db"}
 
 
 def test_preflight_collector_aggregates_all_blockers():
@@ -52,6 +76,13 @@ def test_preflight_collector_aggregates_all_blockers():
     collector.block("B", "DATABASE", "bad db")
     collector.block("C", "FEISHU", "bad feishu")
     assert collector.blocking_keys == ["B", "C"]
+
+
+def test_preflight_has_explicit_database_route_gate():
+    text = (ROOT / "deploy/live_acceptance/preflight.py").read_text(encoding="utf-8")
+    assert "DATABASE_ROUTE" in text
+    assert "candidate_cross_network" in text
+    assert "LIVE_ACCEPTANCE_DATABASE_ROUTE_STATUS" in text
 
 
 def test_human_live_gate_requires_preflight_before_mutation():
