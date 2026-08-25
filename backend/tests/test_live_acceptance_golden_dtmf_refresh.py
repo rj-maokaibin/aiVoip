@@ -10,8 +10,15 @@ def test_live_golden_refresh_is_exact_sha_content_gated_and_idempotent():
     assert "_dtmf_source_readiness" in live
     assert "_refresh_stale_golden_dtmf" in live
     assert 'GOLDEN_DTMF_DIGITS = "601"' in live
+    assert "EXPECTED_PCM_ANALYZER_VERSION = PcmIntelligenceEngine.analyzer_version" in live
+    assert "EXPECTED_MEDIA_ANALYZER_VERSION = MEDIA_GATED_ANALYZER_VERSION" in live
+    assert "_latest_report_run" in live
     assert '"DTMF_INSPECTOR"' in live
     assert "DTMF_SIP_DIAL_MATCH" in live
+    assert "PCM_ANALYZER_VERSION_STALE" in live
+    assert "MEDIA_ANALYZER_VERSION_STALE" in live
+    assert "PCM_REPORT_RUN_NOT_GOLDEN_EVIDENCE" in live
+    assert "MEDIA_REPORT_RUN_NOT_GOLDEN_EVIDENCE" in live
     assert "PCM_601_ACCEPTED_EVENT_MISSING" in live
     assert "MEDIA_601_SIP_MATCH_MISSING" in live
     assert "MEDIA_601_PCM_WAV_MISSING" in live

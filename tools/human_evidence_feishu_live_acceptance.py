@@ -10,6 +10,7 @@ from urllib.parse import quote
 
 from sqlalchemy import select
 
+from app.analyzers.pcm import PcmIntelligenceEngine
 from app.db.evidence_report_models import (
     EvidenceReportArtifactLink,
     FeishuEvidenceDocumentBinding,
@@ -21,13 +22,15 @@ from app.integrations.feishu.evidence_document_human_v2 import HumanFeishuEviden
 from app.integrations.storage import ObjectStorage
 from app.services.analysis import create_media_analysis_job, create_pcm_analysis_job
 from app.services.evidence_report import generate_evidence_report
-from app.workers.media_tasks import analyze_media_evidence
+from app.workers.media_tasks import MEDIA_GATED_ANALYZER_VERSION, analyze_media_evidence
 from app.workers.pcm_tasks import analyze_pcm_evidence
 
 
 REAL_GOLDEN_001_SHA256 = "b038aa7c9a0644581f2815f654fcdee4620860796382265b178823fccba2e3f0"
 GOLDEN_PCM_PROFILE_ID = "ruijie_aim_diag_v1"
 GOLDEN_DTMF_DIGITS = "601"
+EXPECTED_PCM_ANALYZER_VERSION = PcmIntelligenceEngine.analyzer_version
+EXPECTED_MEDIA_ANALYZER_VERSION = MEDIA_GATED_ANALYZER_VERSION
 HUMAN_CONTRACT = "feishu-evidence-living-document-human-v2"
 PREFLIGHT_CONTRACT = "voip-live-acceptance-preflight-v1"
 REQUIRED_VISUAL_KINDS = {"DTMF_INSPECTOR", "SPECTRUM", "SPECTROGRAM"}
@@ -77,18 +80,23 @@ def _case_has_required_analyzers(db, case_id: str) -> bool:
     return REQUIRED_GOLDEN_ANALYZERS.issubset({str(x) for x in successful})
 
 
-def _latest_successful_run_for_evidence(db, *, case_id: str, analyzer_name: str, evidence_id: str) -> AnalyzerRun | None:
-    rows = list(db.scalars(
-        select(AnalyzerRun).where(
+def _latest_report_run(db, *, case_id: str, analyzer_name: str) -> AnalyzerRun | None:
+    """Mirror CASE report run selection: newest run wins, before status/content checks."""
+    return db.scalar(
+        select(AnalyzerRun)
+        .where(
             AnalyzerRun.case_id == case_id,
             AnalyzerRun.analyzer_name == analyzer_name,
-            AnalyzerRun.status == "SUCCESS",
-        ).order_by(AnalyzerRun.created_at.desc())
-    ))
-    for row in rows:
-        if str(evidence_id) in {str(x) for x in (row.input_evidence_ids or [])}:
-            return row
-    return None
+        )
+        .order_by(AnalyzerRun.created_at.desc())
+        .limit(1)
+    )
+
+
+def _run_uses_evidence(run: AnalyzerRun | None, evidence_id: str) -> bool:
+    if run is None:
+        return False
+    return str(evidence_id) in {str(x) for x in (run.input_evidence_ids or [])}
 
 
 def _load_run_result(storage: ObjectStorage, run: AnalyzerRun | None) -> dict:
@@ -156,39 +164,83 @@ def _media_pcm_wav_scopes(db, media_run: AnalyzerRun | None) -> set[tuple[str, i
 
 
 def _dtmf_source_readiness(db, storage: ObjectStorage, *, case_id: str, evidence: Evidence) -> dict:
-    pcm_run = _latest_successful_run_for_evidence(
-        db, case_id=case_id, analyzer_name="pcm_intelligence", evidence_id=str(evidence.id)
-    )
-    media_run = _latest_successful_run_for_evidence(
-        db, case_id=case_id, analyzer_name="media_intelligence", evidence_id=str(evidence.id)
-    )
-    pcm = _load_run_result(storage, pcm_run)
-    media = _load_run_result(storage, media_run)
+    pcm_run = _latest_report_run(db, case_id=case_id, analyzer_name="pcm_intelligence")
+    media_run = _latest_report_run(db, case_id=case_id, analyzer_name="media_intelligence")
+
+    pcm_status = str(pcm_run.status or "") if pcm_run is not None else None
+    media_status = str(media_run.status or "") if media_run is not None else None
+    pcm_exact = _run_uses_evidence(pcm_run, str(evidence.id))
+    media_exact = _run_uses_evidence(media_run, str(evidence.id))
+    pcm_version = str(pcm_run.analyzer_version or "") if pcm_run is not None else None
+    media_version = str(media_run.analyzer_version or "") if media_run is not None else None
+    pcm_version_current = pcm_version == EXPECTED_PCM_ANALYZER_VERSION
+    media_version_current = media_version == EXPECTED_MEDIA_ANALYZER_VERSION
+
+    pcm = _load_run_result(storage, pcm_run) if pcm_status == "SUCCESS" and pcm_exact else {}
+    media = _load_run_result(storage, media_run) if media_status == "SUCCESS" and media_exact else {}
     pcm_candidates = _pcm_601_candidates(pcm)
     media_matches = _media_601_matches(media)
-    media_wavs = _media_pcm_wav_scopes(db, media_run)
+    media_wavs = _media_pcm_wav_scopes(db, media_run) if media_exact else set()
     coherent = pcm_candidates & media_matches & media_wavs
+
     reasons: list[str] = []
     if pcm_run is None:
-        reasons.append("PCM_RUN_MISSING")
+        reasons.append("PCM_REPORT_RUN_MISSING")
+    elif pcm_status != "SUCCESS":
+        reasons.append("PCM_REPORT_RUN_NOT_SUCCESS")
+    elif not pcm_exact:
+        reasons.append("PCM_REPORT_RUN_NOT_GOLDEN_EVIDENCE")
+    elif not pcm_version_current:
+        reasons.append("PCM_ANALYZER_VERSION_STALE")
     elif not pcm_candidates:
         reasons.append("PCM_601_ACCEPTED_EVENT_MISSING")
+
     if media_run is None:
-        reasons.append("MEDIA_RUN_MISSING")
+        reasons.append("MEDIA_REPORT_RUN_MISSING")
+    elif media_status != "SUCCESS":
+        reasons.append("MEDIA_REPORT_RUN_NOT_SUCCESS")
+    elif not media_exact:
+        reasons.append("MEDIA_REPORT_RUN_NOT_GOLDEN_EVIDENCE")
+    elif not media_version_current:
+        reasons.append("MEDIA_ANALYZER_VERSION_STALE")
     elif not media_matches:
         reasons.append("MEDIA_601_SIP_MATCH_MISSING")
     elif not (media_matches & media_wavs):
         reasons.append("MEDIA_601_PCM_WAV_MISSING")
+
     if pcm_candidates and media_matches and media_wavs and not coherent:
         reasons.append("DTMF_SCOPE_COHERENCE_MISSING")
+
+    pcm_ready = bool(
+        pcm_run is not None
+        and pcm_status == "SUCCESS"
+        and pcm_exact
+        and pcm_version_current
+        and pcm_candidates
+    )
+    media_ready = bool(
+        media_run is not None
+        and media_status == "SUCCESS"
+        and media_exact
+        and media_version_current
+        and (media_matches & media_wavs)
+    )
     return {
-        "ready": bool(coherent) and not reasons,
-        "pcm_ready": bool(pcm_candidates),
-        "media_ready": bool(media_matches & media_wavs),
+        "ready": pcm_ready and media_ready and bool(coherent) and not reasons,
+        "pcm_ready": pcm_ready,
+        "media_ready": media_ready,
         "scope_coherent": bool(coherent),
         "reason_codes": reasons,
-        "pcm_analyzer_version": str(pcm_run.analyzer_version) if pcm_run is not None else None,
-        "media_analyzer_version": str(media_run.analyzer_version) if media_run is not None else None,
+        "pcm_content_ready": bool(pcm_candidates),
+        "media_content_ready": bool(media_matches & media_wavs),
+        "pcm_report_run_status": pcm_status,
+        "media_report_run_status": media_status,
+        "pcm_report_run_exact_golden": pcm_exact,
+        "media_report_run_exact_golden": media_exact,
+        "pcm_analyzer_version": pcm_version,
+        "media_analyzer_version": media_version,
+        "expected_pcm_analyzer_version": EXPECTED_PCM_ANALYZER_VERSION,
+        "expected_media_analyzer_version": EXPECTED_MEDIA_ANALYZER_VERSION,
     }
 
 
