@@ -1,4 +1,4 @@
-name: Production M7 C06 Poseidon Credential Probe
+name: Production M7 C06 APF3260-M Poseidon Probe
 
 on:
   pull_request:
@@ -24,8 +24,11 @@ jobs:
     timeout-minutes: 20
     env:
       TARGET_IP: '10.48.8.74'
-      TARGET_PORT: '10001'
-      TARGET_SN: 'G1V030E010214'
+      TARGET_PORT: '10002'
+      TARGET_SN: 'G1U060H000384'
+      TARGET_MODEL: 'APF3260-M'
+      TARGET_PLATFORM_ID: 'mt7981'
+      TARGET_VOICE_INTERFACE: 'br-lan_400'
     steps:
       - uses: actions/checkout@v4
         with:
@@ -36,6 +39,7 @@ jobs:
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha }}"
+          echo "OPERATIONAL_HEAD=$(git rev-parse HEAD)"
 
       - name: Probe Runner host TCP reachability
         run: |
@@ -75,6 +79,9 @@ jobs:
             -e TARGET_IP="$TARGET_IP" \
             -e TARGET_PORT="$TARGET_PORT" \
             -e TARGET_SN="$TARGET_SN" \
+            -e TARGET_MODEL="$TARGET_MODEL" \
+            -e TARGET_PLATFORM_ID="$TARGET_PLATFORM_ID" \
+            -e TARGET_VOICE_INTERFACE="$TARGET_VOICE_INTERFACE" \
             -e HOST_TCP_REACHABLE="${HOST_TCP_REACHABLE:-false}" \
             "$REPRODUCTION_WORKER" python - <<'PY' > validation/production_m7_c06_poseidon_probe.json
           import asyncio
@@ -90,15 +97,21 @@ jobs:
           target_ip = os.environ['TARGET_IP']
           target_port = int(os.environ['TARGET_PORT'])
           target_sn = os.environ['TARGET_SN']
+          target_model = os.environ['TARGET_MODEL']
+          target_platform_id = os.environ['TARGET_PLATFORM_ID']
+          target_voice_interface = os.environ['TARGET_VOICE_INTERFACE']
           host_tcp_reachable = os.environ.get('HOST_TCP_REACHABLE', 'false').lower() == 'true'
           payload = {
-              'schema_version': 'production-m7-c06-poseidon-probe-v3',
+              'schema_version': 'production-m7-c06-poseidon-probe-v4',
               'checked_at': datetime.now(timezone.utc).isoformat(),
               'target': {
-                  'model': 'APF1250',
+                  'model': target_model,
+                  'platform_id': target_platform_id,
                   'ip': target_ip,
                   'ssh_port': target_port,
                   'sn_suffix': target_sn[-4:],
+                  'voice_interface': target_voice_interface,
+                  'identity_source': 'AUDITED_R7_APF3260M_RC55',
               },
               'side_effect_boundary': {
                   'poseidon_devkey_create_or_refresh_possible': True,
@@ -121,7 +134,7 @@ jobs:
           except Exception as exc:
               payload['network']['production_container_tcp_reachable'] = False
               payload['network']['container_error_type'] = type(exc).__name__
-              payload['blocking_reasons'].append('APF1250_TCP_ENDPOINT_UNREACHABLE')
+              payload['blocking_reasons'].append('APF3260M_TCP_ENDPOINT_UNREACHABLE')
 
           if host_tcp_reachable and not payload['network'].get('production_container_tcp_reachable'):
               payload['network']['reachability_boundary'] = 'DOCKER_OR_CONTAINER_ROUTE'
@@ -135,7 +148,7 @@ jobs:
               password = await provider.get_password(
                   sn=target_sn,
                   ip=target_ip,
-                  product='APF1250',
+                  product=target_model,
               )
               payload['poseidon'] = {
                   'provider_id': provider.provider_id,
@@ -153,17 +166,19 @@ jobs:
                   result = await adapter.execute_shell(
                       "echo PROBE_OK=1; "
                       "echo TCPDUMP_COUNT=$(ps w | grep '[t]cpdump' | wc -l); "
-                      "echo DSP_DIAG_PROCESS_COUNT=$(ps w | grep '[d]sp diag' | wc -l)",
+                      "echo DSP_DIAG_PROCESS_COUNT=$(ps w | grep '[d]sp diag' | wc -l); "
+                      "echo VOICE_IF_PRESENT=$(ip link show " + target_voice_interface + " >/dev/null 2>&1 && echo 1 || echo 0)",
                       timeout=10,
                   )
                   text = result.stdout or ''
                   def number(name):
-                      match = re.search(rf'{name}=(\\d+)', text)
+                      match = re.search(rf'{name}=(\d+)', text)
                       return int(match.group(1)) if match else None
                   payload['dut'] = {
                       'ssh_connected': 'PROBE_OK=1' in text,
                       'tcpdump_process_count': number('TCPDUMP_COUNT'),
                       'dsp_diag_process_count': number('DSP_DIAG_PROCESS_COUNT'),
+                      'voice_interface_present': number('VOICE_IF_PRESENT') == 1,
                   }
               finally:
                   try:
@@ -188,11 +203,13 @@ jobs:
 
           if payload.get('dut', {}).get('ssh_connected') is not True:
               if 'POSEIDON_OR_SSH_PROBE_FAILED' not in payload['blocking_reasons']:
-                  payload['blocking_reasons'].append('APF1250_SSH_READONLY_PROBE_FAILED')
+                  payload['blocking_reasons'].append('APF3260M_SSH_READONLY_PROBE_FAILED')
           if payload.get('dut', {}).get('tcpdump_process_count') not in (0, None):
-              payload['blocking_reasons'].append('APF1250_RESIDUAL_TCPDUMP_PROCESS')
+              payload['blocking_reasons'].append('APF3260M_RESIDUAL_TCPDUMP_PROCESS')
           if payload.get('dut', {}).get('dsp_diag_process_count') not in (0, None):
-              payload['blocking_reasons'].append('APF1250_RESIDUAL_DSP_DIAG_PROCESS')
+              payload['blocking_reasons'].append('APF3260M_RESIDUAL_DSP_DIAG_PROCESS')
+          if payload.get('dut', {}).get('ssh_connected') is True and payload.get('dut', {}).get('voice_interface_present') is not True:
+              payload['blocking_reasons'].append('APF3260M_AUDITED_VOICE_INTERFACE_MISSING')
 
           payload['verdict'] = 'PASS' if not payload['blocking_reasons'] else 'BLOCKED'
           print(json.dumps(payload, ensure_ascii=False, indent=2))
@@ -203,11 +220,11 @@ jobs:
           cat validation/production_m7_c06_poseidon_probe.json
           exit "$rc"
 
-      - name: Upload sanitized Poseidon probe evidence
+      - name: Upload sanitized APF3260-M Poseidon probe evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: production-m7-c06-poseidon-probe
+          name: production-m7-c06-apf3260m-poseidon-probe
           path: validation/production_m7_c06_poseidon_probe.json
           if-no-files-found: error
           retention-days: 30
