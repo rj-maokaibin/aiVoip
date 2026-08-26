@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     credential_api_token: str = ""
     credential_api_token_file: str = ""
     credential_api_token_env: str = ""
-    ssh_username: str = "admin"
+    ssh_username: str = "root"
     ssh_connect_timeout: float = 8.0
     ssh_command_timeout: float = 10.0
     aim_prompt: str = "AIM>"

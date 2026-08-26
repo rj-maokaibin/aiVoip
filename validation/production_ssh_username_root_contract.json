@@ -1,0 +1,7 @@
+{
+  "schema_version": "production-ssh-username-contract-v1",
+  "ssh_username": "root",
+  "scope": "production-dut",
+  "credential_provider": "poseidon",
+  "runtime_authority": "/etc/voip-ai/production.env"
+}
