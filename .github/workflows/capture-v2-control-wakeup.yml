@@ -1,4 +1,4 @@
-name: Capture V2 Host Port 8000 PID Probe
+name: Capture V2 Production Host Port Set Probe
 
 on:
   push:
@@ -14,7 +14,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  host-port-8000-pid-probe:
+  production-port-set-probe:
     runs-on:
       - self-hosted
       - linux
@@ -22,27 +22,21 @@ jobs:
       - voip-controlled-linux
     timeout-minutes: 10
     steps:
-      - name: Identify privileged host listener on 8000 read-only
+      - name: Verify isolated production host ports are free
         shell: bash
         run: |
           set -euo pipefail
-          docker run --rm --privileged --pid=host --network host -v /:/host python:3.12-slim \
-            chroot /host /bin/bash -lc '
-              set -euo pipefail
-              echo "=== SS 8000 WITH PID ==="
-              ss -ltnp "( sport = :8000 )" || true
-              echo "=== FUSER 8000 ==="
-              fuser -v 8000/tcp || true
-              echo "=== MATCHING PROCESS COMMANDS ==="
-              PIDS=$(fuser 8000/tcp 2>/dev/null || true)
-              for p in $PIDS; do
-                ps -o pid,ppid,user,lstart,etime,stat,args -p "$p" || true
-                echo "CMDLINE[$p]=$(tr "\0" " " </proc/$p/cmdline 2>/dev/null || true)"
-                echo "CGROUP[$p]"; cat /proc/$p/cgroup 2>/dev/null || true
-              done
-            '
+          for port in 18001 8080 19001; do
+            echo "=== PORT $port ==="
+            ss -ltn "( sport = :$port )" || true
+            if ss -ltn "( sport = :$port )" | tail -n +2 | grep -q .; then
+              echo "PORT_${port}_FREE=false"
+              exit 1
+            fi
+            echo "PORT_${port}_FREE=true"
+          done
 
-      - name: Confirm production remains V1 after RC91 rollback
+      - name: Confirm production remains V1
         shell: bash
         run: |
           set -euo pipefail
