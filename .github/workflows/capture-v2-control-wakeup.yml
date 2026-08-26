@@ -22,55 +22,50 @@ jobs:
       - voip-controlled-linux
     timeout-minutes: 10
     steps:
-      - name: Host process and Docker state
+      - name: Inspect stopped RC85 process tree
         shell: bash
         run: |
           set -euo pipefail
           echo "PROBE_UTC=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-          echo "=== RC85/control-related host processes ==="
-          ps -eo pid,ppid,user,etime,stat,args | grep -E 'capture_v2|control_cli|production_cutover_guarded|deploy/voip-ai|docker compose|buildx|buildkit|alembic' | grep -v grep || true
-          echo "=== voip-ai containers ==="
-          docker ps -a --filter label=com.docker.compose.project=voip-ai --format 'SERVICE={{.Label "com.docker.compose.service"}} NAME={{.Names}} STATUS={{.Status}} IMAGE={{.Image}}' || true
+          ps -o pid,ppid,pgid,sid,tpgid,user,etime,stat,wchan:24,args -p 608858,2203168,2575556,2575557,2575558 || true
+          for p in 2203168 2575556 2575557 2575558; do
+            if [ -r "/proc/$p/status" ]; then
+              echo "=== /proc/$p/status selected ==="
+              grep -E '^(Name|State|Tgid|Pid|PPid|TracerPid|SigPnd|ShdPnd|SigBlk|SigIgn|SigCgt):' "/proc/$p/status" || true
+            fi
+          done
 
-      - name: Control workspace local state
+      - name: Read only safe production env state
         shell: bash
         run: |
           set -euo pipefail
-          ROOT=/home/dev/workspace/aiVoip-control
-          if [ ! -d "$ROOT" ]; then
-            echo "CONTROL_ROOT_MISSING=$ROOT"
-            exit 0
-          fi
-          DEV_UID="$(stat -c %u "$ROOT")"
-          DEV_GID="$(stat -c %g "$ROOT")"
-          docker image inspect python:3.12-slim >/dev/null
           docker run --rm \
-            --user "$DEV_UID:$DEV_GID" \
-            -v "$ROOT:$ROOT:ro" \
-            -w "$ROOT" \
+            -v /etc/voip-ai:/probe/voip-ai:ro \
             python:3.12-slim \
-            sh -lc '
-              set -eu
-              echo "=== local validation/control/status.json ==="
-              cat validation/control/status.json 2>/dev/null || true
-              echo "=== local ledger.json ==="
-              cat .capture-v2-control/ledger.json 2>/dev/null || true
-              echo "=== RC85 local log metadata ==="
-              if [ -d .capture-v2-control/logs/RC85-PRODUCTION-CUTOVER-011 ]; then
-                ls -l .capture-v2-control/logs/RC85-PRODUCTION-CUTOVER-011 || true
-                wc -c .capture-v2-control/logs/RC85-PRODUCTION-CUTOVER-011/* 2>/dev/null || true
-              else
-                echo "RC85_LOCAL_LOG_DIR_MISSING"
-              fi
-            '
+            python - <<'PY'
+          from pathlib import Path
+          import json
+          p=Path('/probe/voip-ai/production.env')
+          keys={'APP_ENV','REPRODUCTION_PLATFORM_MODE','CAPTURE_ENGINE_VERSION','CAPTURE_V2_PRODUCTION_ENABLED','CAPTURE_V2_ACTIVATION_REHEARSAL','CAPTURE_V2_REUSE_LEGACY_REPRODUCTION_SEMANTICS','FEISHU_IDENTITY_RBAC_ENABLED'}
+          out={}
+          if p.is_file():
+              for raw in p.read_text(encoding='utf-8').splitlines():
+                  s=raw.strip()
+                  if not s or s.startswith('#') or '=' not in s: continue
+                  if s.startswith('export '): s=s[7:].strip()
+                  k,v=s.split('=',1); k=k.strip(); v=v.strip().strip('"').strip("'")
+                  if k in keys: out[k]=v
+          print(json.dumps(out, sort_keys=True))
+          print('BACKUPS:')
+          for x in sorted(Path('/probe/voip-ai').glob('production.env*')):
+              print(x.name)
+          PY
 
-      - name: Backend live Capture Authority
+      - name: Docker project and local build state
         shell: bash
         run: |
           set -euo pipefail
-          BACKEND="$(docker ps --filter label=com.docker.compose.project=voip-ai --filter label=com.docker.compose.service=backend -q | head -n1)"
-          if [ -z "$BACKEND" ]; then
-            echo "BACKEND_CONTAINER_NOT_RUNNING"
-            exit 0
-          fi
-          docker exec "$BACKEND" python -c "import json; from app.capture_v2.runtime import capture_authority_mode; from app.core.config import settings; print(json.dumps({'engine':str(settings.capture_engine_version),'production_enabled':bool(settings.capture_v2_production_enabled),'platform':str(settings.reproduction_platform_mode),'authority':capture_authority_mode()}))"
+          echo '=== voip-ai containers ==='
+          docker ps -a --filter label=com.docker.compose.project=voip-ai --format 'SERVICE={{.Label "com.docker.compose.service"}} NAME={{.Names}} STATUS={{.Status}} IMAGE={{.Image}}' || true
+          echo '=== recent voip-ai images ==='
+          docker images --format '{{.Repository}}:{{.Tag}} {{.ID}} {{.CreatedSince}}' | grep -E 'voip-ai|aiVoip' | head -50 || true
