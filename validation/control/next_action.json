@@ -1,12 +1,12 @@
 {
   "schema_version": "capture-v2-remote-action-v1",
-  "action_id": "RC88-PRODUCTION-DEPLOYMENT-PREFLIGHT-015",
-  "sequence": 226,
-  "created_at": "2026-08-26T08:18:00+00:00",
-  "expires_at": "2026-08-26T14:18:00+00:00",
-  "action_type": "PRODUCTION_DEPLOYMENT_PREFLIGHT",
+  "action_id": "RC89-PRODUCTION-CUTOVER-016",
+  "sequence": 227,
+  "created_at": "2026-08-26T08:20:30+00:00",
+  "expires_at": "2026-08-26T14:20:30+00:00",
+  "action_type": "PRODUCTION_CUTOVER",
   "parameters": {
-    "timeout_seconds": 300
+    "timeout_seconds": 7200
   },
   "safety": {
     "require_clean_git": true,
@@ -14,8 +14,8 @@
     "require_v2_disabled": true,
     "allow_worker_kill": false,
     "allow_server_quarantine": false,
-    "expected_head": "9df273ab29569afb198f5e0bcf36fe7750f07192"
+    "expected_head": "f531d59e32d755ef8a3aa91aeff551cfdf3d13fd"
   },
   "requested_by": "ChatGPT-remote-validation-controller",
-  "note": "Fresh guarded production deployment preflight after PR #59 fixed fetched-master snapshot ancestry validation and PR #60 synchronized the fully accepted master into production control. PR #60 passed Frozen Contracts, Full Software Acceptance, Prepared-PCAP Golden #001, Human Evidence Gate and evidence upload. Verify canonical authorization, real production V1 prestate, deploy blockers, source manifest and production compose requirements. Perform no production or DUT mutation. A final guarded V2 cutover must not be issued unless this action returns PASS with deployment_status=PASS and no deploy blockers."
+  "note": "Execute the explicitly authorized guarded Capture Engine V2 production cutover after RC88 fresh production preflight PASS with deployment_status=PASS and no deploy blockers. The accepted master includes the repo-owner Git identity fix and exact FETCH_HEAD master snapshot ancestry fix, both validated by full Frozen/Full Software/Golden/Human Evidence gates and synchronized into production control. Use the canonical authorization and audited guarded cutover only. Back up production.env before mutation; switch CAPTURE_ENGINE_VERSION=V2, CAPTURE_V2_PRODUCTION_ENABLED=true and REPRODUCTION_PLATFORM_MODE=real; run strict release preflight, production deploy, database migration/runtime verification, required service/queue/storage/frontend/backend checks, and backend authority probe. Fail closed with verified V1 rollback on any error. No DUT mutation is allowed. Declare success only with live evidence CAPTURE_AUTHORITY=V2."
 }
