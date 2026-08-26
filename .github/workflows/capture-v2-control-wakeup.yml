@@ -1,4 +1,4 @@
-name: Capture V2 Production Host Port Set Probe
+name: Capture V2 Backend Port Isolation Apply
 
 on:
   push:
@@ -14,7 +14,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  production-port-set-probe:
+  backend-port-isolation-apply:
     runs-on:
       - self-hosted
       - linux
@@ -22,21 +22,83 @@ jobs:
       - voip-controlled-linux
     timeout-minutes: 10
     steps:
-      - name: Verify isolated production host ports are free
+      - name: Guard V1 prestate and target port
         shell: bash
         run: |
           set -euo pipefail
-          for port in 18001 8080 19001; do
-            echo "=== PORT $port ==="
-            ss -ltn "( sport = :$port )" || true
-            if ss -ltn "( sport = :$port )" | tail -n +2 | grep -q .; then
-              echo "PORT_${port}_FREE=false"
-              exit 1
-            fi
-            echo "PORT_${port}_FREE=true"
-          done
+          if ss -ltn '( sport = :18001 )' | tail -n +2 | grep -q .; then
+            echo 'PORT_18001_FREE=false'
+            exit 1
+          fi
+          echo 'PORT_18001_FREE=true'
+          docker run --rm -i -v /etc/voip-ai:/probe/voip-ai:ro python:3.12-slim python - <<'PY'
+          from pathlib import Path
+          import stat
+          p=Path('/probe/voip-ai/production.env'); vals={}
+          mode=stat.S_IMODE(p.stat().st_mode)
+          assert mode & 0o077 == 0, oct(mode)
+          for raw in p.read_text(encoding='utf-8').splitlines():
+              s=raw.strip()
+              if not s or s.startswith('#') or '=' not in s: continue
+              if s.startswith('export '): s=s[7:].strip()
+              k,v=s.split('=',1); vals[k.strip()]=v.strip().strip('"').strip("'")
+          def eff(k,d): return vals.get(k,'').strip() or d
+          print('ENGINE='+eff('CAPTURE_ENGINE_VERSION','V1'))
+          print('V2_ENABLED='+eff('CAPTURE_V2_PRODUCTION_ENABLED','false'))
+          print('PLATFORM='+eff('REPRODUCTION_PLATFORM_MODE','mock'))
+          assert eff('APP_ENV','') == 'production'
+          assert eff('CAPTURE_ENGINE_VERSION','V1').upper() == 'V1'
+          assert eff('CAPTURE_V2_PRODUCTION_ENABLED','false').lower() == 'false'
+          assert eff('REPRODUCTION_PLATFORM_MODE','mock') == 'mock'
+          PY
 
-      - name: Confirm production remains V1
+      - name: Atomically isolate aiVoip backend host port
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm --privileged --pid=host --network host -v /:/host python:3.12-slim \
+            chroot /host /usr/bin/python3 - <<'PY'
+          from pathlib import Path
+          from datetime import datetime, timezone
+          import os, shutil, stat
+          p=Path('/etc/voip-ai/production.env')
+          mode=stat.S_IMODE(p.stat().st_mode)
+          if mode & 0o077:
+              raise SystemExit('PRODUCTION_ENV_PERMISSIONS_NOT_PRIVATE')
+          vals={}
+          lines=p.read_text(encoding='utf-8').splitlines()
+          for raw in lines:
+              s=raw.strip()
+              if not s or s.startswith('#') or '=' not in s: continue
+              probe=s[7:].strip() if s.startswith('export ') else s
+              k,v=probe.split('=',1); vals[k.strip()]=v.strip().strip('"').strip("'")
+          def eff(k,d): return vals.get(k,'').strip() or d
+          if eff('APP_ENV','')!='production' or eff('CAPTURE_ENGINE_VERSION','V1').upper()!='V1' or eff('CAPTURE_V2_PRODUCTION_ENABLED','false').lower()!='false' or eff('REPRODUCTION_PLATFORM_MODE','mock')!='mock':
+              raise SystemExit('PRODUCTION_PRESTATE_INVALID')
+          stamp=datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')
+          backup=Path(f'/etc/voip-ai/production.env.backend-port-pre-{stamp}')
+          shutil.copy2(p,backup); os.chmod(backup,0o600)
+          overrides={'VOIP_BACKEND_BIND':'127.0.0.1','VOIP_BACKEND_PORT':'18001'}
+          out=[]; seen=set()
+          for raw in lines:
+              s=raw.strip()
+              if s and not s.startswith('#') and '=' in s:
+                  probe=s[7:].strip() if s.startswith('export ') else s
+                  key=probe.split('=',1)[0].strip()
+                  if key in overrides:
+                      prefix='export ' if s.startswith('export ') else ''
+                      out.append(f'{prefix}{key}={overrides[key]}'); seen.add(key); continue
+              out.append(raw)
+          for k,v in overrides.items():
+              if k not in seen: out.append(f'{k}={v}')
+          tmp=p.with_name(p.name+'.backend-port-new')
+          tmp.write_text('\n'.join(out)+'\n',encoding='utf-8'); os.chmod(tmp,0o600); os.replace(tmp,p)
+          print('BACKUP_CREATED=true')
+          print('BACKEND_BIND=127.0.0.1')
+          print('BACKEND_PORT=18001')
+          PY
+
+      - name: Verify only safe target state and no service restart
         shell: bash
         run: |
           set -euo pipefail
@@ -52,7 +114,12 @@ jobs:
           print('ENGINE='+eff('CAPTURE_ENGINE_VERSION','V1'))
           print('V2_ENABLED='+eff('CAPTURE_V2_PRODUCTION_ENABLED','false'))
           print('PLATFORM='+eff('REPRODUCTION_PLATFORM_MODE','mock'))
-          assert eff('CAPTURE_ENGINE_VERSION','V1').upper() == 'V1'
-          assert eff('CAPTURE_V2_PRODUCTION_ENABLED','false').lower() == 'false'
-          assert eff('REPRODUCTION_PLATFORM_MODE','mock') == 'mock'
+          print('BACKEND_BIND='+eff('VOIP_BACKEND_BIND',''))
+          print('BACKEND_PORT='+eff('VOIP_BACKEND_PORT',''))
+          assert eff('CAPTURE_ENGINE_VERSION','V1').upper()=='V1'
+          assert eff('CAPTURE_V2_PRODUCTION_ENABLED','false').lower()=='false'
+          assert eff('REPRODUCTION_PLATFORM_MODE','mock')=='mock'
+          assert eff('VOIP_BACKEND_BIND','')=='127.0.0.1'
+          assert eff('VOIP_BACKEND_PORT','')=='18001'
           PY
+          docker compose -p aivoip -f /home/dev/workspace/aiVoip/docker-compose.yml ps --status running --services | sort
