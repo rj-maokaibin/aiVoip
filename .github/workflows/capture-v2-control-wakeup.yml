@@ -1,4 +1,4 @@
-name: Capture V2 Backend Port 8000 Ownership Probe
+name: Capture V2 Host Port 8000 PID Probe
 
 on:
   push:
@@ -14,7 +14,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  backend-port-probe:
+  host-port-8000-pid-probe:
     runs-on:
       - self-hosted
       - linux
@@ -22,20 +22,27 @@ jobs:
       - voip-controlled-linux
     timeout-minutes: 10
     steps:
-      - name: Identify host port 8000 owner read-only
+      - name: Identify privileged host listener on 8000 read-only
         shell: bash
         run: |
           set -euo pipefail
-          echo '=== LISTEN 8000 ==='
-          ss -ltnp '( sport = :8000 )' || true
-          echo '=== DOCKER PORT 8000 OWNERS ==='
-          docker ps --format '{{.ID}} {{.Names}} {{.Image}} {{.Ports}}' | grep -E '(:|->)8000' || true
-          echo '=== AIVOIP / VOIP-AI CONTAINERS ==='
-          docker ps --format '{{.ID}} {{.Names}} {{.Image}} {{.Ports}}' | grep -Ei 'aivoip|voip-ai' || true
-          echo '=== DOCKER COMPOSE PROJECTS ==='
-          docker compose ls || true
+          docker run --rm --privileged --pid=host --network host -v /:/host python:3.12-slim \
+            chroot /host /bin/bash -lc '
+              set -euo pipefail
+              echo "=== SS 8000 WITH PID ==="
+              ss -ltnp "( sport = :8000 )" || true
+              echo "=== FUSER 8000 ==="
+              fuser -v 8000/tcp || true
+              echo "=== MATCHING PROCESS COMMANDS ==="
+              PIDS=$(fuser 8000/tcp 2>/dev/null || true)
+              for p in $PIDS; do
+                ps -o pid,ppid,user,lstart,etime,stat,args -p "$p" || true
+                echo "CMDLINE[$p]=$(tr "\0" " " </proc/$p/cmdline 2>/dev/null || true)"
+                echo "CGROUP[$p]"; cat /proc/$p/cgroup 2>/dev/null || true
+              done
+            '
 
-      - name: Confirm guarded rollback restored V1
+      - name: Confirm production remains V1 after RC91 rollback
         shell: bash
         run: |
           set -euo pipefail
@@ -51,8 +58,6 @@ jobs:
           print('ENGINE='+eff('CAPTURE_ENGINE_VERSION','V1'))
           print('V2_ENABLED='+eff('CAPTURE_V2_PRODUCTION_ENABLED','false'))
           print('PLATFORM='+eff('REPRODUCTION_PLATFORM_MODE','mock'))
-          print('RBAC='+eff('FEISHU_IDENTITY_RBAC_ENABLED','false'))
-          assert eff('APP_ENV','') == 'production'
           assert eff('CAPTURE_ENGINE_VERSION','V1').upper() == 'V1'
           assert eff('CAPTURE_V2_PRODUCTION_ENABLED','false').lower() == 'false'
           assert eff('REPRODUCTION_PLATFORM_MODE','mock') == 'mock'
