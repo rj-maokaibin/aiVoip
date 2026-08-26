@@ -65,16 +65,17 @@ jobs:
           import json
           import os
           import re
+          import socket
           from datetime import datetime, timezone
 
-          from app.collectors.asyncssh_adapter import AsyncSSHDeviceAdapter
+          from app.collectors.asyncssh_adapter import AsyncSSHDeviceAdapter, DeviceConnectionError
           from app.integrations.credentials import CredentialError, PoseidonCredentialProvider
 
           target_ip = os.environ['TARGET_IP']
           target_port = int(os.environ['TARGET_PORT'])
           target_sn = os.environ['TARGET_SN']
           payload = {
-              'schema_version': 'production-m7-c06-poseidon-probe-v1',
+              'schema_version': 'production-m7-c06-poseidon-probe-v2',
               'checked_at': datetime.now(timezone.utc).isoformat(),
               'target': {
                   'model': 'APF1250',
@@ -88,10 +89,24 @@ jobs:
                   'production_db_mutation': False,
                   'dut_configuration_mutation': False,
               },
+              'network': {},
               'poseidon': {},
               'dut': {},
               'blocking_reasons': [],
           }
+
+          try:
+              sock = socket.create_connection((target_ip, target_port), timeout=5.0)
+              try:
+                  payload['network'] = {'tcp_reachable': True}
+              finally:
+                  sock.close()
+          except Exception as exc:
+              payload['network'] = {
+                  'tcp_reachable': False,
+                  'error_type': type(exc).__name__,
+              }
+              payload['blocking_reasons'].append('APF1250_TCP_ENDPOINT_UNREACHABLE')
 
           async def probe():
               provider = PoseidonCredentialProvider()
@@ -142,6 +157,11 @@ jobs:
               payload['poseidon']['credential_error'] = (
                   str(exc) if isinstance(exc, CredentialError) else None
               )
+              if isinstance(exc, DeviceConnectionError):
+                  payload['dut'] = {
+                      'ssh_connected': False,
+                      'connection_error': str(exc),
+                  }
               payload['blocking_reasons'].append('POSEIDON_OR_SSH_PROBE_FAILED')
 
           if payload.get('dut', {}).get('ssh_connected') is not True:
