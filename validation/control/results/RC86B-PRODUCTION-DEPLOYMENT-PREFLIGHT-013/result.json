@@ -1,20 +1,37 @@
 {
-  "schema_version": "capture-v2-remote-status-v1",
-  "action_id": "RC86B-PRODUCTION-DEPLOYMENT-PREFLIGHT-013",
-  "sequence": 224,
-  "action_type": "PRODUCTION_DEPLOYMENT_PREFLIGHT",
-  "state": "SUCCEEDED",
-  "runner_id": "srv:7",
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "RC86B-PRODUCTION-DEPLOYMENT-PREFLIGHT-013",
+    "sequence": 224,
+    "created_at": "2026-08-26T05:35:24+00:00",
+    "expires_at": "2026-08-26T11:35:24+00:00",
+    "action_type": "PRODUCTION_DEPLOYMENT_PREFLIGHT",
+    "parameters": {
+      "timeout_seconds": 300
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "3745d2577cc881fc1b22e882d00691b0754896db"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "Fresh guarded production deployment preflight anchored to the exact accepted production-control merge head from PR #58. RC86 was rejected before execution only because its expected_head used the master product SHA and the fail-closed policy correctly detected the control-only canonical authorization artifact outside validation/control. This retry does not relax policy: it anchors expected_head to 3745d2577cc881fc1b22e882d00691b0754896db, whose product parent e6623e29908aa977332c6e0b87fe04d0a88bce84 passed Frozen, Full Software, Prepared-PCAP Golden #001, Human Evidence, and real root-to-repo-owner Git identity probing. Verify the real production V1 prestate, authorization, deployment blockers and compose requirements. Perform no production or DUT mutation. Do not issue production cutover unless this action returns PASS with no deploy blockers."
+  },
   "action_sha256": "5778154f4ebf5a1d92b082bd3ce6f05e8a64894ffa06a54e82f5469c0dff8219",
-  "updated_at": "2026-08-26T05:35:59.131758+00:00",
-  "started_at": null,
-  "finished_at": "2026-08-26T05:35:59.131758+00:00",
+  "runner_id": "srv:7",
+  "state": "SUCCEEDED",
   "return_code": 0,
   "verdict": "PASS",
-  "result_path": "validation/control/results/RC86B-PRODUCTION-DEPLOYMENT-PREFLIGHT-013/result.json",
+  "error": null,
+  "finished_at": "2026-08-26T05:35:59.131758+00:00",
   "stdout_sha256": "f0faea8f87e3b4ed8d3c1c192114c2b4954d456863cb61cec5ef61841fb10b16",
   "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-  "error": null,
+  "local_stdout": ".capture-v2-control/logs/RC86B-PRODUCTION-DEPLOYMENT-PREFLIGHT-013/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/RC86B-PRODUCTION-DEPLOYMENT-PREFLIGHT-013/stderr.log",
   "detail": {
     "safety": {
       "capture_engine_version": "V1",
