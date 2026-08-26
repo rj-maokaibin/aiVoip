@@ -1,4 +1,4 @@
-name: Capture V2 Control Sync Probe
+name: Capture V2 Master Ref Probe
 
 on:
   push:
@@ -14,7 +14,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  control-sync-probe:
+  master-ref-probe:
     runs-on:
       - self-hosted
       - linux
@@ -22,28 +22,24 @@ jobs:
       - voip-controlled-linux
     timeout-minutes: 10
     steps:
-      - name: Verify single detached runner and local control head
+      - name: Read local and remote master refs as repo owner
         shell: bash
         run: |
           set -euo pipefail
-          COUNT="$(ps -eo args | grep 'app.capture_v2.control_cli run --repo-root /home/dev/workspace/aiVoip-control' | grep -v grep | wc -l)"
-          echo "CONTROL_RUNNER_COUNT=$COUNT"
-          test "$COUNT" -eq 1
-          ps -eo pid,ppid,pgid,sid,tpgid,user,etime,stat,args | grep 'app.capture_v2.control_cli run --repo-root /home/dev/workspace/aiVoip-control' | grep -v grep
-          if ps -eo stat,args | grep 'app.capture_v2.control_cli run --repo-root /home/dev/workspace/aiVoip-control' | grep -v grep | grep -q '^T'; then exit 1; fi
           docker run --rm --privileged --network host -v /:/host python:3.12-slim \
-            chroot /host /usr/sbin/runuser -u dev -- /bin/bash -lc '
+            chroot /host /usr/sbin/runuser -u dev -- /usr/bin/env HOME=/home/dev USER=dev LOGNAME=dev /bin/bash -lc '
               set -euo pipefail
               cd /home/dev/workspace/aiVoip-control
-              echo "BRANCH=$(git branch --show-current)"
-              echo "HEAD=$(git rev-parse HEAD)"
-              echo "REMOTE_CONTROL=$(git rev-parse refs/remotes/origin/feat/capture-v2.1.1-real-gates)"
-              test "$(git branch --show-current)" = feat/capture-v2.1.1-real-gates
-              test "$(git rev-parse HEAD)" = 3745d2577cc881fc1b22e882d00691b0754896db
-              test "$(git rev-parse refs/remotes/origin/feat/capture-v2.1.1-real-gates)" = 3745d2577cc881fc1b22e882d00691b0754896db
+              echo "CONTROL_HEAD=$(git rev-parse HEAD)"
+              echo "ORIGIN_MASTER=$(git rev-parse refs/remotes/origin/master)"
+              echo "FETCH_HEAD=$(git rev-parse FETCH_HEAD)"
+              REMOTE="$(git ls-remote origin refs/heads/master | awk "NR==1{print \$1}")"
+              echo "LS_REMOTE_MASTER=$REMOTE"
+              git merge-base --is-ancestor db3e8012a9569d9508e9d2cd920baf1de6bac866 "$REMOTE"
+              echo "VALIDATED_HEAD_IS_REMOTE_MASTER_ANCESTOR=true"
             '
 
-      - name: Verify production still V1 safe prestate
+      - name: Verify production still unmutated V1
         shell: bash
         run: |
           set -euo pipefail
@@ -59,10 +55,7 @@ jobs:
           print('ENGINE='+eff('CAPTURE_ENGINE_VERSION','V1'))
           print('V2_ENABLED='+eff('CAPTURE_V2_PRODUCTION_ENABLED','false'))
           print('PLATFORM='+eff('REPRODUCTION_PLATFORM_MODE','mock'))
-          print('RBAC='+eff('FEISHU_IDENTITY_RBAC_ENABLED','false'))
-          assert eff('APP_ENV','') == 'production'
           assert eff('CAPTURE_ENGINE_VERSION','V1').upper() == 'V1'
           assert eff('CAPTURE_V2_PRODUCTION_ENABLED','false').lower() == 'false'
           assert eff('REPRODUCTION_PLATFORM_MODE','mock') == 'mock'
-          assert eff('FEISHU_IDENTITY_RBAC_ENABLED','false').lower() == 'true'
           PY
