@@ -37,6 +37,21 @@ jobs:
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha }}"
 
+      - name: Probe Runner host TCP reachability
+        run: |
+          set -euo pipefail
+          if python - <<'PY'
+          import os, socket
+          ip=os.environ['TARGET_IP']; port=int(os.environ['TARGET_PORT'])
+          s=socket.create_connection((ip, port), timeout=5.0)
+          s.close()
+          PY
+          then
+            echo 'HOST_TCP_REACHABLE=true' >> "$GITHUB_ENV"
+          else
+            echo 'HOST_TCP_REACHABLE=false' >> "$GITHUB_ENV"
+          fi
+
       - name: Locate production reproduction worker
         run: |
           set -euo pipefail
@@ -60,6 +75,7 @@ jobs:
             -e TARGET_IP="$TARGET_IP" \
             -e TARGET_PORT="$TARGET_PORT" \
             -e TARGET_SN="$TARGET_SN" \
+            -e HOST_TCP_REACHABLE="${HOST_TCP_REACHABLE:-false}" \
             "$REPRODUCTION_WORKER" python - <<'PY' > validation/production_m7_c06_poseidon_probe.json
           import asyncio
           import json
@@ -74,8 +90,9 @@ jobs:
           target_ip = os.environ['TARGET_IP']
           target_port = int(os.environ['TARGET_PORT'])
           target_sn = os.environ['TARGET_SN']
+          host_tcp_reachable = os.environ.get('HOST_TCP_REACHABLE', 'false').lower() == 'true'
           payload = {
-              'schema_version': 'production-m7-c06-poseidon-probe-v2',
+              'schema_version': 'production-m7-c06-poseidon-probe-v3',
               'checked_at': datetime.now(timezone.utc).isoformat(),
               'target': {
                   'model': 'APF1250',
@@ -89,7 +106,7 @@ jobs:
                   'production_db_mutation': False,
                   'dut_configuration_mutation': False,
               },
-              'network': {},
+              'network': {'runner_host_tcp_reachable': host_tcp_reachable},
               'poseidon': {},
               'dut': {},
               'blocking_reasons': [],
@@ -98,15 +115,20 @@ jobs:
           try:
               sock = socket.create_connection((target_ip, target_port), timeout=5.0)
               try:
-                  payload['network'] = {'tcp_reachable': True}
+                  payload['network']['production_container_tcp_reachable'] = True
               finally:
                   sock.close()
           except Exception as exc:
-              payload['network'] = {
-                  'tcp_reachable': False,
-                  'error_type': type(exc).__name__,
-              }
+              payload['network']['production_container_tcp_reachable'] = False
+              payload['network']['container_error_type'] = type(exc).__name__
               payload['blocking_reasons'].append('APF1250_TCP_ENDPOINT_UNREACHABLE')
+
+          if host_tcp_reachable and not payload['network'].get('production_container_tcp_reachable'):
+              payload['network']['reachability_boundary'] = 'DOCKER_OR_CONTAINER_ROUTE'
+          elif not host_tcp_reachable:
+              payload['network']['reachability_boundary'] = 'ENDPOINT_OR_RUNNER_NETWORK'
+          else:
+              payload['network']['reachability_boundary'] = 'TCP_OK'
 
           async def probe():
               provider = PoseidonCredentialProvider()
