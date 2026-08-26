@@ -1,65 +1,42 @@
 {
   "schema_version": "capture-v2-remote-status-v1",
-  "action_id": "RC86B-PRODUCTION-DEPLOYMENT-PREFLIGHT-013",
-  "sequence": 224,
-  "action_type": "PRODUCTION_DEPLOYMENT_PREFLIGHT",
-  "state": "SUCCEEDED",
+  "action_id": "RC87-PRODUCTION-CUTOVER-014",
+  "sequence": 225,
+  "action_type": "PRODUCTION_CUTOVER",
+  "state": "FAILED",
   "runner_id": "srv:7",
-  "action_sha256": "5778154f4ebf5a1d92b082bd3ce6f05e8a64894ffa06a54e82f5469c0dff8219",
-  "updated_at": "2026-08-26T05:35:59.131758+00:00",
+  "action_sha256": "8259b6a647df3a9d218702d6692cdfd69a0f888c9d32827e26969f3ccb0a2069",
+  "updated_at": "2026-08-26T05:37:02.487920+00:00",
   "started_at": null,
-  "finished_at": "2026-08-26T05:35:59.131758+00:00",
-  "return_code": 0,
-  "verdict": "PASS",
-  "result_path": "validation/control/results/RC86B-PRODUCTION-DEPLOYMENT-PREFLIGHT-013/result.json",
-  "stdout_sha256": "f0faea8f87e3b4ed8d3c1c192114c2b4954d456863cb61cec5ef61841fb10b16",
+  "finished_at": "2026-08-26T05:37:02.487920+00:00",
+  "return_code": 1,
+  "verdict": "FAIL",
+  "result_path": "validation/control/results/RC87-PRODUCTION-CUTOVER-014/result.json",
+  "stdout_sha256": "5b46ea6f814e3b6080b71896ed97f549ce80750cd4cda90decd5ee60f71408f6",
   "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "error": null,
   "detail": {
     "safety": {
       "capture_engine_version": "V1",
       "capture_v2_production_enabled": "false",
-      "git_head": "753aff9c5bd6375e29ed7b76a1265c3c41bc8d37",
-      "expected_product_head": "3745d2577cc881fc1b22e882d00691b0754896db"
+      "git_head": "d8e99bc1687692638e73b72856d426e04f1de8c1",
+      "expected_product_head": "476cdda79faac5f6a62893480374d68bb0770059"
     },
     "parsed_output": {
-      "scope": "GUARDED_PRODUCTION_DEPLOYMENT_PREFLIGHT",
+      "scope": "GUARDED_PRODUCTION_CAPTURE_V2_CUTOVER",
+      "project": "voip-ai",
       "production_env": "/etc/voip-ai/production.env",
-      "mutations_performed": false,
-      "runtime_cutover_performed": false,
-      "authorization": {
-        "authorized": true,
-        "final_acceptance_action": "RC68-MASTER-FIX-CANDIDATE-INTEGRATION-005"
+      "production_mutation": false,
+      "dut_mutation": false,
+      "rollback_on_failure": true,
+      "stages": {
+        "validated_source_merged": {
+          "passed": false,
+          "validated_feature_head": "db3e8012a9569d9508e9d2cd920baf1de6bac866"
+        }
       },
-      "release_gate": {
-        "approved": true,
-        "production_cutover_approved": true,
-        "capture_engine_version": "V1",
-        "production_v2_enabled": false
-      },
-      "deployment_preflight": {
-        "return_code": 0,
-        "stdout_tail": "      \"status\": \"PASS\",\n      \"category\": \"SECURITY\",\n      \"detail\": \"non-default bootstrap credentials configured\",\n      \"blocks_deploy\": false,\n      \"blocks_release\": false\n    },\n    {\n      \"key\": \"DATABASE_URL_MATCH\",\n      \"status\": \"PASS\",\n      \"category\": \"CONFIG\",\n      \"detail\": \"DATABASE_URL contains configured PostgreSQL credential\",\n      \"blocks_deploy\": false,\n      \"blocks_release\": false\n    },\n    {\n      \"key\": \"PRODUCTION_STORAGE_MODE\",\n      \"status\": \"PASS\",\n      \"category\": \"STORAGE\",\n      \"detail\": \"minio\",\n      \"blocks_deploy\": false,\n      \"blocks_release\": false\n    },\n    {\n      \"key\": \"CREDENTIAL_PROVIDER\",\n      \"status\": \"PASS\",\n      \"category\": \"SECURITY\",\n      \"detail\": \"API provider configured\",\n      \"blocks_deploy\": false,\n      \"blocks_release\": false\n    },\n    {\n[REDACTED_SENSITIVE_LINE]\n      \"status\": \"PASS\",\n[REDACTED_SENSITIVE_LINE]\n[REDACTED_SENSITIVE_LINE]\n      \"blocks_deploy\": false,\n      \"blocks_release\": false\n    },\n    {\n[REDACTED_SENSITIVE_LINE]\n      \"status\": \"PASS\",\n[REDACTED_SENSITIVE_LINE]\n[REDACTED_SENSITIVE_LINE]\n      \"blocks_deploy\": false,\n      \"blocks_release\": false\n    },\n    {\n[REDACTED_SENSITIVE_LINE]\n      \"status\": \"PASS\",\n[REDACTED_SENSITIVE_LINE]\n[REDACTED_SENSITIVE_LINE]\n      \"blocks_deploy\": false,\n      \"blocks_release\": false\n    },\n    {\n[REDACTED_SENSITIVE_LINE]\n      \"status\": \"PASS\",\n[REDACTED_SENSITIVE_LINE]\n[REDACTED_SENSITIVE_LINE]\n      \"blocks_deploy\": false,\n      \"blocks_release\": false\n    },\n    {\n[REDACTED_SENSITIVE_LINE]\n      \"status\": \"PASS\",\n[REDACTED_SENSITIVE_LINE]\n[REDACTED_SENSITIVE_LINE]\n      \"blocks_deploy\": false,\n      \"blocks_release\": false\n    },\n    {\n[REDACTED_SENSITIVE_LINE]\n      \"status\": \"PASS\",\n[REDACTED_SENSITIVE_LINE]\n[REDACTED_SENSITIVE_LINE]\n      \"blocks_deploy\": false,\n      \"blocks_release\": false\n    },\n    {\n      \"key\": \"FEISHU_LIVE_CONFIG\",\n      \"status\": \"PASS\",\n      \"category\": \"INTEGRATION\",\n      \"detail\": \"live target configured\",\n      \"blocks_deploy\": false,\n      \"blocks_release\": false\n    },\n    {\n      \"key\": \"FEISHU_IDENTITY_RBAC\",\n      \"status\": \"PASS\",\n      \"category\": \"SECURITY\",\n      \"detail\": \"Feishu identity RBAC enabled\",\n      \"blocks_deploy\": false,\n      \"blocks_release\": false\n    },\n    {\n      \"key\": \"EC02_REAL_PLATFORM\",\n      \"status\": \"BLOCKED\",\n      \"category\": \"PLATFORM\",\n      \"detail\": \"REPRODUCTION_PLATFORM_MODE=mock; EC-02 remains pending\",\n      \"blocks_deploy\": false,\n      \"blocks_release\": true\n    },\n    {\n      \"key\": \"FRONTEND_LOCKFILE\",\n      \"status\": \"PASS\",\n      \"category\": \"BUILD\",\n      \"detail\": \"source-controlled package-lock.json present\",\n      \"blocks_deploy\": false,\n      \"blocks_release\": false\n    },\n    {\n      \"key\": \"SOURCE_MANIFEST\",\n      \"status\": \"PASS\",\n      \"category\": \"BUILD\",\n      \"detail\": \"/home/dev/workspace/aiVoip-control/release/source_manifest.json\",\n      \"blocks_deploy\": false,\n      \"blocks_release\": false\n    }\n  ]\n}",
-        "stderr_tail": "",
-        "status": "PASS",
-        "deployment_status": "PASS",
-        "deploy_blocking_keys": []
-      },
-      "compose_config": {
-        "return_code": 0,
-        "required_services_present": [
-          "backend",
-          "beat",
-          "reproduction-control-high-worker",
-          "reproduction-watch-worker",
-          "reproduction-worker"
-        ],
-        "missing_required_services": [],
-        "stderr_tail": ""
-      },
-      "current_running_services": [],
-      "verdict": "PASS",
-      "reason": "PRODUCTION_DEPLOYMENT_PREFLIGHT_READY"
+      "verdict": "FAIL",
+      "reason": "VALIDATED_FEATURE_HEAD_NOT_MERGED_TO_MASTER"
     }
   }
 }
