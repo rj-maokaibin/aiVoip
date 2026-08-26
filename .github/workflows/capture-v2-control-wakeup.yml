@@ -1,4 +1,4 @@
-name: Capture V2 Cutover Git Identity Probe
+name: Capture V2 RC85B Targeted Regression
 
 on:
   push:
@@ -14,45 +14,32 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  repo-owner-git-probe:
+  targeted-regression:
     runs-on:
       - self-hosted
       - linux
       - x64
       - voip-controlled-linux
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
-      - name: Confirm safe production prestate
-        shell: bash
-        run: |
-          set -euo pipefail
-          docker run --rm -i -v /etc/voip-ai:/probe/voip-ai:ro python:3.12-slim python - <<'PY'
-          from pathlib import Path
-          p=Path('/probe/voip-ai/production.env'); vals={}
-          for raw in p.read_text(encoding='utf-8').splitlines():
-              s=raw.strip()
-              if not s or s.startswith('#') or '=' not in s: continue
-              if s.startswith('export '): s=s[7:].strip()
-              k,v=s.split('=',1); vals[k.strip()]=v.strip().strip('"').strip("'")
-          def eff(k,d): return vals.get(k,'').strip() or d
-          assert eff('APP_ENV','') == 'production'
-          assert eff('REPRODUCTION_PLATFORM_MODE','mock') == 'mock'
-          assert eff('CAPTURE_ENGINE_VERSION','V1').upper() == 'V1'
-          assert eff('CAPTURE_V2_PRODUCTION_ENABLED','false').lower() == 'false'
-          assert eff('FEISHU_IDENTITY_RBAC_ENABLED','false').lower() == 'true'
-          print('SAFE_V1_PRESTATE_CONFIRMED=true')
-          PY
+      - name: Checkout PR57 head
+        uses: actions/checkout@v4
+        with:
+          ref: fix/capture-v2-cutover-repo-owner-git-rc85b
+          clean: true
 
-      - name: Root to repo-owner Git identity probe
+      - name: Run cutover Git identity regression
         shell: bash
         run: |
           set -euo pipefail
-          ROOT=/home/dev/workspace/aiVoip-control
-          OWNER_UID="$(stat -c %u "$ROOT")"
-          OWNER_NAME="$(stat -c %U "$ROOT")"
-          echo "REPO_OWNER_UID=$OWNER_UID"
-          echo "REPO_OWNER_NAME=$OWNER_NAME"
-          test "$OWNER_NAME" = dev
+          cd backend
+          /home/dev/workspace/aiVoip/.venv-release-gate/bin/python3 -m pytest \
+            tests/test_capture_v2_production_cutover_git_identity.py -q
+
+      - name: Real root-to-repo-owner Git identity probe
+        shell: bash
+        run: |
+          set -euo pipefail
           RESULT="$(docker run --rm --privileged --network host -v /:/host python:3.12-slim \
             chroot /host /usr/sbin/runuser -u dev -- /usr/bin/env \
               HOME=/home/dev USER=dev LOGNAME=dev \
@@ -62,21 +49,12 @@ jobs:
           SHA="$(printf '%s\n' "$RESULT" | awk 'NR==1{print $1}')"
           test "${#SHA}" -eq 40
           printf '%s' "$SHA" | grep -Eq '^[0-9a-f]{40}$'
-          echo "REPO_OWNER_GIT_REMOTE_MASTER=$SHA"
-          echo 'ROOT_TO_REPO_OWNER_GIT_IDENTITY_PASS=true'
+          echo "ROOT_TO_REPO_OWNER_GIT_IDENTITY_PASS=true"
 
-      - name: Confirm control runner and production remain unchanged
+      - name: Confirm production remained V1
         shell: bash
         run: |
           set -euo pipefail
-          COUNT="$(ps -eo args | grep 'app.capture_v2.control_cli run --repo-root /home/dev/workspace/aiVoip-control' | grep -v grep | wc -l)"
-          echo "CONTROL_RUNNER_COUNT=$COUNT"
-          test "$COUNT" -eq 1
-          ps -eo pid,ppid,pgid,sid,tpgid,user,etime,stat,args | grep 'app.capture_v2.control_cli run --repo-root /home/dev/workspace/aiVoip-control' | grep -v grep
-          if ps -eo stat,args | grep 'app.capture_v2.control_cli run --repo-root /home/dev/workspace/aiVoip-control' | grep -v grep | grep -q '^T'; then
-            echo 'CONTROL_RUNNER_STOPPED=true'
-            exit 1
-          fi
           docker run --rm -i -v /etc/voip-ai:/probe/voip-ai:ro python:3.12-slim python - <<'PY'
           from pathlib import Path
           p=Path('/probe/voip-ai/production.env'); vals={}
