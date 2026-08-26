@@ -1,12 +1,12 @@
 {
   "schema_version": "capture-v2-remote-action-v1",
-  "action_id": "RC86B-PRODUCTION-DEPLOYMENT-PREFLIGHT-013",
-  "sequence": 224,
-  "created_at": "2026-08-26T05:35:24+00:00",
-  "expires_at": "2026-08-26T11:35:24+00:00",
-  "action_type": "PRODUCTION_DEPLOYMENT_PREFLIGHT",
+  "action_id": "RC87-PRODUCTION-CUTOVER-014",
+  "sequence": 225,
+  "created_at": "2026-08-26T05:36:25+00:00",
+  "expires_at": "2026-08-26T11:36:25+00:00",
+  "action_type": "PRODUCTION_CUTOVER",
   "parameters": {
-    "timeout_seconds": 300
+    "timeout_seconds": 7200
   },
   "safety": {
     "require_clean_git": true,
@@ -14,8 +14,8 @@
     "require_v2_disabled": true,
     "allow_worker_kill": false,
     "allow_server_quarantine": false,
-    "expected_head": "3745d2577cc881fc1b22e882d00691b0754896db"
+    "expected_head": "476cdda79faac5f6a62893480374d68bb0770059"
   },
   "requested_by": "ChatGPT-remote-validation-controller",
-  "note": "Fresh guarded production deployment preflight anchored to the exact accepted production-control merge head from PR #58. RC86 was rejected before execution only because its expected_head used the master product SHA and the fail-closed policy correctly detected the control-only canonical authorization artifact outside validation/control. This retry does not relax policy: it anchors expected_head to 3745d2577cc881fc1b22e882d00691b0754896db, whose product parent e6623e29908aa977332c6e0b87fe04d0a88bce84 passed Frozen, Full Software, Prepared-PCAP Golden #001, Human Evidence, and real root-to-repo-owner Git identity probing. Verify the real production V1 prestate, authorization, deployment blockers and compose requirements. Perform no production or DUT mutation. Do not issue production cutover unless this action returns PASS with no deploy blockers."
+  "note": "Execute the explicitly authorized guarded Capture Engine V2 production cutover only after RC86B fresh production deployment preflight PASS with deployment_status=PASS and deploy_blocking_keys empty. Accepted master includes PR #57 repo-owner Git identity fix and passed Frozen, Full Software, Prepared-PCAP Golden #001 and Human Evidence; PR #58 synchronized it into the production control branch; the single no-TTY control runner was live-probed healthy; and real root-to-repo-owner Git access was proven. Use the canonical authorization and audited production_cutover_guarded module only. Back up production env before mutation, switch to V2/real mode, deploy accepted source, run migrations and runtime verification, validate all required services/queues, Redis, MinIO, frontend/backend readiness and backend capture authority. Fail closed and restore the pre-cutover V1 state on any error. No DUT mutation is allowed. Production V2 may be declared active only if this action returns PASS and live runtime evidence proves CAPTURE_ENGINE_VERSION=V2, CAPTURE_V2_PRODUCTION_ENABLED=true, REPRODUCTION_PLATFORM_MODE=real and CAPTURE_AUTHORITY=V2."
 }
