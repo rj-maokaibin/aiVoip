@@ -1,0 +1,206 @@
+name: Production Poseidon Cutover Dry Run
+
+on:
+  pull_request:
+    branches:
+      - master
+    paths:
+      - '.github/workflows/production-poseidon-cutover-dry-run.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-poseidon-cutover-dry-run
+  cancel-in-progress: false
+
+jobs:
+  dry-run:
+    runs-on:
+      - self-hosted
+      - linux
+      - x64
+      - voip-controlled-linux
+    timeout-minutes: 20
+    env:
+      REQUIRED_MASTER_SHA: bd385b96972dedeee96c245875a2778f290c2c2c
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - name: Verify source contains credential Gate fix
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha }}"
+          git merge-base --is-ancestor "$REQUIRED_MASTER_SHA" HEAD
+          echo "DRY_RUN_HEAD=$(git rev-parse HEAD)"
+          echo "REQUIRED_MASTER_SHA=$REQUIRED_MASTER_SHA"
+
+      - name: Locate live production backend and deployment metadata
+        run: |
+          set -euo pipefail
+          docker info >/dev/null
+          mapfile -t containers < <(docker ps \
+            --filter label=com.docker.compose.project=voip-ai \
+            --filter label=com.docker.compose.service=backend \
+            --format '{{.Names}}')
+          test "${#containers[@]}" -eq 1
+          backend="${containers[0]}"
+          docker inspect --format '{{.State.Status}}' "$backend" | grep -qx running
+          workdir="$(docker inspect --format '{{ index .Config.Labels "com.docker.compose.project.working_dir" }}' "$backend")"
+          config_files="$(docker inspect --format '{{ index .Config.Labels "com.docker.compose.project.config_files" }}' "$backend")"
+          environment_file="$(docker inspect --format '{{ index .Config.Labels "com.docker.compose.project.environment_file" }}' "$backend" 2>/dev/null || true)"
+          printf 'BACKEND_CONTAINER=%s\n' "$backend" >> "$GITHUB_ENV"
+          printf 'PRODUCTION_WORKDIR=%s\n' "$workdir" >> "$GITHUB_ENV"
+          printf 'COMPOSE_CONFIG_FILES=%s\n' "$config_files" >> "$GITHUB_ENV"
+          printf 'COMPOSE_ENVIRONMENT_FILE=%s\n' "$environment_file" >> "$GITHUB_ENV"
+          printf 'PRODUCTION_WORKDIR=%s\n' "$workdir"
+          printf 'COMPOSE_CONFIG_FILES=%s\n' "$config_files"
+          if [ -n "$environment_file" ]; then
+            printf 'COMPOSE_ENVIRONMENT_FILE_LABEL_PRESENT=true\n'
+          else
+            printf 'COMPOSE_ENVIRONMENT_FILE_LABEL_PRESENT=false\n'
+          fi
+
+      - name: Resolve exact production env file without exposing secrets
+        run: |
+          set -euo pipefail
+          mkdir -p validation
+          runtime_json="$(docker exec "$BACKEND_CONTAINER" python - <<'PY'
+          import json, os
+          from urllib.parse import urlparse
+          url=os.getenv('CREDENTIAL_API_URL','').strip()
+          print(json.dumps({
+            'provider': os.getenv('CREDENTIAL_PROVIDER','').strip().lower(),
+            'api_host': (urlparse(url).hostname or '').lower(),
+            'capture_engine': os.getenv('CAPTURE_ENGINE_VERSION',''),
+            'v2_enabled': os.getenv('CAPTURE_V2_PRODUCTION_ENABLED','').lower() == 'true',
+            'platform_mode': os.getenv('REPRODUCTION_PLATFORM_MODE',''),
+          }))
+          PY
+          )"
+          export RUNTIME_JSON="$runtime_json"
+          python3 - <<'PY'
+          import json, os
+          p=json.loads(os.environ['RUNTIME_JSON'])
+          assert p['provider']=='api', p
+          assert p['api_host'].endswith('.example.internal') or p['api_host']=='example.internal', p
+          assert p['capture_engine']=='V2', p
+          assert p['v2_enabled'] is True, p
+          assert p['platform_mode']=='real', p
+          print('RUNTIME_CURRENT_PROVIDER=api')
+          print('RUNTIME_API_URL_CLASS=PLACEHOLDER')
+          print('RUNTIME_CAPTURE_AUTHORITY=V2_REAL')
+          PY
+
+          candidates=()
+          [ -n "${COMPOSE_ENVIRONMENT_FILE:-}" ] && candidates+=("$COMPOSE_ENVIRONMENT_FILE")
+          candidates+=("/etc/voip-ai/production.env")
+          [ -n "${PRODUCTION_WORKDIR:-}" ] && candidates+=("$PRODUCTION_WORKDIR/.env" "$PRODUCTION_WORKDIR/production.env")
+
+          matches=()
+          seen='|'
+          for candidate in "${candidates[@]}"; do
+            [ -n "$candidate" ] || continue
+            case "$seen" in *"|$candidate|"*) continue;; esac
+            seen="${seen}${candidate}|"
+            [ -f "$candidate" ] || continue
+            [ -r "$candidate" ] || continue
+            if CANDIDATE="$candidate" RUNTIME_JSON="$runtime_json" python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          from urllib.parse import urlparse
+          path=Path(os.environ['CANDIDATE'])
+          values={}
+          for raw in path.read_text(encoding='utf-8').splitlines():
+              line=raw.strip()
+              if not line or line.startswith('#') or '=' not in line: continue
+              if line.startswith('export '): line=line[7:].strip()
+              k,v=line.split('=',1); k=k.strip(); v=v.strip()
+              if len(v)>=2 and v[0]==v[-1] and v[0] in {'"', "'"}: v=v[1:-1]
+              values[k]=v
+          runtime=json.loads(os.environ['RUNTIME_JSON'])
+          host=(urlparse(values.get('CREDENTIAL_API_URL','')).hostname or '').lower()
+          ok=(
+              values.get('APP_ENV','').lower()=='production'
+              and values.get('CREDENTIAL_PROVIDER','').lower()==runtime['provider']
+              and host==runtime['api_host']
+          )
+          raise SystemExit(0 if ok else 1)
+          PY
+            then
+              matches+=("$candidate")
+            fi
+          done
+          printf 'MATCHING_PRODUCTION_ENV_COUNT=%s\n' "${#matches[@]}"
+          test "${#matches[@]}" -eq 1
+          env_file="${matches[0]}"
+          printf 'PRODUCTION_ENV_FILE=%s\n' "$env_file" >> "$GITHUB_ENV"
+          printf 'PRODUCTION_ENV_FILE=%s\n' "$env_file"
+          stat -c 'PRODUCTION_ENV_MODE=%a SIZE=%s' "$env_file"
+          if [ -w "$env_file" ]; then echo 'PRODUCTION_ENV_WRITABLE_BY_RUNNER=true'; else echo 'PRODUCTION_ENV_WRITABLE_BY_RUNNER=false'; fi
+
+      - name: Run deployment preflight against temporary Poseidon env copy
+        run: |
+          set -euo pipefail
+          tmp="$RUNNER_TEMP/production-poseidon-dryrun.env"
+          rm -f "$tmp"
+          cp "$PRODUCTION_ENV_FILE" "$tmp"
+          chmod 0600 "$tmp"
+          TMP_ENV="$tmp" python3 - <<'PY'
+          import os
+          from pathlib import Path
+          p=Path(os.environ['TMP_ENV'])
+          lines=p.read_text(encoding='utf-8').splitlines()
+          seen=0
+          out=[]
+          for line in lines:
+              stripped=line.strip()
+              prefix='export ' if stripped.startswith('export ') else ''
+              body=stripped[7:].strip() if prefix else stripped
+              if body.startswith('CREDENTIAL_PROVIDER='):
+                  seen += 1
+                  out.append(prefix + 'CREDENTIAL_PROVIDER=poseidon')
+              else:
+                  out.append(line)
+          if seen != 1:
+              raise SystemExit(f'CREDENTIAL_PROVIDER_LINE_COUNT={seen}')
+          p.write_text('\n'.join(out)+'\n', encoding='utf-8')
+          PY
+          set +e
+          python3 deploy/deployment_preflight.py \
+            --env-file "$tmp" \
+            --mode deploy \
+            --out validation/production_poseidon_cutover_dry_run.json
+          rc=$?
+          set -e
+          rm -f "$tmp"
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          p=json.loads(Path('validation/production_poseidon_cutover_dry_run.json').read_text(encoding='utf-8'))
+          checks={x['key']: x for x in p['checks']}
+          summary={
+            'status': p['status'],
+            'deployment_status': p['deployment_status'],
+            'release_status': p['release_status'],
+            'deploy_blocking_keys': p['deploy_blocking_keys'],
+            'credential_provider': checks.get('CREDENTIAL_PROVIDER'),
+            'poseidon_secret_file': checks.get('POSEIDON_SECRET_FILE'),
+          }
+          print(json.dumps(summary, ensure_ascii=False, indent=2))
+          assert checks['CREDENTIAL_PROVIDER']['status']=='PASS', checks['CREDENTIAL_PROVIDER']
+          assert checks['POSEIDON_SECRET_FILE']['status']=='PASS', checks['POSEIDON_SECRET_FILE']
+          PY
+          exit "$rc"
+
+      - name: Upload sanitized dry-run evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-poseidon-cutover-dry-run
+          path: validation/production_poseidon_cutover_dry_run.json
+          if-no-files-found: error
+          retention-days: 30
