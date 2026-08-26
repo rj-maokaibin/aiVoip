@@ -1,0 +1,126 @@
+name: Production C06 Dispatch Diagnose
+
+on:
+  pull_request:
+    branches:
+      - master
+    paths:
+      - '.github/workflows/production-c06-dispatch-diagnose.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-c06-dispatch-diagnose
+  cancel-in-progress: false
+
+jobs:
+  diagnose:
+    runs-on:
+      - self-hosted
+      - linux
+      - x64
+      - voip-controlled-linux
+    timeout-minutes: 10
+    env:
+      SESSION_ID: '5760f273-8a32-4a45-960e-162c8e1afc4f'
+    steps:
+      - name: Read-only production dispatch diagnosis
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          mkdir -p "$RUNNER_TEMP/c06-dispatch-diagnose"
+          out="$RUNNER_TEMP/c06-dispatch-diagnose/result.txt"
+          exec > >(tee "$out") 2>&1
+
+          mapfile -t backends < <(docker ps --filter label=com.docker.compose.project=voip-ai --filter label=com.docker.compose.service=backend --format '{{.Names}}')
+          mapfile -t workers < <(docker ps --filter label=com.docker.compose.project=voip-ai --filter label=com.docker.compose.service=reproduction-worker --format '{{.Names}}')
+          mapfile -t redises < <(docker ps --filter label=com.docker.compose.project=voip-ai --filter label=com.docker.compose.service=redis --format '{{.Names}}')
+          test "${#backends[@]}" -eq 1
+          test "${#workers[@]}" -eq 1
+          test "${#redises[@]}" -eq 1
+          backend="${backends[0]}"; worker="${workers[0]}"; redis="${redises[0]}"
+
+          echo "BACKEND=$backend"
+          echo "WORKER=$worker"
+          echo "REDIS=$redis"
+          echo "WORKER_STATUS=$(docker inspect -f '{{.State.Status}}' "$worker")"
+          echo "WORKER_RESTART_COUNT=$(docker inspect -f '{{.RestartCount}}' "$worker")"
+          echo "WORKER_CMD=$(docker inspect -f '{{json .Config.Cmd}}' "$worker")"
+
+          echo '--- runtime identity ---'
+          docker exec -i "$backend" python - <<'PY'
+          import hashlib, os
+          from app.core.config import settings
+          def h(v): return hashlib.sha256((v or '').encode()).hexdigest()[:12]
+          print('BACKEND_REDIS_URL_HASH='+h(settings.redis_url))
+          print('BACKEND_APP_ENV='+settings.app_env)
+          print('BACKEND_CAPTURE_ENGINE_VERSION='+settings.capture_engine_version)
+          print('BACKEND_REPRO_MODE='+settings.reproduction_platform_mode)
+          PY
+          docker exec -i "$worker" python - <<'PY'
+          import hashlib
+          from app.core.config import settings
+          from app.workers.celery_app import celery_app
+          def h(v): return hashlib.sha256((v or '').encode()).hexdigest()[:12]
+          print('WORKER_REDIS_URL_HASH='+h(settings.redis_url))
+          print('WORKER_SSH_USERNAME='+settings.ssh_username)
+          print('TASK_REGISTERED_LOCAL='+str('reproduction.start' in celery_app.tasks))
+          print('TASK_QUEUE_ATTR='+str(getattr(celery_app.tasks.get('reproduction.start'),'queue',None)))
+          PY
+
+          echo '--- session db state ---'
+          docker exec -i -e SESSION_ID="$SESSION_ID" "$backend" python - <<'PY'
+          import os, json
+          from sqlalchemy import select
+          from app.db.session import SessionLocal
+          from app.db.models import ReproductionSession, ReproductionEventRecord, ArmValidationResult
+          sid=os.environ['SESSION_ID']
+          with SessionLocal() as db:
+              s=db.get(ReproductionSession,sid)
+              print('SESSION_EXISTS='+str(bool(s)))
+              if s:
+                  print('SESSION_STATE='+str(s.state))
+                  print('SESSION_TERMINAL_REASON='+str(s.terminal_reason))
+                  print('SESSION_UPDATED_AT='+str(s.updated_at))
+              events=list(db.scalars(select(ReproductionEventRecord).where(ReproductionEventRecord.session_id==sid).order_by(ReproductionEventRecord.created_at)))
+              print('EVENT_COUNT='+str(len(events)))
+              for e in events[-20:]:
+                  vals={c.name:getattr(e,c.name) for c in e.__table__.columns}
+                  safe={k:str(v) for k,v in vals.items() if k not in {'detail_json','payload_json'}}
+                  print('EVENT='+json.dumps(safe,ensure_ascii=False))
+              arm=list(db.scalars(select(ArmValidationResult).where(ArmValidationResult.session_id==sid)))
+              print('ARM_VALIDATION_COUNT='+str(len(arm)))
+          PY
+
+          echo '--- redis broker queue ---'
+          docker exec "$redis" redis-cli LLEN reproduction-control | sed 's/^/REPRODUCTION_CONTROL_LLEN=/'
+          docker exec "$redis" redis-cli LLEN reproduction-control-high | sed 's/^/REPRODUCTION_CONTROL_HIGH_LLEN=/'
+          docker exec "$redis" redis-cli LLEN reproduction-watch | sed 's/^/REPRODUCTION_WATCH_LLEN=/'
+          docker exec "$redis" redis-cli --scan --pattern '*reproduction-control*' | head -50 | sed 's/^/REDIS_KEY=/' || true
+
+          echo '--- worker celery inspect targeted ---'
+          node="celery@$(docker exec "$worker" hostname)"
+          echo "CELERY_NODE=$node"
+          timeout 20 docker exec "$worker" celery -A app.workers.celery_app:celery_app inspect ping -d "$node" || true
+          timeout 20 docker exec "$worker" celery -A app.workers.celery_app:celery_app inspect active_queues -d "$node" || true
+          timeout 20 docker exec "$worker" celery -A app.workers.celery_app:celery_app inspect registered -d "$node" || true
+          timeout 20 docker exec "$worker" celery -A app.workers.celery_app:celery_app inspect active -d "$node" || true
+          timeout 20 docker exec "$worker" celery -A app.workers.celery_app:celery_app inspect reserved -d "$node" || true
+
+          echo '--- reproduction worker logs ---'
+          docker logs --since 20m "$worker" 2>&1 | tail -400 | grep -E "$SESSION_ID|reproduction\.start|Received task|ERROR|CRITICAL|Traceback|consumer|Connected to redis|ready" || true
+
+          echo '--- backend publish logs ---'
+          docker logs --since 20m "$backend" 2>&1 | tail -400 | grep -E "$SESSION_ID|reproduction|ERROR|CRITICAL|Traceback|202 Accepted|POST /api/v1/cases" || true
+
+          echo 'DIAGNOSE_READ_ONLY=PASS'
+
+      - name: Upload diagnosis evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-c06-dispatch-diagnose
+          path: ${{ runner.temp }}/c06-dispatch-diagnose
+          if-no-files-found: warn
+          retention-days: 90
