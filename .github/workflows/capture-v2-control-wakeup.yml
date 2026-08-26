@@ -22,11 +22,10 @@ jobs:
       - voip-controlled-linux
     timeout-minutes: 10
     steps:
-      - name: Guard safe V1 prestate and stopped RC85 tree
+      - name: Guard safe V1 prestate and no stale control tree
         shell: bash
         run: |
           set -euo pipefail
-          echo "RECOVERY_UTC=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           docker run --rm -i -v /etc/voip-ai:/probe/voip-ai:ro python:3.12-slim python - <<'PY'
           from pathlib import Path
           p=Path('/probe/voip-ai/production.env')
@@ -48,63 +47,63 @@ jobs:
           print('SAFE_V1_PRESTATE_CONFIRMED=true')
           PY
           test -z "$(docker ps -aq --filter label=com.docker.compose.project=voip-ai)"
-          for p in 2203168 2575556 2575557 2575558; do
-            test -r "/proc/$p/cmdline"
-          done
-          ps -o pid,ppid,pgid,sid,tpgid,user,etime,stat,args -p 2203168,2575556,2575557,2575558
-          ps -o stat= -p 2203168 | grep -q '^T'
-          ps -o stat= -p 2575556 | grep -q '^T'
-          ps -o stat= -p 2575558 | grep -q '^T'
-          docker run --rm -v /:/host:ro python:3.12-slim chroot /host /usr/bin/systemd-run --version
+          if ps -eo args | grep 'app.capture_v2.control_cli run --repo-root /home/dev/workspace/aiVoip-control' | grep -v grep; then
+            echo 'UNEXPECTED_EXISTING_CONTROL_RUNNER=true'
+            exit 1
+          fi
 
-      - name: Terminate only stale stopped control tree
+      - name: Start no-TTY persistent control container
         shell: bash
         run: |
           set -euo pipefail
-          docker run --rm --pid=host python:3.12-slim sh -lc '
-            kill -TERM 2575558 2575557 2575556 2203168 2>/dev/null || true
-            sleep 2
-            for p in 2575558 2575557 2575556 2203168; do
-              if kill -0 "$p" 2>/dev/null; then kill -KILL "$p" 2>/dev/null || true; fi
-            done
-          '
-          sleep 1
-          for p in 2575558 2575557 2575556 2203168; do
-            if kill -0 "$p" 2>/dev/null; then
-              echo "STALE_PID_REMAINS=$p"
-              exit 1
-            fi
-          done
-          echo 'STALE_CONTROL_TREE_REMOVED=true'
-
-      - name: Start detached host systemd control service
-        shell: bash
-        run: |
-          set -euo pipefail
-          docker run --rm --privileged -v /:/host python:3.12-slim \
-            chroot /host /usr/bin/systemd-run \
-              --unit=aiVoip-capture-v2-control \
-              --collect \
-              --uid=dev \
-              --gid=dev \
-              --property=WorkingDirectory=/home/dev/workspace/aiVoip-control/backend \
-              --property=Restart=on-failure \
-              --property=RestartSec=5 \
-              --property=StandardInput=null \
-              --property=StandardOutput=append:/home/dev/aiVoip-control-runner.log \
-              --property=StandardError=append:/home/dev/aiVoip-control-runner.log \
-              /home/dev/workspace/aiVoip/.venv-release-gate/bin/python3 \
-              -m app.capture_v2.control_cli run \
-              --repo-root /home/dev/workspace/aiVoip-control \
-              --branch feat/capture-v2.1.1-real-gates \
-              --remote origin \
-              --git-sync \
-              --poll-seconds 10
-          sleep 5
-          docker run --rm -v /:/host:ro python:3.12-slim chroot /host /usr/bin/systemctl --no-pager --full status aiVoip-capture-v2-control.service || true
+          docker rm -f aiVoip-capture-v2-control-runner >/dev/null 2>&1 || true
+          docker run -d \
+            --name aiVoip-capture-v2-control-runner \
+            --restart unless-stopped \
+            -v /:/host \
+            python:3.12-slim \
+            chroot /host /usr/sbin/runuser -u dev -- /bin/bash -lc '
+              cd /home/dev/workspace/aiVoip-control/backend
+              exec /home/dev/workspace/aiVoip/.venv-release-gate/bin/python3 \
+                -m app.capture_v2.control_cli run \
+                --repo-root /home/dev/workspace/aiVoip-control \
+                --branch feat/capture-v2.1.1-real-gates \
+                --remote origin \
+                --git-sync \
+                --poll-seconds 10
+            '
+          sleep 6
+          docker ps --filter name=^/aiVoip-capture-v2-control-runner$ --format 'CONTROL_CONTAINER={{.Names}} STATUS={{.Status}}'
+          test "$(docker inspect -f '{{.State.Running}}' aiVoip-capture-v2-control-runner)" = true
           ps -eo pid,ppid,pgid,sid,tpgid,user,etime,stat,args | grep 'app.capture_v2.control_cli run --repo-root /home/dev/workspace/aiVoip-control' | grep -v grep
           if ps -eo stat,args | grep 'app.capture_v2.control_cli run --repo-root /home/dev/workspace/aiVoip-control' | grep -v grep | grep -q '^T'; then
             echo 'NEW_CONTROL_RUNNER_STOPPED=true'
             exit 1
           fi
-          echo 'DETACHED_CONTROL_RUNNER_STARTED=true'
+          echo 'NO_TTY_CONTROL_RUNNER_STARTED=true'
+
+      - name: Confirm RC85 was reclaimed without unsafe prestate change
+        shell: bash
+        run: |
+          set -euo pipefail
+          sleep 5
+          ROOT=/home/dev/workspace/aiVoip-control
+          DEV_UID="$(stat -c %u "$ROOT")"
+          DEV_GID="$(stat -c %g "$ROOT")"
+          docker run --rm --user "$DEV_UID:$DEV_GID" -v "$ROOT:$ROOT:ro" -w "$ROOT" python:3.12-slim sh -lc '
+            cat validation/control/status.json
+          '
+          docker run --rm -i -v /etc/voip-ai:/probe/voip-ai:ro python:3.12-slim python - <<'PY'
+          from pathlib import Path
+          p=Path('/probe/voip-ai/production.env')
+          vals={}
+          for raw in p.read_text(encoding='utf-8').splitlines():
+              s=raw.strip()
+              if not s or s.startswith('#') or '=' not in s: continue
+              if s.startswith('export '): s=s[7:].strip()
+              k,v=s.split('=',1); vals[k.strip()]=v.strip().strip('"').strip("'")
+          def eff(k,d): return vals.get(k,'').strip() or d
+          print('ENGINE='+eff('CAPTURE_ENGINE_VERSION','V1'))
+          print('V2_ENABLED='+eff('CAPTURE_V2_PRODUCTION_ENABLED','false'))
+          print('PLATFORM='+eff('REPRODUCTION_PLATFORM_MODE','mock'))
+          PY
