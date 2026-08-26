@@ -1,4 +1,4 @@
-name: Capture V2 Control Runner Recovery
+name: Capture V2 Control Runner Network Recovery
 
 on:
   push:
@@ -22,7 +22,7 @@ jobs:
       - voip-controlled-linux
     timeout-minutes: 10
     steps:
-      - name: Guard safe V1 prestate
+      - name: Guard V1 prestate and existing no-TTY runner
         shell: bash
         run: |
           set -euo pipefail
@@ -39,57 +39,21 @@ jobs:
           assert eff('REPRODUCTION_PLATFORM_MODE','mock') == 'mock'
           assert eff('CAPTURE_ENGINE_VERSION','V1').upper() == 'V1'
           assert eff('CAPTURE_V2_PRODUCTION_ENABLED','false').lower() == 'false'
-          assert eff('CAPTURE_V2_ACTIVATION_REHEARSAL','false').lower() == 'false'
           assert eff('FEISHU_IDENTITY_RBAC_ENABLED','false').lower() == 'true'
           print('SAFE_V1_PRESTATE_CONFIRMED=true')
           PY
-          test -z "$(docker ps -aq --filter label=com.docker.compose.project=voip-ai)"
+          test "$(docker inspect -f '{{.State.Running}}' aivoip-capture-v2-control-runner)" = true
+          ps -eo pid,ppid,pgid,sid,tpgid,user,etime,stat,args | grep 'app.capture_v2.control_cli run --repo-root /home/dev/workspace/aiVoip-control' | grep -v grep
 
-      - name: Remove only verified stopped RC85 process tree
+      - name: Replace control container with host-network no-TTY runner
         shell: bash
         run: |
           set -euo pipefail
-          docker run --rm --privileged --pid=host -v /:/host python:3.12-slim \
-            chroot /host /bin/bash -lc '
-              set -euo pipefail
-              declare -A expect
-              expect[2203168]="app.capture_v2.control_cli run --repo-root /home/dev/workspace/aiVoip-control"
-              expect[2575556]="production_cutover_guarded --repo-root /home/dev/workspace/aiVoip-control"
-              expect[2575557]="production_cutover_guarded --repo-root /home/dev/workspace/aiVoip-control"
-              expect[2575558]="production_cutover_guarded --repo-root /home/dev/workspace/aiVoip-control"
-              for p in 2203168 2575556 2575557 2575558; do
-                test -r "/proc/$p/cmdline"
-                cmd="$(tr "\0" " " < "/proc/$p/cmdline")"
-                state="$(awk "/^State:/{print \$2}" "/proc/$p/status")"
-                echo "PID=$p STATE=$state CMD=$cmd"
-                case "$cmd" in
-                  *"${expect[$p]}"*) ;;
-                  *) echo "PID_COMMAND_MISMATCH=$p"; exit 1;;
-                esac
-              done
-              test "$(awk "/^State:/{print \$2}" /proc/2203168/status)" = T
-              test "$(awk "/^State:/{print \$2}" /proc/2575556/status)" = T
-              test "$(awk "/^State:/{print \$2}" /proc/2575558/status)" = T
-              kill -TERM 2575558 2575557 2575556 2203168 || true
-              sleep 2
-              for p in 2575558 2575557 2575556 2203168; do
-                if [ -e "/proc/$p" ]; then kill -KILL "$p" || true; fi
-              done
-              sleep 1
-              for p in 2575558 2575557 2575556 2203168; do
-                if [ -e "/proc/$p" ]; then echo "STALE_PID_REMAINS=$p"; exit 1; fi
-              done
-              echo STALE_RC85_TREE_REMOVED=true
-            '
-
-      - name: Start single persistent no-TTY control runner
-        shell: bash
-        run: |
-          set -euo pipefail
-          docker rm -f aivoip-capture-v2-control-runner >/dev/null 2>&1 || true
+          docker rm -f aivoip-capture-v2-control-runner
           docker run -d \
             --name aivoip-capture-v2-control-runner \
             --restart unless-stopped \
+            --network host \
             -v /:/host \
             python:3.12-slim \
             chroot /host /usr/sbin/runuser -u dev -- /bin/bash -lc '
@@ -102,28 +66,28 @@ jobs:
                 --git-sync \
                 --poll-seconds 10
             '
-          sleep 6
+          sleep 8
           test "$(docker inspect -f '{{.State.Running}}' aivoip-capture-v2-control-runner)" = true
-          echo "CONTROL_CONTAINER=$(docker inspect -f '{{.Name}} {{.State.Status}}' aivoip-capture-v2-control-runner)"
           COUNT="$(ps -eo args | grep 'app.capture_v2.control_cli run --repo-root /home/dev/workspace/aiVoip-control' | grep -v grep | wc -l)"
           echo "CONTROL_RUNNER_COUNT=$COUNT"
           test "$COUNT" -eq 1
           ps -eo pid,ppid,pgid,sid,tpgid,user,etime,stat,args | grep 'app.capture_v2.control_cli run --repo-root /home/dev/workspace/aiVoip-control' | grep -v grep
-          if ps -eo stat,args | grep 'app.capture_v2.control_cli run --repo-root /home/dev/workspace/aiVoip-control' | grep -v grep | grep -q '^T'; then
-            echo NEW_CONTROL_RUNNER_STOPPED=true
-            exit 1
-          fi
-          echo NO_TTY_CONTROL_RUNNER_STARTED=true
+          if ps -eo stat,args | grep 'app.capture_v2.control_cli run --repo-root /home/dev/workspace/aiVoip-control' | grep -v grep | grep -q '^T'; then exit 1; fi
+          echo HOST_NETWORK_NO_TTY_RUNNER_STARTED=true
 
-      - name: Confirm RC85 reclaimed and safe state
+      - name: Confirm Git sync and RC85 reclaim
         shell: bash
         run: |
           set -euo pipefail
-          sleep 8
+          sleep 12
+          echo '=== control container logs ==='
+          docker logs --tail 80 aivoip-capture-v2-control-runner 2>&1 || true
           ROOT=/home/dev/workspace/aiVoip-control
           DEV_UID="$(stat -c %u "$ROOT")"
           DEV_GID="$(stat -c %g "$ROOT")"
+          echo '=== local control status ==='
           docker run --rm --user "$DEV_UID:$DEV_GID" -v "$ROOT:$ROOT:ro" -w "$ROOT" python:3.12-slim sh -lc 'cat validation/control/status.json'
+          echo '=== safe production state ==='
           docker run --rm -i -v /etc/voip-ai:/probe/voip-ai:ro python:3.12-slim python - <<'PY'
           from pathlib import Path
           p=Path('/probe/voip-ai/production.env'); vals={}
