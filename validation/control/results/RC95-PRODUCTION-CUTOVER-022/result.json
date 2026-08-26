@@ -1,20 +1,37 @@
 {
-  "schema_version": "capture-v2-remote-status-v1",
-  "action_id": "RC95-PRODUCTION-CUTOVER-022",
-  "sequence": 233,
-  "action_type": "PRODUCTION_CUTOVER",
-  "state": "SUCCEEDED",
-  "runner_id": "srv:7",
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "RC95-PRODUCTION-CUTOVER-022",
+    "sequence": 233,
+    "created_at": "2026-08-26T10:46:00+00:00",
+    "expires_at": "2026-08-26T16:46:00+00:00",
+    "action_type": "PRODUCTION_CUTOVER",
+    "parameters": {
+      "timeout_seconds": 7200
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "194d6e6ce03235c1274d0d129e3ae5a95acb9fe0"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "Execute the authorized guarded Capture Engine V2 production cutover after RC94 fresh production preflight PASS with no deploy blockers. RC93 crossed the backend port issue but backend readiness failed only because MinIO bootstrap credentials did not match the secure backend secret files. RC93 rollback restored V1 fully. Production.env MinIO bootstrap root credentials have now been atomically aligned to the backend MinIO secret files without disclosure; equality was verified true, V1/V2-disabled/mock was preserved, backend host remains isolated at 127.0.0.1:18001 and MinIO console at 127.0.0.1:19001. Do not alter release-smoke or the existing aivoip project. Run guarded V2/real env switch, strict release preflight, production deploy, migration, readiness, runtime verify, required services and backend capture-authority probe. Fail closed with verified V1 rollback on any error. No DUT mutation. Declare production active only with live CAPTURE_AUTHORITY=V2 evidence."
+  },
   "action_sha256": "55fafce560b09d41aa6ba1b8c91e4dd60d771c293b4789de98cfe2c279ec5ca1",
-  "updated_at": "2026-08-26T10:47:37.597758+00:00",
-  "started_at": null,
-  "finished_at": "2026-08-26T10:47:37.597758+00:00",
+  "runner_id": "srv:7",
+  "state": "SUCCEEDED",
   "return_code": 0,
   "verdict": "PASS",
-  "result_path": "validation/control/results/RC95-PRODUCTION-CUTOVER-022/result.json",
+  "error": null,
+  "finished_at": "2026-08-26T10:47:37.597758+00:00",
   "stdout_sha256": "6cd360c01aa62e6163e5cb6ae6d35a7fb458f8ab7280dc771914a2e46cbd4543",
   "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-  "error": null,
+  "local_stdout": ".capture-v2-control/logs/RC95-PRODUCTION-CUTOVER-022/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/RC95-PRODUCTION-CUTOVER-022/stderr.log",
   "detail": {
     "safety": {
       "capture_engine_version": "V1",
