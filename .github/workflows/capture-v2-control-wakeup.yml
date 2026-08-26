@@ -1,4 +1,4 @@
-name: Capture V2 RC93 Live Readonly Probe
+name: Capture V2 RC93 Readiness Probe
 
 on:
   push:
@@ -14,7 +14,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  rc93-live-probe:
+  rc93-readiness-probe:
     runs-on:
       - self-hosted
       - linux
@@ -22,20 +22,21 @@ jobs:
       - voip-controlled-linux
     timeout-minutes: 10
     steps:
-      - name: Read RC93 host processes and voip-ai runtime
+      - name: Read backend readiness and logs
         shell: bash
         run: |
           set -euo pipefail
-          echo '=== CONTROL/CUTOVER PROCESSES ==='
-          ps -eo pid,ppid,pgid,sid,tpgid,user,etime,stat,args | grep -E 'capture_v2.control_cli|production_cutover_guarded|deploy/voip-ai' | grep -v grep || true
-          echo '=== VOIP-AI CONTAINERS ==='
-          docker ps -a --format '{{.ID}} {{.Names}} {{.Status}} {{.Ports}}' | grep '^.* voip-ai-' || true
-          echo '=== PORTS ==='
-          ss -ltn '( sport = :18001 or sport = :8080 or sport = :19001 )' || true
-          echo '=== BACKEND READINESS ==='
-          curl -fsS --max-time 3 http://127.0.0.1:18001/health/ready || true
+          echo '=== READY RESPONSE ==='
+          curl -sS --max-time 5 -i http://127.0.0.1:18001/health/ready || true
+          echo
+          echo '=== BACKEND LOG TAIL ==='
+          docker logs --tail 160 voip-ai-backend-1 2>&1 || true
+          echo '=== CONTAINER STATE ==='
+          docker inspect voip-ai-backend-1 --format '{{json .State}}' || true
+          echo '=== VOIP-AI RUNNING SERVICES ==='
+          docker ps --format '{{.Names}} {{.Status}}' | grep '^voip-ai-' | sort || true
 
-      - name: Read safe production authority keys
+      - name: Read safe authority keys
         shell: bash
         run: |
           set -euo pipefail
@@ -48,6 +49,8 @@ jobs:
               if s.startswith('export '): s=s[7:].strip()
               k,v=s.split('=',1); vals[k.strip()]=v.strip().strip('"').strip("'")
           def eff(k,d): return vals.get(k,'').strip() or d
-          for k,d in [('CAPTURE_ENGINE_VERSION','V1'),('CAPTURE_V2_PRODUCTION_ENABLED','false'),('REPRODUCTION_PLATFORM_MODE','mock'),('VOIP_BACKEND_BIND',''),('VOIP_BACKEND_PORT',''),('VOIP_MINIO_CONSOLE_BIND',''),('VOIP_MINIO_CONSOLE_PORT','')]:
-              print(f'{k}={eff(k,d)}')
+          print('ENGINE='+eff('CAPTURE_ENGINE_VERSION','V1'))
+          print('V2_ENABLED='+eff('CAPTURE_V2_PRODUCTION_ENABLED','false'))
+          print('PLATFORM='+eff('REPRODUCTION_PLATFORM_MODE','mock'))
+          print('BACKEND_PORT='+eff('VOIP_BACKEND_PORT',''))
           PY
