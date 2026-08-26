@@ -6,8 +6,10 @@ from pathlib import Path
 from app.capture_v2.control import production_cutover_guarded as cutover
 
 
-def _completed(argv: list[str], rc: int = 0) -> subprocess.CompletedProcess[str]:
-    return subprocess.CompletedProcess(argv, rc, stdout="ok", stderr="")
+def _completed(
+    argv: list[str], rc: int = 0, *, stdout: str = "ok", stderr: str = ""
+) -> subprocess.CompletedProcess[str]:
+    return subprocess.CompletedProcess(argv, rc, stdout=stdout, stderr=stderr)
 
 
 def test_git_uses_existing_identity_when_already_repo_owner(monkeypatch, tmp_path: Path) -> None:
@@ -86,13 +88,89 @@ def test_git_fails_closed_for_unprivileged_identity_mismatch(monkeypatch, tmp_pa
     assert "EUID_MISMATCH:euid=2000:owner_uid=1000" in cp.stderr
 
 
+def test_master_snapshot_uses_exact_fetch_head_for_ancestor(monkeypatch, tmp_path: Path) -> None:
+    master = "e6623e29908aa977332c6e0b87fe04d0a88bce84"
+    validated = "db3e8012a9569d9508e9d2cd920baf1de6bac866"
+    calls: list[tuple[str, ...]] = []
+
+    def fake_git(repo_root: Path, *args: str, timeout: float = 120.0):
+        assert repo_root == tmp_path
+        calls.append(args)
+        if args == ("fetch", "origin", "master"):
+            return _completed(["git", *args])
+        if args == ("rev-parse", "FETCH_HEAD"):
+            return _completed(["git", *args], stdout=master + "\n")
+        if args == ("merge-base", "--is-ancestor", validated, master):
+            return _completed(["git", *args])
+        raise AssertionError(f"unexpected git args: {args}")
+
+    monkeypatch.setattr(cutover, "_git_as_repo_owner", fake_git)
+    git_for_run, snapshot = cutover._master_snapshot_git()
+
+    fetched = git_for_run(tmp_path, "fetch", "origin", "master")
+    ancestor = git_for_run(
+        tmp_path, "merge-base", "--is-ancestor", validated, "origin/master"
+    )
+
+    assert fetched.returncode == 0
+    assert ancestor.returncode == 0
+    assert snapshot["master_head"] == master
+    assert calls == [
+        ("fetch", "origin", "master"),
+        ("rev-parse", "FETCH_HEAD"),
+        ("merge-base", "--is-ancestor", validated, master),
+    ]
+    assert ("merge-base", "--is-ancestor", validated, "origin/master") not in calls
+
+
+def test_master_snapshot_fails_closed_if_fetch_head_is_invalid(monkeypatch, tmp_path: Path) -> None:
+    def fake_git(repo_root: Path, *args: str, timeout: float = 120.0):
+        if args == ("fetch", "origin", "master"):
+            return _completed(["git", *args])
+        if args == ("rev-parse", "FETCH_HEAD"):
+            return _completed(["git", *args], stdout="not-a-sha\n")
+        raise AssertionError(f"unexpected git args: {args}")
+
+    monkeypatch.setattr(cutover, "_git_as_repo_owner", fake_git)
+    git_for_run, snapshot = cutover._master_snapshot_git()
+
+    cp = git_for_run(tmp_path, "fetch", "origin", "master")
+
+    assert cp.returncode == 126
+    assert "MASTER_FETCH_HEAD_INVALID" in cp.stderr
+    assert snapshot["master_head"] is None
+
+
+def test_master_snapshot_fails_closed_if_ancestor_check_has_no_snapshot(
+    monkeypatch, tmp_path: Path
+) -> None:
+    def unexpected_git(*args, **kwargs):  # pragma: no cover - assertion helper
+        raise AssertionError("must not execute ancestry check without fetched snapshot")
+
+    monkeypatch.setattr(cutover, "_git_as_repo_owner", unexpected_git)
+    git_for_run, snapshot = cutover._master_snapshot_git()
+
+    cp = git_for_run(
+        tmp_path,
+        "merge-base",
+        "--is-ancestor",
+        "db3e8012a9569d9508e9d2cd920baf1de6bac866",
+        "origin/master",
+    )
+
+    assert cp.returncode == 126
+    assert cp.stderr == "MASTER_FETCH_SNAPSHOT_MISSING"
+    assert snapshot["master_head"] is None
+
+
 def test_run_restores_base_hooks_after_failure(monkeypatch, tmp_path: Path) -> None:
     original_read = cutover._base._read_safe_env
     original_git = cutover._base._git
 
     def explode(*, repo_root: Path, authorization_path: Path):
         assert cutover._base._read_safe_env is cutover._read_safe_env_with_effective_defaults
-        assert cutover._base._git is cutover._git_as_repo_owner
+        assert cutover._base._git is not original_git
+        assert callable(cutover._base._git)
         raise RuntimeError("boom")
 
     monkeypatch.setattr(cutover._base, "run", explode)
