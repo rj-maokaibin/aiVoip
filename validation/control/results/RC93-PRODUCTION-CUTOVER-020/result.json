@@ -1,20 +1,37 @@
 {
-  "schema_version": "capture-v2-remote-status-v1",
-  "action_id": "RC93-PRODUCTION-CUTOVER-020",
-  "sequence": 231,
-  "action_type": "PRODUCTION_CUTOVER",
-  "state": "FAILED",
-  "runner_id": "srv:7",
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "RC93-PRODUCTION-CUTOVER-020",
+    "sequence": 231,
+    "created_at": "2026-08-26T10:38:05+00:00",
+    "expires_at": "2026-08-26T16:38:05+00:00",
+    "action_type": "PRODUCTION_CUTOVER",
+    "parameters": {
+      "timeout_seconds": 7200
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "805b1dda1cbd2a530345cfc8cc0aff8e2ab345f7"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "Execute the authorized guarded Capture Engine V2 production cutover after RC92 fresh production preflight PASS with deployment_status=PASS and no deploy blockers. RC91 proved image build and DB migration succeeded but backend host port 8000 collided with an unrelated release-smoke uvicorn process. Do not stop or alter release-smoke or the existing live aivoip stack. Production env has been safely preconfigured while remaining V1 with VOIP_BACKEND_BIND=127.0.0.1 and VOIP_BACKEND_PORT=18001; candidate ports 18001, 8080 and MinIO console 19001 were verified free and RC92 compose/preflight passed. Preserve these backend isolation keys during the cutover, apply the existing guarded V2/real and MinIO console overrides, run strict release preflight, production deploy, migration, runtime verify, required service checks and backend authority probe. Fail closed with verified V1 rollback on any error. No DUT mutation. Declare production active only if live CAPTURE_AUTHORITY=V2 is proven."
+  },
   "action_sha256": "20440b7f96407f096a3661a2a0fe641800e15ee24f6efc2135e094abbf283eb0",
-  "updated_at": "2026-08-26T10:41:57.090052+00:00",
-  "started_at": null,
-  "finished_at": "2026-08-26T10:41:57.090052+00:00",
+  "runner_id": "srv:7",
+  "state": "FAILED",
   "return_code": 1,
   "verdict": "FAIL",
-  "result_path": "validation/control/results/RC93-PRODUCTION-CUTOVER-020/result.json",
+  "error": null,
+  "finished_at": "2026-08-26T10:41:57.090052+00:00",
   "stdout_sha256": "8dc0ad9d6d3812f2209206a04fc67a5ead89ca6d30ca32cec9f1f8982e73f30f",
   "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-  "error": null,
+  "local_stdout": ".capture-v2-control/logs/RC93-PRODUCTION-CUTOVER-020/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/RC93-PRODUCTION-CUTOVER-020/stderr.log",
   "detail": {
     "safety": {
       "capture_engine_version": "V1",
