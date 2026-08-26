@@ -1,12 +1,12 @@
 {
   "schema_version": "capture-v2-remote-action-v1",
-  "action_id": "RC89-PRODUCTION-CUTOVER-016",
-  "sequence": 227,
-  "created_at": "2026-08-26T08:20:30+00:00",
-  "expires_at": "2026-08-26T14:20:30+00:00",
-  "action_type": "PRODUCTION_CUTOVER",
+  "action_id": "RC90-PRODUCTION-DEPLOYMENT-PREFLIGHT-017",
+  "sequence": 228,
+  "created_at": "2026-08-26T10:18:45+00:00",
+  "expires_at": "2026-08-26T16:18:45+00:00",
+  "action_type": "PRODUCTION_DEPLOYMENT_PREFLIGHT",
   "parameters": {
-    "timeout_seconds": 7200
+    "timeout_seconds": 300
   },
   "safety": {
     "require_clean_git": true,
@@ -14,8 +14,8 @@
     "require_v2_disabled": true,
     "allow_worker_kill": false,
     "allow_server_quarantine": false,
-    "expected_head": "f531d59e32d755ef8a3aa91aeff551cfdf3d13fd"
+    "expected_head": "15aef7eb73d6f9541542f27af1fdc8ceac210d9f"
   },
   "requested_by": "ChatGPT-remote-validation-controller",
-  "note": "Execute the explicitly authorized guarded Capture Engine V2 production cutover after RC88 fresh production preflight PASS with deployment_status=PASS and no deploy blockers. The accepted master includes the repo-owner Git identity fix and exact FETCH_HEAD master snapshot ancestry fix, both validated by full Frozen/Full Software/Golden/Human Evidence gates and synchronized into production control. Use the canonical authorization and audited guarded cutover only. Back up production.env before mutation; switch CAPTURE_ENGINE_VERSION=V2, CAPTURE_V2_PRODUCTION_ENABLED=true and REPRODUCTION_PLATFORM_MODE=real; run strict release preflight, production deploy, database migration/runtime verification, required service/queue/storage/frontend/backend checks, and backend authority probe. Fail closed with verified V1 rollback on any error. No DUT mutation is allowed. Declare success only with live evidence CAPTURE_AUTHORITY=V2."
+  "note": "Fresh guarded production deployment preflight after the accepted MinIO console host-port isolation fix was merged to master and synchronized into production control. PR #63 exact master head passed Frozen, Full Software, Prepared-PCAP Golden #001, Human Evidence and artifact upload. A live readonly host probe proved existing aivoip-minio-1 legitimately owns 9001, candidate 127.0.0.1:19001 is free, and production is V1 / V2 disabled / mock after RC89 verified rollback. Verify canonical authorization, real production V1 prestate, deploy blockers, source and compose requirements with no production or DUT mutation. Final cutover remains responsible for an immediate pre-mutation check that 127.0.0.1:19001 is still available."
 }
