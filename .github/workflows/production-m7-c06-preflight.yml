@@ -53,7 +53,7 @@ jobs:
           docker inspect --format '{{.State.Status}}' "$backend" | grep -qx running
           printf 'BACKEND_CONTAINER=%s\n' "$backend" >> "$GITHUB_ENV"
 
-      - name: Read-only V2 authority, DB ownership and APF1250 DUT health
+      - name: Read-only V2 authority, credential chain and APF1250 DUT health
         id: preflight
         run: |
           set -uo pipefail
@@ -69,6 +69,7 @@ jobs:
           import os
           import re
           from datetime import datetime, timezone
+          from urllib.parse import urlparse
 
           from sqlalchemy import select
 
@@ -95,7 +96,7 @@ jobs:
               ReproductionState.FAILED.value,
           }
           payload = {
-              'schema_version': 'production-m7-c06-preflight-v3',
+              'schema_version': 'production-m7-c06-preflight-v4',
               'checked_at': datetime.now(timezone.utc).isoformat(),
               'mutation_performed': False,
               'target': {
@@ -108,6 +109,7 @@ jobs:
               'runtime': {},
               'database': {},
               'credential_provider': {},
+              'poseidon_readiness': {},
               'dut': {},
               'blocking_reasons': [],
           }
@@ -217,11 +219,30 @@ jobs:
 
           try:
               provider = get_credential_provider()
+              api_url = str(getattr(settings, 'credential_api_url', '') or '').strip()
+              parsed_api = urlparse(api_url) if api_url else None
+              api_host = (parsed_api.hostname or '').lower() if parsed_api else ''
+              api_placeholder = (
+                  not api_url
+                  or 'example.internal' in api_host
+                  or 'example.com' in api_host
+                  or '<' in api_url
+                  or '>' in api_url
+              )
               payload['credential_provider'] = {
                   'provider_id': getattr(provider, 'provider_id', 'unknown'),
                   'production_capable': bool(getattr(provider, 'production_capable', False)),
-                  'api_url_configured': bool(getattr(settings, 'credential_api_url', None)),
+                  'api_url_configured': bool(api_url),
+                  'api_url_scheme': parsed_api.scheme if parsed_api else None,
+                  'api_url_is_placeholder': api_placeholder,
+                  'api_token_source_configured': bool(
+                      getattr(settings, 'credential_api_token_file', None)
+                      or getattr(settings, 'credential_api_token_env', None)
+                      or getattr(settings, 'credential_api_token', None)
+                  ),
               }
+              if getattr(provider, 'provider_id', None) == 'api' and api_placeholder:
+                  payload['blocking_reasons'].append('PRODUCTION_CREDENTIAL_API_PLACEHOLDER')
           except Exception as exc:
               provider = None
               payload['credential_provider'] = {
@@ -231,6 +252,30 @@ jobs:
                   'provider_init_error': str(exc) if isinstance(exc, CredentialError) else None,
               }
               payload['blocking_reasons'].append('PRODUCTION_CREDENTIAL_PROVIDER_INIT_FAILED')
+
+          try:
+              from app.integrations.poseidon import _baichuan_credentials, _secret_file
+              secret_path = _secret_file()
+              secret_exists = secret_path.is_file()
+              baichuan_ready = False
+              if secret_exists:
+                  try:
+                      user, password = _baichuan_credentials()
+                      baichuan_ready = bool(user and password)
+                  except CredentialError:
+                      baichuan_ready = False
+              payload['poseidon_readiness'] = {
+                  'provider_supported_by_product': True,
+                  'secret_file_present': secret_exists,
+                  'baichuan_credentials_present': baichuan_ready,
+              }
+          except Exception as exc:
+              payload['poseidon_readiness'] = {
+                  'provider_supported_by_product': True,
+                  'secret_file_present': False,
+                  'baichuan_credentials_present': False,
+                  'probe_error_type': type(exc).__name__,
+              }
 
           async def dut_probe():
               if provider is None:
