@@ -1,38 +1,19 @@
 {
   "schema_version": "capture-v2-remote-status-v1",
-  "action_id": "RC85-PRODUCTION-CUTOVER-011",
-  "sequence": 222,
-  "action_type": "PRODUCTION_CUTOVER",
-  "state": "INCONCLUSIVE",
+  "action_id": "RC86-PRODUCTION-DEPLOYMENT-PREFLIGHT-012",
+  "sequence": 223,
+  "action_type": "PRODUCTION_DEPLOYMENT_PREFLIGHT",
+  "state": "REJECTED",
   "runner_id": "srv:7",
-  "action_sha256": "c0ba3a3590a8d55b023abc166d8f44779adb658ef6cf8dadeabab6a5a2bb1e54",
-  "updated_at": "2026-08-26T03:06:16.020840+00:00",
+  "action_sha256": "8be4842dcc98e40be2afa2febeb5003eaa8732e8ab703d5cb116096e4e3976f3",
+  "updated_at": "2026-08-26T05:34:44.978411+00:00",
   "started_at": null,
-  "finished_at": "2026-08-26T03:06:16.020840+00:00",
-  "return_code": 2,
-  "verdict": "INCONCLUSIVE",
-  "result_path": "validation/control/results/RC85-PRODUCTION-CUTOVER-011/result.json",
-  "stdout_sha256": "42c0c068895f07144364e2f853f9dc8f5c6009f5e7b3f76d3fe5ceea54b32ac4",
+  "finished_at": "2026-08-26T05:34:44.978411+00:00",
+  "return_code": null,
+  "verdict": null,
+  "result_path": "validation/control/results/RC86-PRODUCTION-DEPLOYMENT-PREFLIGHT-012/result.json",
+  "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-  "error": null,
-  "detail": {
-    "safety": {
-      "capture_engine_version": "V1",
-      "capture_v2_production_enabled": "false",
-      "git_head": "efbddf48ca8fdb5abc0f4e7dba07f7983996c162",
-      "expected_product_head": "94d659ed919a3727d21e13ccfbc4f712542993fb"
-    },
-    "parsed_output": {
-      "scope": "GUARDED_PRODUCTION_CAPTURE_V2_CUTOVER",
-      "project": "voip-ai",
-      "production_env": "/etc/voip-ai/production.env",
-      "production_mutation": false,
-      "dut_mutation": false,
-      "rollback_on_failure": true,
-      "stages": {},
-      "verdict": "INCONCLUSIVE",
-      "reason": "MASTER_FETCH_FAILED",
-      "error": "Host key verification failed.\nfatal: Could not read from remote repository.\n\nPlease make sure you have the correct access rights\nand the repository exists."
-    }
-  }
+  "error": "CONTROL_COMMITS_TOUCHED_PRODUCT_CODE:validation/capture_v2/PRODUCTION_CUTOVER_AUTHORIZATION_RC69.json",
+  "detail": {}
 }
