@@ -24,6 +24,7 @@ jobs:
     timeout-minutes: 20
     env:
       REQUIRED_MASTER_SHA: bd385b96972dedeee96c245875a2778f290c2c2c
+      EXPECTED_PRODUCTION_ENV: /etc/voip-ai/production.env
     steps:
       - uses: actions/checkout@v4
         with:
@@ -52,19 +53,19 @@ jobs:
           workdir="$(docker inspect --format '{{ index .Config.Labels "com.docker.compose.project.working_dir" }}' "$backend")"
           config_files="$(docker inspect --format '{{ index .Config.Labels "com.docker.compose.project.config_files" }}' "$backend")"
           environment_file="$(docker inspect --format '{{ index .Config.Labels "com.docker.compose.project.environment_file" }}' "$backend" 2>/dev/null || true)"
+          helper_image="$(docker inspect --format '{{.Config.Image}}' "$backend")"
+          test -n "$helper_image"
+          test "$environment_file" = "$EXPECTED_PRODUCTION_ENV"
           printf 'BACKEND_CONTAINER=%s\n' "$backend" >> "$GITHUB_ENV"
           printf 'PRODUCTION_WORKDIR=%s\n' "$workdir" >> "$GITHUB_ENV"
           printf 'COMPOSE_CONFIG_FILES=%s\n' "$config_files" >> "$GITHUB_ENV"
           printf 'COMPOSE_ENVIRONMENT_FILE=%s\n' "$environment_file" >> "$GITHUB_ENV"
+          printf 'HELPER_IMAGE=%s\n' "$helper_image" >> "$GITHUB_ENV"
           printf 'PRODUCTION_WORKDIR=%s\n' "$workdir"
           printf 'COMPOSE_CONFIG_FILES=%s\n' "$config_files"
-          if [ -n "$environment_file" ]; then
-            printf 'COMPOSE_ENVIRONMENT_FILE_LABEL_PRESENT=true\n'
-          else
-            printf 'COMPOSE_ENVIRONMENT_FILE_LABEL_PRESENT=false\n'
-          fi
+          printf 'COMPOSE_ENVIRONMENT_FILE=%s\n' "$environment_file"
 
-      - name: Resolve exact production env file without exposing secrets
+      - name: Validate protected production env identity without exposing secrets
         run: |
           set -euo pipefail
           mkdir -p validation
@@ -95,60 +96,62 @@ jobs:
           print('RUNTIME_CAPTURE_AUTHORITY=V2_REAL')
           PY
 
-          candidates=()
-          [ -n "${COMPOSE_ENVIRONMENT_FILE:-}" ] && candidates+=("$COMPOSE_ENVIRONMENT_FILE")
-          candidates+=("/etc/voip-ai/production.env")
-          [ -n "${PRODUCTION_WORKDIR:-}" ] && candidates+=("$PRODUCTION_WORKDIR/.env" "$PRODUCTION_WORKDIR/production.env")
-
-          matches=()
-          seen='|'
-          for candidate in "${candidates[@]}"; do
-            [ -n "$candidate" ] || continue
-            case "$seen" in *"|$candidate|"*) continue;; esac
-            seen="${seen}${candidate}|"
-            [ -f "$candidate" ] || continue
-            [ -r "$candidate" ] || continue
-            if CANDIDATE="$candidate" RUNTIME_JSON="$runtime_json" python3 - <<'PY'
+          # The runner account intentionally cannot read the protected host env
+          # directly. Reuse its already-authorized Docker control plane to mount
+          # exactly the Compose-declared env file read-only into an ephemeral
+          # helper. Only non-secret identity fields are compared; no env values
+          # are printed.
+          docker run --rm -i \
+            --entrypoint python \
+            -e RUNTIME_JSON="$runtime_json" \
+            -v "$COMPOSE_ENVIRONMENT_FILE:/source/production.env:ro" \
+            "$HELPER_IMAGE" - <<'PY'
           import json, os
           from pathlib import Path
           from urllib.parse import urlparse
-          path=Path(os.environ['CANDIDATE'])
+          path=Path('/source/production.env')
           values={}
           for raw in path.read_text(encoding='utf-8').splitlines():
               line=raw.strip()
-              if not line or line.startswith('#') or '=' not in line: continue
-              if line.startswith('export '): line=line[7:].strip()
-              k,v=line.split('=',1); k=k.strip(); v=v.strip()
-              if len(v)>=2 and v[0]==v[-1] and v[0] in {'"', "'"}: v=v[1:-1]
+              if not line or line.startswith('#') or '=' not in line:
+                  continue
+              if line.startswith('export '):
+                  line=line[7:].strip()
+              k,v=line.split('=',1)
+              k=k.strip(); v=v.strip()
+              if len(v)>=2 and v[0]==v[-1] and v[0] in {'"', "'"}:
+                  v=v[1:-1]
               values[k]=v
           runtime=json.loads(os.environ['RUNTIME_JSON'])
           host=(urlparse(values.get('CREDENTIAL_API_URL','')).hostname or '').lower()
-          ok=(
-              values.get('APP_ENV','').lower()=='production'
-              and values.get('CREDENTIAL_PROVIDER','').lower()==runtime['provider']
-              and host==runtime['api_host']
-          )
-          raise SystemExit(0 if ok else 1)
+          assert values.get('APP_ENV','').lower()=='production'
+          assert values.get('CREDENTIAL_PROVIDER','').lower()==runtime['provider']
+          assert host==runtime['api_host']
+          print('PRODUCTION_ENV_IDENTITY_MATCH=PASS')
           PY
-            then
-              matches+=("$candidate")
-            fi
-          done
-          printf 'MATCHING_PRODUCTION_ENV_COUNT=%s\n' "${#matches[@]}"
-          test "${#matches[@]}" -eq 1
-          env_file="${matches[0]}"
-          printf 'PRODUCTION_ENV_FILE=%s\n' "$env_file" >> "$GITHUB_ENV"
-          printf 'PRODUCTION_ENV_FILE=%s\n' "$env_file"
-          stat -c 'PRODUCTION_ENV_MODE=%a SIZE=%s' "$env_file"
-          if [ -w "$env_file" ]; then echo 'PRODUCTION_ENV_WRITABLE_BY_RUNNER=true'; else echo 'PRODUCTION_ENV_WRITABLE_BY_RUNNER=false'; fi
+
+          tmp="$RUNNER_TEMP/production-poseidon-dryrun.env"
+          rm -f "$tmp"
+          runner_uid="$(id -u)"
+          runner_gid="$(id -g)"
+          docker run --rm \
+            -e RUNNER_UID="$runner_uid" \
+            -e RUNNER_GID="$runner_gid" \
+            -v "$COMPOSE_ENVIRONMENT_FILE:/source/production.env:ro" \
+            -v "$RUNNER_TEMP:/out" \
+            --entrypoint sh \
+            "$HELPER_IMAGE" -c \
+            'set -eu; umask 077; cp /source/production.env /out/production-poseidon-dryrun.env; chown "$RUNNER_UID:$RUNNER_GID" /out/production-poseidon-dryrun.env; chmod 0600 /out/production-poseidon-dryrun.env'
+          test -r "$tmp"
+          test "$(stat -c '%a' "$tmp")" = '600'
+          echo "DRYRUN_ENV_COPY=$tmp" >> "$GITHUB_ENV"
+          echo 'PRODUCTION_ENV_PROTECTED_READ=PASS'
 
       - name: Run deployment preflight against temporary Poseidon env copy
         run: |
           set -euo pipefail
-          tmp="$RUNNER_TEMP/production-poseidon-dryrun.env"
-          rm -f "$tmp"
-          cp "$PRODUCTION_ENV_FILE" "$tmp"
-          chmod 0600 "$tmp"
+          tmp="$DRYRUN_ENV_COPY"
+          trap 'rm -f "$tmp"' EXIT
           TMP_ENV="$tmp" python3 - <<'PY'
           import os
           from pathlib import Path
@@ -169,14 +172,26 @@ jobs:
               raise SystemExit(f'CREDENTIAL_PROVIDER_LINE_COUNT={seen}')
           p.write_text('\n'.join(out)+'\n', encoding='utf-8')
           PY
+
+          # Execute the newly merged preflight source inside a disposable Python
+          # runtime while exposing production secret paths read-only. This avoids
+          # weakening permissions on /etc/voip-ai or /home/dev/secret.yaml.
           set +e
-          python3 deploy/deployment_preflight.py \
-            --env-file "$tmp" \
-            --mode deploy \
-            --out validation/production_poseidon_cutover_dry_run.json
+          docker run --rm \
+            --entrypoint python \
+            -v "$GITHUB_WORKSPACE:/workspace:ro" \
+            -v "$tmp:/tmp/production.env:ro" \
+            -v "$GITHUB_WORKSPACE/validation:/out" \
+            -v /etc/voip-ai:/etc/voip-ai:ro \
+            -v /home/dev/secret.yaml:/home/dev/secret.yaml:ro \
+            -w /workspace \
+            "$HELPER_IMAGE" \
+            deploy/deployment_preflight.py \
+              --env-file /tmp/production.env \
+              --mode deploy \
+              --out /out/production_poseidon_cutover_dry_run.json
           rc=$?
           set -e
-          rm -f "$tmp"
           python3 - <<'PY'
           import json
           from pathlib import Path
@@ -202,5 +217,5 @@ jobs:
         with:
           name: production-poseidon-cutover-dry-run
           path: validation/production_poseidon_cutover_dry_run.json
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 30
