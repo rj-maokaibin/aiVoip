@@ -1,4 +1,4 @@
-name: Capture V2 RC93 Readiness Probe
+name: Capture V2 MinIO Credential Consistency Probe
 
 on:
   push:
@@ -14,7 +14,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  rc93-readiness-probe:
+  minio-credential-consistency:
     runs-on:
       - self-hosted
       - linux
@@ -22,21 +22,38 @@ jobs:
       - voip-controlled-linux
     timeout-minutes: 10
     steps:
-      - name: Read backend readiness and logs
+      - name: Compare bootstrap env credentials to backend secret files without disclosure
         shell: bash
         run: |
           set -euo pipefail
-          echo '=== READY RESPONSE ==='
-          curl -sS --max-time 5 -i http://127.0.0.1:18001/health/ready || true
-          echo
-          echo '=== BACKEND LOG TAIL ==='
-          docker logs --tail 160 voip-ai-backend-1 2>&1 || true
-          echo '=== CONTAINER STATE ==='
-          docker inspect voip-ai-backend-1 --format '{{json .State}}' || true
-          echo '=== VOIP-AI RUNNING SERVICES ==='
-          docker ps --format '{{.Names}} {{.Status}}' | grep '^voip-ai-' | sort || true
+          docker run --rm -i --privileged -v /:/host python:3.12-slim python - <<'PY'
+          from pathlib import Path
+          import stat
+          envp=Path('/host/etc/voip-ai/production.env')
+          vals={}
+          for raw in envp.read_text(encoding='utf-8').splitlines():
+              s=raw.strip()
+              if not s or s.startswith('#') or '=' not in s: continue
+              if s.startswith('export '): s=s[7:].strip()
+              k,v=s.split('=',1); vals[k.strip()]=v.strip().strip('"').strip("'")
+          def host_path(key):
+              raw=vals.get(key,'').strip()
+              if not raw: raise SystemExit(f'{key}_MISSING')
+              p=Path('/host') / raw.lstrip('/')
+              if not p.is_file(): raise SystemExit(f'{key}_FILE_MISSING')
+              if stat.S_IMODE(p.stat().st_mode) & 0o077: raise SystemExit(f'{key}_FILE_PERMISSIONS_INVALID')
+              return p
+          access=host_path('MINIO_ACCESS_KEY_SECRET_HOST_FILE').read_text(encoding='utf-8').strip()
+          secret=host_path('MINIO_SECRET_KEY_SECRET_HOST_FILE').read_text(encoding='utf-8').strip()
+          root_user=vals.get('MINIO_ROOT_USER','').strip()
+          root_pw=vals.get('MINIO_ROOT_PASSWORD','').strip()
+          print('MINIO_ACCESS_KEY_MATCH=' + str(root_user == access).lower())
+          print('MINIO_SECRET_KEY_MATCH=' + str(root_pw == secret).lower())
+          print('MINIO_ACCESS_KEY_NONEMPTY=' + str(bool(access)).lower())
+          print('MINIO_SECRET_KEY_NONEMPTY=' + str(bool(secret)).lower())
+          PY
 
-      - name: Read safe authority keys
+      - name: Confirm RC93 safe authority keys only
         shell: bash
         run: |
           set -euo pipefail
@@ -52,5 +69,4 @@ jobs:
           print('ENGINE='+eff('CAPTURE_ENGINE_VERSION','V1'))
           print('V2_ENABLED='+eff('CAPTURE_V2_PRODUCTION_ENABLED','false'))
           print('PLATFORM='+eff('REPRODUCTION_PLATFORM_MODE','mock'))
-          print('BACKEND_PORT='+eff('VOIP_BACKEND_PORT',''))
           PY
