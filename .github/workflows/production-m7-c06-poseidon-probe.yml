@@ -1,0 +1,171 @@
+name: Production M7 C06 Poseidon Credential Probe
+
+on:
+  pull_request:
+    branches:
+      - master
+    paths:
+      - '.github/workflows/production-m7-c06-poseidon-probe.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-m7-c06-poseidon-probe
+  cancel-in-progress: false
+
+jobs:
+  poseidon-credential-probe:
+    runs-on:
+      - self-hosted
+      - linux
+      - x64
+      - voip-controlled-linux
+    timeout-minutes: 20
+    env:
+      TARGET_IP: '10.48.8.74'
+      TARGET_PORT: '10001'
+      TARGET_SN: 'G1V030E010214'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 1
+
+      - name: Verify exact operational head
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha }}"
+
+      - name: Locate production reproduction worker
+        run: |
+          set -euo pipefail
+          docker info >/dev/null
+          mapfile -t containers < <(docker ps \
+            --filter label=com.docker.compose.project=voip-ai \
+            --filter label=com.docker.compose.service=reproduction-worker \
+            --format '{{.Names}}')
+          printf 'REPRODUCTION_WORKER_COUNT=%s\n' "${#containers[@]}"
+          test "${#containers[@]}" -eq 1
+          worker="${containers[0]}"
+          docker inspect --format '{{.State.Status}}' "$worker" | grep -qx running
+          printf 'REPRODUCTION_WORKER=%s\n' "$worker" >> "$GITHUB_ENV"
+
+      - name: Resolve via Poseidon and perform SSH read-only probe
+        run: |
+          set -uo pipefail
+          mkdir -p validation
+          set +e
+          docker exec -i \
+            -e TARGET_IP="$TARGET_IP" \
+            -e TARGET_PORT="$TARGET_PORT" \
+            -e TARGET_SN="$TARGET_SN" \
+            "$REPRODUCTION_WORKER" python - <<'PY' > validation/production_m7_c06_poseidon_probe.json
+          import asyncio
+          import json
+          import os
+          import re
+          from datetime import datetime, timezone
+
+          from app.collectors.asyncssh_adapter import AsyncSSHDeviceAdapter
+          from app.integrations.credentials import CredentialError, PoseidonCredentialProvider
+
+          target_ip = os.environ['TARGET_IP']
+          target_port = int(os.environ['TARGET_PORT'])
+          target_sn = os.environ['TARGET_SN']
+          payload = {
+              'schema_version': 'production-m7-c06-poseidon-probe-v1',
+              'checked_at': datetime.now(timezone.utc).isoformat(),
+              'target': {
+                  'model': 'APF1250',
+                  'ip': target_ip,
+                  'ssh_port': target_port,
+                  'sn_suffix': target_sn[-4:],
+              },
+              'side_effect_boundary': {
+                  'poseidon_devkey_create_or_refresh_possible': True,
+                  'production_env_mutation': False,
+                  'production_db_mutation': False,
+                  'dut_configuration_mutation': False,
+              },
+              'poseidon': {},
+              'dut': {},
+              'blocking_reasons': [],
+          }
+
+          async def probe():
+              provider = PoseidonCredentialProvider()
+              password = await provider.get_password(
+                  sn=target_sn,
+                  ip=target_ip,
+                  product='APF1250',
+              )
+              payload['poseidon'] = {
+                  'provider_id': provider.provider_id,
+                  'production_capable': provider.production_capable,
+                  'credential_resolved': bool(password),
+              }
+              adapter = AsyncSSHDeviceAdapter(
+                  ip=target_ip,
+                  port=target_port,
+                  username='root',
+                  password=password,
+              )
+              try:
+                  await asyncio.wait_for(adapter.connect(), timeout=15)
+                  result = await adapter.execute_shell(
+                      "echo PROBE_OK=1; "
+                      "echo TCPDUMP_COUNT=$(ps w | grep '[t]cpdump' | wc -l); "
+                      "echo DSP_DIAG_PROCESS_COUNT=$(ps w | grep '[d]sp diag' | wc -l)",
+                      timeout=10,
+                  )
+                  text = result.stdout or ''
+                  def number(name):
+                      match = re.search(rf'{name}=(\\d+)', text)
+                      return int(match.group(1)) if match else None
+                  payload['dut'] = {
+                      'ssh_connected': 'PROBE_OK=1' in text,
+                      'tcpdump_process_count': number('TCPDUMP_COUNT'),
+                      'dsp_diag_process_count': number('DSP_DIAG_PROCESS_COUNT'),
+                  }
+              finally:
+                  try:
+                      await asyncio.wait_for(adapter.disconnect(), timeout=5)
+                  except Exception:
+                      pass
+
+          try:
+              asyncio.run(probe())
+          except Exception as exc:
+              payload['poseidon'].setdefault('credential_resolved', False)
+              payload['poseidon']['error_type'] = type(exc).__name__
+              payload['poseidon']['credential_error'] = (
+                  str(exc) if isinstance(exc, CredentialError) else None
+              )
+              payload['blocking_reasons'].append('POSEIDON_OR_SSH_PROBE_FAILED')
+
+          if payload.get('dut', {}).get('ssh_connected') is not True:
+              if 'POSEIDON_OR_SSH_PROBE_FAILED' not in payload['blocking_reasons']:
+                  payload['blocking_reasons'].append('APF1250_SSH_READONLY_PROBE_FAILED')
+          if payload.get('dut', {}).get('tcpdump_process_count') not in (0, None):
+              payload['blocking_reasons'].append('APF1250_RESIDUAL_TCPDUMP_PROCESS')
+          if payload.get('dut', {}).get('dsp_diag_process_count') not in (0, None):
+              payload['blocking_reasons'].append('APF1250_RESIDUAL_DSP_DIAG_PROCESS')
+
+          payload['verdict'] = 'PASS' if not payload['blocking_reasons'] else 'BLOCKED'
+          print(json.dumps(payload, ensure_ascii=False, indent=2))
+          raise SystemExit(0 if payload['verdict'] == 'PASS' else 2)
+          PY
+          rc=$?
+          set -e
+          cat validation/production_m7_c06_poseidon_probe.json
+          exit "$rc"
+
+      - name: Upload sanitized Poseidon probe evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-m7-c06-poseidon-probe
+          path: validation/production_m7_c06_poseidon_probe.json
+          if-no-files-found: error
+          retention-days: 30
