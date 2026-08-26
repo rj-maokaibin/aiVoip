@@ -1,6 +1,11 @@
 name: Production C06 Dispatch Diagnose
 
 on:
+  push:
+    branches:
+      - 'ops/production-c06-dispatch-diagnose-20260826'
+    paths:
+      - '.github/workflows/production-c06-dispatch-diagnose.yml'
   pull_request:
     branches:
       - master
@@ -50,7 +55,7 @@ jobs:
 
           echo '--- runtime identity ---'
           docker exec -i "$backend" python - <<'PY'
-          import hashlib, os
+          import hashlib
           from app.core.config import settings
           def h(v): return hashlib.sha256((v or '').encode()).hexdigest()[:12]
           print('BACKEND_REDIS_URL_HASH='+h(settings.redis_url))
