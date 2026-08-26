@@ -1,0 +1,207 @@
+name: Production M7 C06 APF3260-M Post-cutover Preflight
+
+on:
+  pull_request:
+    branches:
+      - master
+    paths:
+      - '.github/workflows/production-m7-c06-3260-postcutover-preflight.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-m7-c06-3260-postcutover-preflight
+  cancel-in-progress: false
+
+jobs:
+  postcutover-preflight:
+    runs-on:
+      - self-hosted
+      - linux
+      - x64
+      - voip-controlled-linux
+    timeout-minutes: 20
+    env:
+      TARGET_IP: '10.48.8.74'
+      TARGET_PORT: '10002'
+      TARGET_SN: 'G1U060H000384'
+      TARGET_PRODUCT: 'APF3260'
+      TARGET_VOICE_INTERFACE: 'br-lan_400'
+      EXPECTED_PRODUCTION_ENV: '/etc/voip-ai/production.env'
+    steps:
+      - name: Verify production authority and provider
+        run: |
+          set -euo pipefail
+          docker info >/dev/null
+          mapfile -t backends < <(docker ps --filter label=com.docker.compose.project=voip-ai --filter label=com.docker.compose.service=backend --format '{{.Names}}')
+          mapfile -t workers < <(docker ps --filter label=com.docker.compose.project=voip-ai --filter label=com.docker.compose.service=reproduction-worker --format '{{.Names}}')
+          test "${#backends[@]}" -eq 1
+          test "${#workers[@]}" -eq 1
+          backend="${backends[0]}"; worker="${workers[0]}"
+          env_file="$(docker inspect --format '{{ index .Config.Labels "com.docker.compose.project.environment_file" }}' "$backend")"
+          helper_image="$(docker inspect --format '{{.Config.Image}}' "$backend")"
+          test "$env_file" = "$EXPECTED_PRODUCTION_ENV"
+          docker exec -i "$backend" python - <<'PY'
+          import os
+          from app.integrations.credentials import get_credential_provider
+          assert os.getenv('CREDENTIAL_PROVIDER','').lower() == 'poseidon'
+          assert os.getenv('CAPTURE_ENGINE_VERSION') == 'V2'
+          assert os.getenv('CAPTURE_V2_PRODUCTION_ENABLED','').lower() == 'true'
+          assert os.getenv('REPRODUCTION_PLATFORM_MODE') == 'real'
+          p=get_credential_provider()
+          assert type(p).__name__ == 'PoseidonCredentialProvider'
+          assert bool(getattr(p,'production_capable',False))
+          print('PRODUCTION_RUNTIME=POSEIDON_V2_REAL_PASS')
+          PY
+          docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$worker" | grep -qx 'CREDENTIAL_PROVIDER=poseidon'
+          docker run --rm -i -v "$env_file:/source/production.env:ro" --entrypoint python "$helper_image" - <<'PY'
+          from pathlib import Path
+          values={}
+          for raw in Path('/source/production.env').read_text(encoding='utf-8').splitlines():
+              line=raw.strip()
+              if not line or line.startswith('#') or '=' not in line: continue
+              if line.startswith('export '): line=line[7:].strip()
+              k,v=line.split('=',1); values[k.strip()]=v.strip().strip("'\"")
+          assert values.get('APP_ENV','').lower() == 'production'
+          assert values.get('CREDENTIAL_PROVIDER','').lower() == 'poseidon'
+          print('PRODUCTION_ENV_PROVIDER=POSEIDON_PASS')
+          PY
+          printf 'BACKEND_CONTAINER=%s\n' "$backend" >> "$GITHUB_ENV"
+          printf 'REPRO_WORKER=%s\n' "$worker" >> "$GITHUB_ENV"
+          echo 'AUTHORITY_PROVIDER_GATE=PASS'
+
+      - name: Verify DB has no active session or diagnostic lock
+        run: |
+          set -euo pipefail
+          docker exec -i "$BACKEND_CONTAINER" python - <<'PY'
+          from sqlalchemy import select
+          from app.contracts.enums import LockStatus, ReproductionState
+          from app.db.models import DeviceDiagnosticLock, ReproductionSession
+          from app.db.session import SessionLocal
+          terminal={
+              ReproductionState.COMPLETED.value,
+              ReproductionState.PARTIAL_SUCCESS.value,
+              ReproductionState.CANCELLED.value,
+              ReproductionState.FAILED.value,
+          }
+          db=SessionLocal()
+          try:
+              sessions=list(db.scalars(select(ReproductionSession)).all())
+              active_sessions=[s for s in sessions if s.state not in terminal]
+              active_locks=list(db.scalars(select(DeviceDiagnosticLock).where(
+                  DeviceDiagnosticLock.status.in_([LockStatus.ACTIVE.value, LockStatus.QUARANTINED.value])
+              )).all())
+              print(f'ACTIVE_NONTERMINAL_SESSION_COUNT={len(active_sessions)}')
+              print(f'ACTIVE_OR_QUARANTINED_LOCK_COUNT={len(active_locks)}')
+              assert not active_sessions
+              assert not active_locks
+          finally:
+              db.close()
+          print('DB_SESSION_LOCK_GATE=PASS')
+          PY
+
+      - name: Verify APF3260-M Poseidon SSH and no residual capture
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/m7-c06-postcutover"
+          docker exec -i \
+            -e TARGET_IP="$TARGET_IP" \
+            -e TARGET_PORT="$TARGET_PORT" \
+            -e TARGET_SN="$TARGET_SN" \
+            -e TARGET_PRODUCT="$TARGET_PRODUCT" \
+            -e TARGET_VOICE_INTERFACE="$TARGET_VOICE_INTERFACE" \
+            "$REPRO_WORKER" python - <<'PY' > "$RUNNER_TEMP/m7-c06-postcutover/result.json"
+          import asyncio, json, os, socket
+          from datetime import datetime, timezone
+          from app.integrations.credentials import get_credential_provider
+          from app.collectors.asyncssh_adapter import AsyncSSHDeviceAdapter
+
+          async def main():
+              ip=os.environ['TARGET_IP']; port=int(os.environ['TARGET_PORT'])
+              provider=get_credential_provider()
+              payload={
+                  'schema_version':'production-m7-c06-apf3260m-postcutover-preflight-v1',
+                  'checked_at':datetime.now(timezone.utc).isoformat(),
+                  'mutation_performed':False,
+                  'target':{'model':'APF3260-M','sn_suffix':os.environ['TARGET_SN'][-4:],'ip':ip,'ssh_port':port,'voice_interface':os.environ['TARGET_VOICE_INTERFACE']},
+                  'checks':{},
+              }
+              payload['checks']['provider_class']=type(provider).__name__
+              payload['checks']['production_capable']=bool(getattr(provider,'production_capable',False))
+              try:
+                  with socket.create_connection((ip,port),timeout=5): pass
+                  payload['checks']['tcp']=True
+              except Exception as exc:
+                  payload['checks']['tcp']=False; payload['checks']['tcp_error']=type(exc).__name__
+              try:
+                  password=await provider.get_password(sn=os.environ['TARGET_SN'], ip=ip, product=os.environ['TARGET_PRODUCT'])
+                  payload['checks']['credential_resolved']=bool(password)
+              except Exception as exc:
+                  password=''; payload['checks']['credential_resolved']=False; payload['checks']['credential_error']=type(exc).__name__
+              if password:
+                  adapter=AsyncSSHDeviceAdapter(ip=ip, port=port, username='root', password=password)
+                  try:
+                      await adapter.connect()
+                      cmd=(
+                          f"echo PROBE_OK=1; "
+                          f"ip link show {os.environ['TARGET_VOICE_INTERFACE']} >/dev/null 2>&1 && echo VOICE_IF_OK=1; "
+                          "echo RESIDUAL_TCPDUMP=$(ps w | grep '[t]cpdump' | wc -l); "
+                          "echo RESIDUAL_DSP_PCM=$(ps w | grep -E '[d]sp diag|[p]cm_(rx|tx)' | wc -l)"
+                      )
+                      res=await adapter.execute_shell(cmd)
+                      out=res.stdout or ''
+                      payload['checks']['ssh']=True
+                      payload['checks']['probe_ok']='PROBE_OK=1' in out
+                      payload['checks']['voice_interface']='VOICE_IF_OK=1' in out
+                      for line in out.splitlines():
+                          if line.startswith('RESIDUAL_TCPDUMP='):
+                              payload['checks']['residual_tcpdump']=int(line.split('=',1)[1].strip())
+                          if line.startswith('RESIDUAL_DSP_PCM='):
+                              payload['checks']['residual_dsp_pcm']=int(line.split('=',1)[1].strip())
+                  except Exception as exc:
+                      payload['checks']['ssh']=False; payload['checks']['ssh_error']=type(exc).__name__
+                  finally:
+                      try: await adapter.disconnect()
+                      except Exception: pass
+              required=[
+                  payload['checks'].get('provider_class')=='PoseidonCredentialProvider',
+                  payload['checks'].get('production_capable') is True,
+                  payload['checks'].get('tcp') is True,
+                  payload['checks'].get('credential_resolved') is True,
+                  payload['checks'].get('ssh') is True,
+                  payload['checks'].get('probe_ok') is True,
+                  payload['checks'].get('voice_interface') is True,
+                  payload['checks'].get('residual_tcpdump') == 0,
+                  payload['checks'].get('residual_dsp_pcm') == 0,
+              ]
+              payload['verdict']='PASS' if all(required) else 'BLOCKED'
+              print(json.dumps(payload,ensure_ascii=False,indent=2))
+              return 0 if payload['verdict']=='PASS' else 2
+          raise SystemExit(asyncio.run(main()))
+          PY
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          p=json.loads((Path(os.environ['RUNNER_TEMP'])/'m7-c06-postcutover/result.json').read_text())
+          print(json.dumps({
+              'verdict':p['verdict'],
+              'provider':p['checks'].get('provider_class'),
+              'tcp':p['checks'].get('tcp'),
+              'credential_resolved':p['checks'].get('credential_resolved'),
+              'ssh':p['checks'].get('ssh'),
+              'voice_interface':p['checks'].get('voice_interface'),
+              'residual_tcpdump':p['checks'].get('residual_tcpdump'),
+              'residual_dsp_pcm':p['checks'].get('residual_dsp_pcm'),
+          },ensure_ascii=False,indent=2))
+          assert p['verdict']=='PASS', p
+          PY
+
+      - name: Upload sanitized post-cutover preflight evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-m7-c06-apf3260m-postcutover-preflight
+          path: ${{ runner.temp }}/m7-c06-postcutover/result.json
+          if-no-files-found: warn
+          retention-days: 90
