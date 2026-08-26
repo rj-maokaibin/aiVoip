@@ -1,20 +1,37 @@
 {
-  "schema_version": "capture-v2-remote-status-v1",
-  "action_id": "RC90-PRODUCTION-DEPLOYMENT-PREFLIGHT-017",
-  "sequence": 228,
-  "action_type": "PRODUCTION_DEPLOYMENT_PREFLIGHT",
-  "state": "SUCCEEDED",
-  "runner_id": "srv:7",
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "RC90-PRODUCTION-DEPLOYMENT-PREFLIGHT-017",
+    "sequence": 228,
+    "created_at": "2026-08-26T10:18:45+00:00",
+    "expires_at": "2026-08-26T16:18:45+00:00",
+    "action_type": "PRODUCTION_DEPLOYMENT_PREFLIGHT",
+    "parameters": {
+      "timeout_seconds": 300
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "15aef7eb73d6f9541542f27af1fdc8ceac210d9f"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "Fresh guarded production deployment preflight after the accepted MinIO console host-port isolation fix was merged to master and synchronized into production control. PR #63 exact master head passed Frozen, Full Software, Prepared-PCAP Golden #001, Human Evidence and artifact upload. A live readonly host probe proved existing aivoip-minio-1 legitimately owns 9001, candidate 127.0.0.1:19001 is free, and production is V1 / V2 disabled / mock after RC89 verified rollback. Verify canonical authorization, real production V1 prestate, deploy blockers, source and compose requirements with no production or DUT mutation. Final cutover remains responsible for an immediate pre-mutation check that 127.0.0.1:19001 is still available."
+  },
   "action_sha256": "f91c2e5dd6ba5958b6c740f368a37160019aa92bbea96d024b1286ab0969269c",
-  "updated_at": "2026-08-26T10:19:01.177694+00:00",
-  "started_at": null,
-  "finished_at": "2026-08-26T10:19:01.177694+00:00",
+  "runner_id": "srv:7",
+  "state": "SUCCEEDED",
   "return_code": 0,
   "verdict": "PASS",
-  "result_path": "validation/control/results/RC90-PRODUCTION-DEPLOYMENT-PREFLIGHT-017/result.json",
+  "error": null,
+  "finished_at": "2026-08-26T10:19:01.177694+00:00",
   "stdout_sha256": "f0faea8f87e3b4ed8d3c1c192114c2b4954d456863cb61cec5ef61841fb10b16",
   "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-  "error": null,
+  "local_stdout": ".capture-v2-control/logs/RC90-PRODUCTION-DEPLOYMENT-PREFLIGHT-017/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/RC90-PRODUCTION-DEPLOYMENT-PREFLIGHT-017/stderr.log",
   "detail": {
     "safety": {
       "capture_engine_version": "V1",
