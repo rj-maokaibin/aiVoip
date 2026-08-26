@@ -25,6 +25,7 @@ jobs:
     env:
       TARGET_IP: '10.48.8.74'
       TARGET_PORT: '10001'
+      TARGET_SN: 'G1V030E010214'
     steps:
       - uses: actions/checkout@v4
         with:
@@ -61,6 +62,7 @@ jobs:
           docker exec -i \
             -e TARGET_IP="$TARGET_IP" \
             -e TARGET_PORT="$TARGET_PORT" \
+            -e TARGET_SN="$TARGET_SN" \
             "$BACKEND_CONTAINER" python - <<'PY' > validation/production_m7_c06_preflight.json
           import asyncio
           import json
@@ -78,6 +80,7 @@ jobs:
 
           target_ip = os.environ['TARGET_IP']
           target_port = int(os.environ['TARGET_PORT'])
+          target_sn = os.environ['TARGET_SN']
           terminal_states = {
               ReproductionState.COMPLETED.value,
               ReproductionState.PARTIAL_SUCCESS.value,
@@ -85,10 +88,16 @@ jobs:
               ReproductionState.FAILED.value,
           }
           payload = {
-              'schema_version': 'production-m7-c06-preflight-v1',
+              'schema_version': 'production-m7-c06-preflight-v2',
               'checked_at': datetime.now(timezone.utc).isoformat(),
               'mutation_performed': False,
-              'target': {'model': 'APF1250', 'ip': target_ip, 'ssh_port': target_port},
+              'target': {
+                  'model': 'APF1250',
+                  'ip': target_ip,
+                  'ssh_port': target_port,
+                  'sn_suffix': target_sn[-4:],
+                  'identity_source': 'AUDITED_R6_GATE',
+              },
               'runtime': {},
               'database': {},
               'dut': {},
@@ -109,7 +118,6 @@ jobs:
               payload['blocking_reasons'].append('PRODUCTION_CAPTURE_AUTHORITY_NOT_V2_REAL')
 
           db = SessionLocal()
-          latest_device = None
           try:
               devices = list(db.scalars(
                   select(CaseDevice)
@@ -118,7 +126,7 @@ jobs:
               ).all())
               device_ids = [d.id for d in devices]
               sns = sorted({d.sn for d in devices if d.sn})
-              latest_device = devices[0] if devices else None
+              identity_conflict = bool(sns and sns != [target_sn])
 
               active_locks = []
               sessions = []
@@ -162,18 +170,16 @@ jobs:
 
               payload['database'] = {
                   'matching_case_device_rows': len(devices),
-                  'unique_device_identity_count': len(sns),
-                  'resolved_identity': len(sns) == 1,
-                  'sn_suffix': (sns[0][-4:] if len(sns) == 1 else None),
+                  'first_production_case_binding_required': len(devices) == 0,
+                  'stored_unique_device_identity_count': len(sns),
+                  'stored_identity_matches_audited_target': not identity_conflict,
                   'active_or_quarantined_lock_count': len(active_locks),
                   'active_nonterminal_session_count': len(active_sessions),
                   'recent_sessions': recent_sessions,
                   'recent_cases': recent_cases[:5],
               }
-              if not devices:
-                  payload['blocking_reasons'].append('APF1250_NOT_FOUND_IN_PRODUCTION_DB')
-              if len(sns) != 1:
-                  payload['blocking_reasons'].append('APF1250_IDENTITY_NOT_UNIQUE')
+              if identity_conflict:
+                  payload['blocking_reasons'].append('APF1250_PRODUCTION_DB_IDENTITY_CONFLICT')
               if active_locks:
                   payload['blocking_reasons'].append('APF1250_HAS_ACTIVE_OR_QUARANTINED_LOCK')
               if active_sessions:
@@ -182,14 +188,12 @@ jobs:
               db.close()
 
           async def dut_probe():
-              if latest_device is None:
-                  return {'ssh_connected': False, 'reason': 'NO_MATCHING_CASE_DEVICE'}
               provider = get_credential_provider()
-              password = await provider.get_password(sn=latest_device.sn, ip=latest_device.ip)
-              username = provider.resolve_username(ip=latest_device.ip, fallback=latest_device.username or 'root')
+              password = await provider.get_password(sn=target_sn, ip=target_ip)
+              username = provider.resolve_username(ip=target_ip, fallback='root')
               adapter = AsyncSSHDeviceAdapter(
-                  ip=latest_device.ip,
-                  port=latest_device.ssh_port,
+                  ip=target_ip,
+                  port=target_port,
                   username=username,
                   password=password,
               )
@@ -206,6 +210,7 @@ jobs:
                       m = re.search(rf'{name}=(\\d+)', text)
                       return int(m.group(1)) if m else None
                   return {
+                      'credential_resolved': True,
                       'ssh_connected': 'PROBE_OK=1' in text,
                       'tcpdump_process_count': number('TCPDUMP_COUNT'),
                       'dsp_diag_process_count': number('DSP_DIAG_PROCESS_COUNT'),
@@ -226,7 +231,11 @@ jobs:
               if dut.get('dsp_diag_process_count') not in (0, None):
                   payload['blocking_reasons'].append('APF1250_RESIDUAL_DSP_DIAG_PROCESS')
           except Exception as exc:
-              payload['dut'] = {'ssh_connected': False, 'error_type': type(exc).__name__}
+              payload['dut'] = {
+                  'credential_resolved': False,
+                  'ssh_connected': False,
+                  'error_type': type(exc).__name__,
+              }
               payload['blocking_reasons'].append('APF1250_SSH_READONLY_PROBE_EXCEPTION')
 
           payload['verdict'] = 'PASS' if not payload['blocking_reasons'] else 'BLOCKED'
