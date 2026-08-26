@@ -1,4 +1,4 @@
-name: Capture V2 Control Wakeup
+name: Capture V2 Control Readonly Probe
 
 on:
   push:
@@ -14,7 +14,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  control-once:
+  readonly-probe:
     runs-on:
       - self-hosted
       - linux
@@ -22,56 +22,55 @@ jobs:
       - voip-controlled-linux
     timeout-minutes: 10
     steps:
-      - name: Verify worktree and control branch ancestry
+      - name: Host process and Docker state
         shell: bash
         run: |
           set -euo pipefail
-          ROOT=/home/dev/workspace/aiVoip
+          echo "PROBE_UTC=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          echo "=== RC85/control-related host processes ==="
+          ps -eo pid,ppid,user,etime,stat,args | grep -E 'capture_v2|control_cli|production_cutover_guarded|deploy/voip-ai|docker compose|buildx|buildkit|alembic' | grep -v grep || true
+          echo "=== voip-ai containers ==="
+          docker ps -a --filter label=com.docker.compose.project=voip-ai --format 'SERVICE={{.Label "com.docker.compose.service"}} NAME={{.Names}} STATUS={{.Status}} IMAGE={{.Image}}' || true
+
+      - name: Control workspace local state
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT=/home/dev/workspace/aiVoip-control
+          if [ ! -d "$ROOT" ]; then
+            echo "CONTROL_ROOT_MISSING=$ROOT"
+            exit 0
+          fi
           DEV_UID="$(stat -c %u "$ROOT")"
           DEV_GID="$(stat -c %g "$ROOT")"
           docker image inspect python:3.12-slim >/dev/null
           docker run --rm \
             --user "$DEV_UID:$DEV_GID" \
-            -v /usr/bin/git:/usr/local/bin/git-host:ro \
             -v "$ROOT:$ROOT:ro" \
             -w "$ROOT" \
             python:3.12-slim \
             sh -lc '
               set -eu
-              git-host --version
-              echo "BRANCH=$(git-host branch --show-current)"
-              echo "HEAD=$(git-host rev-parse HEAD)"
-              echo "STATUS_BEGIN"
-              git-host status --porcelain --untracked-files=all
-              echo "STATUS_END"
-              test -z "$(git-host status --porcelain --untracked-files=all)"
-              LOCAL_CONTROL=$(git-host rev-parse refs/heads/feat/capture-v2.1.1-real-gates)
-              REMOTE_CONTROL=$(git-host rev-parse refs/remotes/origin/feat/capture-v2.1.1-real-gates)
-              echo "LOCAL_CONTROL=$LOCAL_CONTROL"
-              echo "REMOTE_CONTROL=$REMOTE_CONTROL"
-              git-host merge-base --is-ancestor "$LOCAL_CONTROL" "$REMOTE_CONTROL"
-              echo "CONTROL_FAST_FORWARD_SAFE=true"
+              echo "=== local validation/control/status.json ==="
+              cat validation/control/status.json 2>/dev/null || true
+              echo "=== local ledger.json ==="
+              cat .capture-v2-control/ledger.json 2>/dev/null || true
+              echo "=== RC85 local log metadata ==="
+              if [ -d .capture-v2-control/logs/RC85-PRODUCTION-CUTOVER-011 ]; then
+                ls -l .capture-v2-control/logs/RC85-PRODUCTION-CUTOVER-011 || true
+                wc -c .capture-v2-control/logs/RC85-PRODUCTION-CUTOVER-011/* 2>/dev/null || true
+              else
+                echo "RC85_LOCAL_LOG_DIR_MISSING"
+              fi
             '
 
-      - name: Restore dedicated control branch only
+      - name: Backend live Capture Authority
         shell: bash
         run: |
           set -euo pipefail
-          ROOT=/home/dev/workspace/aiVoip
-          DEV_UID="$(stat -c %u "$ROOT")"
-          DEV_GID="$(stat -c %g "$ROOT")"
-          docker run --rm \
-            --user "$DEV_UID:$DEV_GID" \
-            -v /usr/bin/git:/usr/local/bin/git-host:ro \
-            -v "$ROOT:$ROOT" \
-            -w "$ROOT" \
-            python:3.12-slim \
-            sh -lc '
-              set -eu
-              test "$(git-host branch --show-current)" = master
-              test -z "$(git-host status --porcelain --untracked-files=all)"
-              git-host switch feat/capture-v2.1.1-real-gates
-              echo "RESTORED_BRANCH=$(git-host branch --show-current)"
-              echo "RESTORED_HEAD=$(git-host rev-parse HEAD)"
-            '
-          echo 'Branch restored. Existing dev control daemon owns the subsequent fetch/ff-only/reexec/action execution.'
+          BACKEND="$(docker ps --filter label=com.docker.compose.project=voip-ai --filter label=com.docker.compose.service=backend -q | head -n1)"
+          if [ -z "$BACKEND" ]; then
+            echo "BACKEND_CONTAINER_NOT_RUNNING"
+            exit 0
+          fi
+          docker exec "$BACKEND" python -c "import json; from app.capture_v2.runtime import capture_authority_mode; from app.core.config import settings; print(json.dumps({'engine':str(settings.capture_engine_version),'production_enabled':bool(settings.capture_v2_production_enabled),'platform':str(settings.reproduction_platform_mode),'authority':capture_authority_mode()}))"
