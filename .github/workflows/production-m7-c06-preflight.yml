@@ -40,7 +40,8 @@ jobs:
       - name: Locate live production backend without mutation
         run: |
           set -euo pipefail
-          mapfile -t containers < <(sudo -n docker ps \
+          docker info >/dev/null
+          mapfile -t containers < <(docker ps \
             --filter label=com.docker.compose.project=voip-ai \
             --filter label=com.docker.compose.service=backend \
             --format '{{.Names}}')
@@ -48,7 +49,7 @@ jobs:
           test "${#containers[@]}" -eq 1
           backend="${containers[0]}"
           test -n "$backend"
-          sudo -n docker inspect --format '{{.State.Status}}' "$backend" | grep -qx running
+          docker inspect --format '{{.State.Status}}' "$backend" | grep -qx running
           printf 'BACKEND_CONTAINER=%s\n' "$backend" >> "$GITHUB_ENV"
 
       - name: Read-only V2 authority, DB ownership and APF1250 DUT health
@@ -57,7 +58,7 @@ jobs:
           set -uo pipefail
           mkdir -p validation
           set +e
-          sudo -n docker exec -i \
+          docker exec -i \
             -e TARGET_IP="$TARGET_IP" \
             -e TARGET_PORT="$TARGET_PORT" \
             "$BACKEND_CONTAINER" python - <<'PY' > validation/production_m7_c06_preflight.json
