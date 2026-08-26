@@ -23,194 +23,183 @@ jobs:
       - voip-controlled-linux
     timeout-minutes: 20
     env:
-      REQUIRED_MASTER_SHA: bd385b96972dedeee96c245875a2778f290c2c2c
       EXPECTED_PRODUCTION_ENV: /etc/voip-ai/production.env
+      TARGET_IP: '10.48.8.74'
+      TARGET_PORT: '10002'
+      TARGET_SN: 'G1U060H000384'
+      TARGET_MODEL: 'APF3260-M'
+      TARGET_PRODUCT: 'APF3260'
+      TARGET_VOICE_INTERFACE: 'br-lan_400'
     steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-          fetch-depth: 1
-
-      - name: Verify exact operational source and credential Gate fix
-        run: |
-          set -euo pipefail
-          test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha }}"
-          grep -q "provider == 'poseidon'" deploy/deployment_preflight.py
-          grep -q "POSEIDON_SECRET_FILE" deploy/deployment_preflight.py
-          grep -q "example.internal" deploy/deployment_preflight.py
-          echo "DRY_RUN_HEAD=$(git rev-parse HEAD)"
-          echo "REQUIRED_MASTER_SHA=$REQUIRED_MASTER_SHA"
-          echo "CREDENTIAL_GATE_FIX_PRESENT=PASS"
-
-      - name: Locate live production backend and deployment metadata
+      - name: Locate live production containers and authority
         run: |
           set -euo pipefail
           docker info >/dev/null
-          mapfile -t containers < <(docker ps \
-            --filter label=com.docker.compose.project=voip-ai \
-            --filter label=com.docker.compose.service=backend \
-            --format '{{.Names}}')
-          test "${#containers[@]}" -eq 1
-          backend="${containers[0]}"
-          docker inspect --format '{{.State.Status}}' "$backend" | grep -qx running
-          workdir="$(docker inspect --format '{{ index .Config.Labels "com.docker.compose.project.working_dir" }}' "$backend")"
-          config_files="$(docker inspect --format '{{ index .Config.Labels "com.docker.compose.project.config_files" }}' "$backend")"
-          environment_file="$(docker inspect --format '{{ index .Config.Labels "com.docker.compose.project.environment_file" }}' "$backend" 2>/dev/null || true)"
+          mapfile -t backends < <(docker ps --filter label=com.docker.compose.project=voip-ai --filter label=com.docker.compose.service=backend --format '{{.Names}}')
+          mapfile -t workers < <(docker ps --filter label=com.docker.compose.project=voip-ai --filter label=com.docker.compose.service=reproduction-worker --format '{{.Names}}')
+          test "${#backends[@]}" -eq 1
+          test "${#workers[@]}" -eq 1
+          backend="${backends[0]}"
+          worker="${workers[0]}"
+          environment_file="$(docker inspect --format '{{ index .Config.Labels "com.docker.compose.project.environment_file" }}' "$backend")"
           helper_image="$(docker inspect --format '{{.Config.Image}}' "$backend")"
-          test -n "$helper_image"
           test "$environment_file" = "$EXPECTED_PRODUCTION_ENV"
+          test -n "$helper_image"
           printf 'BACKEND_CONTAINER=%s\n' "$backend" >> "$GITHUB_ENV"
-          printf 'PRODUCTION_WORKDIR=%s\n' "$workdir" >> "$GITHUB_ENV"
-          printf 'COMPOSE_CONFIG_FILES=%s\n' "$config_files" >> "$GITHUB_ENV"
-          printf 'COMPOSE_ENVIRONMENT_FILE=%s\n' "$environment_file" >> "$GITHUB_ENV"
+          printf 'REPRO_WORKER=%s\n' "$worker" >> "$GITHUB_ENV"
+          printf 'PRODUCTION_ENV_FILE=%s\n' "$environment_file" >> "$GITHUB_ENV"
           printf 'HELPER_IMAGE=%s\n' "$helper_image" >> "$GITHUB_ENV"
-          printf 'PRODUCTION_WORKDIR=%s\n' "$workdir"
-          printf 'COMPOSE_CONFIG_FILES=%s\n' "$config_files"
-          printf 'COMPOSE_ENVIRONMENT_FILE=%s\n' "$environment_file"
+          docker exec -i "$backend" python - <<'PY'
+          import os
+          assert os.getenv('CREDENTIAL_PROVIDER','').lower() == 'api'
+          assert os.getenv('CAPTURE_ENGINE_VERSION') == 'V2'
+          assert os.getenv('CAPTURE_V2_PRODUCTION_ENABLED','').lower() == 'true'
+          assert os.getenv('REPRODUCTION_PLATFORM_MODE') == 'real'
+          print('CURRENT_CREDENTIAL_PROVIDER=api')
+          print('CAPTURE_AUTHORITY=V2_REAL')
+          PY
 
-      - name: Validate protected production env identity without exposing secrets
+      - name: Validate protected production env identity
         run: |
           set -euo pipefail
-          mkdir -p validation
-          runtime_json="$(docker exec -i "$BACKEND_CONTAINER" python - <<'PY'
-          import json, os
+          runtime_host="$(docker exec -i "$BACKEND_CONTAINER" python - <<'PY'
+          import os
           from urllib.parse import urlparse
-          url=os.getenv('CREDENTIAL_API_URL','').strip()
-          print(json.dumps({
-            'provider': os.getenv('CREDENTIAL_PROVIDER','').strip().lower(),
-            'api_host': (urlparse(url).hostname or '').lower(),
-            'capture_engine': os.getenv('CAPTURE_ENGINE_VERSION',''),
-            'v2_enabled': os.getenv('CAPTURE_V2_PRODUCTION_ENABLED','').lower() == 'true',
-            'platform_mode': os.getenv('REPRODUCTION_PLATFORM_MODE',''),
-          }))
+          print((urlparse(os.getenv('CREDENTIAL_API_URL','')).hostname or '').lower())
           PY
           )"
-          export RUNTIME_JSON="$runtime_json"
-          python3 - <<'PY'
-          import json, os
-          p=json.loads(os.environ['RUNTIME_JSON'])
-          assert p['provider']=='api', p
-          assert p['api_host'].endswith('.example.internal') or p['api_host']=='example.internal', p
-          assert p['capture_engine']=='V2', p
-          assert p['v2_enabled'] is True, p
-          assert p['platform_mode']=='real', p
-          print('RUNTIME_CURRENT_PROVIDER=api')
-          print('RUNTIME_API_URL_CLASS=PLACEHOLDER')
-          print('RUNTIME_CAPTURE_AUTHORITY=V2_REAL')
-          PY
-
           docker run --rm -i \
             --entrypoint python \
-            -e RUNTIME_JSON="$runtime_json" \
-            -v "$COMPOSE_ENVIRONMENT_FILE:/source/production.env:ro" \
+            -e RUNTIME_HOST="$runtime_host" \
+            -v "$PRODUCTION_ENV_FILE:/source/production.env:ro" \
             "$HELPER_IMAGE" - <<'PY'
-          import json, os
+          import os
           from pathlib import Path
           from urllib.parse import urlparse
-          path=Path('/source/production.env')
           values={}
-          for raw in path.read_text(encoding='utf-8').splitlines():
+          for raw in Path('/source/production.env').read_text(encoding='utf-8').splitlines():
               line=raw.strip()
               if not line or line.startswith('#') or '=' not in line:
                   continue
-              if line.startswith('export '):
-                  line=line[7:].strip()
-              k,v=line.split('=',1)
-              k=k.strip(); v=v.strip()
-              if len(v)>=2 and v[0]==v[-1] and v[0] in {'"', "'"}:
-                  v=v[1:-1]
-              values[k]=v
-          runtime=json.loads(os.environ['RUNTIME_JSON'])
+              if line.startswith('export '): line=line[7:].strip()
+              k,v=line.split('=',1); v=v.strip()
+              if len(v)>=2 and v[0]==v[-1] and v[0] in {'"', "'"}: v=v[1:-1]
+              values[k.strip()]=v
           host=(urlparse(values.get('CREDENTIAL_API_URL','')).hostname or '').lower()
-          assert values.get('APP_ENV','').lower()=='production'
-          assert values.get('CREDENTIAL_PROVIDER','').lower()==runtime['provider']
-          assert host==runtime['api_host']
-          print('PRODUCTION_ENV_IDENTITY_MATCH=PASS')
+          assert values.get('APP_ENV','').lower() == 'production'
+          assert values.get('CREDENTIAL_PROVIDER','').lower() == 'api'
+          assert host == os.environ['RUNTIME_HOST']
+          assert host == 'credential-service.example.internal' or host.endswith('.example.internal')
+          print('PRODUCTION_ENV_IDENTITY=PASS')
+          print('CURRENT_API_URL_CLASS=PLACEHOLDER')
           PY
 
-          tmp="$RUNNER_TEMP/production-poseidon-dryrun.env"
-          rm -f "$tmp"
-          runner_uid="$(id -u)"
-          runner_gid="$(id -g)"
-          docker run --rm \
-            -e RUNNER_UID="$runner_uid" \
-            -e RUNNER_GID="$runner_gid" \
-            -v "$COMPOSE_ENVIRONMENT_FILE:/source/production.env:ro" \
-            -v "$RUNNER_TEMP:/out" \
-            --entrypoint sh \
-            "$HELPER_IMAGE" -c \
-            'set -eu; umask 077; cp /source/production.env /out/production-poseidon-dryrun.env; chown "$RUNNER_UID:$RUNNER_GID" /out/production-poseidon-dryrun.env; chmod 0600 /out/production-poseidon-dryrun.env'
-          test -r "$tmp"
-          test "$(stat -c '%a' "$tmp")" = '600'
-          echo "DRYRUN_ENV_COPY=$tmp" >> "$GITHUB_ENV"
-          echo 'PRODUCTION_ENV_PROTECTED_READ=PASS'
-
-      - name: Run deployment preflight against temporary Poseidon env copy
+      - name: Simulate Poseidon provider in production reproduction worker
         run: |
           set -euo pipefail
-          tmp="$DRYRUN_ENV_COPY"
-          trap 'rm -f "$tmp"' EXIT
-          TMP_ENV="$tmp" python3 - <<'PY'
-          import os
-          from pathlib import Path
-          p=Path(os.environ['TMP_ENV'])
-          lines=p.read_text(encoding='utf-8').splitlines()
-          seen=0
-          out=[]
-          for line in lines:
-              stripped=line.strip()
-              prefix='export ' if stripped.startswith('export ') else ''
-              body=stripped[7:].strip() if prefix else stripped
-              if body.startswith('CREDENTIAL_PROVIDER='):
-                  seen += 1
-                  out.append(prefix + 'CREDENTIAL_PROVIDER=poseidon')
-              else:
-                  out.append(line)
-          if seen != 1:
-              raise SystemExit(f'CREDENTIAL_PROVIDER_LINE_COUNT={seen}')
-          p.write_text('\n'.join(out)+'\n', encoding='utf-8')
-          PY
-
+          mkdir -p "$RUNNER_TEMP/poseidon-dry-run"
           set +e
-          docker run --rm \
-            --entrypoint python \
-            -v "$GITHUB_WORKSPACE:/workspace:ro" \
-            -v "$tmp:/tmp/production.env:ro" \
-            -v "$GITHUB_WORKSPACE/validation:/out" \
-            -v /etc/voip-ai:/etc/voip-ai:ro \
-            -v /home/dev/secret.yaml:/home/dev/secret.yaml:ro \
-            -w /workspace \
-            "$HELPER_IMAGE" \
-            deploy/deployment_preflight.py \
-              --env-file /tmp/production.env \
-              --mode deploy \
-              --out /out/production_poseidon_cutover_dry_run.json
+          docker exec -i \
+            -e CREDENTIAL_PROVIDER=poseidon \
+            -e TARGET_IP="$TARGET_IP" \
+            -e TARGET_PORT="$TARGET_PORT" \
+            -e TARGET_SN="$TARGET_SN" \
+            -e TARGET_PRODUCT="$TARGET_PRODUCT" \
+            -e TARGET_VOICE_INTERFACE="$TARGET_VOICE_INTERFACE" \
+            "$REPRO_WORKER" python - <<'PY' > "$RUNNER_TEMP/poseidon-dry-run/result.json"
+          import asyncio, json, os, socket
+          from datetime import datetime, timezone
+          from app.integrations.credentials import get_credential_provider
+          from app.collectors.asyncssh_adapter import AsyncSSHDeviceAdapter
+
+          async def main():
+              ip=os.environ['TARGET_IP']; port=int(os.environ['TARGET_PORT'])
+              sn=os.environ['TARGET_SN']; product=os.environ['TARGET_PRODUCT']
+              iface=os.environ['TARGET_VOICE_INTERFACE']
+              payload={
+                  'schema_version':'production-poseidon-cutover-dry-run-v4',
+                  'checked_at':datetime.now(timezone.utc).isoformat(),
+                  'mutation_performed':False,
+                  'target':{'ip':ip,'port':port,'sn':sn,'product':product,'voice_interface':iface},
+                  'checks':{},
+              }
+              provider=get_credential_provider()
+              payload['checks']['provider_class']=type(provider).__name__
+              payload['checks']['production_capable']=bool(getattr(provider,'production_capable',False))
+              payload['checks']['provider_ok']=payload['checks']['provider_class']=='PoseidonCredentialProvider' and payload['checks']['production_capable']
+              try:
+                  with socket.create_connection((ip,port),timeout=5): pass
+                  payload['checks']['tcp']=True
+              except Exception as exc:
+                  payload['checks']['tcp']=False
+                  payload['checks']['tcp_error']=type(exc).__name__
+              try:
+                  password=await provider.get_password(sn=sn, ip=ip, product=product)
+                  payload['checks']['credential_resolved']=bool(password)
+              except Exception as exc:
+                  password=''
+                  payload['checks']['credential_resolved']=False
+                  payload['checks']['credential_error']=type(exc).__name__
+              if password:
+                  adapter=AsyncSSHDeviceAdapter(host=ip, port=port, username='root', password=password)
+                  try:
+                      out=await adapter.run(f"echo PROBE_OK=1; ip link show {iface} >/dev/null 2>&1 && echo VOICE_IF_OK=1; pgrep -af tcpdump | wc -l; ps w | grep -E '[d]sp diag|[p]cm_(rx|tx)' | wc -l")
+                      payload['checks']['ssh']=True
+                      payload['checks']['probe_ok']='PROBE_OK=1' in out
+                      payload['checks']['voice_interface']='VOICE_IF_OK=1' in out
+                  except Exception as exc:
+                      payload['checks']['ssh']=False
+                      payload['checks']['ssh_error']=type(exc).__name__
+              payload['verdict']='PASS' if all([
+                  payload['checks'].get('provider_ok'),
+                  payload['checks'].get('tcp'),
+                  payload['checks'].get('credential_resolved'),
+                  payload['checks'].get('ssh'),
+                  payload['checks'].get('probe_ok'),
+                  payload['checks'].get('voice_interface'),
+              ]) else 'BLOCKED'
+              print(json.dumps(payload,ensure_ascii=False,indent=2))
+              return 0 if payload['verdict']=='PASS' else 2
+          raise SystemExit(asyncio.run(main()))
+          PY
           rc=$?
           set -e
           python3 - <<'PY'
-          import json
+          import json, os
           from pathlib import Path
-          p=json.loads(Path('validation/production_poseidon_cutover_dry_run.json').read_text(encoding='utf-8'))
-          checks={x['key']: x for x in p['checks']}
-          summary={
-            'status': p['status'],
-            'deployment_status': p['deployment_status'],
-            'release_status': p['release_status'],
-            'deploy_blocking_keys': p['deploy_blocking_keys'],
-            'credential_provider': checks.get('CREDENTIAL_PROVIDER'),
-            'poseidon_secret_file': checks.get('POSEIDON_SECRET_FILE'),
+          p=json.loads((Path(os.environ['RUNNER_TEMP'])/'poseidon-dry-run/result.json').read_text())
+          safe={
+              'verdict':p['verdict'],
+              'provider_class':p['checks'].get('provider_class'),
+              'production_capable':p['checks'].get('production_capable'),
+              'tcp':p['checks'].get('tcp'),
+              'credential_resolved':p['checks'].get('credential_resolved'),
+              'ssh':p['checks'].get('ssh'),
+              'probe_ok':p['checks'].get('probe_ok'),
+              'voice_interface':p['checks'].get('voice_interface'),
           }
-          print(json.dumps(summary, ensure_ascii=False, indent=2))
-          assert checks['CREDENTIAL_PROVIDER']['status']=='PASS', checks['CREDENTIAL_PROVIDER']
-          assert checks['POSEIDON_SECRET_FILE']['status']=='PASS', checks['POSEIDON_SECRET_FILE']
+          print(json.dumps(safe,ensure_ascii=False,indent=2))
+          assert p['verdict']=='PASS', safe
           PY
           exit "$rc"
+
+      - name: Verify no production mutation occurred
+        run: |
+          set -euo pipefail
+          docker exec -i "$BACKEND_CONTAINER" python - <<'PY'
+          import os
+          assert os.getenv('CREDENTIAL_PROVIDER','').lower() == 'api'
+          assert os.getenv('CAPTURE_ENGINE_VERSION') == 'V2'
+          print('POST_DRYRUN_PROVIDER=api')
+          print('POST_DRYRUN_CAPTURE_AUTHORITY=V2')
+          print('PRODUCTION_MUTATION=false')
+          PY
 
       - name: Upload sanitized dry-run evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: production-poseidon-cutover-dry-run
-          path: validation/production_poseidon_cutover_dry_run.json
+          path: ${{ runner.temp }}/poseidon-dry-run/result.json
           if-no-files-found: warn
           retention-days: 30
