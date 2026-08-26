@@ -1,20 +1,37 @@
 {
-  "schema_version": "capture-v2-remote-status-v1",
-  "action_id": "RC89-PRODUCTION-CUTOVER-016",
-  "sequence": 227,
-  "action_type": "PRODUCTION_CUTOVER",
-  "state": "FAILED",
-  "runner_id": "srv:7",
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "RC89-PRODUCTION-CUTOVER-016",
+    "sequence": 227,
+    "created_at": "2026-08-26T08:20:30+00:00",
+    "expires_at": "2026-08-26T14:20:30+00:00",
+    "action_type": "PRODUCTION_CUTOVER",
+    "parameters": {
+      "timeout_seconds": 7200
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "f531d59e32d755ef8a3aa91aeff551cfdf3d13fd"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "Execute the explicitly authorized guarded Capture Engine V2 production cutover after RC88 fresh production preflight PASS with deployment_status=PASS and no deploy blockers. The accepted master includes the repo-owner Git identity fix and exact FETCH_HEAD master snapshot ancestry fix, both validated by full Frozen/Full Software/Golden/Human Evidence gates and synchronized into production control. Use the canonical authorization and audited guarded cutover only. Back up production.env before mutation; switch CAPTURE_ENGINE_VERSION=V2, CAPTURE_V2_PRODUCTION_ENABLED=true and REPRODUCTION_PLATFORM_MODE=real; run strict release preflight, production deploy, database migration/runtime verification, required service/queue/storage/frontend/backend checks, and backend authority probe. Fail closed with verified V1 rollback on any error. No DUT mutation is allowed. Declare success only with live evidence CAPTURE_AUTHORITY=V2."
+  },
   "action_sha256": "2b7ab331ab56d0013dab55d6fee42615eb39fc68d239902f810e2a5725a404e0",
-  "updated_at": "2026-08-26T09:06:18.205491+00:00",
-  "started_at": null,
-  "finished_at": "2026-08-26T09:06:18.205491+00:00",
+  "runner_id": "srv:7",
+  "state": "FAILED",
   "return_code": 1,
   "verdict": "FAIL",
-  "result_path": "validation/control/results/RC89-PRODUCTION-CUTOVER-016/result.json",
+  "error": null,
+  "finished_at": "2026-08-26T09:06:18.205491+00:00",
   "stdout_sha256": "62467accbff02f12a8bd884fce1d6987a09a0af1cc7b4cf99bb2fe83fe6b46a2",
   "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-  "error": null,
+  "local_stdout": ".capture-v2-control/logs/RC89-PRODUCTION-CUTOVER-016/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/RC89-PRODUCTION-CUTOVER-016/stderr.log",
   "detail": {
     "safety": {
       "capture_engine_version": "V1",
