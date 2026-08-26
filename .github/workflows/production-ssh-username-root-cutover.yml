@@ -1,0 +1,314 @@
+name: Production SSH Username Root Cutover
+
+on:
+  pull_request:
+    branches:
+      - master
+    paths:
+      - '.github/workflows/production-ssh-username-root-cutover.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-ssh-username-root-cutover
+  cancel-in-progress: false
+
+jobs:
+  cutover:
+    runs-on:
+      - self-hosted
+      - linux
+      - x64
+      - voip-controlled-linux
+    timeout-minutes: 30
+    env:
+      EXPECTED_PRODUCTION_ENV: /etc/voip-ai/production.env
+      EXPECTED_WORKDIR: /home/dev/workspace/aiVoip-control
+      TARGET_IP: '10.48.8.74'
+      TARGET_PORT: '10002'
+      TARGET_SN: 'G1U060H000384'
+      TARGET_VOICE_INTERFACE: 'br-lan_400'
+      APP_SERVICES: 'backend collector-worker packet-worker pcm-worker media-worker diagnosis-worker feishu-long-connection reproduction-worker reproduction-control-high-worker reproduction-watch-worker beat'
+
+    steps:
+      - name: Guard and atomically switch SSH_USERNAME to root
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          docker info >/dev/null
+          evidence_dir="$RUNNER_TEMP/ssh-username-root-cutover"
+          mkdir -p "$evidence_dir"
+          result="$evidence_dir/result.json"
+          stage='INIT'
+          mutated=0
+          backup_name="production.env.pre-ssh-root.$(date -u +%Y%m%dT%H%M%SZ)"
+
+          mapfile -t backends < <(docker ps --filter label=com.docker.compose.project=voip-ai --filter label=com.docker.compose.service=backend --format '{{.Names}}')
+          mapfile -t workers < <(docker ps --filter label=com.docker.compose.project=voip-ai --filter label=com.docker.compose.service=reproduction-worker --format '{{.Names}}')
+          test "${#backends[@]}" -eq 1
+          test "${#workers[@]}" -eq 1
+          backend="${backends[0]}"
+          worker="${workers[0]}"
+
+          env_file="$(docker inspect --format '{{ index .Config.Labels "com.docker.compose.project.environment_file" }}' "$backend")"
+          workdir="$(docker inspect --format '{{ index .Config.Labels "com.docker.compose.project.working_dir" }}' "$backend")"
+          helper_image="$(docker inspect --format '{{.Config.Image}}' "$backend")"
+          test "$env_file" = "$EXPECTED_PRODUCTION_ENV"
+          test "$workdir" = "$EXPECTED_WORKDIR"
+          test -n "$helper_image"
+
+          plugin=''
+          for p in \
+            /usr/libexec/docker/cli-plugins/docker-compose \
+            /usr/lib/docker/cli-plugins/docker-compose \
+            /usr/local/lib/docker/cli-plugins/docker-compose \
+            "$HOME/.docker/cli-plugins/docker-compose"; do
+            if [ -x "$p" ]; then plugin="$p"; break; fi
+          done
+          test -n "$plugin"
+
+          compose_helper() {
+            timeout 240 docker run --rm \
+              -e WORKDIR="$workdir" \
+              -e VOIP_APP_ENV_FILE=/etc/voip-ai/production.env \
+              -v /var/run/docker.sock:/var/run/docker.sock \
+              -v "$plugin:/usr/local/bin/docker-compose:ro" \
+              -v "$workdir:$workdir:ro" \
+              -v /etc/voip-ai:/etc/voip-ai:ro \
+              -v /home/dev/secret.yaml:/home/dev/secret.yaml:ro \
+              --entrypoint sh "$helper_image" -c '
+                set -eu
+                cd "$WORKDIR"
+                exec /usr/local/bin/docker-compose --project-name voip-ai \
+                  --env-file /etc/voip-ai/production.env \
+                  -f docker-compose.yml -f docker-compose.production.yml "$@"
+              ' sh "$@"
+          }
+
+          write_result() {
+            local verdict="$1" rollback="$2" rollback_ok="$3" failed_stage="$4"
+            VERDICT="$verdict" ROLLBACK="$rollback" ROLLBACK_OK="$rollback_ok" FAILED_STAGE="$failed_stage" BACKUP_NAME="$backup_name" \
+              python3 - <<'PY' > "$result"
+          import json, os
+          print(json.dumps({
+              'schema_version': 'production-ssh-username-root-cutover-v1',
+              'verdict': os.environ['VERDICT'],
+              'target_ssh_username': 'root',
+              'rollback_performed': os.environ['ROLLBACK'] == 'true',
+              'rollback_verified': os.environ['ROLLBACK_OK'] == 'true',
+              'failed_stage': os.environ['FAILED_STAGE'] or None,
+              'backup_file_basename': os.environ['BACKUP_NAME'],
+              'target': {'model':'APF3260-M','sn_suffix':'0384','ip':'10.48.8.74','ssh_port':10002},
+          }, indent=2))
+          PY
+          }
+
+          rollback() {
+            set +e
+            local ok=true
+            echo "ROLLBACK_BEGIN stage=$stage"
+            docker run --rm -i \
+              -e BACKUP_NAME="$backup_name" \
+              -v /etc/voip-ai:/target:rw \
+              --entrypoint python "$helper_image" - <<'PY'
+          import os
+          from pathlib import Path
+          root=Path('/target'); src=root/os.environ['BACKUP_NAME']; dst=root/'production.env'
+          if not src.is_file(): raise SystemExit('ROLLBACK_BACKUP_MISSING')
+          data=src.read_bytes(); tmp=root/'.production.env.rollback.tmp'; tmp.write_bytes(data)
+          st=src.stat(); os.chmod(tmp,0o600)
+          try: os.chown(tmp,st.st_uid,st.st_gid)
+          except PermissionError: pass
+          os.replace(tmp,dst)
+          print('ROLLBACK_ENV_RESTORED=PASS')
+          PY
+            [ $? -eq 0 ] || ok=false
+            compose_helper up -d --no-deps --force-recreate $APP_SERVICES
+            [ $? -eq 0 ] || ok=false
+            sleep 4
+            mapfile -t rb < <(docker ps --filter label=com.docker.compose.project=voip-ai --filter label=com.docker.compose.service=backend --format '{{.Names}}')
+            if [ "${#rb[@]}" -eq 1 ]; then
+              docker exec -i "${rb[0]}" python - <<'PY'
+          import os
+          assert os.getenv('SSH_USERNAME') == 'admin'
+          assert os.getenv('CREDENTIAL_PROVIDER','').lower() == 'poseidon'
+          assert os.getenv('CAPTURE_ENGINE_VERSION') == 'V2'
+          assert os.getenv('REPRODUCTION_PLATFORM_MODE') == 'real'
+          print('ROLLBACK_RUNTIME=ADMIN_POSEIDON_V2_REAL')
+          PY
+              [ $? -eq 0 ] || ok=false
+            else
+              ok=false
+            fi
+            if $ok; then
+              write_result BLOCKED true true "$stage"
+              echo 'ROLLBACK_VERIFIED=PASS'
+            else
+              write_result FAILED true false "$stage"
+              echo 'ROLLBACK_VERIFIED=FAILED' >&2
+            fi
+            set -e
+          }
+
+          on_exit() {
+            rc=$?
+            trap - EXIT
+            if [ "$rc" -ne 0 ] && [ "$mutated" -eq 1 ]; then
+              rollback
+            elif [ "$rc" -ne 0 ]; then
+              write_result BLOCKED false false "$stage"
+            fi
+            exit "$rc"
+          }
+          trap on_exit EXIT
+
+          stage='PRE_CUTOVER_RUNTIME_GUARD'
+          docker exec -i "$backend" python - <<'PY'
+          import os
+          assert os.getenv('SSH_USERNAME') == 'admin'
+          assert os.getenv('CREDENTIAL_PROVIDER','').lower() == 'poseidon'
+          assert os.getenv('CAPTURE_ENGINE_VERSION') == 'V2'
+          assert os.getenv('CAPTURE_V2_PRODUCTION_ENABLED','').lower() == 'true'
+          assert os.getenv('REPRODUCTION_PLATFORM_MODE') == 'real'
+          print('PRE_RUNTIME=ADMIN_POSEIDON_V2_REAL')
+          PY
+
+          stage='NO_ACTIVE_SESSION_OR_LOCK'
+          docker exec -i "$backend" python - <<'PY'
+          from sqlalchemy import select
+          from app.contracts.enums import LockStatus, ReproductionState
+          from app.db.models import DeviceDiagnosticLock, ReproductionSession
+          from app.db.session import SessionLocal
+          terminal={ReproductionState.COMPLETED.value,ReproductionState.PARTIAL_SUCCESS.value,ReproductionState.CANCELLED.value,ReproductionState.FAILED.value}
+          db=SessionLocal()
+          try:
+              active_sessions=[s for s in db.scalars(select(ReproductionSession)).all() if s.state not in terminal]
+              active_locks=list(db.scalars(select(DeviceDiagnosticLock).where(DeviceDiagnosticLock.status.in_([LockStatus.ACTIVE.value,LockStatus.QUARANTINED.value]))).all())
+              print(f'ACTIVE_NONTERMINAL_SESSION_COUNT={len(active_sessions)}')
+              print(f'ACTIVE_OR_QUARANTINED_LOCK_COUNT={len(active_locks)}')
+              assert not active_sessions
+              assert not active_locks
+          finally:
+              db.close()
+          PY
+
+          stage='COMPOSE_GUARD'
+          compose_helper config --services >/tmp/voip-ai-services
+          grep -qx backend /tmp/voip-ai-services
+          grep -qx reproduction-worker /tmp/voip-ai-services
+          echo 'COMPOSE_GUARD=PASS'
+
+          stage='BACKUP_AND_ATOMIC_ENV_SWITCH'
+          docker run --rm -i \
+            -e BACKUP_NAME="$backup_name" \
+            -v /etc/voip-ai:/target:rw \
+            --entrypoint python "$helper_image" - <<'PY'
+          import os, shutil
+          from pathlib import Path
+          root=Path('/target'); env=root/'production.env'; backup=root/os.environ['BACKUP_NAME']
+          if not env.is_file(): raise SystemExit('PRODUCTION_ENV_MISSING')
+          st=env.stat(); shutil.copy2(env,backup); os.chmod(backup,0o600)
+          lines=env.read_text(encoding='utf-8').splitlines(); out=[]; seen=0
+          for line in lines:
+              stripped=line.strip(); prefix='export ' if stripped.startswith('export ') else ''
+              body=stripped[7:].strip() if prefix else stripped
+              if body.startswith('SSH_USERNAME='):
+                  seen += 1
+                  old=body.split('=',1)[1].strip().strip("'\"")
+                  if old != 'admin': raise SystemExit(f'UNEXPECTED_CURRENT_SSH_USERNAME:{old}')
+                  out.append(prefix+'SSH_USERNAME=root')
+              else:
+                  out.append(line)
+          if seen != 1: raise SystemExit(f'SSH_USERNAME_LINE_COUNT:{seen}')
+          tmp=root/'.production.env.ssh-root.tmp'; tmp.write_text('\n'.join(out)+'\n',encoding='utf-8')
+          os.chmod(tmp,0o600)
+          try: os.chown(tmp,st.st_uid,st.st_gid)
+          except PermissionError: pass
+          os.replace(tmp,env)
+          print('PRODUCTION_ENV_SSH_USERNAME=root')
+          print('PRODUCTION_ENV_BACKUP_CREATED=PASS')
+          PY
+          mutated=1
+
+          stage='RECREATE_APPLICATION_CONTAINERS'
+          compose_helper up -d --no-deps --force-recreate $APP_SERVICES
+
+          stage='VERIFY_ALL_APPLICATION_CONTAINERS'
+          for _ in $(seq 1 60); do
+            all_running=true
+            for svc in $APP_SERVICES; do
+              mapfile -t cs < <(docker ps --filter label=com.docker.compose.project=voip-ai --filter label=com.docker.compose.service="$svc" --format '{{.Names}}')
+              if [ "${#cs[@]}" -ne 1 ]; then all_running=false; break; fi
+            done
+            $all_running && break
+            sleep 2
+          done
+          for svc in $APP_SERVICES; do
+            mapfile -t cs < <(docker ps --filter label=com.docker.compose.project=voip-ai --filter label=com.docker.compose.service="$svc" --format '{{.Names}}')
+            test "${#cs[@]}" -eq 1
+            docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "${cs[0]}" | grep -qx 'SSH_USERNAME=root'
+            docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "${cs[0]}" | grep -qx 'CREDENTIAL_PROVIDER=poseidon'
+          done
+          echo 'ALL_APP_CONTAINERS_SSH_USERNAME=ROOT'
+
+          stage='VERIFY_CORE_RUNTIME'
+          mapfile -t new_backends < <(docker ps --filter label=com.docker.compose.project=voip-ai --filter label=com.docker.compose.service=backend --format '{{.Names}}')
+          mapfile -t new_workers < <(docker ps --filter label=com.docker.compose.project=voip-ai --filter label=com.docker.compose.service=reproduction-worker --format '{{.Names}}')
+          test "${#new_backends[@]}" -eq 1
+          test "${#new_workers[@]}" -eq 1
+          backend="${new_backends[0]}"; worker="${new_workers[0]}"
+          docker exec -i "$backend" python - <<'PY'
+          import os
+          assert os.getenv('SSH_USERNAME') == 'root'
+          assert os.getenv('CREDENTIAL_PROVIDER','').lower() == 'poseidon'
+          assert os.getenv('CAPTURE_ENGINE_VERSION') == 'V2'
+          assert os.getenv('CAPTURE_V2_PRODUCTION_ENABLED','').lower() == 'true'
+          assert os.getenv('REPRODUCTION_PLATFORM_MODE') == 'real'
+          print('POST_RUNTIME=ROOT_POSEIDON_V2_REAL')
+          PY
+
+          stage='NORMAL_WORKER_REAL_DUT_PROOF'
+          docker exec -i \
+            -e TARGET_IP="$TARGET_IP" \
+            -e TARGET_PORT="$TARGET_PORT" \
+            -e TARGET_SN="$TARGET_SN" \
+            -e TARGET_VOICE_INTERFACE="$TARGET_VOICE_INTERFACE" \
+            "$worker" python - <<'PY'
+          import asyncio, os, socket
+          from app.core.config import settings
+          from app.integrations.credentials import get_credential_provider
+          from app.collectors.asyncssh_adapter import AsyncSSHDeviceAdapter
+          async def main():
+              ip=os.environ['TARGET_IP']; port=int(os.environ['TARGET_PORT'])
+              assert settings.ssh_username == 'root', settings.ssh_username
+              provider=get_credential_provider()
+              assert type(provider).__name__ == 'PoseidonCredentialProvider'
+              with socket.create_connection((ip,port),timeout=5): pass
+              # Mirror the normal worker path: resolve by SN/IP only, no product override.
+              password=await provider.get_password(sn=os.environ['TARGET_SN'],ip=ip)
+              assert password
+              adapter=AsyncSSHDeviceAdapter(ip=ip,port=port,username=settings.ssh_username,password=password)
+              try:
+                  await adapter.connect()
+                  res=await adapter.execute_shell(f"echo NORMAL_WORKER_ROOT_SSH_OK=1; ip link show {os.environ['TARGET_VOICE_INTERFACE']} >/dev/null 2>&1 && echo VOICE_IF_OK=1")
+                  assert 'NORMAL_WORKER_ROOT_SSH_OK=1' in (res.stdout or '')
+                  assert 'VOICE_IF_OK=1' in (res.stdout or '')
+              finally:
+                  await adapter.disconnect()
+              print('NORMAL_WORKER_REAL_DUT_PROOF=PASS')
+          asyncio.run(main())
+          PY
+
+          stage='FINAL'
+          write_result PASS false false ''
+          trap - EXIT
+          echo 'PRODUCTION_SSH_USERNAME_ROOT_CUTOVER=PASS'
+
+      - name: Upload cutover evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-ssh-username-root-cutover
+          path: ${{ runner.temp }}/ssh-username-root-cutover/
+          if-no-files-found: warn
