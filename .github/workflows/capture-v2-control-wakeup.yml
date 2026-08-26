@@ -45,7 +45,7 @@ jobs:
               test "$(git rev-parse refs/remotes/origin/feat/capture-v2.1.1-real-gates)" = 9df273ab29569afb198f5e0bcf36fe7750f07192
             '
 
-      - name: Execute actual fixed master snapshot path as cutover root
+      - name: Execute actual fetched-master wrapper as cutover root
         shell: bash
         run: |
           set -euo pipefail
@@ -59,12 +59,14 @@ jobs:
           from app.capture_v2.control import production_cutover_guarded as cutover
 
           repo = Path("/home/dev/workspace/aiVoip-control")
-          cp, sha, err = cutover._fetch_master_snapshot(repo)
-          print("FETCH_RC=" + str(cp.returncode))
+          git_for_run, snapshot = cutover._master_snapshot_git()
+          fetched = git_for_run(repo, "fetch", "origin", "master")
+          print("FETCH_RC=" + str(fetched.returncode))
+          assert fetched.returncode == 0, fetched.stderr
+          sha = str(snapshot.get("master_head") or "")
           print("FETCHED_MASTER_SHA=" + sha)
-          assert cp.returncode == 0, err
           assert sha == "abcb054d018b27495aaa4c47079c354b69471a9d", sha
-          anc = cutover._git_as_repo_owner(repo, "merge-base", "--is-ancestor", "db3e8012a9569d9508e9d2cd920baf1de6bac866", sha)
+          anc = git_for_run(repo, "merge-base", "--is-ancestor", "db3e8012a9569d9508e9d2cd920baf1de6bac866", "origin/master")
           print("ANCESTOR_RC=" + str(anc.returncode))
           assert anc.returncode == 0, anc.stderr
           print("EXACT_FETCHED_MASTER_ANCESTRY_PASS=true")
