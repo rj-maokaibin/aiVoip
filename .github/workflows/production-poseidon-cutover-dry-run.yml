@@ -117,7 +117,7 @@ jobs:
               sn=os.environ['TARGET_SN']; product=os.environ['TARGET_PRODUCT']
               iface=os.environ['TARGET_VOICE_INTERFACE']
               payload={
-                  'schema_version':'production-poseidon-cutover-dry-run-v4',
+                  'schema_version':'production-poseidon-cutover-dry-run-v5',
                   'checked_at':datetime.now(timezone.utc).isoformat(),
                   'mutation_performed':False,
                   'target':{'ip':ip,'port':port,'sn':sn,'product':product,'voice_interface':iface},
@@ -141,15 +141,22 @@ jobs:
                   payload['checks']['credential_resolved']=False
                   payload['checks']['credential_error']=type(exc).__name__
               if password:
-                  adapter=AsyncSSHDeviceAdapter(host=ip, port=port, username='root', password=password)
+                  adapter=AsyncSSHDeviceAdapter(ip=ip, port=port, username='root', password=password)
                   try:
-                      out=await adapter.run(f"echo PROBE_OK=1; ip link show {iface} >/dev/null 2>&1 && echo VOICE_IF_OK=1; pgrep -af tcpdump | wc -l; ps w | grep -E '[d]sp diag|[p]cm_(rx|tx)' | wc -l")
+                      await adapter.connect()
+                      res=await adapter.execute_shell(f"echo PROBE_OK=1; ip link show {iface} >/dev/null 2>&1 && echo VOICE_IF_OK=1; pgrep -af tcpdump | wc -l; ps w | grep -E '[d]sp diag|[p]cm_(rx|tx)' | wc -l")
+                      out=res.stdout or ''
                       payload['checks']['ssh']=True
                       payload['checks']['probe_ok']='PROBE_OK=1' in out
                       payload['checks']['voice_interface']='VOICE_IF_OK=1' in out
                   except Exception as exc:
                       payload['checks']['ssh']=False
                       payload['checks']['ssh_error']=type(exc).__name__
+                  finally:
+                      try:
+                          await adapter.disconnect()
+                      except Exception:
+                          pass
               payload['verdict']='PASS' if all([
                   payload['checks'].get('provider_ok'),
                   payload['checks'].get('tcp'),
