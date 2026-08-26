@@ -1,4 +1,4 @@
-name: Capture V2 RC85B Targeted Regression
+name: Capture V2 Control Sync Probe
 
 on:
   push:
@@ -14,44 +14,36 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  targeted-regression:
+  control-sync-probe:
     runs-on:
       - self-hosted
       - linux
       - x64
       - voip-controlled-linux
-    timeout-minutes: 15
+    timeout-minutes: 10
     steps:
-      - name: Checkout PR57 head
-        uses: actions/checkout@v4
-        with:
-          ref: fix/capture-v2-cutover-repo-owner-git-rc85b
-          clean: true
-
-      - name: Run cutover Git identity regression
+      - name: Verify single detached runner and local control head
         shell: bash
         run: |
           set -euo pipefail
-          cd backend
-          /home/dev/workspace/aiVoip/.venv-release-gate/bin/python3 -m pytest \
-            tests/test_capture_v2_production_cutover_git_identity.py -q
+          COUNT="$(ps -eo args | grep 'app.capture_v2.control_cli run --repo-root /home/dev/workspace/aiVoip-control' | grep -v grep | wc -l)"
+          echo "CONTROL_RUNNER_COUNT=$COUNT"
+          test "$COUNT" -eq 1
+          ps -eo pid,ppid,pgid,sid,tpgid,user,etime,stat,args | grep 'app.capture_v2.control_cli run --repo-root /home/dev/workspace/aiVoip-control' | grep -v grep
+          if ps -eo stat,args | grep 'app.capture_v2.control_cli run --repo-root /home/dev/workspace/aiVoip-control' | grep -v grep | grep -q '^T'; then exit 1; fi
+          docker run --rm --privileged --network host -v /:/host python:3.12-slim \
+            chroot /host /usr/sbin/runuser -u dev -- /bin/bash -lc '
+              set -euo pipefail
+              cd /home/dev/workspace/aiVoip-control
+              echo "BRANCH=$(git branch --show-current)"
+              echo "HEAD=$(git rev-parse HEAD)"
+              echo "REMOTE_CONTROL=$(git rev-parse refs/remotes/origin/feat/capture-v2.1.1-real-gates)"
+              test "$(git branch --show-current)" = feat/capture-v2.1.1-real-gates
+              test "$(git rev-parse HEAD)" = 3745d2577cc881fc1b22e882d00691b0754896db
+              test "$(git rev-parse refs/remotes/origin/feat/capture-v2.1.1-real-gates)" = 3745d2577cc881fc1b22e882d00691b0754896db
+            '
 
-      - name: Real root-to-repo-owner Git identity probe
-        shell: bash
-        run: |
-          set -euo pipefail
-          RESULT="$(docker run --rm --privileged --network host -v /:/host python:3.12-slim \
-            chroot /host /usr/sbin/runuser -u dev -- /usr/bin/env \
-              HOME=/home/dev USER=dev LOGNAME=dev \
-              /usr/bin/git -C /home/dev/workspace/aiVoip-control \
-              ls-remote origin refs/heads/master)"
-          echo "$RESULT"
-          SHA="$(printf '%s\n' "$RESULT" | awk 'NR==1{print $1}')"
-          test "${#SHA}" -eq 40
-          printf '%s' "$SHA" | grep -Eq '^[0-9a-f]{40}$'
-          echo "ROOT_TO_REPO_OWNER_GIT_IDENTITY_PASS=true"
-
-      - name: Confirm production remained V1
+      - name: Verify production still V1 safe prestate
         shell: bash
         run: |
           set -euo pipefail
@@ -67,7 +59,10 @@ jobs:
           print('ENGINE='+eff('CAPTURE_ENGINE_VERSION','V1'))
           print('V2_ENABLED='+eff('CAPTURE_V2_PRODUCTION_ENABLED','false'))
           print('PLATFORM='+eff('REPRODUCTION_PLATFORM_MODE','mock'))
+          print('RBAC='+eff('FEISHU_IDENTITY_RBAC_ENABLED','false'))
+          assert eff('APP_ENV','') == 'production'
           assert eff('CAPTURE_ENGINE_VERSION','V1').upper() == 'V1'
           assert eff('CAPTURE_V2_PRODUCTION_ENABLED','false').lower() == 'false'
           assert eff('REPRODUCTION_PLATFORM_MODE','mock') == 'mock'
+          assert eff('FEISHU_IDENTITY_RBAC_ENABLED','false').lower() == 'true'
           PY
