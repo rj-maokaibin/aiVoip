@@ -1,9 +1,9 @@
 {
   "schema_version": "capture-v2-remote-action-v1",
-  "action_id": "RC86-PRODUCTION-DEPLOYMENT-PREFLIGHT-012",
-  "sequence": 223,
-  "created_at": "2026-08-26T05:34:21+00:00",
-  "expires_at": "2026-08-26T11:34:21+00:00",
+  "action_id": "RC86B-PRODUCTION-DEPLOYMENT-PREFLIGHT-013",
+  "sequence": 224,
+  "created_at": "2026-08-26T05:35:24+00:00",
+  "expires_at": "2026-08-26T11:35:24+00:00",
   "action_type": "PRODUCTION_DEPLOYMENT_PREFLIGHT",
   "parameters": {
     "timeout_seconds": 300
@@ -14,8 +14,8 @@
     "require_v2_disabled": true,
     "allow_worker_kill": false,
     "allow_server_quarantine": false,
-    "expected_head": "e6623e29908aa977332c6e0b87fe04d0a88bce84"
+    "expected_head": "3745d2577cc881fc1b22e882d00691b0754896db"
   },
   "requested_by": "ChatGPT-remote-validation-controller",
-  "note": "Fresh guarded production deployment preflight after PR #57 repo-owner Git identity fix passed Frozen, Full Software, Prepared-PCAP Golden #001 and Human Evidence; PR #58 synchronized accepted master into the production control branch; and the detached single control runner was live-probed at control head 3745d2577cc881fc1b22e882d00691b0754896db with production still V1 / V2 disabled / platform mock. Read the canonical authorization and real /etc/voip-ai/production.env, verify safe V1 prestate, accepted source, deployment blockers and production compose requirements. Perform no production or DUT mutation. A new guarded production cutover must not be issued unless this action returns PASS with no deploy blockers."
+  "note": "Fresh guarded production deployment preflight anchored to the exact accepted production-control merge head from PR #58. RC86 was rejected before execution only because its expected_head used the master product SHA and the fail-closed policy correctly detected the control-only canonical authorization artifact outside validation/control. This retry does not relax policy: it anchors expected_head to 3745d2577cc881fc1b22e882d00691b0754896db, whose product parent e6623e29908aa977332c6e0b87fe04d0a88bce84 passed Frozen, Full Software, Prepared-PCAP Golden #001, Human Evidence, and real root-to-repo-owner Git identity probing. Verify the real production V1 prestate, authorization, deployment blockers and compose requirements. Perform no production or DUT mutation. Do not issue production cutover unless this action returns PASS with no deploy blockers."
 }
