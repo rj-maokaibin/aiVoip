@@ -68,7 +68,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p validation
-          runtime_json="$(docker exec "$BACKEND_CONTAINER" python - <<'PY'
+          runtime_json="$(docker exec -i "$BACKEND_CONTAINER" python - <<'PY'
           import json, os
           from urllib.parse import urlparse
           url=os.getenv('CREDENTIAL_API_URL','').strip()
