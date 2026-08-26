@@ -54,9 +54,8 @@ jobs:
               set -euo pipefail
               cd /home/dev/workspace/aiVoip-control/backend
               export PYTHONPATH=.
-              /home/dev/workspace/aiVoip-control/.venv-release-gate/bin/python3 - <<"PY"
+              /home/dev/workspace/aiVoip/.venv-release-gate/bin/python3 - <<"PY"
           from pathlib import Path
-          import subprocess
           from app.capture_v2.control import production_cutover_guarded as cutover
 
           repo = Path("/home/dev/workspace/aiVoip-control")
