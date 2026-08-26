@@ -1,12 +1,12 @@
 {
   "schema_version": "capture-v2-remote-action-v1",
-  "action_id": "RC85-PRODUCTION-CUTOVER-011",
-  "sequence": 222,
-  "created_at": "2026-08-26T00:01:30+00:00",
-  "expires_at": "2026-08-26T12:01:30+00:00",
-  "action_type": "PRODUCTION_CUTOVER",
+  "action_id": "RC86-PRODUCTION-DEPLOYMENT-PREFLIGHT-012",
+  "sequence": 223,
+  "created_at": "2026-08-26T05:34:21+00:00",
+  "expires_at": "2026-08-26T11:34:21+00:00",
+  "action_type": "PRODUCTION_DEPLOYMENT_PREFLIGHT",
   "parameters": {
-    "timeout_seconds": 7200
+    "timeout_seconds": 300
   },
   "safety": {
     "require_clean_git": true,
@@ -14,8 +14,8 @@
     "require_v2_disabled": true,
     "allow_worker_kill": false,
     "allow_server_quarantine": false,
-    "expected_head": "94d659ed919a3727d21e13ccfbc4f712542993fb"
+    "expected_head": "e6623e29908aa977332c6e0b87fe04d0a88bce84"
   },
   "requested_by": "ChatGPT-remote-validation-controller",
-  "note": "Execute the authorized guarded Capture Engine V2 production cutover after RC84G production deployment preflight PASS with no deploy blockers. Use the canonical authorization and audited guarded cutover module only. Back up production env, switch to V2/real mode, deploy current accepted source, run migrations and runtime verification, validate required services/queues/storage/frontend/backend authority, and fail closed with verified rollback to V1 on any error. No DUT mutation is allowed. Production V2 may be declared active only if the action returns PASS and runtime authority verifies CAPTURE_AUTHORITY=V2."
+  "note": "Fresh guarded production deployment preflight after PR #57 repo-owner Git identity fix passed Frozen, Full Software, Prepared-PCAP Golden #001 and Human Evidence; PR #58 synchronized accepted master into the production control branch; and the detached single control runner was live-probed at control head 3745d2577cc881fc1b22e882d00691b0754896db with production still V1 / V2 disabled / platform mock. Read the canonical authorization and real /etc/voip-ai/production.env, verify safe V1 prestate, accepted source, deployment blockers and production compose requirements. Perform no production or DUT mutation. A new guarded production cutover must not be issued unless this action returns PASS with no deploy blockers."
 }
