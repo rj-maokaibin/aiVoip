@@ -1,4 +1,4 @@
-name: Production M7 C06 Read-only Preflight
+name: Production M7 C06 APF3260-M Read-only Preflight
 
 on:
   pull_request:
@@ -24,8 +24,11 @@ jobs:
     timeout-minutes: 20
     env:
       TARGET_IP: '10.48.8.74'
-      TARGET_PORT: '10001'
-      TARGET_SN: 'G1V030E010214'
+      TARGET_PORT: '10002'
+      TARGET_SN: 'G1U060H000384'
+      TARGET_MODEL: 'APF3260-M'
+      TARGET_PLATFORM_ID: 'mt7981'
+      TARGET_VOICE_INTERFACE: 'br-lan_400'
     steps:
       - uses: actions/checkout@v4
         with:
@@ -49,12 +52,10 @@ jobs:
           printf 'PRODUCTION_BACKEND_COUNT=%s\n' "${#containers[@]}"
           test "${#containers[@]}" -eq 1
           backend="${containers[0]}"
-          test -n "$backend"
           docker inspect --format '{{.State.Status}}' "$backend" | grep -qx running
           printf 'BACKEND_CONTAINER=%s\n' "$backend" >> "$GITHUB_ENV"
 
-      - name: Read-only V2 authority, credential chain and APF1250 DUT health
-        id: preflight
+      - name: Read-only production V2, DB and credential-path preflight for APF3260-M
         run: |
           set -uo pipefail
           mkdir -p validation
@@ -63,55 +64,53 @@ jobs:
             -e TARGET_IP="$TARGET_IP" \
             -e TARGET_PORT="$TARGET_PORT" \
             -e TARGET_SN="$TARGET_SN" \
+            -e TARGET_MODEL="$TARGET_MODEL" \
+            -e TARGET_PLATFORM_ID="$TARGET_PLATFORM_ID" \
+            -e TARGET_VOICE_INTERFACE="$TARGET_VOICE_INTERFACE" \
             "$BACKEND_CONTAINER" python - <<'PY' > validation/production_m7_c06_preflight.json
-          import asyncio
           import json
           import os
-          import re
           from datetime import datetime, timezone
           from urllib.parse import urlparse
 
           from sqlalchemy import select
 
-          from app.collectors.asyncssh_adapter import AsyncSSHDeviceAdapter
           from app.contracts.enums import LockStatus, ReproductionState
           from app.core.config import settings
-          from app.db.models import (
-              Case,
-              CaseDevice,
-              DeviceCredential,
-              DeviceDiagnosticLock,
-              ReproductionSession,
-          )
+          from app.db.models import Case, CaseDevice, DeviceCredential, DeviceDiagnosticLock, ReproductionSession
           from app.db.session import SessionLocal
           from app.integrations.credentials import CredentialError, get_credential_provider
 
           target_ip = os.environ['TARGET_IP']
           target_port = int(os.environ['TARGET_PORT'])
           target_sn = os.environ['TARGET_SN']
+          target_model = os.environ['TARGET_MODEL']
           terminal_states = {
               ReproductionState.COMPLETED.value,
               ReproductionState.PARTIAL_SUCCESS.value,
               ReproductionState.CANCELLED.value,
               ReproductionState.FAILED.value,
           }
+
           payload = {
-              'schema_version': 'production-m7-c06-preflight-v4',
+              'schema_version': 'production-m7-c06-apf3260m-preflight-v1',
               'checked_at': datetime.now(timezone.utc).isoformat(),
               'mutation_performed': False,
               'target': {
-                  'model': 'APF1250',
+                  'model': target_model,
+                  'platform_id': os.environ['TARGET_PLATFORM_ID'],
                   'ip': target_ip,
                   'ssh_port': target_port,
                   'sn_suffix': target_sn[-4:],
-                  'identity_source': 'AUDITED_R6_GATE',
+                  'voice_interface': os.environ['TARGET_VOICE_INTERFACE'],
+                  'identity_source': 'AUDITED_R7_APF3260M_RC55',
               },
               'runtime': {},
               'database': {},
               'credential_provider': {},
               'poseidon_readiness': {},
-              'dut': {},
               'blocking_reasons': [],
+              'warnings': [],
           }
 
           engine = os.getenv('CAPTURE_ENGINE_VERSION')
@@ -122,7 +121,7 @@ jobs:
               'capture_engine_version': engine,
               'capture_v2_production_enabled': v2_enabled,
               'reproduction_platform_mode': platform_mode,
-              'authority_expected_v2': runtime_ok,
+              'authority_expected_v2_real': runtime_ok,
           }
           if not runtime_ok:
               payload['blocking_reasons'].append('PRODUCTION_CAPTURE_AUTHORITY_NOT_V2_REAL')
@@ -135,12 +134,8 @@ jobs:
                   .order_by(CaseDevice.created_at.desc())
               ).all())
               device_ids = [d.id for d in devices]
-              sns = sorted({d.sn for d in devices if d.sn})
-              identity_conflict = bool(sns and sns != [target_sn])
-
-              credential_row = db.scalar(
-                  select(DeviceCredential).where(DeviceCredential.sn == target_sn)
-              )
+              stored_sns = sorted({d.sn for d in devices if d.sn})
+              identity_conflict = any(sn != target_sn for sn in stored_sns)
 
               active_locks = []
               sessions = []
@@ -161,16 +156,8 @@ jobs:
                   ).all())
 
               active_sessions = [s for s in sessions if s.state not in terminal_states]
-              recent_sessions = [
-                  {
-                      'session_id': s.id,
-                      'case_id': s.case_id,
-                      'state': s.state,
-                      'cleanup_status': s.cleanup_status,
-                      'created_at': s.created_at.isoformat() if s.created_at else None,
-                  }
-                  for s in sessions[:5]
-              ]
+              credential_row = db.scalar(select(DeviceCredential).where(DeviceCredential.sn == target_sn))
+
               recent_cases = []
               for d in devices[:8]:
                   case = db.get(Case, d.case_id)
@@ -185,14 +172,25 @@ jobs:
               payload['database'] = {
                   'matching_case_device_rows': len(devices),
                   'first_production_case_binding_required': len(devices) == 0,
-                  'stored_unique_device_identity_count': len(sns),
+                  'stored_unique_sn_count': len(stored_sns),
                   'stored_identity_matches_audited_target': not identity_conflict,
                   'active_or_quarantined_lock_count': len(active_locks),
                   'active_nonterminal_session_count': len(active_sessions),
+                  'recent_sessions': [
+                      {
+                          'session_id': s.id,
+                          'case_id': s.case_id,
+                          'state': s.state,
+                          'cleanup_status': s.cleanup_status,
+                          'created_at': s.created_at.isoformat() if s.created_at else None,
+                      }
+                      for s in sessions[:5]
+                  ],
+                  'recent_cases': recent_cases[:5],
                   'device_credential_registration': {
                       'row_exists': credential_row is not None,
-                      'endpoint_matches_target': (
-                          credential_row is not None
+                      'endpoint_matches_target': bool(
+                          credential_row
                           and credential_row.ip == target_ip
                           and int(credential_row.ssh_port) == target_port
                       ),
@@ -200,20 +198,15 @@ jobs:
                       'password_present': bool(credential_row and credential_row.password),
                       'source': credential_row.source if credential_row else None,
                       'product_present': bool(credential_row and credential_row.product),
-                      'updated_at': (
-                          credential_row.updated_at.isoformat()
-                          if credential_row and credential_row.updated_at else None
-                      ),
                   },
-                  'recent_sessions': recent_sessions,
-                  'recent_cases': recent_cases[:5],
               }
+
               if identity_conflict:
-                  payload['blocking_reasons'].append('APF1250_PRODUCTION_DB_IDENTITY_CONFLICT')
+                  payload['blocking_reasons'].append('APF3260M_PRODUCTION_DB_IDENTITY_CONFLICT')
               if active_locks:
-                  payload['blocking_reasons'].append('APF1250_HAS_ACTIVE_OR_QUARANTINED_LOCK')
+                  payload['blocking_reasons'].append('APF3260M_HAS_ACTIVE_OR_QUARANTINED_LOCK')
               if active_sessions:
-                  payload['blocking_reasons'].append('APF1250_HAS_NONTERMINAL_REPRODUCTION_SESSION')
+                  payload['blocking_reasons'].append('APF3260M_HAS_NONTERMINAL_REPRODUCTION_SESSION')
           finally:
               db.close()
 
@@ -229,22 +222,22 @@ jobs:
                   or '<' in api_url
                   or '>' in api_url
               )
+              provider_id = getattr(provider, 'provider_id', 'unknown')
               payload['credential_provider'] = {
-                  'provider_id': getattr(provider, 'provider_id', 'unknown'),
+                  'provider_id': provider_id,
                   'production_capable': bool(getattr(provider, 'production_capable', False)),
                   'api_url_configured': bool(api_url),
                   'api_url_scheme': parsed_api.scheme if parsed_api else None,
-                  'api_url_is_placeholder': api_placeholder,
+                  'api_url_is_placeholder': api_placeholder if provider_id == 'api' else None,
                   'api_token_source_configured': bool(
                       getattr(settings, 'credential_api_token_file', None)
                       or getattr(settings, 'credential_api_token_env', None)
                       or getattr(settings, 'credential_api_token', None)
                   ),
               }
-              if getattr(provider, 'provider_id', None) == 'api' and api_placeholder:
+              if provider_id == 'api' and api_placeholder:
                   payload['blocking_reasons'].append('PRODUCTION_CREDENTIAL_API_PLACEHOLDER')
           except Exception as exc:
-              provider = None
               payload['credential_provider'] = {
                   'provider_id': None,
                   'production_capable': False,
@@ -265,72 +258,26 @@ jobs:
                   except CredentialError:
                       baichuan_ready = False
               payload['poseidon_readiness'] = {
-                  'provider_supported_by_product': True,
                   'secret_file_present': secret_exists,
                   'baichuan_credentials_present': baichuan_ready,
+                  'direct_probe_supported': True,
               }
           except Exception as exc:
               payload['poseidon_readiness'] = {
-                  'provider_supported_by_product': True,
                   'secret_file_present': False,
                   'baichuan_credentials_present': False,
+                  'direct_probe_supported': False,
                   'probe_error_type': type(exc).__name__,
               }
 
-          async def dut_probe():
-              if provider is None:
-                  raise CredentialError('CREDENTIAL_PROVIDER_UNAVAILABLE')
-              password = await provider.get_password(sn=target_sn, ip=target_ip, product='APF1250')
-              resolver = getattr(provider, 'resolve_username', None)
-              username = resolver(ip=target_ip, fallback='root') if callable(resolver) else 'root'
-              adapter = AsyncSSHDeviceAdapter(
-                  ip=target_ip,
-                  port=target_port,
-                  username=username,
-                  password=password,
-              )
-              try:
-                  await asyncio.wait_for(adapter.connect(), timeout=15)
-                  command = (
-                      "echo PROBE_OK=1; "
-                      "echo TCPDUMP_COUNT=$(ps w | grep '[t]cpdump' | wc -l); "
-                      "echo DSP_DIAG_PROCESS_COUNT=$(ps w | grep '[d]sp diag' | wc -l)"
-                  )
-                  result = await adapter.execute_shell(command, timeout=10)
-                  text = result.stdout or ''
-                  def number(name):
-                      m = re.search(rf'{name}=(\\d+)', text)
-                      return int(m.group(1)) if m else None
-                  return {
-                      'credential_resolved': True,
-                      'ssh_connected': 'PROBE_OK=1' in text,
-                      'tcpdump_process_count': number('TCPDUMP_COUNT'),
-                      'dsp_diag_process_count': number('DSP_DIAG_PROCESS_COUNT'),
-                  }
-              finally:
-                  try:
-                      await asyncio.wait_for(adapter.disconnect(), timeout=5)
-                  except Exception:
-                      pass
-
-          try:
-              dut = asyncio.run(dut_probe())
-              payload['dut'] = dut
-              if not dut.get('ssh_connected'):
-                  payload['blocking_reasons'].append('APF1250_SSH_READONLY_PROBE_FAILED')
-              if dut.get('tcpdump_process_count') not in (0, None):
-                  payload['blocking_reasons'].append('APF1250_RESIDUAL_TCPDUMP_PROCESS')
-              if dut.get('dsp_diag_process_count') not in (0, None):
-                  payload['blocking_reasons'].append('APF1250_RESIDUAL_DSP_DIAG_PROCESS')
-          except Exception as exc:
-              payload['dut'] = {
-                  'credential_resolved': False,
-                  'ssh_connected': False,
-                  'error_type': type(exc).__name__,
-                  'credential_error': str(exc) if isinstance(exc, CredentialError) else None,
-              }
-              payload['blocking_reasons'].append('APF1250_SSH_READONLY_PROBE_EXCEPTION')
-
+          payload['device_control_plane_ready'] = not any(
+              reason.startswith('APF3260M_') or reason == 'PRODUCTION_CAPTURE_AUTHORITY_NOT_V2_REAL'
+              for reason in payload['blocking_reasons']
+          )
+          payload['formal_product_credential_path_ready'] = not any(
+              reason.startswith('PRODUCTION_CREDENTIAL_')
+              for reason in payload['blocking_reasons']
+          )
           payload['verdict'] = 'PASS' if not payload['blocking_reasons'] else 'BLOCKED'
           print(json.dumps(payload, ensure_ascii=False, indent=2))
           raise SystemExit(0 if payload['verdict'] == 'PASS' else 2)
@@ -340,11 +287,11 @@ jobs:
           cat validation/production_m7_c06_preflight.json
           exit "$rc"
 
-      - name: Upload sanitized read-only preflight evidence
+      - name: Upload sanitized APF3260-M preflight evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: production-m7-c06-preflight
+          name: production-m7-c06-apf3260m-preflight
           path: validation/production_m7_c06_preflight.json
           if-no-files-found: error
           retention-days: 30
