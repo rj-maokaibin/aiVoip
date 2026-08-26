@@ -56,7 +56,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          docker run --rm --privileged --pid=host --network host -v /:/host python:3.12-slim \
+          docker run --rm -i --privileged --pid=host --network host -v /:/host python:3.12-slim \
             chroot /host /usr/bin/python3 - <<'PY'
           from pathlib import Path
           from datetime import datetime, timezone
@@ -98,7 +98,7 @@ jobs:
           print('BACKEND_PORT=18001')
           PY
 
-      - name: Verify only safe target state and no service restart
+      - name: Verify safe target state
         shell: bash
         run: |
           set -euo pipefail
@@ -122,4 +122,3 @@ jobs:
           assert eff('VOIP_BACKEND_BIND','')=='127.0.0.1'
           assert eff('VOIP_BACKEND_PORT','')=='18001'
           PY
-          docker compose -p aivoip -f /home/dev/workspace/aiVoip/docker-compose.yml ps --status running --services | sort
