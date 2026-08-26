@@ -22,24 +22,12 @@ jobs:
       - voip-controlled-linux
     timeout-minutes: 10
     steps:
-      - name: Inspect stopped RC85 process tree
+      - name: Safe production env state only
         shell: bash
         run: |
           set -euo pipefail
           echo "PROBE_UTC=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-          ps -o pid,ppid,pgid,sid,tpgid,user,etime,stat,wchan:24,args -p 608858,2203168,2575556,2575557,2575558 || true
-          for p in 2203168 2575556 2575557 2575558; do
-            if [ -r "/proc/$p/status" ]; then
-              echo "=== /proc/$p/status selected ==="
-              grep -E '^(Name|State|Tgid|Pid|PPid|TracerPid|SigPnd|ShdPnd|SigBlk|SigIgn|SigCgt):' "/proc/$p/status" || true
-            fi
-          done
-
-      - name: Read only safe production env state
-        shell: bash
-        run: |
-          set -euo pipefail
-          docker run --rm \
+          docker run --rm -i \
             -v /etc/voip-ai:/probe/voip-ai:ro \
             python:3.12-slim \
             python - <<'PY'
@@ -51,21 +39,25 @@ jobs:
           if p.is_file():
               for raw in p.read_text(encoding='utf-8').splitlines():
                   s=raw.strip()
-                  if not s or s.startswith('#') or '=' not in s: continue
-                  if s.startswith('export '): s=s[7:].strip()
-                  k,v=s.split('=',1); k=k.strip(); v=v.strip().strip('"').strip("'")
-                  if k in keys: out[k]=v
-          print(json.dumps(out, sort_keys=True))
+                  if not s or s.startswith('#') or '=' not in s:
+                      continue
+                  if s.startswith('export '):
+                      s=s[7:].strip()
+                  k,v=s.split('=',1)
+                  k=k.strip(); v=v.strip()
+                  if len(v)>=2 and v[0]==v[-1] and v[0] in {'\"', "'"}:
+                      v=v[1:-1]
+                  if k in keys:
+                      out[k]=v
+          print('SAFE_ENV='+json.dumps(out, sort_keys=True))
           print('BACKUPS:')
           for x in sorted(Path('/probe/voip-ai').glob('production.env*')):
               print(x.name)
           PY
 
-      - name: Docker project and local build state
+      - name: Current RC85 process states and voip-ai containers
         shell: bash
         run: |
           set -euo pipefail
-          echo '=== voip-ai containers ==='
+          ps -o pid,ppid,pgid,sid,tpgid,user,etime,stat,args -p 2203168,2575556,2575557,2575558 || true
           docker ps -a --filter label=com.docker.compose.project=voip-ai --format 'SERVICE={{.Label "com.docker.compose.service"}} NAME={{.Names}} STATUS={{.Status}} IMAGE={{.Image}}' || true
-          echo '=== recent voip-ai images ==='
-          docker images --format '{{.Repository}}:{{.Tag}} {{.ID}} {{.CreatedSince}}' | grep -E 'voip-ai|aiVoip' | head -50 || true
