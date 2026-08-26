@@ -1,4 +1,4 @@
-name: Capture V2 Control Git Remote Diagnostic
+name: Capture V2 RC89 Readonly Progress Probe
 
 on:
   push:
@@ -14,7 +14,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  git-remote-diagnostic:
+  rc89-readonly-probe:
     runs-on:
       - self-hosted
       - linux
@@ -22,35 +22,16 @@ jobs:
       - voip-controlled-linux
     timeout-minutes: 10
     steps:
-      - name: Diagnose repo-owner origin and explicit master fetch
+      - name: Read control and cutover processes
         shell: bash
         run: |
           set -euo pipefail
-          docker run --rm --privileged --network host -v /:/host python:3.12-slim \
-            chroot /host /usr/sbin/runuser -u dev -- /usr/bin/env HOME=/home/dev USER=dev LOGNAME=dev /bin/bash -lc '
-              set -euo pipefail
-              cd /home/dev/workspace/aiVoip-control
-              echo "HEAD=$(git rev-parse HEAD)"
-              echo "BRANCH=$(git branch --show-current)"
-              echo "ORIGIN_URL=$(git remote get-url origin)"
-              echo "ORIGIN_FETCH_BEGIN"
-              git config --get-all remote.origin.fetch || true
-              echo "ORIGIN_FETCH_END"
-              echo "LS_REMOTE_BEGIN"
-              git ls-remote origin refs/heads/master refs/heads/feat/capture-v2.1.1-real-gates
-              echo "LS_REMOTE_END"
-              echo "FETCH_EXPLICIT_MASTER_BEGIN"
-              git fetch --verbose origin refs/heads/master
-              echo "FETCH_EXPLICIT_MASTER_END"
-              echo "FETCH_HEAD_RAW_BEGIN"
-              cat .git/FETCH_HEAD
-              echo "FETCH_HEAD_RAW_END"
-              echo "FETCH_HEAD=$(git rev-parse FETCH_HEAD)"
-              echo "MASTER_EXPECTED=abcb054d018b27495aaa4c47079c354b69471a9d"
-              test "$(git rev-parse FETCH_HEAD)" = abcb054d018b27495aaa4c47079c354b69471a9d
-            '
+          echo '=== CONTROL/CUTOVER PROCESSES ==='
+          ps -eo pid,ppid,pgid,sid,tpgid,user,etime,stat,args | grep -E 'capture_v2.control_cli|production_cutover_guarded|deploy/voip-ai' | grep -v grep || true
+          echo '=== VOIP-AI CONTAINERS ==='
+          docker ps -a --filter label=com.docker.compose.project=voip-ai --format '{{.Names}}|{{.Status}}|{{.Image}}' || true
 
-      - name: Verify production remains V1
+      - name: Read safe production cutover state
         shell: bash
         run: |
           set -euo pipefail
@@ -63,10 +44,13 @@ jobs:
               if s.startswith('export '): s=s[7:].strip()
               k,v=s.split('=',1); vals[k.strip()]=v.strip().strip('"').strip("'")
           def eff(k,d): return vals.get(k,'').strip() or d
+          print('APP_ENV='+eff('APP_ENV',''))
           print('ENGINE='+eff('CAPTURE_ENGINE_VERSION','V1'))
           print('V2_ENABLED='+eff('CAPTURE_V2_PRODUCTION_ENABLED','false'))
           print('PLATFORM='+eff('REPRODUCTION_PLATFORM_MODE','mock'))
-          assert eff('CAPTURE_ENGINE_VERSION','V1').upper() == 'V1'
-          assert eff('CAPTURE_V2_PRODUCTION_ENABLED','false').lower() == 'false'
-          assert eff('REPRODUCTION_PLATFORM_MODE','mock') == 'mock'
+          print('RBAC='+eff('FEISHU_IDENTITY_RBAC_ENABLED','false'))
+          root=Path('/probe/voip-ai')
+          backups=sorted(x.name for x in root.glob('production.env.capture-v2-pre-*'))
+          print('CUTOVER_BACKUP_COUNT='+str(len(backups)))
+          print('LATEST_CUTOVER_BACKUP='+(backups[-1] if backups else 'NONE'))
           PY
