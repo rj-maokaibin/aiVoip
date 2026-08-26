@@ -1,12 +1,12 @@
 {
   "schema_version": "capture-v2-remote-action-v1",
-  "action_id": "RC87-PRODUCTION-CUTOVER-014",
-  "sequence": 225,
-  "created_at": "2026-08-26T05:36:25+00:00",
-  "expires_at": "2026-08-26T11:36:25+00:00",
-  "action_type": "PRODUCTION_CUTOVER",
+  "action_id": "RC88-PRODUCTION-DEPLOYMENT-PREFLIGHT-015",
+  "sequence": 226,
+  "created_at": "2026-08-26T08:18:00+00:00",
+  "expires_at": "2026-08-26T14:18:00+00:00",
+  "action_type": "PRODUCTION_DEPLOYMENT_PREFLIGHT",
   "parameters": {
-    "timeout_seconds": 7200
+    "timeout_seconds": 300
   },
   "safety": {
     "require_clean_git": true,
@@ -14,8 +14,8 @@
     "require_v2_disabled": true,
     "allow_worker_kill": false,
     "allow_server_quarantine": false,
-    "expected_head": "476cdda79faac5f6a62893480374d68bb0770059"
+    "expected_head": "9df273ab29569afb198f5e0bcf36fe7750f07192"
   },
   "requested_by": "ChatGPT-remote-validation-controller",
-  "note": "Execute the explicitly authorized guarded Capture Engine V2 production cutover only after RC86B fresh production deployment preflight PASS with deployment_status=PASS and deploy_blocking_keys empty. Accepted master includes PR #57 repo-owner Git identity fix and passed Frozen, Full Software, Prepared-PCAP Golden #001 and Human Evidence; PR #58 synchronized it into the production control branch; the single no-TTY control runner was live-probed healthy; and real root-to-repo-owner Git access was proven. Use the canonical authorization and audited production_cutover_guarded module only. Back up production env before mutation, switch to V2/real mode, deploy accepted source, run migrations and runtime verification, validate all required services/queues, Redis, MinIO, frontend/backend readiness and backend capture authority. Fail closed and restore the pre-cutover V1 state on any error. No DUT mutation is allowed. Production V2 may be declared active only if this action returns PASS and live runtime evidence proves CAPTURE_ENGINE_VERSION=V2, CAPTURE_V2_PRODUCTION_ENABLED=true, REPRODUCTION_PLATFORM_MODE=real and CAPTURE_AUTHORITY=V2."
+  "note": "Fresh guarded production deployment preflight after PR #59 fixed fetched-master snapshot ancestry validation and PR #60 synchronized the fully accepted master into production control. PR #60 passed Frozen Contracts, Full Software Acceptance, Prepared-PCAP Golden #001, Human Evidence Gate and evidence upload. Verify canonical authorization, real production V1 prestate, deploy blockers, source manifest and production compose requirements. Perform no production or DUT mutation. A final guarded V2 cutover must not be issued unless this action returns PASS with deployment_status=PASS and no deploy blockers."
 }
