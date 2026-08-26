@@ -91,9 +91,7 @@ def test_git_fails_closed_for_unprivileged_identity_mismatch(monkeypatch, tmp_pa
 
 def test_master_snapshot_uses_isolated_ref_for_ancestor(monkeypatch, tmp_path: Path) -> None:
     master = "abcb054d018b27495aaa4c47079c354b69471a9d"
-    validated = "db3e8012a9569d95056ab37a3d35221a5bffcc1b"
-    # Preserve the real validated head length/shape used by the cutover contract.
-    validated = "db3e8012a9569d95056ab37a3d35221a5bffcc1" if len(validated) != 40 else validated
+    validated = "db3e8012a9569d9508e9d2cd920baf1de6bac866"
     snapshot_ref = "refs/capture-v2/master-snapshot"
     calls: list[tuple[str, ...]] = []
 
@@ -212,7 +210,7 @@ def test_master_snapshot_fails_closed_if_ancestor_check_has_no_snapshot(
         tmp_path,
         "merge-base",
         "--is-ancestor",
-        "db3e8012a9569d950d2cd920baf1de6bac86600",
+        "db3e8012a9569d9508e9d2cd920baf1de6bac866",
         "origin/master",
     )
 
