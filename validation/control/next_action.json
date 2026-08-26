@@ -1,12 +1,12 @@
 {
   "schema_version": "capture-v2-remote-action-v1",
-  "action_id": "RC93-PRODUCTION-CUTOVER-020",
-  "sequence": 231,
-  "created_at": "2026-08-26T10:38:05+00:00",
-  "expires_at": "2026-08-26T16:38:05+00:00",
-  "action_type": "PRODUCTION_CUTOVER",
+  "action_id": "RC94-PRODUCTION-DEPLOYMENT-PREFLIGHT-021",
+  "sequence": 232,
+  "created_at": "2026-08-26T10:45:10+00:00",
+  "expires_at": "2026-08-26T16:45:10+00:00",
+  "action_type": "PRODUCTION_DEPLOYMENT_PREFLIGHT",
   "parameters": {
-    "timeout_seconds": 7200
+    "timeout_seconds": 300
   },
   "safety": {
     "require_clean_git": true,
@@ -14,8 +14,8 @@
     "require_v2_disabled": true,
     "allow_worker_kill": false,
     "allow_server_quarantine": false,
-    "expected_head": "805b1dda1cbd2a530345cfc8cc0aff8e2ab345f7"
+    "expected_head": "117f6b91c6a9410cb67b42f8d10af4b96302efa7"
   },
   "requested_by": "ChatGPT-remote-validation-controller",
-  "note": "Execute the authorized guarded Capture Engine V2 production cutover after RC92 fresh production preflight PASS with deployment_status=PASS and no deploy blockers. RC91 proved image build and DB migration succeeded but backend host port 8000 collided with an unrelated release-smoke uvicorn process. Do not stop or alter release-smoke or the existing live aivoip stack. Production env has been safely preconfigured while remaining V1 with VOIP_BACKEND_BIND=127.0.0.1 and VOIP_BACKEND_PORT=18001; candidate ports 18001, 8080 and MinIO console 19001 were verified free and RC92 compose/preflight passed. Preserve these backend isolation keys during the cutover, apply the existing guarded V2/real and MinIO console overrides, run strict release preflight, production deploy, migration, runtime verify, required service checks and backend authority probe. Fail closed with verified V1 rollback on any error. No DUT mutation. Declare production active only if live CAPTURE_AUTHORITY=V2 is proven."
+  "note": "Fresh guarded production deployment preflight after RC93 rollback succeeded and the MinIO readiness blocker was proven to be bootstrap/backend secret credential mismatch. Without disclosing any secret, production.env MINIO_ROOT_USER and MINIO_ROOT_PASSWORD were atomically aligned to the secure MINIO_ACCESS_KEY_SECRET_HOST_FILE and MINIO_SECRET_KEY_SECRET_HOST_FILE values; equality was verified true while production remained V1 / V2 disabled / platform mock and backend host isolation remained 127.0.0.1:18001. Verify canonical authorization, V1 prestate, non-default MinIO bootstrap credentials, secret files, deployment blockers, compose expansion, source manifest and required services. Perform no production or DUT mutation. Do not issue cutover unless PASS with no deploy blockers."
 }
