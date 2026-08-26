@@ -1,4 +1,4 @@
-name: Capture V2 MinIO Bootstrap Credential Alignment
+name: Capture V2 RC95 Live Readiness Probe
 
 on:
   push:
@@ -14,7 +14,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  minio-credential-align:
+  rc95-live-readiness:
     runs-on:
       - self-hosted
       - linux
@@ -22,21 +22,27 @@ jobs:
       - voip-controlled-linux
     timeout-minutes: 10
     steps:
-      - name: Guard rollback V1 state and no voip-ai runtime
+      - name: Probe cutover process runtime and readiness read-only
         shell: bash
         run: |
           set -euo pipefail
-          if docker ps -q --filter 'label=com.docker.compose.project=voip-ai' | grep -q .; then
-            echo 'VOIP_AI_RUNTIME_PRESENT=true'
-            exit 1
-          fi
-          echo 'VOIP_AI_RUNTIME_PRESENT=false'
+          echo '=== CUTOVER PROCESS ==='
+          ps -eo pid,ppid,user,etime,stat,args | grep -E 'production_cutover_guarded|deploy/voip-ai' | grep -v grep || true
+          echo '=== READY ==='
+          curl -sS --max-time 5 -i http://127.0.0.1:18001/health/ready || true
+          echo
+          echo '=== RUNNING SERVICES ==='
+          docker ps --format '{{.Names}} {{.Status}} {{.Ports}}' | grep '^voip-ai-' | sort || true
+          echo '=== BACKEND LOG TAIL ==='
+          docker logs --tail 60 voip-ai-backend-1 2>&1 || true
+
+      - name: Read safe authority keys only
+        shell: bash
+        run: |
+          set -euo pipefail
           docker run --rm -i -v /etc/voip-ai:/probe/voip-ai:ro python:3.12-slim python - <<'PY'
           from pathlib import Path
-          import stat
           p=Path('/probe/voip-ai/production.env'); vals={}
-          mode=stat.S_IMODE(p.stat().st_mode)
-          assert mode & 0o077 == 0, oct(mode)
           for raw in p.read_text(encoding='utf-8').splitlines():
               s=raw.strip()
               if not s or s.startswith('#') or '=' not in s: continue
@@ -47,119 +53,4 @@ jobs:
           print('V2_ENABLED='+eff('CAPTURE_V2_PRODUCTION_ENABLED','false'))
           print('PLATFORM='+eff('REPRODUCTION_PLATFORM_MODE','mock'))
           print('BACKEND_PORT='+eff('VOIP_BACKEND_PORT',''))
-          assert eff('APP_ENV','')=='production'
-          assert eff('CAPTURE_ENGINE_VERSION','V1').upper()=='V1'
-          assert eff('CAPTURE_V2_PRODUCTION_ENABLED','false').lower()=='false'
-          assert eff('REPRODUCTION_PLATFORM_MODE','mock')=='mock'
-          assert eff('VOIP_BACKEND_BIND','')=='127.0.0.1'
-          assert eff('VOIP_BACKEND_PORT','')=='18001'
-          PY
-
-      - name: Atomically align MinIO bootstrap credentials to backend secret files
-        shell: bash
-        run: |
-          set -euo pipefail
-          docker run --rm -i --privileged -v /:/host python:3.12-slim python - <<'PY'
-          from pathlib import Path
-          from datetime import datetime, timezone
-          import os, re, shutil, stat
-
-          root=Path('/host')
-          p=root/'etc/voip-ai/production.env'
-          mode=stat.S_IMODE(p.stat().st_mode)
-          if mode & 0o077:
-              raise SystemExit('PRODUCTION_ENV_PERMISSIONS_NOT_PRIVATE')
-
-          def parse(lines):
-              out={}
-              for raw in lines:
-                  s=raw.strip()
-                  if not s or s.startswith('#') or '=' not in s: continue
-                  probe=s[7:].strip() if s.startswith('export ') else s
-                  k,v=probe.split('=',1)
-                  v=v.strip()
-                  if len(v)>=2 and v[0]==v[-1] and v[0] in {'"',"'"}: v=v[1:-1]
-                  out[k.strip()]=v
-              return out
-
-          lines=p.read_text(encoding='utf-8').splitlines()
-          vals=parse(lines)
-          def eff(k,d): return vals.get(k,'').strip() or d
-          if not (
-              eff('APP_ENV','')=='production'
-              and eff('CAPTURE_ENGINE_VERSION','V1').upper()=='V1'
-              and eff('CAPTURE_V2_PRODUCTION_ENABLED','false').lower()=='false'
-              and eff('REPRODUCTION_PLATFORM_MODE','mock')=='mock'
-          ):
-              raise SystemExit('PRODUCTION_PRESTATE_INVALID')
-
-          def secret_file(key):
-              raw=vals.get(key,'').strip()
-              if not raw: raise SystemExit(key+'_MISSING')
-              fp=root/raw.lstrip('/')
-              if not fp.is_file(): raise SystemExit(key+'_FILE_MISSING')
-              fm=stat.S_IMODE(fp.stat().st_mode)
-              if fm & 0o077: raise SystemExit(key+'_FILE_PERMISSIONS_INVALID')
-              value=fp.read_text(encoding='utf-8').strip()
-              if not value: raise SystemExit(key+'_EMPTY')
-              return value
-
-          access=secret_file('MINIO_ACCESS_KEY_SECRET_HOST_FILE')
-          secret=secret_file('MINIO_SECRET_KEY_SECRET_HOST_FILE')
-          # Keep the env update unambiguous for Docker Compose. No value is printed.
-          safe=re.compile(r'^[A-Za-z0-9._~+/=-]{12,256}$')
-          if not safe.fullmatch(access): raise SystemExit('MINIO_ACCESS_KEY_DOTENV_UNSAFE')
-          if not safe.fullmatch(secret): raise SystemExit('MINIO_SECRET_KEY_DOTENV_UNSAFE')
-
-          overrides={'MINIO_ROOT_USER':access,'MINIO_ROOT_PASSWORD':secret}
-          stamp=datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')
-          backup=root/f'etc/voip-ai/production.env.minio-cred-pre-{stamp}'
-          shutil.copy2(p,backup); os.chmod(backup,0o600)
-
-          out=[]; seen=set()
-          for raw in lines:
-              s=raw.strip()
-              if s and not s.startswith('#') and '=' in s:
-                  probe=s[7:].strip() if s.startswith('export ') else s
-                  key=probe.split('=',1)[0].strip()
-                  if key in overrides:
-                      prefix='export ' if s.startswith('export ') else ''
-                      out.append(f'{prefix}{key}={overrides[key]}'); seen.add(key); continue
-              out.append(raw)
-          for key,value in overrides.items():
-              if key not in seen: out.append(f'{key}={value}')
-          tmp=p.with_name(p.name+'.minio-cred-new')
-          tmp.write_text('\n'.join(out)+'\n',encoding='utf-8'); os.chmod(tmp,0o600); os.replace(tmp,p)
-          print('MINIO_BOOTSTRAP_CREDENTIAL_ALIGNMENT_APPLIED=true')
-          print('BACKUP_CREATED=true')
-          PY
-
-      - name: Verify credential equality without disclosure and V1 preserved
-        shell: bash
-        run: |
-          set -euo pipefail
-          docker run --rm -i --privileged -v /:/host python:3.12-slim python - <<'PY'
-          from pathlib import Path
-          root=Path('/host'); p=root/'etc/voip-ai/production.env'; vals={}
-          for raw in p.read_text(encoding='utf-8').splitlines():
-              s=raw.strip()
-              if not s or s.startswith('#') or '=' not in s: continue
-              if s.startswith('export '): s=s[7:].strip()
-              k,v=s.split('=',1); vals[k.strip()]=v.strip().strip('"').strip("'")
-          def eff(k,d): return vals.get(k,'').strip() or d
-          access=(root/vals['MINIO_ACCESS_KEY_SECRET_HOST_FILE'].lstrip('/')).read_text(encoding='utf-8').strip()
-          secret=(root/vals['MINIO_SECRET_KEY_SECRET_HOST_FILE'].lstrip('/')).read_text(encoding='utf-8').strip()
-          access_match=vals.get('MINIO_ROOT_USER','').strip()==access
-          secret_match=vals.get('MINIO_ROOT_PASSWORD','').strip()==secret
-          print('MINIO_ACCESS_KEY_MATCH='+str(access_match).lower())
-          print('MINIO_SECRET_KEY_MATCH='+str(secret_match).lower())
-          print('ENGINE='+eff('CAPTURE_ENGINE_VERSION','V1'))
-          print('V2_ENABLED='+eff('CAPTURE_V2_PRODUCTION_ENABLED','false'))
-          print('PLATFORM='+eff('REPRODUCTION_PLATFORM_MODE','mock'))
-          print('BACKEND_PORT='+eff('VOIP_BACKEND_PORT',''))
-          assert access_match and secret_match
-          assert eff('CAPTURE_ENGINE_VERSION','V1').upper()=='V1'
-          assert eff('CAPTURE_V2_PRODUCTION_ENABLED','false').lower()=='false'
-          assert eff('REPRODUCTION_PLATFORM_MODE','mock')=='mock'
-          assert eff('VOIP_BACKEND_PORT','')=='18001'
           PY
