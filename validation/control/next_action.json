@@ -1,12 +1,12 @@
 {
   "schema_version": "capture-v2-remote-action-v1",
-  "action_id": "RC91-PRODUCTION-CUTOVER-018",
-  "sequence": 229,
-  "created_at": "2026-08-26T10:19:15+00:00",
-  "expires_at": "2026-08-26T16:19:15+00:00",
-  "action_type": "PRODUCTION_CUTOVER",
+  "action_id": "RC92-PRODUCTION-DEPLOYMENT-PREFLIGHT-019",
+  "sequence": 230,
+  "created_at": "2026-08-26T10:37:40+00:00",
+  "expires_at": "2026-08-26T16:37:40+00:00",
+  "action_type": "PRODUCTION_DEPLOYMENT_PREFLIGHT",
   "parameters": {
-    "timeout_seconds": 7200
+    "timeout_seconds": 300
   },
   "safety": {
     "require_clean_git": true,
@@ -14,8 +14,8 @@
     "require_v2_disabled": true,
     "allow_worker_kill": false,
     "allow_server_quarantine": false,
-    "expected_head": "9bf27796e378dc1d05ea71e27539bd387db634a1"
+    "expected_head": "56c1f6ddbcbfdb8adce9a6ea5b8eced1600a8e3f"
   },
   "requested_by": "ChatGPT-remote-validation-controller",
-  "note": "Execute the final authorized guarded Capture Engine V2 production cutover after RC90 fresh production preflight PASS with deployment_status=PASS and no deploy blockers. The accepted master/control head includes all prior production-control fixes plus the MinIO console collision fix: before production.env mutation, verify 127.0.0.1:19001 is still available; within the same atomic env backup transaction set CAPTURE_ENGINE_VERSION=V2, CAPTURE_V2_PRODUCTION_ENABLED=true, REPRODUCTION_PLATFORM_MODE=real, VOIP_MINIO_CONSOLE_BIND=127.0.0.1 and VOIP_MINIO_CONSOLE_PORT=19001. Do not stop or alter the existing live aivoip stack occupying host 9001. Run strict release preflight, production deploy, DB migration/runtime verification, required services, queues, Redis, MinIO storage, frontend/backend readiness and backend capture-authority probe. Fail closed with verified V1 rollback on any error. No DUT mutation. Declare production cutover complete only with live CAPTURE_AUTHORITY=V2 evidence."
+  "note": "Fresh guarded production deployment preflight after RC91 failed only on host backend port collision and rollback restored V1. A live privileged probe identified release-smoke uvicorn PID 1691069 legitimately listening on 0.0.0.0:8000. Production env has now been atomically preconfigured, without service restart or V2 activation, with VOIP_BACKEND_BIND=127.0.0.1 and VOIP_BACKEND_PORT=18001; ports 18001, 8080 and 19001 were verified free. Verify canonical authorization, V1 prestate, deployment blockers, compose expansion with backend 18001 and MinIO console 19001, source manifest and required services. Perform no production or DUT mutation. Do not issue cutover unless PASS with no deploy blockers."
 }
