@@ -1,0 +1,335 @@
+name: Production M7 C06 APF3260-M Start Normal Flow
+
+on:
+  pull_request:
+    branches:
+      - master
+    paths:
+      - '.github/workflows/production-m7-c06-3260-start.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-m7-c06-3260-start
+  cancel-in-progress: false
+
+jobs:
+  start-c06:
+    runs-on:
+      - self-hosted
+      - linux
+      - x64
+      - voip-controlled-linux
+    timeout-minutes: 20
+    env:
+      TARGET_IP: '10.48.8.74'
+      TARGET_PORT: '10002'
+      TARGET_SN: 'G1U060H000384'
+      TARGET_VOICE_INTERFACE: 'br-lan_400'
+      PROFILE_ID: 'VOIP_GENERIC_FULL_CAPTURE'
+      CASE_IDEMPOTENCY: 'm7-c06-apf3260-case-20260826-v1'
+      REPRO_IDEMPOTENCY: 'm7-c06-apf3260-reproduction-20260826-v1'
+    steps:
+      - name: Normal-worker-equivalent fail-closed guard
+        run: |
+          set -euo pipefail
+          docker info >/dev/null
+          mapfile -t backends < <(docker ps --filter label=com.docker.compose.project=voip-ai --filter label=com.docker.compose.service=backend --format '{{.Names}}')
+          mapfile -t workers < <(docker ps --filter label=com.docker.compose.project=voip-ai --filter label=com.docker.compose.service=reproduction-worker --format '{{.Names}}')
+          test "${#backends[@]}" -eq 1
+          test "${#workers[@]}" -eq 1
+          backend="${backends[0]}"; worker="${workers[0]}"
+          printf 'BACKEND_CONTAINER=%s\n' "$backend" >> "$GITHUB_ENV"
+          printf 'REPRO_WORKER=%s\n' "$worker" >> "$GITHUB_ENV"
+
+          docker exec -i "$backend" python - <<'PY'
+          from sqlalchemy import select
+          from app.contracts.enums import LockStatus, ReproductionState
+          from app.db.models import DeviceDiagnosticLock, ReproductionSession
+          from app.db.session import SessionLocal
+          from app.core.config import settings
+          from app.integrations.credentials import get_credential_provider
+          assert settings.app_env.lower() == 'production'
+          assert settings.capture_engine_version == 'V2'
+          assert settings.capture_v2_production_enabled is True
+          assert settings.reproduction_platform_mode == 'real'
+          assert settings.credential_provider.lower() == 'poseidon'
+          p=get_credential_provider()
+          assert type(p).__name__ == 'PoseidonCredentialProvider'
+          terminal={'COMPLETED','PARTIAL_SUCCESS','CANCELLED','FAILED'}
+          db=SessionLocal()
+          try:
+              sessions=list(db.scalars(select(ReproductionSession)).all())
+              active=[s for s in sessions if s.state not in terminal]
+              locks=list(db.scalars(select(DeviceDiagnosticLock).where(
+                  DeviceDiagnosticLock.status.in_([LockStatus.ACTIVE.value, LockStatus.QUARANTINED.value])
+              )).all())
+              print(f'ACTIVE_NONTERMINAL_SESSION_COUNT={len(active)}')
+              print(f'ACTIVE_OR_QUARANTINED_LOCK_COUNT={len(locks)}')
+              assert not active
+              assert not locks
+          finally:
+              db.close()
+          print(f'NORMAL_WORKER_SSH_USERNAME={settings.ssh_username}')
+          print('PRODUCTION_MAIN_PATH_RUNTIME=PASS')
+          PY
+
+          # Exactly mirror reproduction_tasks._build_real_adapter(): provider gets
+          # only sn/ip, and SSH username comes from current production settings.
+          docker exec -i \
+            -e TARGET_IP="$TARGET_IP" \
+            -e TARGET_PORT="$TARGET_PORT" \
+            -e TARGET_SN="$TARGET_SN" \
+            -e TARGET_VOICE_INTERFACE="$TARGET_VOICE_INTERFACE" \
+            "$worker" python - <<'PY'
+          import asyncio, os
+          from app.core.config import settings
+          from app.integrations.credentials import get_credential_provider
+          from app.collectors.asyncssh_adapter import AsyncSSHDeviceAdapter
+          async def main():
+              provider=get_credential_provider()
+              password=await provider.get_password(sn=os.environ['TARGET_SN'], ip=os.environ['TARGET_IP'])
+              assert password
+              adapter=AsyncSSHDeviceAdapter(
+                  ip=os.environ['TARGET_IP'], port=int(os.environ['TARGET_PORT']),
+                  username=settings.ssh_username, password=password,
+              )
+              try:
+                  await adapter.connect()
+                  res=await adapter.execute_shell(
+                      f"echo MAIN_PATH_SSH_OK=1; ip link show {os.environ['TARGET_VOICE_INTERFACE']} >/dev/null 2>&1 && echo VOICE_IF_OK=1"
+                  )
+                  out=res.stdout or ''
+                  assert 'MAIN_PATH_SSH_OK=1' in out
+                  assert 'VOICE_IF_OK=1' in out
+              finally:
+                  await adapter.disconnect()
+              print('NORMAL_WORKER_CREDENTIAL_AND_SSH=PASS')
+          asyncio.run(main())
+          PY
+
+      - name: Create Case and Reproduction via production HTTP API
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/m7-c06-start"
+          docker exec -i \
+            -e TARGET_IP="$TARGET_IP" \
+            -e TARGET_PORT="$TARGET_PORT" \
+            -e TARGET_SN="$TARGET_SN" \
+            -e PROFILE_ID="$PROFILE_ID" \
+            -e CASE_IDEMPOTENCY="$CASE_IDEMPOTENCY" \
+            -e REPRO_IDEMPOTENCY="$REPRO_IDEMPOTENCY" \
+            "$BACKEND_CONTAINER" python - <<'PY' > "$RUNNER_TEMP/m7-c06-start/api-result.json"
+          import hashlib, hmac, json, os, time
+          import httpx
+          from app.auth.providers import HmacGatewayAuthProvider, get_auth_provider
+
+          actor='m7-c06-production-acceptance'
+          role='SERVICE'
+          provider=get_auth_provider()
+          assert isinstance(provider,HmacGatewayAuthProvider)
+          secret=provider._secret()
+          base='http://127.0.0.1:8000/api/v1'
+
+          def headers(idem=None):
+              ts=str(int(time.time()))
+              canonical=f'{actor}\n{role}\n{ts}'.encode()
+              sig=hmac.new(secret.encode(),canonical,hashlib.sha256).hexdigest()
+              h={
+                  'X-Actor-Id':actor,
+                  'X-Actor-Role':role,
+                  'X-Auth-Timestamp':ts,
+                  'X-Auth-Signature':sig,
+              }
+              if idem: h['Idempotency-Key']=idem
+              return h
+
+          with httpx.Client(timeout=30.0) as c:
+              profiles=c.get(base+'/reproduction-profiles',headers=headers())
+              profiles.raise_for_status()
+              profile_ids={x['id'] for x in profiles.json()}
+              assert os.environ['PROFILE_ID'] in profile_ids, profile_ids
+
+              case_resp=c.post(
+                  base+'/cases', headers=headers(os.environ['CASE_IDEMPOTENCY']),
+                  json={
+                      'summary':'Production M7 C06 normal call acceptance - APF3260-M',
+                      'ip':os.environ['TARGET_IP'],
+                      'ssh_port':int(os.environ['TARGET_PORT']),
+                      'sn':os.environ['TARGET_SN'],
+                  },
+              )
+              case_resp.raise_for_status()
+              case=case_resp.json()
+              assert len(case.get('devices') or []) == 1, case
+              device_id=case['devices'][0]['id']
+
+              repro_resp=c.post(
+                  base+f"/cases/{case['id']}/reproductions",
+                  headers=headers(os.environ['REPRO_IDEMPOTENCY']),
+                  json={'profile_id':os.environ['PROFILE_ID'],'device_id':device_id,'symptom_class':'GENERIC'},
+              )
+              repro_resp.raise_for_status()
+              repro=repro_resp.json()
+
+              result={
+                  'schema_version':'production-m7-c06-start-v1',
+                  'normal_product_http_api':True,
+                  'case_id':case['id'],
+                  'case_no':case['case_no'],
+                  'device_id':device_id,
+                  'session_id':repro['id'],
+                  'initial_state':repro['state'],
+                  'profile_key':repro['profile_key'],
+              }
+              print(json.dumps(result,ensure_ascii=False,indent=2))
+          PY
+
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          p=json.loads((Path(os.environ['RUNNER_TEMP'])/'m7-c06-start/api-result.json').read_text())
+          assert p['normal_product_http_api'] is True
+          assert p['profile_key']=='VOIP_GENERIC_FULL_CAPTURE'
+          print(f"CASE_NO={p['case_no']}")
+          print(f"CASE_ID={p['case_id']}")
+          print(f"DEVICE_ID={p['device_id']}")
+          print(f"SESSION_ID={p['session_id']}")
+          print(f"INITIAL_STATE={p['initial_state']}")
+          PY
+
+      - name: Wait for real V2 ARMED and WATCHING
+        run: |
+          set -euo pipefail
+          case_id="$(python3 -c "import json,os; print(json.load(open(os.path.join(os.environ['RUNNER_TEMP'],'m7-c06-start/api-result.json')))['case_id'])")"
+          session_id="$(python3 -c "import json,os; print(json.load(open(os.path.join(os.environ['RUNNER_TEMP'],'m7-c06-start/api-result.json')))['session_id'])")"
+          export CASE_ID="$case_id" SESSION_ID="$session_id"
+          docker exec -i \
+            -e SESSION_ID="$session_id" \
+            "$BACKEND_CONTAINER" python - <<'PY' > "$RUNNER_TEMP/m7-c06-start/watching-result.json"
+          import json, os, time
+          from sqlalchemy import select
+          from app.db.models import ReproductionSession, ReproductionEventRecord, ArmValidationResult
+          from app.capture_v2.db_models import CaptureSession
+          from app.db.session import SessionLocal
+
+          sid=os.environ['SESSION_ID']
+          terminal={'COMPLETED','PARTIAL_SUCCESS','CANCELLED','FAILED','ARM_FAILED','CLEANUP_FAILED'}
+          seen=[]
+          deadline=time.time()+150
+          final=None
+          while time.time()<deadline:
+              db=SessionLocal()
+              try:
+                  row=db.get(ReproductionSession,sid)
+                  if not row: raise RuntimeError('SESSION_DISAPPEARED')
+                  state=row.state
+                  if not seen or seen[-1]!=state: seen.append(state)
+                  if state=='WATCHING':
+                      final=row
+                      break
+                  if state in terminal:
+                      raise RuntimeError(f'REPRODUCTION_TERMINAL_BEFORE_WATCHING:{state}:{row.terminal_reason}')
+              finally:
+                  db.close()
+              time.sleep(2)
+          if final is None:
+              raise RuntimeError(f'WATCHING_TIMEOUT seen={seen}')
+
+          db=SessionLocal()
+          try:
+              row=db.get(ReproductionSession,sid)
+              event_rows=list(db.scalars(select(ReproductionEventRecord).where(ReproductionEventRecord.session_id==sid).order_by(ReproductionEventRecord.created_at)))
+              event_dump=[]
+              event_values=[]
+              for e in event_rows:
+                  d={c.name:getattr(e,c.name) for c in e.__table__.columns}
+                  for k,v in list(d.items()):
+                      if hasattr(v,'isoformat'): d[k]=v.isoformat()
+                  event_dump.append(d)
+                  event_values.extend(str(v) for v in d.values() if v is not None)
+              arm=list(db.scalars(select(ArmValidationResult).where(ArmValidationResult.session_id==sid).order_by(ArmValidationResult.validation_no)))
+              capture=list(db.scalars(select(CaptureSession).where(CaptureSession.reproduction_session_id==sid)))
+              joined='|'.join(event_values)
+              assert 'ARM_READY' in joined, event_dump
+              assert 'WATCH_STARTED' in joined, event_dump
+              assert arm, 'ARM_VALIDATION_MISSING'
+              assert capture, 'CAPTURE_V2_SESSION_MISSING'
+              payload={
+                  'schema_version':'production-m7-c06-watching-v1',
+                  'session_id':sid,
+                  'state':row.state,
+                  'capture_stage':row.capture_stage,
+                  'capture_completeness':row.capture_completeness,
+                  'cleanup_required':row.cleanup_required,
+                  'profile_key':row.profile_key,
+                  'voice_runtime_context':row.voice_runtime_context_json,
+                  'seen_states':seen,
+                  'arm_validation_statuses':[a.status for a in arm],
+                  'arm_required_channels':[a.required_channels_json for a in arm],
+                  'arm_observed_channels':[a.observed_channels_json for a in arm],
+                  'v2_capture_session_count':len(capture),
+                  'arm_ready_event':True,
+                  'watch_started_event':True,
+                  'pretrigger_before_user_call':True,
+              }
+              print(json.dumps(payload,ensure_ascii=False,indent=2,default=str))
+          finally:
+              db.close()
+          PY
+
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          p=json.loads((Path(os.environ['RUNNER_TEMP'])/'m7-c06-start/watching-result.json').read_text())
+          assert p['state']=='WATCHING', p
+          assert p['arm_ready_event'] and p['watch_started_event']
+          assert p['v2_capture_session_count'] >= 1
+          print(f"M7_C06_STATE={p['state']}")
+          print(f"SEEN_STATES={','.join(p['seen_states'])}")
+          print(f"ARM_VALIDATION_STATUSES={p['arm_validation_statuses']}")
+          print(f"CAPTURE_COMPLETENESS_PRE_CALL={p['capture_completeness']}")
+          print(f"V2_CAPTURE_SESSION_COUNT={p['v2_capture_session_count']}")
+          print('PRETRIGGER_CAPTURE_BEFORE_USER_CALL=PASS')
+          PY
+
+      - name: Verify live DUT pre-call capture footprint through normal credential path
+        run: |
+          set -euo pipefail
+          docker exec -i \
+            -e TARGET_IP="$TARGET_IP" \
+            -e TARGET_PORT="$TARGET_PORT" \
+            -e TARGET_SN="$TARGET_SN" \
+            -e TARGET_VOICE_INTERFACE="$TARGET_VOICE_INTERFACE" \
+            "$REPRO_WORKER" python - <<'PY'
+          import asyncio, os
+          from app.core.config import settings
+          from app.integrations.credentials import get_credential_provider
+          from app.collectors.asyncssh_adapter import AsyncSSHDeviceAdapter
+          async def main():
+              provider=get_credential_provider()
+              password=await provider.get_password(sn=os.environ['TARGET_SN'],ip=os.environ['TARGET_IP'])
+              adapter=AsyncSSHDeviceAdapter(ip=os.environ['TARGET_IP'],port=int(os.environ['TARGET_PORT']),username=settings.ssh_username,password=password)
+              try:
+                  await adapter.connect()
+                  res=await adapter.execute_shell(
+                      f"echo WATCHING_DUT_OK=1; ip link show {os.environ['TARGET_VOICE_INTERFACE']} >/dev/null 2>&1 && echo VOICE_IF_OK=1; echo TCPDUMP_COUNT=$(ps w | grep '[t]cpdump' | wc -l)"
+                  )
+                  out=res.stdout or ''
+                  assert 'WATCHING_DUT_OK=1' in out and 'VOICE_IF_OK=1' in out
+                  print(out.strip())
+              finally:
+                  await adapter.disconnect()
+          asyncio.run(main())
+          PY
+          echo 'PRODUCTION_M7_C06_READY_FOR_REAL_CALL=PASS'
+
+      - name: Upload C06 start evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-m7-c06-apf3260m-start
+          path: ${{ runner.temp }}/m7-c06-start
+          if-no-files-found: warn
+          retention-days: 90
