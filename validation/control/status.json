@@ -1,65 +1,7 @@
 {
   "schema_version": "capture-v2-remote-status-v1",
-  "action_id": "RC84G-PRODUCTION-DEPLOYMENT-PREFLIGHT-010",
-  "sequence": 221,
-  "action_type": "PRODUCTION_DEPLOYMENT_PREFLIGHT",
-  "state": "SUCCEEDED",
-  "runner_id": "srv:2203168",
-  "action_sha256": "267472c6e25861bbb7e49b57af7b03b739ba6c811f4a4310d3f4e7f965ed8c1b",
-  "updated_at": "2026-08-25T23:59:17.229682+00:00",
-  "started_at": null,
-  "finished_at": "2026-08-25T23:59:17.229682+00:00",
-  "return_code": 0,
-  "verdict": "PASS",
-  "result_path": "validation/control/results/RC84G-PRODUCTION-DEPLOYMENT-PREFLIGHT-010/result.json",
-  "stdout_sha256": "f0faea8f87e3b4ed8d3c1c192114c2b4954d456863cb61cec5ef61841fb10b16",
-  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-  "error": null,
-  "detail": {
-    "safety": {
-      "capture_engine_version": "V1",
-      "capture_v2_production_enabled": "false",
-      "git_head": "437015cd94f0de91dd65fff6de2940f557084fb6",
-      "expected_product_head": "2a99f08b5a734c8024d8ef3abc5d657999d03d1d"
-    },
-    "parsed_output": {
-      "scope": "GUARDED_PRODUCTION_DEPLOYMENT_PREFLIGHT",
-      "production_env": "/etc/voip-ai/production.env",
-      "mutations_performed": false,
-      "runtime_cutover_performed": false,
-      "authorization": {
-        "authorized": true,
-        "final_acceptance_action": "RC68-MASTER-FIX-CANDIDATE-INTEGRATION-005"
-      },
-      "release_gate": {
-        "approved": true,
-        "production_cutover_approved": true,
-        "capture_engine_version": "V1",
-        "production_v2_enabled": false
-      },
-      "deployment_preflight": {
-        "return_code": 0,
-        "stdout_tail": "      \"status\": \"PASS\",\n      \"category\": \"SECURITY\",\n      \"detail\": \"non-default bootstrap credentials configured\",\n      \"blocks_deploy\": false,\n      \"blocks_release\": false\n    },\n    {\n      \"key\": \"DATABASE_URL_MATCH\",\n      \"status\": \"PASS\",\n      \"category\": \"CONFIG\",\n      \"detail\": \"DATABASE_URL contains configured PostgreSQL credential\",\n      \"blocks_deploy\": false,\n      \"blocks_release\": false\n    },\n    {\n      \"key\": \"PRODUCTION_STORAGE_MODE\",\n      \"status\": \"PASS\",\n      \"category\": \"STORAGE\",\n      \"detail\": \"minio\",\n      \"blocks_deploy\": false,\n      \"blocks_release\": false\n    },\n    {\n      \"key\": \"CREDENTIAL_PROVIDER\",\n      \"status\": \"PASS\",\n      \"category\": \"SECURITY\",\n      \"detail\": \"API provider configured\",\n      \"blocks_deploy\": false,\n      \"blocks_release\": false\n    },\n    {\n[REDACTED_SENSITIVE_LINE]\n      \"status\": \"PASS\",\n[REDACTED_SENSITIVE_LINE]\n[REDACTED_SENSITIVE_LINE]\n      \"blocks_deploy\": false,\n      \"blocks_release\": false\n    },\n    {\n[REDACTED_SENSITIVE_LINE]\n      \"status\": \"PASS\",\n[REDACTED_SENSITIVE_LINE]\n[REDACTED_SENSITIVE_LINE]\n      \"blocks_deploy\": false,\n      \"blocks_release\": false\n    },\n    {\n[REDACTED_SENSITIVE_LINE]\n      \"status\": \"PASS\",\n[REDACTED_SENSITIVE_LINE]\n[REDACTED_SENSITIVE_LINE]\n      \"blocks_deploy\": false,\n      \"blocks_release\": false\n    },\n    {\n[REDACTED_SENSITIVE_LINE]\n      \"status\": \"PASS\",\n[REDACTED_SENSITIVE_LINE]\n[REDACTED_SENSITIVE_LINE]\n      \"blocks_deploy\": false,\n      \"blocks_release\": false\n    },\n    {\n[REDACTED_SENSITIVE_LINE]\n      \"status\": \"PASS\",\n[REDACTED_SENSITIVE_LINE]\n[REDACTED_SENSITIVE_LINE]\n      \"blocks_deploy\": false,\n      \"blocks_release\": false\n    },\n    {\n[REDACTED_SENSITIVE_LINE]\n      \"status\": \"PASS\",\n[REDACTED_SENSITIVE_LINE]\n[REDACTED_SENSITIVE_LINE]\n      \"blocks_deploy\": false,\n      \"blocks_release\": false\n    },\n    {\n      \"key\": \"FEISHU_LIVE_CONFIG\",\n      \"status\": \"PASS\",\n      \"category\": \"INTEGRATION\",\n      \"detail\": \"live target configured\",\n      \"blocks_deploy\": false,\n      \"blocks_release\": false\n    },\n    {\n      \"key\": \"FEISHU_IDENTITY_RBAC\",\n      \"status\": \"PASS\",\n      \"category\": \"SECURITY\",\n      \"detail\": \"Feishu identity RBAC enabled\",\n      \"blocks_deploy\": false,\n      \"blocks_release\": false\n    },\n    {\n      \"key\": \"EC02_REAL_PLATFORM\",\n      \"status\": \"BLOCKED\",\n      \"category\": \"PLATFORM\",\n      \"detail\": \"REPRODUCTION_PLATFORM_MODE=mock; EC-02 remains pending\",\n      \"blocks_deploy\": false,\n      \"blocks_release\": true\n    },\n    {\n      \"key\": \"FRONTEND_LOCKFILE\",\n      \"status\": \"PASS\",\n      \"category\": \"BUILD\",\n      \"detail\": \"source-controlled package-lock.json present\",\n      \"blocks_deploy\": false,\n      \"blocks_release\": false\n    },\n    {\n      \"key\": \"SOURCE_MANIFEST\",\n      \"status\": \"PASS\",\n      \"category\": \"BUILD\",\n      \"detail\": \"/home/dev/workspace/aiVoip-control/release/source_manifest.json\",\n      \"blocks_deploy\": false,\n      \"blocks_release\": false\n    }\n  ]\n}",
-        "stderr_tail": "",
-        "status": "PASS",
-        "deployment_status": "PASS",
-        "deploy_blocking_keys": []
-      },
-      "compose_config": {
-        "return_code": 0,
-        "required_services_present": [
-          "backend",
-          "beat",
-          "reproduction-control-high-worker",
-          "reproduction-watch-worker",
-          "reproduction-worker"
-        ],
-        "missing_required_services": [],
-        "stderr_tail": ""
-      },
-      "current_running_services": [],
-      "verdict": "PASS",
-      "reason": "PRODUCTION_DEPLOYMENT_PREFLIGHT_READY"
-    }
-  }
+  "state": "RUNNER_ERROR",
+  "runner_id": "657c4cee1709:7",
+  "updated_at": "2026-08-26T03:04:56.469533+00:00",
+  "error": "GitSyncError:git fetch origin feat/capture-v2.1.1-real-gates failed: ssh: Could not resolve hostname github.com: Temporary failure in name resolution\nfatal: Could not read from remote repository.\n\nPlease make sure you have the correct access rights\nand the repository exists."
 }
