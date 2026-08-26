@@ -1,20 +1,37 @@
 {
-  "schema_version": "capture-v2-remote-status-v1",
-  "action_id": "RC94-PRODUCTION-DEPLOYMENT-PREFLIGHT-021",
-  "sequence": 232,
-  "action_type": "PRODUCTION_DEPLOYMENT_PREFLIGHT",
-  "state": "SUCCEEDED",
-  "runner_id": "srv:7",
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "RC94-PRODUCTION-DEPLOYMENT-PREFLIGHT-021",
+    "sequence": 232,
+    "created_at": "2026-08-26T10:45:10+00:00",
+    "expires_at": "2026-08-26T16:45:10+00:00",
+    "action_type": "PRODUCTION_DEPLOYMENT_PREFLIGHT",
+    "parameters": {
+      "timeout_seconds": 300
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "117f6b91c6a9410cb67b42f8d10af4b96302efa7"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "Fresh guarded production deployment preflight after RC93 rollback succeeded and the MinIO readiness blocker was proven to be bootstrap/backend secret credential mismatch. Without disclosing any secret, production.env MINIO_ROOT_USER and MINIO_ROOT_PASSWORD were atomically aligned to the secure MINIO_ACCESS_KEY_SECRET_HOST_FILE and MINIO_SECRET_KEY_SECRET_HOST_FILE values; equality was verified true while production remained V1 / V2 disabled / platform mock and backend host isolation remained 127.0.0.1:18001. Verify canonical authorization, V1 prestate, non-default MinIO bootstrap credentials, secret files, deployment blockers, compose expansion, source manifest and required services. Perform no production or DUT mutation. Do not issue cutover unless PASS with no deploy blockers."
+  },
   "action_sha256": "9e196ee2b993f09089cfca800522aa967ed2357966c932d22b0aa31cc2ec633b",
-  "updated_at": "2026-08-26T10:45:42.843023+00:00",
-  "started_at": null,
-  "finished_at": "2026-08-26T10:45:42.843023+00:00",
+  "runner_id": "srv:7",
+  "state": "SUCCEEDED",
   "return_code": 0,
   "verdict": "PASS",
-  "result_path": "validation/control/results/RC94-PRODUCTION-DEPLOYMENT-PREFLIGHT-021/result.json",
+  "error": null,
+  "finished_at": "2026-08-26T10:45:42.843023+00:00",
   "stdout_sha256": "f0faea8f87e3b4ed8d3c1c192114c2b4954d456863cb61cec5ef61841fb10b16",
   "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-  "error": null,
+  "local_stdout": ".capture-v2-control/logs/RC94-PRODUCTION-DEPLOYMENT-PREFLIGHT-021/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/RC94-PRODUCTION-DEPLOYMENT-PREFLIGHT-021/stderr.log",
   "detail": {
     "safety": {
       "capture_engine_version": "V1",
