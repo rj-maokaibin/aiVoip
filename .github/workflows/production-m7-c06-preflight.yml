@@ -74,9 +74,16 @@ jobs:
 
           from app.collectors.asyncssh_adapter import AsyncSSHDeviceAdapter
           from app.contracts.enums import LockStatus, ReproductionState
-          from app.db.models import Case, CaseDevice, DeviceDiagnosticLock, ReproductionSession
+          from app.core.config import settings
+          from app.db.models import (
+              Case,
+              CaseDevice,
+              DeviceCredential,
+              DeviceDiagnosticLock,
+              ReproductionSession,
+          )
           from app.db.session import SessionLocal
-          from app.integrations.credentials import get_credential_provider
+          from app.integrations.credentials import CredentialError, get_credential_provider
 
           target_ip = os.environ['TARGET_IP']
           target_port = int(os.environ['TARGET_PORT'])
@@ -88,7 +95,7 @@ jobs:
               ReproductionState.FAILED.value,
           }
           payload = {
-              'schema_version': 'production-m7-c06-preflight-v2',
+              'schema_version': 'production-m7-c06-preflight-v3',
               'checked_at': datetime.now(timezone.utc).isoformat(),
               'mutation_performed': False,
               'target': {
@@ -100,6 +107,7 @@ jobs:
               },
               'runtime': {},
               'database': {},
+              'credential_provider': {},
               'dut': {},
               'blocking_reasons': [],
           }
@@ -127,6 +135,10 @@ jobs:
               device_ids = [d.id for d in devices]
               sns = sorted({d.sn for d in devices if d.sn})
               identity_conflict = bool(sns and sns != [target_sn])
+
+              credential_row = db.scalar(
+                  select(DeviceCredential).where(DeviceCredential.sn == target_sn)
+              )
 
               active_locks = []
               sessions = []
@@ -175,6 +187,22 @@ jobs:
                   'stored_identity_matches_audited_target': not identity_conflict,
                   'active_or_quarantined_lock_count': len(active_locks),
                   'active_nonterminal_session_count': len(active_sessions),
+                  'device_credential_registration': {
+                      'row_exists': credential_row is not None,
+                      'endpoint_matches_target': (
+                          credential_row is not None
+                          and credential_row.ip == target_ip
+                          and int(credential_row.ssh_port) == target_port
+                      ),
+                      'username_present': bool(credential_row and credential_row.username),
+                      'password_present': bool(credential_row and credential_row.password),
+                      'source': credential_row.source if credential_row else None,
+                      'product_present': bool(credential_row and credential_row.product),
+                      'updated_at': (
+                          credential_row.updated_at.isoformat()
+                          if credential_row and credential_row.updated_at else None
+                      ),
+                  },
                   'recent_sessions': recent_sessions,
                   'recent_cases': recent_cases[:5],
               }
@@ -187,10 +215,29 @@ jobs:
           finally:
               db.close()
 
-          async def dut_probe():
+          try:
               provider = get_credential_provider()
-              password = await provider.get_password(sn=target_sn, ip=target_ip)
-              username = provider.resolve_username(ip=target_ip, fallback='root')
+              payload['credential_provider'] = {
+                  'provider_id': getattr(provider, 'provider_id', 'unknown'),
+                  'production_capable': bool(getattr(provider, 'production_capable', False)),
+                  'api_url_configured': bool(getattr(settings, 'credential_api_url', None)),
+              }
+          except Exception as exc:
+              provider = None
+              payload['credential_provider'] = {
+                  'provider_id': None,
+                  'production_capable': False,
+                  'provider_init_error_type': type(exc).__name__,
+                  'provider_init_error': str(exc) if isinstance(exc, CredentialError) else None,
+              }
+              payload['blocking_reasons'].append('PRODUCTION_CREDENTIAL_PROVIDER_INIT_FAILED')
+
+          async def dut_probe():
+              if provider is None:
+                  raise CredentialError('CREDENTIAL_PROVIDER_UNAVAILABLE')
+              password = await provider.get_password(sn=target_sn, ip=target_ip, product='APF1250')
+              resolver = getattr(provider, 'resolve_username', None)
+              username = resolver(ip=target_ip, fallback='root') if callable(resolver) else 'root'
               adapter = AsyncSSHDeviceAdapter(
                   ip=target_ip,
                   port=target_port,
@@ -235,6 +282,7 @@ jobs:
                   'credential_resolved': False,
                   'ssh_connected': False,
                   'error_type': type(exc).__name__,
+                  'credential_error': str(exc) if isinstance(exc, CredentialError) else None,
               }
               payload['blocking_reasons'].append('APF1250_SSH_READONLY_PROBE_EXCEPTION')
 
