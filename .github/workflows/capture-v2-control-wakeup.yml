@@ -1,4 +1,4 @@
-name: Capture V2 Port 9001 Readonly Probe
+name: Capture V2 MinIO Candidate Port Probe
 
 on:
   push:
@@ -14,7 +14,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  port-9001-readonly-probe:
+  minio-candidate-port-probe:
     runs-on:
       - self-hosted
       - linux
@@ -22,20 +22,21 @@ jobs:
       - voip-controlled-linux
     timeout-minutes: 10
     steps:
-      - name: Identify host port 9001 owner
+      - name: Verify candidate 19001 is free
         shell: bash
         run: |
           set -euo pipefail
-          echo '=== LISTEN 9001 ==='
-          ss -ltnp '( sport = :9001 )' || true
-          echo '=== ALL RUNNING CONTAINERS WITH PORTS ==='
-          docker ps --format '{{.ID}}|{{.Names}}|{{.Image}}|{{.Ports}}' || true
-          echo '=== CONTAINERS PUBLISHING 9001 ==='
-          docker ps --format '{{.ID}} {{.Names}} {{.Ports}}' | grep -E '(^|[, ])0\.0\.0\.0:9001->|\[::\]:9001->|:9001->' || true
-          echo '=== VOIP-AI CONTAINERS ==='
-          docker ps -a --filter label=com.docker.compose.project=voip-ai --format '{{.ID}}|{{.Names}}|{{.Status}}|{{.Ports}}' || true
+          echo '=== 9001 CURRENT OWNER ==='
+          docker ps --format '{{.ID}} {{.Names}} {{.Ports}}' | grep ':9001->' || true
+          echo '=== 19001 LISTENERS ==='
+          ss -ltn '( sport = :19001 )' || true
+          if ss -ltn '( sport = :19001 )' | tail -n +2 | grep -q .; then
+            echo 'PORT_19001_FREE=false'
+            exit 1
+          fi
+          echo 'PORT_19001_FREE=true'
 
-      - name: Confirm production remains safe V1
+      - name: Confirm production remains V1
         shell: bash
         run: |
           set -euo pipefail
@@ -51,8 +52,6 @@ jobs:
           print('ENGINE='+eff('CAPTURE_ENGINE_VERSION','V1'))
           print('V2_ENABLED='+eff('CAPTURE_V2_PRODUCTION_ENABLED','false'))
           print('PLATFORM='+eff('REPRODUCTION_PLATFORM_MODE','mock'))
-          print('MINIO_CONSOLE_BIND='+eff('VOIP_MINIO_CONSOLE_BIND','0.0.0.0'))
-          print('MINIO_CONSOLE_PORT='+eff('VOIP_MINIO_CONSOLE_PORT','9001'))
           assert eff('CAPTURE_ENGINE_VERSION','V1').upper() == 'V1'
           assert eff('CAPTURE_V2_PRODUCTION_ENABLED','false').lower() == 'false'
           assert eff('REPRODUCTION_PLATFORM_MODE','mock') == 'mock'
