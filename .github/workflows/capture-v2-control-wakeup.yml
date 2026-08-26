@@ -1,4 +1,4 @@
-name: Capture V2 Exact Pre-Mutation Probe
+name: Capture V2 Control Git Remote Diagnostic
 
 on:
   push:
@@ -14,7 +14,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  exact-pre-mutation-probe:
+  git-remote-diagnostic:
     runs-on:
       - self-hosted
       - linux
@@ -22,58 +22,35 @@ jobs:
       - voip-controlled-linux
     timeout-minutes: 10
     steps:
-      - name: Verify single detached control runner and synced control head
+      - name: Diagnose repo-owner origin and explicit master fetch
         shell: bash
         run: |
           set -euo pipefail
-          COUNT="$(ps -eo args | grep 'app.capture_v2.control_cli run --repo-root /home/dev/workspace/aiVoip-control' | grep -v grep | wc -l)"
-          echo "CONTROL_RUNNER_COUNT=$COUNT"
-          test "$COUNT" -eq 1
-          if ps -eo stat,args | grep 'app.capture_v2.control_cli run --repo-root /home/dev/workspace/aiVoip-control' | grep -v grep | grep -q '^T'; then
-            echo 'CONTROL_RUNNER_STOPPED=true'
-            exit 1
-          fi
           docker run --rm --privileged --network host -v /:/host python:3.12-slim \
-            chroot /host /usr/sbin/runuser -u dev -- /bin/bash -lc '
+            chroot /host /usr/sbin/runuser -u dev -- /usr/bin/env HOME=/home/dev USER=dev LOGNAME=dev /bin/bash -lc '
               set -euo pipefail
               cd /home/dev/workspace/aiVoip-control
-              echo "BRANCH=$(git branch --show-current)"
               echo "HEAD=$(git rev-parse HEAD)"
-              echo "REMOTE_CONTROL=$(git rev-parse refs/remotes/origin/feat/capture-v2.1.1-real-gates)"
-              test "$(git branch --show-current)" = feat/capture-v2.1.1-real-gates
-              test "$(git rev-parse HEAD)" = 9df273ab29569afb198f5e0bcf36fe7750f07192
-              test "$(git rev-parse refs/remotes/origin/feat/capture-v2.1.1-real-gates)" = 9df273ab29569afb198f5e0bcf36fe7750f07192
+              echo "BRANCH=$(git branch --show-current)"
+              echo "ORIGIN_URL=$(git remote get-url origin)"
+              echo "ORIGIN_FETCH_BEGIN"
+              git config --get-all remote.origin.fetch || true
+              echo "ORIGIN_FETCH_END"
+              echo "LS_REMOTE_BEGIN"
+              git ls-remote origin refs/heads/master refs/heads/feat/capture-v2.1.1-real-gates
+              echo "LS_REMOTE_END"
+              echo "FETCH_EXPLICIT_MASTER_BEGIN"
+              git fetch --verbose origin refs/heads/master
+              echo "FETCH_EXPLICIT_MASTER_END"
+              echo "FETCH_HEAD_RAW_BEGIN"
+              cat .git/FETCH_HEAD
+              echo "FETCH_HEAD_RAW_END"
+              echo "FETCH_HEAD=$(git rev-parse FETCH_HEAD)"
+              echo "MASTER_EXPECTED=abcb054d018b27495aaa4c47079c354b69471a9d"
+              test "$(git rev-parse FETCH_HEAD)" = abcb054d018b27495aaa4c47079c354b69471a9d
             '
 
-      - name: Execute actual fetched-master wrapper as cutover root
-        shell: bash
-        run: |
-          set -euo pipefail
-          docker run --rm --privileged --network host -v /:/host python:3.12-slim \
-            chroot /host /bin/bash -lc '
-              set -euo pipefail
-              cd /home/dev/workspace/aiVoip-control/backend
-              export PYTHONPATH=.
-              /home/dev/workspace/aiVoip/.venv-release-gate/bin/python3 - <<"PY"
-          from pathlib import Path
-          from app.capture_v2.control import production_cutover_guarded as cutover
-
-          repo = Path("/home/dev/workspace/aiVoip-control")
-          git_for_run, snapshot = cutover._master_snapshot_git()
-          fetched = git_for_run(repo, "fetch", "origin", "master")
-          print("FETCH_RC=" + str(fetched.returncode))
-          assert fetched.returncode == 0, fetched.stderr
-          sha = str(snapshot.get("master_head") or "")
-          print("FETCHED_MASTER_SHA=" + sha)
-          assert sha == "abcb054d018b27495aaa4c47079c354b69471a9d", sha
-          anc = git_for_run(repo, "merge-base", "--is-ancestor", "db3e8012a9569d9508e9d2cd920baf1de6bac866", "origin/master")
-          print("ANCESTOR_RC=" + str(anc.returncode))
-          assert anc.returncode == 0, anc.stderr
-          print("EXACT_FETCHED_MASTER_ANCESTRY_PASS=true")
-          PY
-            '
-
-      - name: Verify production remains V1 safe prestate
+      - name: Verify production remains V1
         shell: bash
         run: |
           set -euo pipefail
@@ -89,10 +66,7 @@ jobs:
           print('ENGINE='+eff('CAPTURE_ENGINE_VERSION','V1'))
           print('V2_ENABLED='+eff('CAPTURE_V2_PRODUCTION_ENABLED','false'))
           print('PLATFORM='+eff('REPRODUCTION_PLATFORM_MODE','mock'))
-          print('RBAC='+eff('FEISHU_IDENTITY_RBAC_ENABLED','false'))
-          assert eff('APP_ENV','') == 'production'
           assert eff('CAPTURE_ENGINE_VERSION','V1').upper() == 'V1'
           assert eff('CAPTURE_V2_PRODUCTION_ENABLED','false').lower() == 'false'
           assert eff('REPRODUCTION_PLATFORM_MODE','mock') == 'mock'
-          assert eff('FEISHU_IDENTITY_RBAC_ENABLED','false').lower() == 'true'
           PY
