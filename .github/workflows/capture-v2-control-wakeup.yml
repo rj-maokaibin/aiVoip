@@ -1,4 +1,4 @@
-name: Capture V2 RC89 Readonly Progress Probe
+name: Capture V2 Port 9001 Readonly Probe
 
 on:
   push:
@@ -14,7 +14,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  rc89-readonly-probe:
+  port-9001-readonly-probe:
     runs-on:
       - self-hosted
       - linux
@@ -22,16 +22,20 @@ jobs:
       - voip-controlled-linux
     timeout-minutes: 10
     steps:
-      - name: Read control and cutover processes
+      - name: Identify host port 9001 owner
         shell: bash
         run: |
           set -euo pipefail
-          echo '=== CONTROL/CUTOVER PROCESSES ==='
-          ps -eo pid,ppid,pgid,sid,tpgid,user,etime,stat,args | grep -E 'capture_v2.control_cli|production_cutover_guarded|deploy/voip-ai' | grep -v grep || true
+          echo '=== LISTEN 9001 ==='
+          ss -ltnp '( sport = :9001 )' || true
+          echo '=== ALL RUNNING CONTAINERS WITH PORTS ==='
+          docker ps --format '{{.ID}}|{{.Names}}|{{.Image}}|{{.Ports}}' || true
+          echo '=== CONTAINERS PUBLISHING 9001 ==='
+          docker ps --format '{{.ID}} {{.Names}} {{.Ports}}' | grep -E '(^|[, ])0\.0\.0\.0:9001->|\[::\]:9001->|:9001->' || true
           echo '=== VOIP-AI CONTAINERS ==='
-          docker ps -a --filter label=com.docker.compose.project=voip-ai --format '{{.Names}}|{{.Status}}|{{.Image}}' || true
+          docker ps -a --filter label=com.docker.compose.project=voip-ai --format '{{.ID}}|{{.Names}}|{{.Status}}|{{.Ports}}' || true
 
-      - name: Read safe production cutover state
+      - name: Confirm production remains safe V1
         shell: bash
         run: |
           set -euo pipefail
@@ -44,13 +48,12 @@ jobs:
               if s.startswith('export '): s=s[7:].strip()
               k,v=s.split('=',1); vals[k.strip()]=v.strip().strip('"').strip("'")
           def eff(k,d): return vals.get(k,'').strip() or d
-          print('APP_ENV='+eff('APP_ENV',''))
           print('ENGINE='+eff('CAPTURE_ENGINE_VERSION','V1'))
           print('V2_ENABLED='+eff('CAPTURE_V2_PRODUCTION_ENABLED','false'))
           print('PLATFORM='+eff('REPRODUCTION_PLATFORM_MODE','mock'))
-          print('RBAC='+eff('FEISHU_IDENTITY_RBAC_ENABLED','false'))
-          root=Path('/probe/voip-ai')
-          backups=sorted(x.name for x in root.glob('production.env.capture-v2-pre-*'))
-          print('CUTOVER_BACKUP_COUNT='+str(len(backups)))
-          print('LATEST_CUTOVER_BACKUP='+(backups[-1] if backups else 'NONE'))
+          print('MINIO_CONSOLE_BIND='+eff('VOIP_MINIO_CONSOLE_BIND','0.0.0.0'))
+          print('MINIO_CONSOLE_PORT='+eff('VOIP_MINIO_CONSOLE_PORT','9001'))
+          assert eff('CAPTURE_ENGINE_VERSION','V1').upper() == 'V1'
+          assert eff('CAPTURE_V2_PRODUCTION_ENABLED','false').lower() == 'false'
+          assert eff('REPRODUCTION_PLATFORM_MODE','mock') == 'mock'
           PY
