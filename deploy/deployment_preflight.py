@@ -13,6 +13,14 @@ from urllib.parse import urlparse
 ROOT = Path(__file__).resolve().parents[1]
 PLACEHOLDER = re.compile(r"<[^>]+>")
 DEFAULT_SECRET_VALUES = {"", "change-me", "minioadmin", "voipminio", "voipminiosecret", "password", "secret"}
+PRODUCTION_CREDENTIAL_PROVIDERS = {"api", "poseidon"}
+POSEIDON_SECRET_PATH = Path("/home/dev/secret.yaml")
+PLACEHOLDER_HOSTS = {
+    "example.com",
+    "www.example.com",
+    "example.internal",
+    "credential-service.example.internal",
+}
 
 
 @dataclass
@@ -68,6 +76,76 @@ def bool_value(v: str) -> bool:
     return str(v).strip().lower() in {"1", "true", "yes", "on"}
 
 
+def resolved_service_url(raw: str) -> tuple[bool, str]:
+    """Return whether a service URL is syntactically real rather than a template.
+
+    Production preflight previously treated any non-empty credential API URL as
+    ready, so ``credential-service.example.internal`` passed the release gate.
+    Keep this check deterministic and network-free: reachability is a runtime
+    concern, while placeholders must fail before deployment.
+    """
+    value = str(raw or "").strip()
+    if not value:
+        return False, "not configured"
+    if PLACEHOLDER.search(value):
+        return False, "contains unresolved <...> placeholder"
+    parsed = urlparse(value)
+    host = str(parsed.hostname or "").lower().rstrip(".")
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc or not host:
+        return False, "must be an absolute http(s) URL"
+    if (
+        host in PLACEHOLDER_HOSTS
+        or host.endswith(".example")
+        or host.endswith(".example.com")
+        or host.endswith(".example.internal")
+    ):
+        return False, f"placeholder host is not production-ready: {host}"
+    return True, f"resolved service host={host}"
+
+
+def credential_provider_checks(values: dict[str, str]) -> list[Check]:
+    provider = values.get("CREDENTIAL_PROVIDER", "").strip().lower()
+    provider_ok = provider in PRODUCTION_CREDENTIAL_PROVIDERS
+    checks = [Check(
+        "CREDENTIAL_PROVIDER",
+        "PASS" if provider_ok else "BLOCKED",
+        "SECURITY",
+        f"production-capable provider={provider}" if provider_ok else
+        "CREDENTIAL_PROVIDER must be one of: api, poseidon",
+        not provider_ok,
+        not provider_ok,
+    )]
+    if not provider_ok:
+        return checks
+
+    if provider == "api":
+        api_ok, api_detail = resolved_service_url(values.get("CREDENTIAL_API_URL", ""))
+        checks.append(Check(
+            "CREDENTIAL_API_URL",
+            "PASS" if api_ok else "BLOCKED",
+            "SECURITY",
+            api_detail,
+            not api_ok,
+            not api_ok,
+        ))
+        return checks
+
+    # Poseidon is an existing production_capable provider in the application.
+    # docker-compose.yml mounts this host file read-only at the same path in the
+    # backend/reproduction control workers. Do not read or print its contents here;
+    # actual credential resolution is verified by the runtime/real-DUT probe.
+    poseidon_ok, poseidon_detail = secure_file(POSEIDON_SECRET_PATH)
+    checks.append(Check(
+        "POSEIDON_SECRET_FILE",
+        "PASS" if poseidon_ok else "BLOCKED",
+        "SECRET",
+        f"Poseidon bootstrap secret: {POSEIDON_SECRET_PATH} ({poseidon_detail})",
+        not poseidon_ok,
+        not poseidon_ok,
+    ))
+    return checks
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="VOIP AI production deployment preflight")
     ap.add_argument("--env-file", type=Path, required=True)
@@ -96,7 +174,7 @@ def main() -> int:
     required = [
         "APP_ENV", "BUILD_REVISION", "POSTGRES_PASSWORD", "DATABASE_URL", "REDIS_URL",
         "MINIO_ROOT_USER", "MINIO_ROOT_PASSWORD", "MINIO_ENDPOINT", "MINIO_BUCKET",
-        "CREDENTIAL_PROVIDER", "CREDENTIAL_API_URL", "PRODUCTION_AUTH_PROVIDER",
+        "CREDENTIAL_PROVIDER", "PRODUCTION_AUTH_PROVIDER",
         "CORS_ALLOW_ORIGINS", "REPRODUCTION_STORAGE_MODE", "REPRODUCTION_PLATFORM_MODE",
     ]
     missing = [k for k in required if not values.get(k, "").strip()]
@@ -130,13 +208,15 @@ def main() -> int:
     storage_ok = values.get("REPRODUCTION_STORAGE_MODE", "").lower() == "minio"
     checks.append(Check("PRODUCTION_STORAGE_MODE", "PASS" if storage_ok else "BLOCKED", "STORAGE", values.get("REPRODUCTION_STORAGE_MODE", ""), not storage_ok, not storage_ok))
 
-    credential_ok = values.get("CREDENTIAL_PROVIDER", "").lower() == "api" and bool(values.get("CREDENTIAL_API_URL", "").strip())
-    checks.append(Check("CREDENTIAL_PROVIDER", "PASS" if credential_ok else "BLOCKED", "SECURITY", "API provider configured" if credential_ok else "CREDENTIAL_PROVIDER=api and CREDENTIAL_API_URL are required", not credential_ok, not credential_ok))
+    checks.extend(credential_provider_checks(values))
 
     secret_vars = {
         "AUTH_GATEWAY_HMAC_SECRET_HOST_FILE": "auth gateway HMAC",
         "MINIO_ACCESS_KEY_SECRET_HOST_FILE": "MinIO access key",
         "MINIO_SECRET_KEY_SECRET_HOST_FILE": "MinIO secret key",
+        # The production Compose contract still mounts this Docker secret for all
+        # app services even when Poseidon is selected. Keep validating it until a
+        # separate Compose-secret cleanup removes that runtime dependency.
         "CREDENTIAL_API_TOKEN_SECRET_HOST_FILE": "credential API token",
         "FEISHU_APP_SECRET_HOST_FILE": "Feishu app secret",
         "FEISHU_VERIFICATION_TOKEN_HOST_FILE": "Feishu verification token",
