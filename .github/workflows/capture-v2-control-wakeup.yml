@@ -1,4 +1,4 @@
-name: Capture V2 Control Runner Network Recovery
+name: Capture V2 Cutover Git Identity Probe
 
 on:
   push:
@@ -14,7 +14,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  recover-control-runner:
+  repo-owner-git-probe:
     runs-on:
       - self-hosted
       - linux
@@ -22,7 +22,7 @@ jobs:
       - voip-controlled-linux
     timeout-minutes: 10
     steps:
-      - name: Guard V1 prestate and existing no-TTY runner
+      - name: Confirm safe production prestate
         shell: bash
         run: |
           set -euo pipefail
@@ -42,52 +42,41 @@ jobs:
           assert eff('FEISHU_IDENTITY_RBAC_ENABLED','false').lower() == 'true'
           print('SAFE_V1_PRESTATE_CONFIRMED=true')
           PY
-          test "$(docker inspect -f '{{.State.Running}}' aivoip-capture-v2-control-runner)" = true
-          ps -eo pid,ppid,pgid,sid,tpgid,user,etime,stat,args | grep 'app.capture_v2.control_cli run --repo-root /home/dev/workspace/aiVoip-control' | grep -v grep
 
-      - name: Replace control container with host-network no-TTY runner
+      - name: Root to repo-owner Git identity probe
         shell: bash
         run: |
           set -euo pipefail
-          docker rm -f aivoip-capture-v2-control-runner
-          docker run -d \
-            --name aivoip-capture-v2-control-runner \
-            --restart unless-stopped \
-            --network host \
-            -v /:/host \
-            python:3.12-slim \
-            chroot /host /usr/sbin/runuser -u dev -- /bin/bash -lc '
-              cd /home/dev/workspace/aiVoip-control/backend
-              exec /home/dev/workspace/aiVoip/.venv-release-gate/bin/python3 \
-                -m app.capture_v2.control_cli run \
-                --repo-root /home/dev/workspace/aiVoip-control \
-                --branch feat/capture-v2.1.1-real-gates \
-                --remote origin \
-                --git-sync \
-                --poll-seconds 10
-            '
-          sleep 8
-          test "$(docker inspect -f '{{.State.Running}}' aivoip-capture-v2-control-runner)" = true
+          ROOT=/home/dev/workspace/aiVoip-control
+          OWNER_UID="$(stat -c %u "$ROOT")"
+          OWNER_NAME="$(stat -c %U "$ROOT")"
+          echo "REPO_OWNER_UID=$OWNER_UID"
+          echo "REPO_OWNER_NAME=$OWNER_NAME"
+          test "$OWNER_NAME" = dev
+          RESULT="$(docker run --rm --privileged --network host -v /:/host python:3.12-slim \
+            chroot /host /usr/sbin/runuser -u dev -- /usr/bin/env \
+              HOME=/home/dev USER=dev LOGNAME=dev \
+              /usr/bin/git -C /home/dev/workspace/aiVoip-control \
+              ls-remote origin refs/heads/master)"
+          echo "$RESULT"
+          SHA="$(printf '%s\n' "$RESULT" | awk 'NR==1{print $1}')"
+          test "${#SHA}" -eq 40
+          printf '%s' "$SHA" | grep -Eq '^[0-9a-f]{40}$'
+          echo "REPO_OWNER_GIT_REMOTE_MASTER=$SHA"
+          echo 'ROOT_TO_REPO_OWNER_GIT_IDENTITY_PASS=true'
+
+      - name: Confirm control runner and production remain unchanged
+        shell: bash
+        run: |
+          set -euo pipefail
           COUNT="$(ps -eo args | grep 'app.capture_v2.control_cli run --repo-root /home/dev/workspace/aiVoip-control' | grep -v grep | wc -l)"
           echo "CONTROL_RUNNER_COUNT=$COUNT"
           test "$COUNT" -eq 1
           ps -eo pid,ppid,pgid,sid,tpgid,user,etime,stat,args | grep 'app.capture_v2.control_cli run --repo-root /home/dev/workspace/aiVoip-control' | grep -v grep
-          if ps -eo stat,args | grep 'app.capture_v2.control_cli run --repo-root /home/dev/workspace/aiVoip-control' | grep -v grep | grep -q '^T'; then exit 1; fi
-          echo HOST_NETWORK_NO_TTY_RUNNER_STARTED=true
-
-      - name: Confirm Git sync and RC85 reclaim
-        shell: bash
-        run: |
-          set -euo pipefail
-          sleep 12
-          echo '=== control container logs ==='
-          docker logs --tail 80 aivoip-capture-v2-control-runner 2>&1 || true
-          ROOT=/home/dev/workspace/aiVoip-control
-          DEV_UID="$(stat -c %u "$ROOT")"
-          DEV_GID="$(stat -c %g "$ROOT")"
-          echo '=== local control status ==='
-          docker run --rm --user "$DEV_UID:$DEV_GID" -v "$ROOT:$ROOT:ro" -w "$ROOT" python:3.12-slim sh -lc 'cat validation/control/status.json'
-          echo '=== safe production state ==='
+          if ps -eo stat,args | grep 'app.capture_v2.control_cli run --repo-root /home/dev/workspace/aiVoip-control' | grep -v grep | grep -q '^T'; then
+            echo 'CONTROL_RUNNER_STOPPED=true'
+            exit 1
+          fi
           docker run --rm -i -v /etc/voip-ai:/probe/voip-ai:ro python:3.12-slim python - <<'PY'
           from pathlib import Path
           p=Path('/probe/voip-ai/production.env'); vals={}
@@ -100,5 +89,7 @@ jobs:
           print('ENGINE='+eff('CAPTURE_ENGINE_VERSION','V1'))
           print('V2_ENABLED='+eff('CAPTURE_V2_PRODUCTION_ENABLED','false'))
           print('PLATFORM='+eff('REPRODUCTION_PLATFORM_MODE','mock'))
-          print('RBAC='+eff('FEISHU_IDENTITY_RBAC_ENABLED','false'))
+          assert eff('CAPTURE_ENGINE_VERSION','V1').upper() == 'V1'
+          assert eff('CAPTURE_V2_PRODUCTION_ENABLED','false').lower() == 'false'
+          assert eff('REPRODUCTION_PLATFORM_MODE','mock') == 'mock'
           PY
