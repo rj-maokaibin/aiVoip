@@ -1,0 +1,125 @@
+name: Production M7 Strict Audit One Shot
+
+on:
+  push:
+    branches:
+      - 'fix/m7-audit-hardening-20260827'
+    paths:
+      - '.github/workflows/production-m7-strict-audit-one-shot.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-m7-strict-audit-one-shot
+  cancel-in-progress: false
+
+jobs:
+  strict-audit:
+    runs-on:
+      - self-hosted
+      - linux
+      - x64
+      - voip-controlled-linux
+    timeout-minutes: 20
+    env:
+      M7_CASE: VOIP-20260827-D38C67
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+
+      - name: Verify branch audit code
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          printf 'AUDIT_HEAD=%s\n' "$(git rev-parse HEAD)"
+          PYTHONPATH=backend:. python tools/github_actions_context_gate.py
+          PYTHONPATH=backend:. pytest -q \
+            backend/tests/test_github_actions_context_gate.py \
+            backend/tests/test_m7_strict_audit.py \
+            backend/tests/test_reproduction_publish_routing.py \
+            backend/tests/test_reproduction_fail_closed.py
+
+      - name: Run strict audit against production DB read-only
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          outdir="$RUNNER_TEMP/m7-strict-audit"
+          rm -rf "$outdir"
+          mkdir -p "$outdir"
+
+          mapfile -t backends < <(docker ps \
+            --filter label=com.docker.compose.project=voip-ai \
+            --filter label=com.docker.compose.service=backend \
+            --format '{{.Names}}')
+          test "${#backends[@]}" -eq 1
+          backend="${backends[0]}"
+          echo "BACKEND=$backend"
+
+          docker exec -i "$backend" python - <<'PY'
+          from app.core.config import settings
+          assert settings.app_env.lower() == 'production'
+          assert settings.capture_engine_version == 'V2'
+          assert settings.capture_v2_production_enabled is True
+          assert settings.reproduction_platform_mode == 'real'
+          assert settings.credential_provider.lower() == 'poseidon'
+          assert settings.ssh_username == 'root'
+          print('PRODUCTION_RUNTIME_CONTRACT=PASS')
+          PY
+
+          remote="/tmp/m7-strict-audit-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          docker exec "$backend" mkdir -p "$remote/tools"
+          cleanup() {
+            docker exec "$backend" rm -rf "$remote" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          docker cp tools/m7_acceptance_strict_audit.py "$backend:$remote/tools/m7_acceptance_strict_audit.py"
+          docker cp tools/m7_acceptance_gate.py "$backend:$remote/tools/m7_acceptance_gate.py"
+
+          docker exec -i \
+            -e M7_CASE="$M7_CASE" \
+            -e AUDIT_ROOT="$remote" \
+            "$backend" sh -lc '
+              set -eu
+              cd /app
+              PYTHONPATH="/app:$AUDIT_ROOT" python "$AUDIT_ROOT/tools/m7_acceptance_strict_audit.py" \
+                --case "$M7_CASE" \
+                --out "$AUDIT_ROOT/result.json" \
+                --strict
+            '
+
+          docker cp "$backend:$remote/result.json" "$outdir/m7_acceptance_strict_audit.json"
+          test -s "$outdir/m7_acceptance_strict_audit.json"
+
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          p = json.loads((Path(os.environ['RUNNER_TEMP'])/'m7-strict-audit/m7_acceptance_strict_audit.json').read_text(encoding='utf-8'))
+          print(json.dumps({
+              'status': p.get('status'),
+              'passed': p.get('criteria_passed'),
+              'total': p.get('criteria_total'),
+              'blocked_ids': p.get('blocked_ids'),
+              'warnings': p.get('warnings'),
+              'strict_blockers': p.get('strict_blockers'),
+              'target_session': (p.get('observed') or {}).get('target_session'),
+              'channel_health': (p.get('observed') or {}).get('channel_health'),
+          }, ensure_ascii=False, indent=2))
+          assert p.get('status') == 'PASS', p
+          assert p.get('criteria_passed') == 20, p
+          assert p.get('criteria_total') == 20, p
+          print('PRODUCTION_M7_STRICT_AUDIT=PASS 20/20')
+          PY
+
+      - name: Upload strict audit evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-m7-strict-audit
+          path: ${{ runner.temp }}/m7-strict-audit
+          if-no-files-found: warn
+          retention-days: 90
