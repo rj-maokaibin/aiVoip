@@ -32,7 +32,7 @@ jobs:
       LIVE_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
       OFFLINE_GOLDEN_PCAP: /tmp/tcpdump-2026-08-14.pcap
       OFFLINE_GOLDEN_SHA256: b038aa7c9a0644581f2815f654fcdee4620860796382265b178823fccba2e3f0
-      VOIP_AI_GATE_VENV: ${{ runner.temp }}/voip-ai-release-gate
+      VOIP_AI_GATE_VENV: /tmp/voip-ai-release-gate-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       - uses: actions/checkout@v4
         with:
