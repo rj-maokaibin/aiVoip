@@ -36,8 +36,8 @@ jobs:
         run: |
           set -Eeuo pipefail
           printf 'AUDIT_HEAD=%s\n' "$(git rev-parse HEAD)"
-          PYTHONPATH=backend:. python tools/github_actions_context_gate.py
-          PYTHONPATH=backend:. pytest -q \
+          PYTHONPATH=backend:. python3 tools/github_actions_context_gate.py
+          PYTHONPATH=backend:. python3 -m pytest -q \
             backend/tests/test_github_actions_context_gate.py \
             backend/tests/test_m7_strict_audit.py \
             backend/tests/test_reproduction_publish_routing.py \
