@@ -1,6 +1,8 @@
 name: Human Evidence Feishu Live Acceptance One Shot
 
 on:
+  # PR events parse/validate this workflow but must never mutate the bound live
+  # Feishu document. The actual one-shot is explicitly operator-dispatched.
   pull_request:
     branches:
       - master
@@ -15,13 +17,14 @@ permissions:
   statuses: write
 
 concurrency:
-  # Keep the same effective key as the former push workflow
-  # (refs/heads/feat/...) so an older one-shot can finish safely first.
   group: human-evidence-feishu-live-acceptance-refs/heads/${{ github.head_ref || github.ref_name }}
   cancel-in-progress: false
 
 jobs:
   gated-live-projection:
+    # A live Feishu projection is an external mutation. Never perform it merely
+    # because a PR touched the workflow or projection code.
+    if: github.event_name == 'workflow_dispatch'
     runs-on:
       - self-hosted
       - linux
@@ -32,7 +35,7 @@ jobs:
       LIVE_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
       OFFLINE_GOLDEN_PCAP: /tmp/tcpdump-2026-08-14.pcap
       OFFLINE_GOLDEN_SHA256: b038aa7c9a0644581f2815f654fcdee4620860796382265b178823fccba2e3f0
-      VOIP_AI_GATE_VENV: ${{ runner.temp }}/voip-ai-release-gate
+      VOIP_AI_GATE_VENV: /tmp/voip-ai-release-gate-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       - uses: actions/checkout@v4
         with:
