@@ -1,0 +1,79 @@
+{
+  "schema_version": "m7-real-dut-strict-audit-record-v1",
+  "recorded_at": "2026-08-27T15:09:53Z",
+  "source": {
+    "workflow_run_id": 33086255626,
+    "workflow_job_id": 98566588830,
+    "artifact_id": 9652274437,
+    "artifact_name": "production-m7-strict-audit",
+    "audited_head_sha": "61bc6c83a8ceac6e893682233063da9fa9e328ec",
+    "master_merge_sha": "c0b45c3529152904645eddfc2c25d9a3bc787ae7"
+  },
+  "case": {
+    "case_no": "VOIP-20260827-D38C67",
+    "case_id": "aac85696-dc36-49d3-9bc5-ea27f1a1e9a7"
+  },
+  "status": "PASS",
+  "criteria_total": 20,
+  "criteria_passed": 20,
+  "blocked_ids": [],
+  "strict_blockers": [],
+  "warnings": [
+    "PLATFORM_PROFILE_ID_LEGACY_MOCK_FALLBACK"
+  ],
+  "production_runtime_contract": "PASS",
+  "target_session": {
+    "id": "e54582b5-ec49-4e9f-8435-2bc224b30cec",
+    "state": "COMPLETED",
+    "platform_profile_id": "mock-voip-platform",
+    "platform_profile_version": "1.0.0",
+    "legacy_real_resolver_fallback": true,
+    "cleanup_status": "CLEANUP_VERIFIED",
+    "capture_completeness": "COMPLETE"
+  },
+  "channel_health": {
+    "PCAP": {
+      "status": "HEALTHY",
+      "packet_count": 8320,
+      "capture_engine": "V2",
+      "producer_count": 1,
+      "exact_producer_count": 1,
+      "readiness_phase": "DATA_PLANE_VERIFIED"
+    },
+    "PCM_RX": {
+      "status": "HEALTHY",
+      "packet_count": 2630,
+      "dst_port": 40000,
+      "readiness_phase": "DATA_PLANE_VERIFIED"
+    },
+    "PCM_TX": {
+      "status": "HEALTHY",
+      "packet_count": 2630,
+      "dst_port": 50000,
+      "readiness_phase": "DATA_PLANE_VERIFIED"
+    },
+    "DEBUG": {
+      "status": "HEALTHY",
+      "reader_alive": true,
+      "heartbeat": true,
+      "runtime_ready": true,
+      "debug_enable_acknowledged": true,
+      "readiness_phase": "WATCH_RUNTIME_READY"
+    },
+    "LOG": {
+      "status": "HEALTHY"
+    }
+  },
+  "interpretation": {
+    "strict_single_session_evidence_chain": "PASS",
+    "legacy_platform_metadata_warning_is_blocker": false,
+    "golden_ready": false,
+    "ai_promotion_eligible": false,
+    "remaining_gap": "ROOT_CAUSE_NOT_CONFIRMED"
+  },
+  "notes": [
+    "This record permanently captures the successful read-only Production M7 strict audit that previously existed only as a 90-day GitHub Actions artifact.",
+    "The historical platform_profile_id=mock-voip-platform is retained as a warning only because the strict audit confirmed the exact legacy REAL_VOICE_CONTEXT_V1 resolver path and same-session real Capture V2 evidence.",
+    "This PASS certifies the M7 real-DUT diagnostic closed loop only; it does not promote Golden READY or AI authority."
+  ]
+}
