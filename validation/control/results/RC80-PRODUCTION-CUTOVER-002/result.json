@@ -1,0 +1,82 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "RC80-PRODUCTION-CUTOVER-002",
+    "sequence": 211,
+    "created_at": "2026-08-23T16:12:00+00:00",
+    "expires_at": "2026-08-24T04:12:00+00:00",
+    "action_type": "GATE_EVALUATE",
+    "parameters": {
+      "timeout_seconds": 7200,
+      "bundle": "/home/dev/workspace/aiVoip/validation/capture_v2/PRODUCTION_CUTOVER_AUTHORIZATION_RC69.json",
+      "gate_id": "PRODUCTION-CUTOVER-RC80"
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "77f4e620b987be2d19d1e4b1ad66b6352d6c1be2"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "Retry the explicitly authorized guarded production cutover after RC79 was rejected before execution solely because timeout_seconds exceeded the control policy maximum. Use the policy maximum 7200 seconds. Require validated feature head merged to master, pre-state V1/Production V2=false, production env backup, strict release preflight, switch to real + V2 + production enabled, full production deploy including reproduction control-high/watch/beat, runtime authority and queue verification, and automatic rollback to the exact pre-cutover env/runtime on any failed postcheck. No DUT mutation is part of this deployment action."
+  },
+  "action_sha256": "66b1bc9ee8fdf02e333a2213c505b5edc5d667bf55d007585d3ea8e044f55770",
+  "runner_id": "srv:257142",
+  "state": "FAILED",
+  "return_code": 1,
+  "verdict": "FAIL",
+  "error": null,
+  "finished_at": "2026-08-23T16:12:01.342448+00:00",
+  "stdout_sha256": "44aa931c198683cf23c03c067654433237dce375bf284e0246f844c502e4b855",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "local_stdout": ".capture-v2-control/logs/RC80-PRODUCTION-CUTOVER-002/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/RC80-PRODUCTION-CUTOVER-002/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "daef95be2708fa2e4b7d116fc4f6e09111528e10",
+      "expected_product_head": "77f4e620b987be2d19d1e4b1ad66b6352d6c1be2"
+    },
+    "parsed_output": {
+      "scope": "GUARDED_PRODUCTION_CAPTURE_V2_CUTOVER",
+      "project": "voip-ai",
+      "production_env": "/etc/voip-ai/production.env",
+      "production_mutation": false,
+      "dut_mutation": false,
+      "rollback_on_failure": true,
+      "stages": {
+        "validated_source_merged": {
+          "passed": true,
+          "validated_feature_head": "3e41f8a82580a6ca73607983326edd9cc4151998"
+        }
+      },
+      "pre_env": {
+        "APP_ENV": "production",
+        "BUILD_REVISION": "88c326a2255ade17cda5ce466b55a0058f335496",
+        "REPRODUCTION_PLATFORM_MODE": "mock",
+        "VOIP_DATA_ROOT": "/data/voip",
+        "VOIP_PROJECT_NAME": "voip-ai"
+      },
+      "verdict": "FAIL",
+      "reason": "PRODUCTION_PRESTATE_INVALID",
+      "prestate_mismatch": {
+        "CAPTURE_ENGINE_VERSION": {
+          "expected": "V1",
+          "observed": null
+        },
+        "CAPTURE_V2_PRODUCTION_ENABLED": {
+          "expected": "false",
+          "observed": null
+        },
+        "CAPTURE_V2_ACTIVATION_REHEARSAL": {
+          "expected": "false",
+          "observed": null
+        }
+      }
+    }
+  }
+}

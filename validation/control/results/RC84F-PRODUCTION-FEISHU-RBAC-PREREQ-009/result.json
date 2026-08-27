@@ -1,0 +1,82 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "RC84F-PRODUCTION-FEISHU-RBAC-PREREQ-009",
+    "sequence": 220,
+    "created_at": "2026-08-25T23:59:00+00:00",
+    "expires_at": "2026-08-26T11:59:00+00:00",
+    "action_type": "PRODUCTION_FEISHU_RBAC_ENABLE",
+    "parameters": {
+      "timeout_seconds": 120
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "19ac691f480c945ab5cbd286c210c406711986f0"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "Retry the single audited production prerequisite after PR #55 full CI/Golden PASS and sync to the dedicated control branch. Treat missing legacy V2 keys only as their effective safe runtime defaults (V1/false); explicit unsafe values must fail closed. Back up /etc/voip-ai/production.env, change only FEISHU_IDENTITY_RBAC_ENABLED=true, verify no other safe prestate key changes, restore on post-write failure, do not restart services, do not switch Capture Authority, and do not mutate DUT state. A fresh explicit production deployment preflight is required afterward before RC85."
+  },
+  "action_sha256": "d52696f2e48a787bc52de6dc3fbaee21324ef1e19161513d1aa73708a278fe7e",
+  "runner_id": "srv:2203168",
+  "state": "SUCCEEDED",
+  "return_code": 0,
+  "verdict": "PASS",
+  "error": null,
+  "finished_at": "2026-08-25T23:58:30.715714+00:00",
+  "stdout_sha256": "34190f16de88c211fb3f046bfec9f6e2ab4e18b39b849a5bbbaf2251672da54c",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "local_stdout": ".capture-v2-control/logs/RC84F-PRODUCTION-FEISHU-RBAC-PREREQ-009/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/RC84F-PRODUCTION-FEISHU-RBAC-PREREQ-009/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "561323bd391c81caf9011b9c853a4047cf72bafb",
+      "expected_product_head": "19ac691f480c945ab5cbd286c210c406711986f0"
+    },
+    "parsed_output": {
+      "scope": "GUARDED_PRODUCTION_FEISHU_RBAC_ENABLE",
+      "production_env": "/etc/voip-ai/production.env",
+      "target_key": "FEISHU_IDENTITY_RBAC_ENABLED",
+      "target_value": true,
+      "mutations_performed": true,
+      "runtime_restart_performed": false,
+      "dut_mutation": false,
+      "authorization": {
+        "authorized": true,
+        "cutover_ready": true,
+        "final_acceptance_action": "RC68-MASTER-FIX-CANDIDATE-INTEGRATION-005"
+      },
+      "release_gate": {
+        "approved": true,
+        "production_cutover_approved": true
+      },
+      "prestate": {
+        "app_env": "production",
+        "capture_engine_version": "V1",
+        "capture_v2_production_enabled": "false",
+        "reproduction_platform_mode": "mock",
+        "feishu_identity_rbac_enabled": false
+      },
+      "prestate_defaulted_keys": [
+        "CAPTURE_ENGINE_VERSION",
+        "CAPTURE_V2_PRODUCTION_ENABLED"
+      ],
+      "prestate_defaults_source": "APPLICATION_RUNTIME_DEFAULTS",
+      "backup_path": "/etc/voip-ai/production.env.feishu-rbac-pre-20260825T235830Z",
+      "changed_keys": [
+        "FEISHU_IDENTITY_RBAC_ENABLED"
+      ],
+      "poststate": {
+        "feishu_identity_rbac_enabled": true
+      },
+      "verdict": "PASS",
+      "reason": "PRODUCTION_FEISHU_RBAC_ENABLED"
+    }
+  }
+}

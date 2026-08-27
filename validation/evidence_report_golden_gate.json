@@ -25,10 +25,12 @@
     "LOCAL_CAPTURE_PERIODIC_INTERFERENCE",
     "ONE_WAY_RTP_MEDIA",
     "PACKET_LOSS",
+    "PAYLOAD_CHANGE",
     "PCM_GAP",
     "PERIODIC_INTERFERENCE_PATH_COMPARISON",
     "PERIODIC_LOW_FREQUENCY_INTERFERENCE",
     "SIP_CALL_FAILED",
+    "SIP_CONFLICTING_FINAL_RESPONSE",
     "SIP_REGISTRATION_FAILED",
     "UNEXPECTED_SILENCE"
   ],
@@ -42,10 +44,12 @@
     "LOCAL_CAPTURE_PERIODIC_INTERFERENCE",
     "ONE_WAY_RTP_MEDIA",
     "PACKET_LOSS",
+    "PAYLOAD_CHANGE",
     "PCM_GAP",
     "PERIODIC_INTERFERENCE_PATH_COMPARISON",
     "PERIODIC_LOW_FREQUENCY_INTERFERENCE",
     "SIP_CALL_FAILED",
+    "SIP_CONFLICTING_FINAL_RESPONSE",
     "SIP_REGISTRATION_FAILED",
     "UNEXPECTED_SILENCE"
   ],
@@ -58,13 +62,13 @@
     "serious_false_positive_allowed": 0
   },
   "metrics": {
-    "tp": 15,
+    "tp": 17,
     "fp": 0,
     "fn": 0,
     "recall": 1.0,
     "precision": 1.0,
-    "p0_required_type_count": 15,
-    "p0_covered_type_count": 15,
+    "p0_required_type_count": 17,
+    "p0_covered_type_count": 17,
     "boundary_total": 7,
     "boundary_correctness": 1.0,
     "wrong_boundary_rate": 0.0,
@@ -136,6 +140,13 @@
       "recall": 1.0,
       "precision": 1.0
     },
+    "PAYLOAD_CHANGE": {
+      "tp": 1,
+      "fp": 0,
+      "fn": 0,
+      "recall": 1.0,
+      "precision": 1.0
+    },
     "PCM_GAP": {
       "tp": 1,
       "fp": 0,
@@ -158,6 +169,13 @@
       "precision": 1.0
     },
     "SIP_CALL_FAILED": {
+      "tp": 1,
+      "fp": 0,
+      "fn": 0,
+      "recall": 1.0,
+      "precision": 1.0
+    },
+    "SIP_CONFLICTING_FINAL_RESPONSE": {
       "tp": 1,
       "fp": 0,
       "fn": 0,
@@ -187,18 +205,22 @@
       "actual_finding_types": [
         "SIP_REGISTRATION_FAILED",
         "SIP_CALL_FAILED",
+        "SIP_CONFLICTING_FINAL_RESPONSE",
         "ONE_WAY_RTP_MEDIA",
         "CODEC_NEGOTIATION_MISMATCH",
         "PACKET_LOSS",
-        "HIGH_DELTA"
+        "HIGH_DELTA",
+        "PAYLOAD_CHANGE"
       ],
       "expected_finding_types": [
         "SIP_REGISTRATION_FAILED",
         "SIP_CALL_FAILED",
+        "SIP_CONFLICTING_FINAL_RESPONSE",
         "CODEC_NEGOTIATION_MISMATCH",
         "ONE_WAY_RTP_MEDIA",
         "PACKET_LOSS",
-        "HIGH_DELTA"
+        "HIGH_DELTA",
+        "PAYLOAD_CHANGE"
       ],
       "boundary_actual": {
         "status": "UNKNOWN",

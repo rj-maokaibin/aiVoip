@@ -181,6 +181,39 @@ def _proposal_diff(baseline: dict, proposal: dict | None) -> dict:
     }
 
 
+def _sanitize_proposal_evidence(db: Session, *, case_id: str, raw: dict | None) -> dict | None:
+    """Drop evidence references that do not belong to the Case.
+
+    LLMs frequently transcribe UUIDs incorrectly. Keeping only references that
+    exactly match real Case evidence is strictly more conservative than trusting
+    model output, and it lets the fail-closed ownership rule pass without being
+    rejected by hallucinated IDs. An unregistered ``next_question_key`` is also
+    cleared so a well-formed proposal is not rejected by a registry miss.
+    """
+    if not isinstance(raw, dict):
+        return raw
+    raw = dict(raw)
+    owned = set(db.scalars(select(Evidence.id).where(Evidence.case_id == case_id)))
+    if owned:
+        raw['hypotheses'] = [
+            {**h, 'supporting_evidence_ids': [x for x in (h.get('supporting_evidence_ids') or []) if x in owned],
+             'contradicting_evidence_ids': [x for x in (h.get('contradicting_evidence_ids') or []) if x in owned]}
+            for h in (raw.get('hypotheses') or []) if isinstance(h, dict)
+        ]
+        raw['claims'] = [
+            {**c, 'evidence': [e for e in (c.get('evidence') or []) if isinstance(e, dict) and e.get('evidence_id') in owned]}
+            for c in (raw.get('claims') or []) if isinstance(c, dict)
+        ]
+    qk = raw.get('next_question_key')
+    if qk:
+        try:
+            from app.reproduction.question_graph import DiagnosticQuestionRegistry
+            DiagnosticQuestionRegistry().get(qk)
+        except Exception:
+            raw['next_question_key'] = None
+    return raw
+
+
 def run_ai_shadow(db: Session, *, case_id: str, diagnosis_run_id: str | None,
                   snapshot: dict, deterministic_baseline: dict,
                   gateway: ReasoningGatewayClient | None = None) -> AIProposalRecord:
@@ -202,6 +235,7 @@ def run_ai_shadow(db: Session, *, case_id: str, diagnosis_run_id: str | None,
             raise RuntimeError('REASONING_GATEWAY_DISABLED')
         response = gateway.enhance(snapshot, deterministic_baseline)
         raw = response.get('proposal') if isinstance(response.get('proposal'), dict) else response
+        raw = _sanitize_proposal_evidence(db, case_id=case_id, raw=raw)
         validated, errors = AIProposalValidator().validate(
             db, case_id=case_id, raw=raw, deterministic_baseline=deterministic_baseline
         )
@@ -211,10 +245,19 @@ def run_ai_shadow(db: Session, *, case_id: str, diagnosis_run_id: str | None,
         status = 'DEGRADED'
 
     latency_ms = int((time.monotonic() - started) * 1000)
+    _schema_version = (raw or {}).get('schema_version', 'ai-proposal-v1')
+    if isinstance(_schema_version, dict):
+        # Model may echo schema_version as an object; the column is VARCHAR, so
+        # collapse it defensively (prefer the explicit version field).
+        _schema_version = (
+            _schema_version.get('version')
+            or _schema_version.get('name')
+            or 'ai-proposal-v2'
+        )
     row = AIProposalRecord(
         case_id=case_id,
         diagnosis_run_id=diagnosis_run_id,
-        schema_version=(raw or {}).get('schema_version', 'ai-proposal-v1'),
+        schema_version=str(_schema_version),
         intent=(raw or {}).get('intent', 'DIAGNOSIS_ENHANCEMENT'),
         mode='SHADOW',
         status=status,

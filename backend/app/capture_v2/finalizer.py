@@ -25,6 +25,7 @@ class FinalizeResult:
     remote_deleted: int
     kernel_drops: int | None
     durable: bool
+    fence_released: bool = True
 
 
 class CaptureV2CaptureFinalizer:
@@ -34,11 +35,12 @@ class CaptureV2CaptureFinalizer:
     anything below ACKED keeps evidence finalization incomplete.
     """
 
-    def __init__(self, *, session_factory, producer_manager, pump, lease_manager):
+    def __init__(self, *, session_factory, producer_manager, pump, lease_manager, mutator=None):
         self.session_factory = session_factory
         self.producer_manager = producer_manager
         self.pump = pump
         self.lease_manager = lease_manager
+        self.mutator = mutator
 
     async def finalize(self, *, capture_session_id: str, capture_epoch_id: str,
                        capture_epoch_token: str, producer, token, token_provider=None,
@@ -151,6 +153,15 @@ class CaptureV2CaptureFinalizer:
                                 "empty_epoch_proven": empty_epoch_proven,
                             },
                         ))
+        fence_released = True
+        if self.mutator is not None:
+            try:
+                # Fenced DUT cleanup: once evidence is durable, hand the DUT fence
+                # back so the next reproduction can publish a fresh epoch instead of
+                # being LEASE_FENCED by this session's residual control files.
+                await self.mutator.release_fence(current)
+            except Exception:
+                fence_released = False
         return FinalizeResult(
             capture_epoch_id=capture_epoch_id,
             final_segments_sealed=result.sealed,
@@ -159,4 +170,5 @@ class CaptureV2CaptureFinalizer:
             remote_deleted=result.deleted,
             kernel_drops=stats.packets_dropped_kernel,
             durable=durable,
+            fence_released=fence_released,
         )

@@ -1,0 +1,36 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "RC86-PRODUCTION-DEPLOYMENT-PREFLIGHT-012",
+    "sequence": 223,
+    "created_at": "2026-08-26T05:34:21+00:00",
+    "expires_at": "2026-08-26T11:34:21+00:00",
+    "action_type": "PRODUCTION_DEPLOYMENT_PREFLIGHT",
+    "parameters": {
+      "timeout_seconds": 300
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "e6623e29908aa977332c6e0b87fe04d0a88bce84"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "Fresh guarded production deployment preflight after PR #57 repo-owner Git identity fix passed Frozen, Full Software, Prepared-PCAP Golden #001 and Human Evidence; PR #58 synchronized accepted master into the production control branch; and the detached single control runner was live-probed at control head 3745d2577cc881fc1b22e882d00691b0754896db with production still V1 / V2 disabled / platform mock. Read the canonical authorization and real /etc/voip-ai/production.env, verify safe V1 prestate, accepted source, deployment blockers and production compose requirements. Perform no production or DUT mutation. A new guarded production cutover must not be issued unless this action returns PASS with no deploy blockers."
+  },
+  "action_sha256": "8be4842dcc98e40be2afa2febeb5003eaa8732e8ab703d5cb116096e4e3976f3",
+  "runner_id": "srv:7",
+  "state": "REJECTED",
+  "return_code": null,
+  "verdict": null,
+  "error": "CONTROL_COMMITS_TOUCHED_PRODUCT_CODE:validation/capture_v2/PRODUCTION_CUTOVER_AUTHORIZATION_RC69.json",
+  "finished_at": "2026-08-26T05:34:44.978411+00:00",
+  "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "local_stdout": ".capture-v2-control/logs/RC86-PRODUCTION-DEPLOYMENT-PREFLIGHT-012/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/RC86-PRODUCTION-DEPLOYMENT-PREFLIGHT-012/stderr.log",
+  "detail": {}
+}

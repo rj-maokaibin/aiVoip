@@ -151,3 +151,28 @@ def quarantine_device_lock(db: Session, *, session: ReproductionSession) -> None
     # Quarantine is a safety interlock, not an expiring operation lease.
     row.lease_expires_at=now
     db.flush()
+
+
+def release_device_lock_forced(db: Session, *, session: ReproductionSession) -> None:
+    """Auditable fail-closed lock release for a pre-ownership startup failure.
+
+    The ARM task failed before Capture ownership was created and before any DUT
+    mutation (PCAP/PCM/debug) happened, so cleanup verification is not required.
+    Mark RELEASED immediately and keep the row reclaimable, mirroring the
+    release_device_lock row-lock ordering (session first, then lock row).
+    """
+    row=db.scalar(select(DeviceDiagnosticLock).where(
+        DeviceDiagnosticLock.device_id==session.device_id,
+        DeviceDiagnosticLock.session_id==session.id,
+    ))
+    if row is None:
+        return
+    now=_utcnow()
+    session.lease_expires_at=None
+    db.flush()
+    row.status=LockStatus.RELEASED.value
+    row.released_at=now
+    row.heartbeat_at=now
+    # Keep the row for audit but make it immediately reclaimable.
+    row.lease_expires_at=now
+    db.flush()

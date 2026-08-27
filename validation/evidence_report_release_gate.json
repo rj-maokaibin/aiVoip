@@ -8,14 +8,14 @@
       "status": "PASS",
       "category": "ACCURACY",
       "blocking": true,
-      "detail": "{\n  \"status\": \"PASS\",\n  \"metrics\": {\n    \"tp\": 15,\n    \"fp\": 0,\n    \"fn\": 0,\n    \"recall\": 1.0,\n    \"precision\": 1.0,\n    \"p0_required_type_count\": 15,\n    \"p0_covered_type_count\": 15,\n    \"boundary_total\": 7,\n    \"boundary_correctness\": 1.0,\n    \"wrong_boundary_rate\": 0.0,\n    \"unknown_expected\": 1,\n    \"unknown_correct\": 1,\n    \"serious_false_positive_count\": 0\n  },\n  \"p0_missing_types\": [],\n  \"out\": \"/home/dev/workspace/aiVoip/validation/evidence_report_golden_gate.json\"\n}"
+      "detail": "{\n  \"status\": \"PASS\",\n  \"metrics\": {\n    \"tp\": 17,\n    \"fp\": 0,\n    \"fn\": 0,\n    \"recall\": 1.0,\n    \"precision\": 1.0,\n    \"p0_required_type_count\": 17,\n    \"p0_covered_type_count\": 17,\n    \"boundary_total\": 7,\n    \"boundary_correctness\": 1.0,\n    \"wrong_boundary_rate\": 0.0,\n    \"unknown_expected\": 1,\n    \"unknown_correct\": 1,\n    \"serious_false_positive_count\": 0\n  },\n  \"p0_missing_types\": [],\n  \"out\": \"/home/dev/workspace/aiVoip-control/validation/evidence_report_golden_gate.json\"\n}"
     },
     {
       "key": "PERFORMANCE_SOFTWARE_CORE",
       "status": "PASS",
       "category": "PERFORMANCE",
       "blocking": true,
-      "detail": "{\n  \"status\": \"PASS\",\n  \"metrics\": {\n    \"p50_seconds\": 1.811,\n    \"p95_seconds\": 1.8134,\n    \"max_seconds\": 1.827,\n    \"mean_seconds\": 1.8136\n  },\n  \"out\": \"/home/dev/workspace/aiVoip/validation/evidence_report_performance_gate.json\"\n}"
+      "detail": "{\n  \"status\": \"PASS\",\n  \"metrics\": {\n    \"p50_seconds\": 5.1548,\n    \"p95_seconds\": 5.164,\n    \"max_seconds\": 5.1687,\n    \"mean_seconds\": 5.1604\n  },\n  \"out\": \"/home/dev/workspace/aiVoip-control/validation/evidence_report_performance_gate.json\"\n}"
     }
   ],
   "environment_gates": [
@@ -23,25 +23,32 @@
       "key": "LIVE_FEISHU_TENANT",
       "status": "UNVERIFIED",
       "blocking_for_production": true,
-      "detail": "需要真实飞书应用/Tenant 验证 Docx Block、PNG/WAV、权限和卡片更新。"
+      "detail": "需要真实飞书应用/Tenant 验证 Evidence Card 内联 PNG/WAV、权限、媒体替换、Grounding 状态投影和卡片更新。"
     },
     {
       "key": "REAL_DUT_END_TO_END",
       "status": "UNVERIFIED",
       "blocking_for_production": true,
-      "detail": "需要真实 DUT 完成 PCAP+PCM RX/TX→Call→Analyzer→Report→Bundle→Cleanup。"
+      "detail": "需要真实 DUT 完成 PCAP+PCM RX/TX→Call→Analyzer→Report→Bundle→Cleanup；Offline Golden 不覆盖采集可靠性。"
     },
     {
-      "key": "REAL_GOLDEN_DATASET",
+      "key": "OFFLINE_ANALYSIS_GOLDEN_001",
       "status": "UNVERIFIED",
       "blocking_for_production": true,
-      "detail": "需要 Synthetic + Lab Real + Field Confirmed 的真实标注集验证最终 Recall/Precision/Boundary 指标。"
+      "detail": "设置 VOIP_OFFLINE_GOLDEN_001_PCAP 指向 SHA256=b038aa7c...e3f0 的外部 PCAP fixture 后，执行真实 Imported-Evidence Golden E2E，并验证 Evidence Card 图/音频/Frame、Grounding 语义以及 PR7 DiagnosticEvent/Decision/Finding 链路。"
+    },
+    {
+      "key": "BROADER_REAL_GOLDEN_DATASET",
+      "status": "UNVERIFIED",
+      "blocking_for_production": true,
+      "detail": "单个 Offline Golden 不能代表最终 Recall/Precision、所有 Evidence Card 可读性、Grounding 规则或 Diagnostic Contract 的全部故障族覆盖；仍需 Synthetic + Lab Real + 更多 Field/Imported Confirmed 样本覆盖正常、负控及各故障族。"
     }
   ],
   "allowed_pending_environment_gates": [
     "LIVE_FEISHU_TENANT",
     "REAL_DUT_END_TO_END",
-    "REAL_GOLDEN_DATASET"
+    "OFFLINE_ANALYSIS_GOLDEN_001",
+    "BROADER_REAL_GOLDEN_DATASET"
   ],
-  "claim": "When software_status=PASS, all machine-verifiable V1.0 software requirements are closed. Production acceptance still requires exactly the three listed environment gates."
+  "claim": "software_status covers machine-verifiable software gates, including PR5 Evidence Card traceability/renderer/permission boundaries; PR6 Structural/Semantic/Evidence/Explainability Grounding, runtime FAILED/audit/idempotency persistence and deterministic Claim Manifest; and PR7 canonical DiagnosticEvent v1 / CandidateDecision v2 / Finding Diagnostic Link v1 contracts with deterministic/reorder-stable IDs, lossless legacy-status projection, explicit MERGE, packet-only snapshot transport, unresolved-PCM INCONCLUSIVE degradation, Claim/event-ref bridge, and the invariant that SUPPRESS/INCONCLUSIVE decisions cannot justify user-visible Findings. production_status also evaluates configured real/offline Golden fixtures; missing external fixtures remain explicit UNVERIFIED gates rather than being silently treated as PASS."
 }

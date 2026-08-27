@@ -12,7 +12,12 @@ if TYPE_CHECKING:
 else:
     LeaseToken = Any
 from app.capture_v2.transport.readonly import ReadOnlyDeviceTransport
-from app.capture_v2.transport.shell_scripts import fenced_script, publish_fence_script
+from app.capture_v2.transport.shell_scripts import (
+    clear_stale_fence_script,
+    fenced_script,
+    publish_fence_script,
+    release_fence_script,
+)
 
 
 class FencedDeviceMutator:
@@ -68,12 +73,70 @@ class FencedDeviceMutator:
                 details={"lease_epoch": token.lease_epoch, "expires_at": expires.isoformat()},
             )
 
+    async def _read_control_state(self) -> dict[str, str]:
+        """Best-effort read of the DUT-side capture fence metadata."""
+        try:
+            return {
+                "lease_epoch": (
+                    await self.reader.read_text(
+                        "/tmp/aivoip_capture/control/lease_epoch", missing_ok=True
+                    )
+                )
+                or "",
+                "session_id": (
+                    await self.reader.read_text(
+                        "/tmp/aivoip_capture/control/session_id", missing_ok=True
+                    )
+                )
+                or "",
+                "owner_worker": (
+                    await self.reader.read_text(
+                        "/tmp/aivoip_capture/control/owner_worker", missing_ok=True
+                    )
+                )
+                or "",
+            }
+        except Exception:
+            return {}
+
+    async def _clear_stale_fence(self, *, operation_id: str) -> None:
+        script = clear_stale_fence_script(operation_id=operation_id)
+        await self._run_once(script, operation_id=operation_id)
+
+    async def _heal_stale_fence(self, token: LeaseToken) -> None:
+        """Take over a DUT fence left by a dead prior session.
+
+        A crash/abort without cleanup leaves the DUT control files behind; a fresh
+        reproduction on the same DUT would otherwise be permanently LEASE_FENCED.
+        Only clear the stale control when no live capture producer exists; a live
+        foreign capture keeps the strict fence (LEASE_FENCED) intact.
+        """
+        control = await self._read_control_state()
+        foreign = (
+            control.get("session_id") not in ("", token.capture_session_id)
+            or control.get("owner_worker") not in ("", token.owner_worker_id)
+        )
+        if not foreign:
+            return
+        try:
+            from app.capture_v2.recovery.scanner import RecoveryScanner
+
+            inventory = await RecoveryScanner(self.reader).scan()
+        except Exception:
+            return  # best-effort: fall back to the strict fence on scan failure
+        if inventory.v2_producers or inventory.legacy_producers:
+            return  # a live capture owns the DUT -> strict fence preserved
+        await self._clear_stale_fence(operation_id=str(uuid4()))
+
     async def publish_fence(self, token: LeaseToken, *, boot_id: str, operation_id: str | None = None) -> None:
         # Never allow a delayed worker to publish an already-expired authority term.
         # The DUT script independently enforces monotonic epoch publication as the
         # second fence, so a stale worker cannot roll N+1 back to N.
         self._ensure_token_live(token)
         operation_id = operation_id or str(uuid4())
+        # Self-heal stale fence state from a dead prior session before publishing
+        # our own, otherwise the DUT refuses the new authority with LEASE_FENCED.
+        await self._heal_stale_fence(token)
         script = publish_fence_script(
             lease_epoch=token.lease_epoch,
             session_id=token.capture_session_id,
@@ -93,6 +156,18 @@ class FencedDeviceMutator:
             if epoch == str(token.lease_epoch) and session_id == token.capture_session_id and owner == token.owner_worker_id:
                 return
             raise
+
+    async def release_fence(self, token: LeaseToken, *, operation_id: str | None = None) -> None:
+        """Fenced removal of the DUT capture fence after a session finalizes.
+
+        Leaves the DUT pristine so the next reproduction can publish a fresh
+        epoch without a stale-owner LEASE_FENCED.  Only the current lease
+        authority (matching DUT lease_epoch) may clear it.
+        """
+        self._ensure_token_live(token)
+        operation_id = operation_id or str(uuid4())
+        script = release_fence_script(lease_epoch=token.lease_epoch, operation_id=operation_id)
+        await self._run_once(script, operation_id=operation_id)
 
     async def execute_fenced(
         self,

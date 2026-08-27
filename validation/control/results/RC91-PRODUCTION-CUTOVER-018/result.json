@@ -1,0 +1,120 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "RC91-PRODUCTION-CUTOVER-018",
+    "sequence": 229,
+    "created_at": "2026-08-26T10:19:15+00:00",
+    "expires_at": "2026-08-26T16:19:15+00:00",
+    "action_type": "PRODUCTION_CUTOVER",
+    "parameters": {
+      "timeout_seconds": 7200
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "9bf27796e378dc1d05ea71e27539bd387db634a1"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "Execute the final authorized guarded Capture Engine V2 production cutover after RC90 fresh production preflight PASS with deployment_status=PASS and no deploy blockers. The accepted master/control head includes all prior production-control fixes plus the MinIO console collision fix: before production.env mutation, verify 127.0.0.1:19001 is still available; within the same atomic env backup transaction set CAPTURE_ENGINE_VERSION=V2, CAPTURE_V2_PRODUCTION_ENABLED=true, REPRODUCTION_PLATFORM_MODE=real, VOIP_MINIO_CONSOLE_BIND=127.0.0.1 and VOIP_MINIO_CONSOLE_PORT=19001. Do not stop or alter the existing live aivoip stack occupying host 9001. Run strict release preflight, production deploy, DB migration/runtime verification, required services, queues, Redis, MinIO storage, frontend/backend readiness and backend capture-authority probe. Fail closed with verified V1 rollback on any error. No DUT mutation. Declare production cutover complete only with live CAPTURE_AUTHORITY=V2 evidence."
+  },
+  "action_sha256": "4b83e0b4b2d18a9539640a6597c8b1082c640172f6665c736a3e1b6b5b8b0df8",
+  "runner_id": "srv:7",
+  "state": "FAILED",
+  "return_code": 1,
+  "verdict": "FAIL",
+  "error": null,
+  "finished_at": "2026-08-26T10:21:26.132055+00:00",
+  "stdout_sha256": "c0216169e40cefd40df8d9c0941e2283efec045220bc694309f9bb1c94d98c61",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "local_stdout": ".capture-v2-control/logs/RC91-PRODUCTION-CUTOVER-018/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/RC91-PRODUCTION-CUTOVER-018/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "489b47f8acc3c3b909d06936918256ac8e4cc7df",
+      "expected_product_head": "9bf27796e378dc1d05ea71e27539bd387db634a1"
+    },
+    "parsed_output": {
+      "scope": "GUARDED_PRODUCTION_CAPTURE_V2_CUTOVER",
+      "project": "voip-ai",
+      "production_env": "/etc/voip-ai/production.env",
+      "production_mutation": true,
+      "dut_mutation": false,
+      "rollback_on_failure": true,
+      "stages": {
+        "validated_source_merged": {
+          "passed": true,
+          "validated_feature_head": "db3e8012a9569d9508e9d2cd920baf1de6bac866",
+          "master_head": "1a3b45c4ee9b11b79536ee33e428c56ac9aa29fd",
+          "master_ref_source": "ISOLATED_LOCAL_REF_SNAPSHOT",
+          "master_snapshot_ref": "refs/capture-v2/master-snapshot"
+        },
+        "source_manifest": {
+          "passed": true,
+          "file_count": 623,
+          "aggregate_sha256": "d3e9d94b33e6fed42f86e436d9ff1771c0be7bea730dfc8d21c76ab8bdf3056b"
+        },
+        "env_switch": {
+          "return_code": 0,
+          "backup_path": "/etc/voip-ai/production.env.capture-v2-pre-20260826T101951Z",
+          "overrides": {
+            "CAPTURE_ENGINE_VERSION": "V2",
+            "CAPTURE_V2_ACTIVATION_REHEARSAL": "false",
+            "CAPTURE_V2_PRODUCTION_ENABLED": "true",
+            "CAPTURE_V2_RELEASE_GATE_ARTIFACT": "/app/validation/capture_v2_release_gate.json",
+            "CAPTURE_V2_REUSE_LEGACY_REPRODUCTION_SEMANTICS": "false",
+            "REPRODUCTION_PLATFORM_MODE": "real",
+            "VOIP_MINIO_CONSOLE_BIND": "127.0.0.1",
+            "VOIP_MINIO_CONSOLE_PORT": "19001"
+          }
+        },
+        "strict_release_preflight": {
+          "return_code": 0,
+          "release_status": "PASS",
+          "release_blocking_keys": []
+        },
+        "production_deploy": {
+          "return_code": 1,
+          "stdout_tail": "#30 [reproduction-worker] exporting to image\n#30 exporting layers 0.3s done\n#30 exporting manifest sha256:4b75e75f267dc0e6987ca1c1aecd4224d931a82c975ab9ddd75d757747dfd257 0.1s done\n#30 exporting config sha256:af8c50df0bee6cdfddbc3894c9b9c2462a21df1a48b5f0bac51363d6254c6c4d 0.1s done\n#30 exporting attestation manifest sha256:b9c0c018d1f220bfbb5f58a1516faa8e66c0c7b7812945d98d117703998c6946 0.2s done\n#30 exporting manifest list sha256:f52894078077e41a464053ef1a2f883f1c036c30ea022285ccc627e58d4672cb 0.1s done\n#30 naming to docker.io/library/voip-ai-reproduction-worker:latest 0.0s done\n#30 unpacking to docker.io/library/voip-ai-reproduction-worker:latest 0.6s done\n#30 DONE 1.4s\n\n#31 [diagnosis-worker] exporting to image\n#31 exporting layers 0.3s done\n#31 exporting manifest sha256:2d4608593e725a55f18ea9d6c0b13236042bf174c44725f6ca245eb06289cdce 0.1s done\n#31 exporting config sha256:5747fd547bf931e4f355fec2eb542e3c5fb5fcff7b2c3be7eb4662e85ff6cdae 0.1s done\n#31 exporting attestation manifest sha256:44ba57a8f5631fd9725ac4f6289028d6e67db6cfc00b4888a2878a78bd5dee5f 0.2s done\n#31 exporting manifest list sha256:3a7b517e08cb5ce71eea53e0b630662f316e60ba323c76105a29a3eb0b6b1aaa 0.1s done\n#31 naming to docker.io/library/voip-ai-diagnosis-worker:latest 0.0s done\n#31 unpacking to docker.io/library/voip-ai-diagnosis-worker:latest 0.6s done\n#31 DONE 1.4s\n\n#32 [pcm-worker] exporting to image\n#32 exporting layers 0.3s done\n#32 exporting manifest sha256:8afe7f74c7c6b62d86621afa983b9c0a8b31b96a6b020fe6e7d622b7e9856651 0.1s done\n#32 exporting config sha256:26e601ac5b9451f885ee4cf12a220690bace5352b609f579c55248a66e17106f 0.1s done\n#32 exporting attestation manifest sha256:954fb638e958787afe0bf8c5153df28daf07f63b7f66a60e5327f3d7ad2a9757 0.2s done\n#32 exporting manifest list sha256:776cd8517dfca97ebe096b9b923a17a376cabe8ba9a7a21cd7a62892ea881736 0.1s done\n#32 naming to docker.io/library/voip-ai-pcm-worker:latest 0.0s done\n#32 unpacking to docker.io/library/voip-ai-pcm-worker:latest 0.6s done\n#32 DONE 1.4s\n\n#33 [reproduction-control-high-worker] exporting to image\n#33 exporting layers 0.3s done\n#33 exporting manifest sha256:b2f4890a5a2f567db32e754849323e55848762c95b7f76e5bca210388c49bf97 0.1s done\n#33 exporting config sha256:c999e5d53662091de9f5fc825e1cf9143ea40890de5564d9e74673ca88b5c135 0.1s done\n#33 exporting attestation manifest sha256:b7959d3588aed3d23767fe694700a5caa390debc8b1f4def5b222512bde6eb27 0.2s done\n#33 exporting manifest list sha256:2caa884ab59ea5079b83cc781df07f6dccbf79e3abb749ff84e27903d2b91916 0.1s done\n#33 naming to docker.io/library/voip-ai-reproduction-control-high-worker:latest 0.0s done\n#33 unpacking to docker.io/library/voip-ai-reproduction-control-high-worker:latest 0.6s done\n#33 DONE 1.4s\n\n#34 [reproduction-watch-worker] exporting to image\n#34 exporting layers 0.3s done\n#34 exporting manifest sha256:1e4ba57ba247ffc71ff24594de305d4507e9d18263ca9d45530e2d511f456403 0.1s done\n#34 exporting config sha256:235fad3198d4ad433a8c660502016d1673804f071508535d968e39f4118b636d 0.1s done\n#34 exporting attestation manifest sha256:c278532002d8bc8d3561c6c20041f7cc9312e03bd1fd97857a5fe38cf357abf6 0.2s done\n#34 exporting manifest list sha256:411004b060a9f43dafd8078af003fd5c6ab6be12d36542f3cce96b6cf0524091 0.1s done\n#34 naming to docker.io/library/voip-ai-reproduction-watch-worker:latest 0.0s done\n#34 unpacking to docker.io/library/voip-ai-reproduction-watch-worker:latest 0.6s done\n#34 DONE 1.4s\n\n#35 [packet-worker] exporting to image\n#35 exporting layers 0.3s done\n#35 exporting manifest sha256:534100267d68d38c34ffae7a40cf23203cf156ab7aaacc2803cb5bada538f15e 0.1s done\n#35 exporting config sha256:347d85e51b9743969456ddae9a5e11ed8dd0bd8bd0ec99ac065bfa668be0fda6 0.1s done\n#35 exporting attestation manifest sha256:329b1c518fd4d3d57f7fcdd0f8c141e188b4f1a1b947007388b2f02996ef0826 0.2s done\n#35 exporting manifest list sha256:d5ac31f72473ec02ea244280a111c40ef9bbd7d25a33dddd9772c8f82982947c 0.1s done\n#35 naming to docker.io/library/voip-ai-packet-worker:latest 0.0s done\n#35 unpacking to docker.io/library/voip-ai-packet-worker:latest 0.6s done\n#35 DONE 1.4s\n\n#36 [media-worker] exporting to image\n#36 exporting layers 0.3s done\n#36 exporting manifest sha256:007ba7596e912ec52d1c6440abd27f28cf1443e38b12629f430cfab10bc35ca2 0.1s done\n#36 exporting config sha256:b8568b12ba2094ab948ee70f19e25fe1165127455b8148f0705c52b50b10e11b 0.1s done\n#36 exporting attestation manifest sha256:d786d4c79ac8b8dec0bfb8c390ad083e208c246183cb3e7f9c9c37cad5b541f3 0.2s done\n#36 exporting manifest list sha256:4db3a35c7202bced88623d9cbeff4ba98491f31285c13e215c522a5685400931 0.1s done\n#36 naming to docker.io/library/voip-ai-media-worker:latest 0.0s done\n#36 unpacking to docker.io/library/voip-ai-media-worker:latest 0.6s done\n#36 DONE 1.4s\n\n#27 [collector-worker] exporting to image\n#27 unpacking to docker.io/library/voip-ai-collector-worker:latest 0.6s done\n#27 DONE 1.4s\n\n#37 [beat] exporting to image\n#37 exporting layers 0.3s done\n#37 exporting manifest sha256:a901bd65cf776833a73d9b9143fc13a8111c1e3410f650fc3b112e9a4d8ba9ca 0.1s done\n#37 exporting config sha256:8c657641593b7e5365ab90196de1a7ed6273fb5b1494760213766802ffcb3131 0.1s done\n#37 exporting attestation manifest sha256:6fec80d63772011f1bfe6234e42ecdb1a9ab111ddc0469e75ea24e0f898f7a8e 0.2s done\n#37 exporting manifest list sha256:a6f93513fb42230e341f9e7e06cb91f6589bbb0885b7777e65a3fbcb9e93e969 0.1s done\n#37 naming to docker.io/library/voip-ai-beat:latest 0.0s done\n#37 unpacking to docker.io/library/voip-ai-beat:latest 0.6s done\n#37 DONE 1.4s\n\n#38 [reproduction-worker] resolving provenance for metadata file\n#38 DONE 0.7s\n\n#39 [beat] resolving provenance for metadata file\n#39 DONE 0.1s\n\n#40 [pcm-worker] resolving provenance for metadata file\n#40 DONE 0.4s\n\n#41 [packet-worker] resolving provenance for metadata file\n#41 DONE 0.2s\n\n#42 [media-worker] resolving provenance for metadata file\n#42 DONE 0.1s\n\n#43 [reproduction-watch-worker] resolving provenance for metadata file\n#43 DONE 0.5s\n\n#44 [release-runner] resolving provenance for metadata file\n#44 DONE 0.6s\n\n#45 [collector-worker] resolving provenance for metadata file\n#45 DONE 0.3s\n\n#46 [reproduction-control-high-worker] resolving provenance for metadata file\n#46 DONE 0.3s\n\n#47 [diagnosis-worker] resolving provenance for metadata file\n#47 DONE 0.5s\n\n#48 [backend] resolving provenance for metadata file\n#48 DONE 0.0s\nPRODUCTION_IMAGE_BUILD=PASS mode=OFFLINE_LOCAL_INVENTORY audit=/data/voip/release/offline-build-fallback.json\nStarting PostgreSQL, Redis and MinIO...\nApplying Alembic migration explicitly before application promotion...\nStarting backend, workers, scheduler and frontend...",
+          "stderr_tail": "INFO  [alembic.runtime.migration] Running upgrade 0008 -> 0009_reproduction_evidence_capture, phase c2 reproduction evidence capture\nINFO  [alembic.runtime.migration] Running upgrade 0009_reproduction_evidence_capture -> 0010_phase_c3_diagnostic_experiments, phase c3 diagnostic question dag experiments causal fix verification\nINFO  [alembic.runtime.migration] Running upgrade 0010_phase_c3_diagnostic_experiments -> 0011_phase_f2_production_hardening, phase f2 production hardening feishu binding\nINFO  [alembic.runtime.migration] Running upgrade 0011_phase_f2_production_hardening -> 0012_device_credentials, device_credentials\nINFO  [alembic.runtime.migration] Running upgrade 0012_device_credentials -> 0013_feishu_binding_nullable_message, feishu_case_bindings.message_id nullable\nINFO  [alembic.runtime.migration] Running upgrade 0013_feishu_binding_nullable_message -> 0014_feishu_source_context, persist Feishu source message/thread context\nINFO  [alembic.runtime.migration] Running upgrade 0014_feishu_source_context -> 0015_ai_proposal_shadow, AI proposal Shadow Mode audit records\nINFO  [alembic.runtime.migration] Running upgrade 0015_ai_proposal_shadow -> 0016_feishu_intake_context, complete Feishu intake source context\nINFO  [alembic.runtime.migration] Running upgrade 0016_feishu_intake_context -> 0017_ai_recommendation_feedback, AI recommendation feedback for Eval acceptance metrics\nINFO  [alembic.runtime.migration] Running upgrade 0017_ai_recommendation_feedback -> 0018_golden_candidate_assessments, Persist automatic Golden Candidate eligibility state\nINFO  [alembic.runtime.migration] Running upgrade 0018_golden_candidate_assessments -> 0019_preliminary_evidence_report_v1, Preliminary Evidence Report V1 persistence\nINFO  [alembic.runtime.migration] Running upgrade 0019_preliminary_evidence_report_v1 -> 0020_evidence_retention_v1, Evidence retention V1\nINFO  [alembic.runtime.migration] Running upgrade 0020_evidence_retention_v1 -> 0021_feishu_case_governance_v1, Feishu one-group-one-active-case governance V1\nINFO  [alembic.runtime.migration] Running upgrade 0021_feishu_case_governance_v1 -> 0022_feishu_identity_rbac_v1, Feishu identity and Case ACL governance V1\nINFO  [alembic.runtime.migration] Running upgrade 0022_feishu_identity_rbac_v1 -> 0023_feishu_document_acl_v1, Feishu document ACL synchronization V1\nINFO  [alembic.runtime.migration] Running upgrade 0023_feishu_document_acl_v1 -> 0024_ai_semantic_router_v1, AI1 semantic router V1\nINFO  [alembic.runtime.migration] Running upgrade 0024_ai_semantic_router_v1 -> 0025_ai_case_copilot_v1, AI3 Case Copilot V1\nINFO  [alembic.runtime.migration] Running upgrade 0025_ai_case_copilot_v1 -> 0026_ai_diagnostic_loop_v1, AI2 Diagnostic Loop V1\nINFO  [alembic.runtime.migration] Running upgrade 0026_ai_diagnostic_loop_v1 -> 0027_capture_v2_foundation, Capture Engine V2.1 foundation + ownership\nINFO  [alembic.runtime.migration] Running upgrade 0027_capture_v2_foundation -> 0028_capture_v2_reliable_segments, Capture Engine V2.1 reliable segment ledger\nRevision ID: 0028_capture_v2_reliable_segments\nRevises: 0027_capture_v2_foundation\nCreate Date: 2026-08-20\nINFO  [alembic.runtime.migration] Running upgrade 0028_capture_v2_reliable_segments -> 0029_capture_v2_readiness_fxs, Capture Engine V2.1 readiness and FXS semantics\nRevision ID: 0029_capture_v2_readiness_fxs\nRevises: 0028_capture_v2_reliable_segments\nCreate Date: 2026-08-20\nINFO  [alembic.runtime.migration] Running upgrade 0029_capture_v2_readiness_fxs -> 0030_capture_v2_coverage, Capture Engine V2.1 coverage ledger\nRevision ID: 0030_capture_v2_coverage\nRevises: 0029_capture_v2_readiness_fxs\nCreate Date: 2026-08-20\nINFO  [alembic.runtime.migration] Running upgrade 0030_capture_v2_coverage -> 0031_capture_v2_quality_report, Capture Engine V2.1 quality and evidence report\nRevision ID: 0031_capture_v2_quality_report\nRevises: 0030_capture_v2_coverage\nCreate Date: 2026-08-20\n Container voip-ai-minio-1  Running\n Container voip-ai-postgres-1  Running\n Container voip-ai-redis-1  Running\n Container voip-ai-collector-worker-1  Creating\n Container voip-ai-reproduction-watch-worker-1  Creating\n Container voip-ai-packet-worker-1  Creating\n Container voip-ai-pcm-worker-1  Creating\n Container voip-ai-backend-1  Creating\n Container voip-ai-reproduction-worker-1  Creating\n Container voip-ai-beat-1  Creating\n Container voip-ai-diagnosis-worker-1  Creating\n Container voip-ai-reproduction-control-high-worker-1  Creating\n Container voip-ai-media-worker-1  Creating\n Container voip-ai-backend-1  Created\n Container voip-ai-diagnosis-worker-1  Created\n Container voip-ai-frontend-1  Creating\n Container voip-ai-reproduction-control-high-worker-1  Created\n Container voip-ai-beat-1  Created\n Container voip-ai-collector-worker-1  Created\n Container voip-ai-packet-worker-1  Created\n Container voip-ai-pcm-worker-1  Created\n Container voip-ai-reproduction-worker-1  Created\n Container voip-ai-reproduction-watch-worker-1  Created\n Container voip-ai-media-worker-1  Created\n Container voip-ai-frontend-1  Created\n Container voip-ai-postgres-1  Waiting\n Container voip-ai-redis-1  Waiting\n Container voip-ai-postgres-1  Waiting\n Container voip-ai-redis-1  Waiting\n Container voip-ai-postgres-1  Waiting\n Container voip-ai-postgres-1  Waiting\n Container voip-ai-redis-1  Waiting\n Container voip-ai-redis-1  Waiting\n Container voip-ai-postgres-1  Waiting\n Container voip-ai-redis-1  Waiting\n Container voip-ai-redis-1  Waiting\n Container voip-ai-redis-1  Waiting\n Container voip-ai-postgres-1  Waiting\n Container voip-ai-postgres-1  Waiting\n Container voip-ai-redis-1  Waiting\n Container voip-ai-postgres-1  Waiting\n Container voip-ai-redis-1  Waiting\n Container voip-ai-redis-1  Waiting\n Container voip-ai-postgres-1  Waiting\n Container voip-ai-postgres-1  Waiting\n Container voip-ai-postgres-1  Healthy\n Container voip-ai-redis-1  Healthy\n Container voip-ai-redis-1  Healthy\n Container voip-ai-redis-1  Healthy\n Container voip-ai-postgres-1  Healthy\n Container voip-ai-postgres-1  Healthy\n Container voip-ai-postgres-1  Healthy\n Container voip-ai-reproduction-watch-worker-1  Starting\n Container voip-ai-redis-1  Healthy\n Container voip-ai-redis-1  Healthy\n Container voip-ai-media-worker-1  Starting\n Container voip-ai-postgres-1  Healthy\n Container voip-ai-postgres-1  Healthy\n Container voip-ai-packet-worker-1  Starting\n Container voip-ai-postgres-1  Healthy\n Container voip-ai-redis-1  Healthy\n Container voip-ai-pcm-worker-1  Starting\n Container voip-ai-postgres-1  Healthy\n Container voip-ai-backend-1  Starting\n Container voip-ai-redis-1  Healthy\n Container voip-ai-beat-1  Starting\n Container voip-ai-postgres-1  Healthy\n Container voip-ai-postgres-1  Healthy\n Container voip-ai-reproduction-worker-1  Starting\n Container voip-ai-redis-1  Healthy\n Container voip-ai-reproduction-control-high-worker-1  Starting\n Container voip-ai-redis-1  Healthy\n Container voip-ai-redis-1  Healthy\n Container voip-ai-collector-worker-1  Starting\n Container voip-ai-diagnosis-worker-1  Starting\n Container voip-ai-packet-worker-1  Started\n Container voip-ai-beat-1  Started\n Container voip-ai-collector-worker-1  Started\n Container voip-ai-pcm-worker-1  Started\n Container voip-ai-reproduction-control-high-worker-1  Started\n Container voip-ai-reproduction-watch-worker-1  Started\n Container voip-ai-diagnosis-worker-1  Started\n Container voip-ai-reproduction-worker-1  Started\n Container voip-ai-media-worker-1  Started\nError response from daemon: failed to set up container networking: driver failed programming external connectivity on endpoint voip-ai-backend-1 (a1c9d8ba0f166b2a1bca8bb8cf7bfeff110ad870135d7e60896d1140f099f035): failed to bind host port 127.0.0.1:8000/tcp: address already in use"
+        }
+      },
+      "pre_env": {
+        "APP_ENV": "production",
+        "BUILD_REVISION": "88c326a2255ade17cda5ce466b55a0058f335496",
+        "REPRODUCTION_PLATFORM_MODE": "mock",
+        "VOIP_DATA_ROOT": "/data/voip",
+        "VOIP_PROJECT_NAME": "voip-ai",
+        "CAPTURE_ENGINE_VERSION": "V1",
+        "CAPTURE_V2_PRODUCTION_ENABLED": "false",
+        "CAPTURE_V2_ACTIVATION_REHEARSAL": "false"
+      },
+      "pre_running_services": [],
+      "rollback": {
+        "attempted": true,
+        "env_restored": true,
+        "runtime_restored": true,
+        "rollback_command": "compose down --remove-orphans",
+        "rollback_return_code": 0
+      },
+      "verdict": "FAIL",
+      "reason": "PRODUCTION_DEPLOY_FAILED",
+      "minio_console_host_isolation": {
+        "bind": "127.0.0.1",
+        "port": 19001,
+        "container_console_port": 9001
+      },
+      "pre_env_defaulted_keys": [
+        "CAPTURE_ENGINE_VERSION",
+        "CAPTURE_V2_ACTIVATION_REHEARSAL",
+        "CAPTURE_V2_PRODUCTION_ENABLED"
+      ],
+      "pre_env_defaults_source": "APPLICATION_RUNTIME_DEFAULTS"
+    }
+  }
+}

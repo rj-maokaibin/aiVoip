@@ -60,7 +60,7 @@ class EffectiveProfileResolver:
         return result
 
     @staticmethod
-    def _device_tokens(device: Any) -> set[str]:
+    def _device_tokens(device: Any, extra_tokens: set[str] | None = None) -> set[str]:
         tokens: set[str] = set()
         platform_id = getattr(device, "platform_id", None)
         if platform_id:
@@ -71,10 +71,15 @@ class EffectiveProfileResolver:
                 value = info.get(key)
                 if value:
                     tokens.add(str(value).strip().lower())
+        if extra_tokens:
+            for token in extra_tokens:
+                cleaned = str(token).strip().lower()
+                if cleaned:
+                    tokens.add(cleaned)
         return tokens
 
-    def _platform_profile(self, device: Any) -> PlatformProfile:
-        tokens = self._device_tokens(device)
+    def _platform_profile(self, device: Any, extra_tokens: set[str] | None = None) -> PlatformProfile:
+        tokens = self._device_tokens(device, extra_tokens)
         profiles = self._platform_profiles()
         for profile in profiles:
             if profile.platform_id.lower() in tokens:
@@ -87,9 +92,15 @@ class EffectiveProfileResolver:
                 return profile
         raise CaptureV2Error("PLATFORM_PROFILE_NOT_FOUND", details={"device_tokens": sorted(tokens)})
 
-    def resolve(self, *, device: Any, requested_profile_id: str) -> EffectiveCaptureProfile:
+    def resolve(
+        self,
+        *,
+        device: Any,
+        requested_profile_id: str,
+        extra_tokens: set[str] | None = None,
+    ) -> EffectiveCaptureProfile:
         capture = self._capture_profile(requested_profile_id)
-        platform = self._platform_profile(device)
+        platform = self._platform_profile(device, extra_tokens)
         validate_invariants(capture, platform)
         resolved = {
             "schema_version": 2,

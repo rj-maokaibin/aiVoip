@@ -1,0 +1,55 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "RC85-PRODUCTION-CUTOVER-011",
+    "sequence": 222,
+    "created_at": "2026-08-26T00:01:30+00:00",
+    "expires_at": "2026-08-26T12:01:30+00:00",
+    "action_type": "PRODUCTION_CUTOVER",
+    "parameters": {
+      "timeout_seconds": 7200
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "94d659ed919a3727d21e13ccfbc4f712542993fb"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "Execute the authorized guarded Capture Engine V2 production cutover after RC84G production deployment preflight PASS with no deploy blockers. Use the canonical authorization and audited guarded cutover module only. Back up production env, switch to V2/real mode, deploy current accepted source, run migrations and runtime verification, validate required services/queues/storage/frontend/backend authority, and fail closed with verified rollback to V1 on any error. No DUT mutation is allowed. Production V2 may be declared active only if the action returns PASS and runtime authority verifies CAPTURE_AUTHORITY=V2."
+  },
+  "action_sha256": "c0ba3a3590a8d55b023abc166d8f44779adb658ef6cf8dadeabab6a5a2bb1e54",
+  "runner_id": "srv:7",
+  "state": "INCONCLUSIVE",
+  "return_code": 2,
+  "verdict": "INCONCLUSIVE",
+  "error": null,
+  "finished_at": "2026-08-26T03:06:16.020840+00:00",
+  "stdout_sha256": "42c0c068895f07144364e2f853f9dc8f5c6009f5e7b3f76d3fe5ceea54b32ac4",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "local_stdout": ".capture-v2-control/logs/RC85-PRODUCTION-CUTOVER-011/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/RC85-PRODUCTION-CUTOVER-011/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "efbddf48ca8fdb5abc0f4e7dba07f7983996c162",
+      "expected_product_head": "94d659ed919a3727d21e13ccfbc4f712542993fb"
+    },
+    "parsed_output": {
+      "scope": "GUARDED_PRODUCTION_CAPTURE_V2_CUTOVER",
+      "project": "voip-ai",
+      "production_env": "/etc/voip-ai/production.env",
+      "production_mutation": false,
+      "dut_mutation": false,
+      "rollback_on_failure": true,
+      "stages": {},
+      "verdict": "INCONCLUSIVE",
+      "reason": "MASTER_FETCH_FAILED",
+      "error": "Host key verification failed.\nfatal: Could not read from remote repository.\n\nPlease make sure you have the correct access rights\nand the repository exists."
+    }
+  }
+}

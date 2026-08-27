@@ -9,6 +9,27 @@ def _all(value: bool = True) -> dict[str, bool]:
     return {key: value for _, key, _, _ in CRITERIA}
 
 
+def _session(platform=None, resolver=None):
+    return SimpleNamespace(
+        platform_profile_id=platform,
+        voice_runtime_context_json={"resolver_id": resolver} if resolver else None,
+    )
+
+
+def test_is_real_session_recognizes_v2_and_v1_real_platforms():
+    # V1 real platform id contains "real".
+    assert _is_real_session(_session(platform="ruijie-voip-aim-real")) is True
+    # V2 production platform id (does NOT contain "real").
+    assert _is_real_session(_session(platform="ruijie-voip-capture-v2")) is True
+    # Mock platform is never real.
+    assert _is_real_session(_session(platform="mock-voip-platform")) is False
+    # A session snapshot created with the default mock id but driven by the real
+    # platform (voice context resolver REAL_VOICE_CONTEXT_V1) is real.
+    assert _is_real_session(_session(platform="mock-voip-platform", resolver="REAL_VOICE_CONTEXT_V1")) is True
+    assert _is_real_session(_session(platform=None)) is False
+    assert _is_real_session(_session(platform=None, resolver="MOCK_VOICE_CONTEXT_V1")) is False
+
+
 def test_m7_all_twenty_criteria_pass_without_root_cause_requirement():
     report = evaluate_signals(
         _all(True),

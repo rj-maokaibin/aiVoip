@@ -1,0 +1,82 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "RC90-PRODUCTION-DEPLOYMENT-PREFLIGHT-017",
+    "sequence": 228,
+    "created_at": "2026-08-26T10:18:45+00:00",
+    "expires_at": "2026-08-26T16:18:45+00:00",
+    "action_type": "PRODUCTION_DEPLOYMENT_PREFLIGHT",
+    "parameters": {
+      "timeout_seconds": 300
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "15aef7eb73d6f9541542f27af1fdc8ceac210d9f"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "Fresh guarded production deployment preflight after the accepted MinIO console host-port isolation fix was merged to master and synchronized into production control. PR #63 exact master head passed Frozen, Full Software, Prepared-PCAP Golden #001, Human Evidence and artifact upload. A live readonly host probe proved existing aivoip-minio-1 legitimately owns 9001, candidate 127.0.0.1:19001 is free, and production is V1 / V2 disabled / mock after RC89 verified rollback. Verify canonical authorization, real production V1 prestate, deploy blockers, source and compose requirements with no production or DUT mutation. Final cutover remains responsible for an immediate pre-mutation check that 127.0.0.1:19001 is still available."
+  },
+  "action_sha256": "f91c2e5dd6ba5958b6c740f368a37160019aa92bbea96d024b1286ab0969269c",
+  "runner_id": "srv:7",
+  "state": "SUCCEEDED",
+  "return_code": 0,
+  "verdict": "PASS",
+  "error": null,
+  "finished_at": "2026-08-26T10:19:01.177694+00:00",
+  "stdout_sha256": "f0faea8f87e3b4ed8d3c1c192114c2b4954d456863cb61cec5ef61841fb10b16",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "local_stdout": ".capture-v2-control/logs/RC90-PRODUCTION-DEPLOYMENT-PREFLIGHT-017/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/RC90-PRODUCTION-DEPLOYMENT-PREFLIGHT-017/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "61c37b537bb33d52ee15315ee764ced3e2d3f835",
+      "expected_product_head": "15aef7eb73d6f9541542f27af1fdc8ceac210d9f"
+    },
+    "parsed_output": {
+      "scope": "GUARDED_PRODUCTION_DEPLOYMENT_PREFLIGHT",
+      "production_env": "/etc/voip-ai/production.env",
+      "mutations_performed": false,
+      "runtime_cutover_performed": false,
+      "authorization": {
+        "authorized": true,
+        "final_acceptance_action": "RC68-MASTER-FIX-CANDIDATE-INTEGRATION-005"
+      },
+      "release_gate": {
+        "approved": true,
+        "production_cutover_approved": true,
+        "capture_engine_version": "V1",
+        "production_v2_enabled": false
+      },
+      "deployment_preflight": {
+        "return_code": 0,
+        "stdout_tail": "      \"status\": \"PASS\",\n      \"category\": \"SECURITY\",\n      \"detail\": \"non-default bootstrap credentials configured\",\n      \"blocks_deploy\": false,\n      \"blocks_release\": false\n    },\n    {\n      \"key\": \"DATABASE_URL_MATCH\",\n      \"status\": \"PASS\",\n      \"category\": \"CONFIG\",\n      \"detail\": \"DATABASE_URL contains configured PostgreSQL credential\",\n      \"blocks_deploy\": false,\n      \"blocks_release\": false\n    },\n    {\n      \"key\": \"PRODUCTION_STORAGE_MODE\",\n      \"status\": \"PASS\",\n      \"category\": \"STORAGE\",\n      \"detail\": \"minio\",\n      \"blocks_deploy\": false,\n      \"blocks_release\": false\n    },\n    {\n      \"key\": \"CREDENTIAL_PROVIDER\",\n      \"status\": \"PASS\",\n      \"category\": \"SECURITY\",\n      \"detail\": \"API provider configured\",\n      \"blocks_deploy\": false,\n      \"blocks_release\": false\n    },\n    {\n[REDACTED_SENSITIVE_LINE]\n      \"status\": \"PASS\",\n[REDACTED_SENSITIVE_LINE]\n[REDACTED_SENSITIVE_LINE]\n      \"blocks_deploy\": false,\n      \"blocks_release\": false\n    },\n    {\n[REDACTED_SENSITIVE_LINE]\n      \"status\": \"PASS\",\n[REDACTED_SENSITIVE_LINE]\n[REDACTED_SENSITIVE_LINE]\n      \"blocks_deploy\": false,\n      \"blocks_release\": false\n    },\n    {\n[REDACTED_SENSITIVE_LINE]\n      \"status\": \"PASS\",\n[REDACTED_SENSITIVE_LINE]\n[REDACTED_SENSITIVE_LINE]\n      \"blocks_deploy\": false,\n      \"blocks_release\": false\n    },\n    {\n[REDACTED_SENSITIVE_LINE]\n      \"status\": \"PASS\",\n[REDACTED_SENSITIVE_LINE]\n[REDACTED_SENSITIVE_LINE]\n      \"blocks_deploy\": false,\n      \"blocks_release\": false\n    },\n    {\n[REDACTED_SENSITIVE_LINE]\n      \"status\": \"PASS\",\n[REDACTED_SENSITIVE_LINE]\n[REDACTED_SENSITIVE_LINE]\n      \"blocks_deploy\": false,\n      \"blocks_release\": false\n    },\n    {\n[REDACTED_SENSITIVE_LINE]\n      \"status\": \"PASS\",\n[REDACTED_SENSITIVE_LINE]\n[REDACTED_SENSITIVE_LINE]\n      \"blocks_deploy\": false,\n      \"blocks_release\": false\n    },\n    {\n      \"key\": \"FEISHU_LIVE_CONFIG\",\n      \"status\": \"PASS\",\n      \"category\": \"INTEGRATION\",\n      \"detail\": \"live target configured\",\n      \"blocks_deploy\": false,\n      \"blocks_release\": false\n    },\n    {\n      \"key\": \"FEISHU_IDENTITY_RBAC\",\n      \"status\": \"PASS\",\n      \"category\": \"SECURITY\",\n      \"detail\": \"Feishu identity RBAC enabled\",\n      \"blocks_deploy\": false,\n      \"blocks_release\": false\n    },\n    {\n      \"key\": \"EC02_REAL_PLATFORM\",\n      \"status\": \"BLOCKED\",\n      \"category\": \"PLATFORM\",\n      \"detail\": \"REPRODUCTION_PLATFORM_MODE=mock; EC-02 remains pending\",\n      \"blocks_deploy\": false,\n      \"blocks_release\": true\n    },\n    {\n      \"key\": \"FRONTEND_LOCKFILE\",\n      \"status\": \"PASS\",\n      \"category\": \"BUILD\",\n      \"detail\": \"source-controlled package-lock.json present\",\n      \"blocks_deploy\": false,\n      \"blocks_release\": false\n    },\n    {\n      \"key\": \"SOURCE_MANIFEST\",\n      \"status\": \"PASS\",\n      \"category\": \"BUILD\",\n      \"detail\": \"/home/dev/workspace/aiVoip-control/release/source_manifest.json\",\n      \"blocks_deploy\": false,\n      \"blocks_release\": false\n    }\n  ]\n}",
+        "stderr_tail": "",
+        "status": "PASS",
+        "deployment_status": "PASS",
+        "deploy_blocking_keys": []
+      },
+      "compose_config": {
+        "return_code": 0,
+        "required_services_present": [
+          "backend",
+          "beat",
+          "reproduction-control-high-worker",
+          "reproduction-watch-worker",
+          "reproduction-worker"
+        ],
+        "missing_required_services": [],
+        "stderr_tail": ""
+      },
+      "current_running_services": [],
+      "verdict": "PASS",
+      "reason": "PRODUCTION_DEPLOYMENT_PREFLIGHT_READY"
+    }
+  }
+}

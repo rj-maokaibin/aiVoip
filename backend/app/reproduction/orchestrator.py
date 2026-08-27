@@ -16,13 +16,22 @@ from app.contracts.enums import (
     ReproductionEvent, ReproductionProfileStatus, ReproductionState, TimestampSource,
 )
 from app.core.errors import AppError
+from app.collectors.asyncssh_adapter import DeviceCommandError, DeviceConnectionError
+from app.capture_v2.errors import CaptureV2Error
 from app.db.models import (
     Case, CaseDevice, CaptureChannelHealth, CleanupRun, DiagnosticQuestion, ReproductionAttempt,
     ReproductionCall, ReproductionCaptureSegment, ReproductionEventRecord, ReproductionProfile, ReproductionProfileVersion,
     ReproductionSession, VoiceRuntimeContextSnapshot, Evidence,
 )
 from app.reproduction.barriers import ArmReadinessBarrier, CleanupReadinessBarrier
-from app.reproduction.locks import acquire_device_lock, heartbeat_device_lock, quarantine_device_lock, release_device_lock
+from app.reproduction.fail_closed import error_code, error_details
+from app.reproduction.locks import (
+    acquire_device_lock,
+    heartbeat_device_lock,
+    quarantine_device_lock,
+    release_device_lock,
+    release_device_lock_forced,
+)
 from app.reproduction.health import CaptureHealthMonitor
 from app.reproduction.capture_pipeline import ReproductionCapturePipeline
 from app.reproduction.live import LiveReproductionAnalyzer
@@ -249,11 +258,44 @@ class ReproductionOrchestrator:
             transition_session(db,session,ReproductionEvent.WATCH_STARTED,actor=actor,reason='watching_started')
             db.flush(); return session
         except AppError as exc:
-            if ReproductionState(session.state) in {ReproductionState.AUTO_ARMING,ReproductionState.ENHANCING}:
-                transition_session(db,session,ReproductionEvent.ARM_FAILED,actor=actor,reason=exc.code,payload=exc.details)
-            session.terminal_reason=exc.code
-            session.terminal_detail_json=exc.details
-            return self.cleanup(db,session=session,actor=actor)
+            return self._fail_arm(db,session=session,error=exc,actor=actor)
+        except CaptureV2Error as exc:
+            return self._fail_arm(db,session=session,error=exc,actor=actor)
+        except (DeviceConnectionError, DeviceCommandError):
+            # Transient SSH failures are retried by Celery autoretry. Preserve the
+            # existing SSH retry semantics: never fail-closed on a retryable error.
+            raise
+        except Exception as exc:
+            return self._fail_arm(db,session=session,error=exc,actor=actor)
+
+    def _fail_arm(self, db: Session, *, session: ReproductionSession, error: BaseException, actor: str|None=None) -> ReproductionSession:
+        code=error_code(error)
+        details=error_details(error)
+        if ReproductionState(session.state) in {ReproductionState.AUTO_ARMING,ReproductionState.ENHANCING}:
+            transition_session(db,session,ReproductionEvent.ARM_FAILED,actor=actor,reason=code,payload=details)
+        session.terminal_reason=code
+        session.terminal_detail_json=details
+        if not self._ownership_engaged():
+            # Pre-ownership startup failure (e.g. Capture V2 platform profile
+            # resolution): no DUT mutation happened, so fail closed to ARM_FAILED
+            # and release the in-transaction lock instead of running a full SSH
+            # cleanup. The session never silently stays in CREATED.
+            session.cleanup_required=False
+            session.cleanup_status=CleanupStatus.NOT_REQUIRED.value
+            release_device_lock_forced(db,session=session)
+            return session
+        # Ownership/capture already engaged (or V1 arm may have started PCAP/PCM/
+        # debug): run the formal cleanup/recovery path.
+        return self.cleanup(db,session=session,actor=actor)
+
+    def _ownership_engaged(self) -> bool:
+        platform=self.platform
+        if getattr(platform,'uses_capture_v2',False):
+            # Capture V2: the fenced producer can only exist once the bridge
+            # created a CaptureSession; pre-ownership failures never touch the DUT.
+            return getattr(platform,'capture_session',None) is not None
+        # V1 arm may have started PCAP/PCM/debug before any exception -> cleanup.
+        return True
 
     def heartbeat(self, db: Session, *, session: ReproductionSession) -> ReproductionSession:
         profile=self._profile(session)

@@ -1,0 +1,70 @@
+{
+  "schema_version": "capture-v2-remote-result-v1",
+  "action": {
+    "schema_version": "capture-v2-remote-action-v1",
+    "action_id": "RC84B-PRODUCTION-DEPLOYMENT-PREFLIGHT-005",
+    "sequence": 216,
+    "created_at": "2026-08-25T16:17:00+00:00",
+    "expires_at": "2026-08-26T04:17:00+00:00",
+    "action_type": "DEPLOYMENT_PREFLIGHT",
+    "parameters": {
+      "timeout_seconds": 300
+    },
+    "safety": {
+      "require_clean_git": true,
+      "require_v1_authority": true,
+      "require_v2_disabled": true,
+      "allow_worker_kill": false,
+      "allow_server_quarantine": false,
+      "expected_head": "ccf04511c44330a5a2cd3b1b8a6c34e2bf5e9c57"
+    },
+    "requested_by": "ChatGPT-remote-validation-controller",
+    "note": "Retry RC84 using the dedicated DEPLOYMENT_PREFLIGHT action introduced by the current control policy. Read-only production preflight only: verify current production prestate remains V1 with Capture V2 disabled, validate the guarded production deployment prerequisites against /etc/voip-ai/production.env and current accepted source, and perform no production or DUT mutation. RC85 cutover must not be issued unless this action returns PASS."
+  },
+  "action_sha256": "2c719f1a8b6d129d1bdb3b8ba20094721cf93c2f91aaf3186f7dfd8637b3ec6e",
+  "runner_id": "srv:2203168",
+  "state": "INCONCLUSIVE",
+  "return_code": 2,
+  "verdict": "INCONCLUSIVE",
+  "error": null,
+  "finished_at": "2026-08-25T17:07:36.164826+00:00",
+  "stdout_sha256": "bd3922518f823218dc277216340f88710949467be9fa7256192e4f9d3a74ff15",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "local_stdout": ".capture-v2-control/logs/RC84B-PRODUCTION-DEPLOYMENT-PREFLIGHT-005/stdout.log",
+  "local_stderr": ".capture-v2-control/logs/RC84B-PRODUCTION-DEPLOYMENT-PREFLIGHT-005/stderr.log",
+  "detail": {
+    "safety": {
+      "capture_engine_version": "V1",
+      "capture_v2_production_enabled": "false",
+      "git_head": "2ed391ebe8e1e3be5d06abbdeae0e397bed9a839",
+      "expected_product_head": "ccf04511c44330a5a2cd3b1b8a6c34e2bf5e9c57"
+    },
+    "parsed_output": {
+      "verdict": "INCONCLUSIVE",
+      "checks": [
+        {
+          "name": "compose_available",
+          "passed": true
+        },
+        {
+          "name": "env_file_present",
+          "passed": false
+        },
+        {
+          "name": "compose_config_valid",
+          "passed": false
+        }
+      ],
+      "facts": {
+        "scope": "READ_ONLY_DEPLOYMENT_PREFLIGHT",
+        "repo_root": "/home/dev/workspace/aiVoip-control",
+        "mutations_performed": false,
+        "compose_version": "Docker Compose version 2.40.3+ds1-0ubuntu1~24.04.1",
+        "env_file": "/home/dev/workspace/aiVoip-control/.env",
+        "env_file_safe": {},
+        "compose_config_error": "error while interpolating services.postgres.environment.POSTGRES_PASSWORD: required variable POSTGRES_PASSWORD is missing a value: POSTGRES_PASSWORD is required"
+      },
+      "reason": "COMPOSE_CONFIG_UNAVAILABLE"
+    }
+  }
+}
