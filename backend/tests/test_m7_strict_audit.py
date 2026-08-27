@@ -20,6 +20,7 @@ from tools.m7_acceptance_strict_audit import (
     analyzer_uses_target_evidence,
     channel_health_detail,
     is_strict_real_session,
+    linked_analyzers_with_provenance,
     select_target_session,
 )
 
@@ -60,7 +61,7 @@ def test_strict_real_session_accepts_known_ids_and_exact_legacy_resolver_only():
     )
 
 
-def test_select_target_session_uses_latest_real_session_not_mock_rows():
+def test_select_target_session_requires_latest_reproduction_itself_to_be_real():
     now = datetime.now(timezone.utc)
     older_real = SimpleNamespace(
         id="real-old",
@@ -74,13 +75,15 @@ def test_select_target_session_uses_latest_real_session_not_mock_rows():
         voice_runtime_context_json={"resolver_id": "MOCK_VOICE_CONTEXT_V1"},
         created_at=now + timedelta(minutes=5),
     )
-    newer_real = SimpleNamespace(
+    assert select_target_session([older_real, newer_mock]) is None
+
+    newest_real = SimpleNamespace(
         id="real-new",
         platform_profile_id="ruijie-voip-aim-real",
         voice_runtime_context_json={},
-        created_at=now + timedelta(minutes=2),
+        created_at=now + timedelta(minutes=10),
     )
-    assert select_target_session([older_real, newer_mock, newer_real]).id == "real-new"
+    assert select_target_session([older_real, newer_mock, newest_real]).id == "real-new"
 
 
 def test_analyzer_must_reference_target_session_evidence():
@@ -88,6 +91,32 @@ def test_analyzer_must_reference_target_session_evidence():
     unrelated = SimpleNamespace(input_evidence_ids=["e-other"])
     assert analyzer_uses_target_evidence(linked, {"e-target"}) is True
     assert analyzer_uses_target_evidence(unrelated, {"e-target"}) is False
+
+
+def test_analyzer_provenance_closure_allows_derived_chain_but_not_unrelated_runs():
+    packet = SimpleNamespace(
+        id="packet",
+        status="SUCCESS",
+        input_evidence_ids=["raw-pcap"],
+        output_evidence_ids=["packet-derived"],
+    )
+    media = SimpleNamespace(
+        id="media",
+        status="SUCCESS",
+        input_evidence_ids=["packet-derived"],
+        output_evidence_ids=["media-derived"],
+    )
+    unrelated = SimpleNamespace(
+        id="unrelated",
+        status="SUCCESS",
+        input_evidence_ids=["other-case-evidence"],
+        output_evidence_ids=["bad-derived"],
+    )
+    linked, closure = linked_analyzers_with_provenance(
+        [media, unrelated, packet], {"raw-pcap"}
+    )
+    assert [row.id for row in linked] == ["packet", "media"]
+    assert closure == {"raw-pcap", "packet-derived", "media-derived"}
 
 
 def test_channel_health_detail_surfaces_packet_count_status_and_health_payload():
@@ -105,12 +134,7 @@ def test_channel_health_detail_surfaces_packet_count_status_and_health_payload()
 
 
 def test_start_task_persists_actual_real_platform_identity(monkeypatch):
-    """Regression for the historical C06 report showing mock-voip-platform.
-
-    Session creation may snapshot Mock because API creation has no connected real
-    platform.  reproduction.start must overwrite that snapshot with the platform
-    that actually executes the session before committing the worker transaction.
-    """
+    """Regression for the historical C06 report showing mock-voip-platform."""
     from app.workers import reproduction_tasks as rt
 
     eng = _engine()
@@ -151,9 +175,6 @@ def test_start_task_persists_actual_real_platform_identity(monkeypatch):
 
         @staticmethod
         def start(db, *, session, owner_worker, actor):
-            # Keep the unit test isolated from DUT/capture commands.  The purpose
-            # is the metadata write performed by reproduction.start immediately
-            # before invoking the orchestrator.
             session.state = "FAILED"
             return session
 
