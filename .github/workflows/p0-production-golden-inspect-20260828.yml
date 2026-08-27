@@ -1,0 +1,130 @@
+name: P0 Production Golden Inspect 20260828
+
+on:
+  push:
+    branches:
+      - ops/p0-production-golden-inspect-20260828
+
+permissions:
+  contents: read
+
+jobs:
+  inspect-production-golden:
+    runs-on:
+      - self-hosted
+      - linux
+      - x64
+      - voip-controlled-linux
+    timeout-minutes: 20
+    env:
+      P0_CASE: VOIP-20260827-D38C67
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Inspect production Golden state read-only
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          outdir="$RUNNER_TEMP/p0-production-golden-inspect"
+          rm -rf "$outdir"
+          mkdir -p "$outdir"
+
+          mapfile -t backends < <(docker ps \
+            --filter label=com.docker.compose.project=voip-ai \
+            --filter label=com.docker.compose.service=backend \
+            --format '{{.Names}}')
+          test "${#backends[@]}" -eq 1
+          backend="${backends[0]}"
+          echo "BACKEND=$backend"
+
+          docker exec -i -e P0_CASE="$P0_CASE" "$backend" python - <<'PY' > "$outdir/golden-root-cause-inspect.json"
+          import json, os
+          from sqlalchemy import select
+          from app.db.session import SessionLocal
+          from app.db.golden_models import GoldenCandidateAssessment
+          from app.db.models import (
+              Case, Hypothesis, HypothesisEvidence, CausalAssessment,
+              AuditLog, FixVerificationRun,
+          )
+          from app.golden.service import GoldenCandidateService
+
+          case_no = os.environ['P0_CASE']
+          db = SessionLocal()
+          try:
+              case = db.scalar(select(Case).where(Case.case_no == case_no))
+              assert case is not None, f'CASE_NOT_FOUND:{case_no}'
+              hypotheses = list(db.scalars(select(Hypothesis).where(Hypothesis.case_id == case.id).order_by(Hypothesis.created_at.asc())))
+              hyp_ids = [h.id for h in hypotheses]
+              links = list(db.scalars(select(HypothesisEvidence).where(HypothesisEvidence.hypothesis_id.in_(hyp_ids)))) if hyp_ids else []
+              causals = list(db.scalars(select(CausalAssessment).where(CausalAssessment.case_id == case.id).order_by(CausalAssessment.created_at.asc())))
+              audits = list(db.scalars(select(AuditLog).where(AuditLog.case_id == case.id).order_by(AuditLog.created_at.asc())))
+              fixes = list(db.scalars(select(FixVerificationRun).where(FixVerificationRun.case_id == case.id).order_by(FixVerificationRun.created_at.asc())))
+              golden = db.scalar(select(GoldenCandidateAssessment).where(GoldenCandidateAssessment.case_id == case.id))
+              assessed = GoldenCandidateService().assess(db, case.id)
+              # Explicit rollback guarantees this inspection never persists incidental ORM state.
+              db.rollback()
+
+              def attrs(obj, names):
+                  return {n: getattr(obj, n, None) for n in names}
+
+              result = {
+                  'schema_version': 'p0-production-golden-root-cause-inspect-v1',
+                  'case': {'id': case.id, 'case_no': case.case_no},
+                  'hypotheses': [attrs(h, ['id','code','title','status','confidence','fault_domain']) for h in hypotheses],
+                  'hypothesis_evidence': [attrs(x, ['id','hypothesis_id','evidence_level','direction','ref_type','ref_id']) for x in links],
+                  'causal_assessments': [attrs(c, ['id','state','hypothesis_id','confidence','reason_code']) for c in causals],
+                  'fix_verification_runs': [attrs(f, ['id','status','hypothesis_id']) for f in fixes],
+                  'root_cause_audit_events': [
+                      {'event_type': a.event_type, 'created_at': a.created_at.isoformat() if a.created_at else None}
+                      for a in audits
+                      if any(t in str(a.event_type or '').upper() for t in ('HYPOTHESIS','ROOT_CAUSE','CAUSAL','FIX_VERIFICATION'))
+                  ],
+                  'materialized_golden': None if golden is None else {
+                      'status': golden.status,
+                      'verification_tier': golden.verification_tier,
+                      'root_cause_confirmed': bool(golden.root_cause_confirmed),
+                      'fix_verified': bool(golden.fix_verified),
+                      'direct_l1_support': bool(golden.direct_l1_support),
+                      'deterministic_baseline_ready': bool(golden.deterministic_baseline_ready),
+                      'snapshot_ready': bool(golden.snapshot_ready),
+                      'audit_coverage_complete': bool(golden.audit_coverage_complete),
+                      'blocker_codes': golden.blocker_codes,
+                      'gap_codes': golden.gap_codes,
+                      'details_json': golden.details_json,
+                  },
+                  'fresh_assessment': assessed,
+              }
+              print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
+          finally:
+              db.close()
+          PY
+
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          p = json.loads((Path(os.environ['RUNNER_TEMP'])/'p0-production-golden-inspect/golden-root-cause-inspect.json').read_text(encoding='utf-8'))
+          fresh = p['fresh_assessment']
+          print(json.dumps({
+              'case': p['case'],
+              'hypothesis_statuses': [(x.get('code'), x.get('status')) for x in p['hypotheses']],
+              'causal_states': [x.get('state') for x in p['causal_assessments']],
+              'materialized_status': (p.get('materialized_golden') or {}).get('status'),
+              'materialized_root_cause_confirmed': (p.get('materialized_golden') or {}).get('root_cause_confirmed'),
+              'fresh_status': fresh.get('status'),
+              'fresh_root_cause_confirmed': (fresh.get('signals') or {}).get('root_cause_confirmed'),
+              'fresh_direct_l1_support': (fresh.get('signals') or {}).get('direct_l1_support'),
+              'fresh_gap_codes': fresh.get('gap_codes'),
+              'fresh_blocker_codes': fresh.get('blocker_codes'),
+          }, ensure_ascii=False, indent=2))
+          PY
+
+      - name: Upload read-only inspection evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: p0-production-golden-root-cause-inspect
+          path: ${{ runner.temp }}/p0-production-golden-inspect
+          if-no-files-found: warn
+          retention-days: 90
