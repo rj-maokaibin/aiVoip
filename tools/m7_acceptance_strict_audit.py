@@ -2,11 +2,10 @@
 """Strict, read-only audit for one real-DUT M7 flow.
 
 The canonical M7 gate is intentionally compatibility-friendly and case-scoped.
-This audit is stricter: it selects exactly one latest real-DUT reproduction
-session and requires session/call/evidence/analyzer provenance to stay inside
-that flow.  It is designed to detect cross-session mosaicking that could make a
-case-level 20/20 report look healthy even when individual evidence came from
-multiple reproductions.
+This audit is stricter: the latest reproduction in the Case must itself be a
+real-DUT session, and evidence/analyzer provenance must remain inside that one
+flow. It detects cross-session mosaicking that could make a Case-level 20/20
+report look healthy even when individual facts came from different sessions.
 
 It never SSHes to a DUT and never mutates DB/session state.
 """
@@ -14,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from datetime import timezone
 from pathlib import Path
 from typing import Any
 
@@ -77,13 +77,7 @@ def _has_token(rows: list[Evidence], *tokens: str) -> bool:
 
 
 def is_strict_real_session(row: Any) -> bool:
-    """Recognize only production platform ids or the exact legacy real resolver.
-
-    The resolver fallback exists solely for historical sessions created before
-    reproduction.start persisted the actual real platform id.  Loose substring
-    matching (for example any resolver containing ``REAL``) is deliberately not
-    accepted.
-    """
+    """Recognize only production platform ids or the exact legacy real resolver."""
     profile = str(getattr(row, "platform_profile_id", "") or "").strip().lower()
     if profile in KNOWN_REAL_PLATFORM_IDS:
         return True
@@ -93,15 +87,41 @@ def is_strict_real_session(row: Any) -> bool:
 
 
 def select_target_session(rows: list[Any]) -> Any | None:
-    real = [row for row in rows if is_strict_real_session(row)]
-    if not real:
+    """Return the latest reproduction only when that exact flow is real-DUT."""
+    if not rows:
         return None
-    return max(real, key=lambda row: getattr(row, "created_at", None))
+    latest = max(rows, key=lambda row: getattr(row, "created_at", None))
+    return latest if is_strict_real_session(latest) else None
 
 
 def analyzer_uses_target_evidence(row: Any, target_evidence_ids: set[str]) -> bool:
     inputs = {str(x) for x in (getattr(row, "input_evidence_ids", None) or []) if x}
     return bool(inputs & target_evidence_ids)
+
+
+def linked_analyzers_with_provenance(
+    rows: list[Any], seed_evidence_ids: set[str]
+) -> tuple[list[Any], set[str]]:
+    """Build a provenance closure from target-session Evidence through analyzers."""
+    proven = {str(x) for x in seed_evidence_ids if x}
+    pending = [
+        row for row in rows
+        if str(getattr(row, "status", "") or "").upper() in SUCCESS_RUN_STATUSES
+    ]
+    linked: list[Any] = []
+    changed = True
+    while changed:
+        changed = False
+        for row in list(pending):
+            if not analyzer_uses_target_evidence(row, proven):
+                continue
+            linked.append(row)
+            pending.remove(row)
+            proven.update(
+                str(x) for x in (getattr(row, "output_evidence_ids", None) or []) if x
+            )
+            changed = True
+    return linked, proven
 
 
 def channel_health_detail(rows: list[Any]) -> dict[str, dict[str, Any]]:
@@ -119,11 +139,17 @@ def channel_health_detail(rows: list[Any]) -> dict[str, dict[str, Any]]:
     return detail
 
 
+def _aware(value: Any) -> Any:
+    if value is not None and getattr(value, "tzinfo", None) is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value
+
+
 def _after_anchor(row: Any, anchor: Any) -> bool:
     created = getattr(row, "created_at", None)
     if created is None or anchor is None:
         return True
-    return created >= anchor
+    return _aware(created) >= _aware(anchor)
 
 
 def _resolve_case(db, value: str) -> Case | None:
@@ -131,6 +157,31 @@ def _resolve_case(db, value: str) -> Case | None:
     if row:
         return row
     return db.scalar(select(Case).where(Case.case_no == value).limit(1))
+
+
+def _blocked_no_target(case: Case, sessions: list[Any]) -> dict[str, Any]:
+    signals = {key: False for _, key, _, _ in CRITERIA}
+    latest = max(sessions, key=lambda row: getattr(row, "created_at", None)) if sessions else None
+    if not sessions:
+        blocker = "REPRODUCTION_SESSION_NOT_FOUND"
+    elif any(is_strict_real_session(row) for row in sessions):
+        blocker = "LATEST_REPRODUCTION_NOT_REAL_OR_AMBIGUOUS"
+    else:
+        blocker = "REAL_DUT_SESSION_NOT_FOUND"
+    report = evaluate_signals(
+        signals,
+        observed={
+            "case": {"id": case.id, "case_no": case.case_no},
+            "latest_session": None if latest is None else {
+                "id": latest.id,
+                "platform_profile_id": latest.platform_profile_id,
+                "state": latest.state,
+            },
+        },
+    )
+    report["schema_version"] = SCHEMA_VERSION
+    report["strict_blockers"] = [blocker]
+    return report
 
 
 def collect_strict(db, case: Case) -> dict[str, Any]:
@@ -143,11 +194,7 @@ def collect_strict(db, case: Case) -> dict[str, Any]:
     )
     target = select_target_session(sessions)
     if target is None:
-        signals = {key: False for _, key, _, _ in CRITERIA}
-        report = evaluate_signals(signals, observed={"case": {"id": case.id, "case_no": case.case_no}})
-        report["schema_version"] = SCHEMA_VERSION
-        report["strict_blockers"] = ["REAL_DUT_SESSION_NOT_FOUND"]
-        return report
+        return _blocked_no_target(case, sessions)
 
     sid = target.id
     anchor = target.started_at or target.created_at
@@ -165,18 +212,18 @@ def collect_strict(db, case: Case) -> dict[str, Any]:
         row for row in evidences
         if str(row.session_id or "") == str(sid) or (row.call_id and row.call_id in call_ids)
     ]
-    target_evidence_ids = {row.id for row in target_evidence}
+    target_evidence_ids = {str(row.id) for row in target_evidence}
 
     analyzers = list(db.scalars(select(AnalyzerRun).where(AnalyzerRun.case_id == case.id)))
-    linked_analyzers = [
-        row for row in analyzers
-        if str(row.status or "").upper() in SUCCESS_RUN_STATUSES
-        and analyzer_uses_target_evidence(row, target_evidence_ids)
-    ]
+    linked_analyzers, proven_evidence_ids = linked_analyzers_with_provenance(
+        analyzers, target_evidence_ids
+    )
 
     diagnoses = [
         row for row in db.scalars(
-            select(DiagnosisRun).where(DiagnosisRun.case_id == case.id).order_by(DiagnosisRun.created_at.desc())
+            select(DiagnosisRun)
+            .where(DiagnosisRun.case_id == case.id)
+            .order_by(DiagnosisRun.created_at.desc())
         )
         if _after_anchor(row, anchor)
         and isinstance(row.decision_json, dict)
@@ -187,7 +234,9 @@ def collect_strict(db, case: Case) -> dict[str, Any]:
 
     proposals = [
         row for row in db.scalars(
-            select(AIProposalRecord).where(AIProposalRecord.case_id == case.id).order_by(AIProposalRecord.created_at.desc())
+            select(AIProposalRecord)
+            .where(AIProposalRecord.case_id == case.id)
+            .order_by(AIProposalRecord.created_at.desc())
         )
         if _after_anchor(row, anchor)
         and (diagnosis is None or row.diagnosis_run_id in {None, diagnosis.id})
@@ -203,15 +252,16 @@ def collect_strict(db, case: Case) -> dict[str, Any]:
     if device is not None:
         locks = list(db.scalars(select(DeviceDiagnosticLock).where(DeviceDiagnosticLock.device_id == device.id)))
 
-    audit_rows = [
-        row for row in db.scalars(select(AuditLog).where(AuditLog.case_id == case.id))
-        if _after_anchor(row, anchor)
-    ]
-    outbox_rows = [
-        row for row in db.scalars(select(EventOutbox).where(EventOutbox.case_id == case.id))
-        if _after_anchor(row, anchor)
-    ]
-    event_set = {str(row.event_type) for row in audit_rows} | {str(row.event_type) for row in outbox_rows}
+    all_audit_rows = list(db.scalars(select(AuditLog).where(AuditLog.case_id == case.id)))
+    all_outbox_rows = list(db.scalars(select(EventOutbox).where(EventOutbox.case_id == case.id)))
+    case_event_set = {str(row.event_type) for row in all_audit_rows} | {
+        str(row.event_type) for row in all_outbox_rows
+    }
+    flow_event_set = {
+        str(row.event_type) for row in all_audit_rows if _after_anchor(row, anchor)
+    } | {
+        str(row.event_type) for row in all_outbox_rows if _after_anchor(row, anchor)
+    }
     golden = db.scalar(select(GoldenCandidateAssessment).where(GoldenCandidateAssessment.case_id == case.id))
 
     segment_channels = {str(row.channel or "").upper() for row in segments}
@@ -243,7 +293,9 @@ def collect_strict(db, case: Case) -> dict[str, Any]:
         any(token in str(row.analyzer_name or "").upper() for token in ("PCM", "MEDIA", "AUDIO", "RTP"))
         for row in linked_analyzers
     )
-    voice_context_ready = any(bool(row.interface_up and row.voice_interface and row.voice_gateway_ip) for row in voice)
+    voice_context_ready = any(
+        bool(row.interface_up and row.voice_interface and row.voice_gateway_ip) for row in voice
+    )
     reproduction_armed = any(str(row.status or "").upper() == "PASSED" for row in arm)
     call_detected = any(
         bool(row.ended_at)
@@ -258,7 +310,9 @@ def collect_strict(db, case: Case) -> dict[str, Any]:
             or any(str(row.status or "").upper() == "VERIFIED" for row in cleanup_runs)
         )
     )
-    no_active_lock = not any(str(row.status or "").upper() in ACTIVE_LOCK_STATUSES for row in locks)
+    no_active_lock = not any(
+        str(row.status or "").upper() in ACTIVE_LOCK_STATUSES for row in locks
+    )
     report_generated = any(
         str(row.status or "").upper() == "GENERATED"
         and bool(row.html_object_key)
@@ -269,8 +323,8 @@ def collect_strict(db, case: Case) -> dict[str, Any]:
         isinstance(row.validated_output_json, dict) and not (row.validation_errors or [])
         for row in accepted
     )
-    audit_groups = [
-        {"CASE_CREATED"},
+
+    flow_audit_groups = [
         {"EVIDENCE_CREATED", "EVIDENCE_UPLOADED"},
         {"ANALYZER_COMPLETED", "PACKET_ANALYSIS_FINISHED", "MEDIA_ANALYSIS_FINISHED", "PCM_ANALYSIS_FINISHED"},
         {"DIAGNOSIS_STARTED", "DIAGNOSIS_CYCLE", "DIAGNOSIS_UPDATED"},
@@ -281,7 +335,10 @@ def collect_strict(db, case: Case) -> dict[str, Any]:
         {"REPRODUCTION_CLEANUP_VALIDATED"},
         {"REPORT_READY", "DIAGNOSIS_REPORT_GENERATED"},
     ]
-    audit_complete = all(bool(event_set & group) for group in audit_groups)
+    audit_complete = (
+        "CASE_CREATED" in case_event_set
+        and all(bool(flow_event_set & group) for group in flow_audit_groups)
+    )
 
     signals = {
         "case_exists": True,
@@ -334,6 +391,7 @@ def collect_strict(db, case: Case) -> dict[str, Any]:
             "count": len(target_evidence),
             "ids": sorted(target_evidence_ids),
             "types": sorted({str(row.type) for row in target_evidence}),
+            "provenance_closure_ids": sorted(proven_evidence_ids),
         },
         "linked_analyzers": [
             {
@@ -341,6 +399,7 @@ def collect_strict(db, case: Case) -> dict[str, Any]:
                 "name": row.analyzer_name,
                 "status": row.status,
                 "input_evidence_ids": row.input_evidence_ids or [],
+                "output_evidence_ids": row.output_evidence_ids or [],
             }
             for row in linked_analyzers
         ],
@@ -363,7 +422,9 @@ def collect_strict(db, case: Case) -> dict[str, Any]:
             for row in calls
         ],
         "cleanup_runs": [{"id": row.id, "status": row.status} for row in cleanup_runs],
-        "active_lock_count": sum(1 for row in locks if str(row.status or "").upper() in ACTIVE_LOCK_STATUSES),
+        "active_lock_count": sum(
+            1 for row in locks if str(row.status or "").upper() in ACTIVE_LOCK_STATUSES
+        ),
         "reports": [{"id": row.id, "status": row.status} for row in reports],
         "golden": None if golden is None else {
             "status": golden.status,
@@ -372,15 +433,16 @@ def collect_strict(db, case: Case) -> dict[str, Any]:
             "blocker_codes": golden.blocker_codes,
             "gap_codes": golden.gap_codes,
         },
-        "audit_event_types": sorted(event_set),
+        "case_audit_event_types": sorted(case_event_set),
+        "target_flow_audit_event_types": sorted(flow_event_set),
     }
     report = evaluate_signals(signals, observed=observed)
     report["schema_version"] = SCHEMA_VERSION
     report["strict_scope"] = {
-        "mode": "LATEST_SINGLE_REAL_REPRODUCTION_SESSION",
+        "mode": "LATEST_REPRODUCTION_MUST_BE_SINGLE_REAL_FLOW",
         "session_id": sid,
         "cross_session_mosaicking_allowed": False,
-        "analyzer_requires_target_evidence_link": True,
+        "analyzer_requires_target_evidence_provenance": True,
     }
     report["warnings"] = []
     if observed["target_session"]["legacy_real_resolver_fallback"]:
@@ -420,6 +482,7 @@ def main() -> int:
         "total": report.get("criteria_total"),
         "blocked_ids": report.get("blocked_ids", []),
         "warnings": report.get("warnings", []),
+        "strict_blockers": report.get("strict_blockers", []),
         "out": str(out),
     }, ensure_ascii=False, indent=2))
     return 2 if args.strict and report.get("status") != "PASS" else 0
