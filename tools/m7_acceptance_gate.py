@@ -26,12 +26,14 @@ from app.db.models import (
     AnalyzerRun,
     ArmValidationResult,
     AuditLog,
+    CaptureChannelHealth,
     Case,
     CaseDevice,
     CleanupRun,
     DeviceDiagnosticLock,
     DiagnosisReport,
     DiagnosisRun,
+    EventOutbox,
     Evidence,
     ReproductionCall,
     ReproductionCaptureSegment,
@@ -134,8 +136,19 @@ def _audit_group(event_set: set[str], alternatives: set[str]) -> bool:
 
 
 def _is_real_session(row: ReproductionSession) -> bool:
-    profile = str(row.platform_profile_id or "").lower()
-    return bool(profile and "real" in profile and "mock" not in profile)
+    """A reproduction is "real" when it actually drove a real DUT, not the Mock
+    platform.  The V1 real platform records platform_profile_id ``ruijie-voip-
+    aim-real``; the V2 production platform records ``ruijie-voip-capture-v2``.
+    ``create_session`` snapshots the default Mock platform id, so also accept a
+    REAL voice-context resolver (``REAL_VOICE_CONTEXT_V1``) which is only
+    produced by the real platform ARM path.
+    """
+    profile = str(getattr(row, "platform_profile_id", "") or "").lower()
+    if profile and "mock" not in profile:
+        return True
+    ctx = getattr(row, "voice_runtime_context_json", None) or {}
+    resolver = str(ctx.get("resolver_id") or "").upper()
+    return "REAL" in resolver
 
 
 def _ai_authority_safe(proposals: list[AIProposalRecord]) -> bool:
@@ -189,10 +202,17 @@ def collect_case_signals(db: Session, case: Case) -> tuple[dict[str, bool], dict
     segments = _by_sessions(ReproductionCaptureSegment)
     arm_results = _by_sessions(ArmValidationResult)
     cleanup_runs = _by_sessions(CleanupRun)
+    channel_health = _by_sessions(CaptureChannelHealth)
     calls = list(db.scalars(select(ReproductionCall).where(ReproductionCall.case_id == case_id)))
     reports = list(db.scalars(select(DiagnosisReport).where(DiagnosisReport.case_id == case_id)))
     audit_rows = list(db.scalars(select(AuditLog).where(AuditLog.case_id == case_id)))
-    event_set = {str(row.event_type) for row in audit_rows}
+    outbox_types = set(
+        db.scalars(select(EventOutbox.event_type).where(EventOutbox.case_id == case_id))
+    )
+    # Audit events are recorded across two stores: ``AuditLog`` (analyzers,
+    # diagnosis, reproduction state) and ``EventOutbox`` (arm/cleanup validation,
+    # media milestones).  M7 verifies the audit CHAIN, so both sources count.
+    event_set = {str(row.event_type) for row in audit_rows} | {str(x) for x in outbox_types}
     golden = db.scalar(select(GoldenCandidateAssessment).where(GoldenCandidateAssessment.case_id == case_id))
 
     locks: list[DeviceDiagnosticLock] = []
@@ -205,10 +225,26 @@ def collect_case_signals(db: Session, case: Case) -> tuple[dict[str, bool], dict
                 locks.append(row)
 
     segment_channels = {str(row.channel or "").upper() for row in segments}
+    # Capture V2 captures PCM RX/TX and debug/log inside the same PCAP data plane;
+    # the authoritative per-channel evidence is CaptureChannelHealth (packet counts
+    # >0 for PCM after a real call, HEALTHY for DEBUG/LOG).
+    v2_pcm_rx = any(
+        str(row.channel or "").upper() == "PCM_RX" and int(row.packet_count or 0) > 0
+        for row in channel_health
+    )
+    v2_pcm_tx = any(
+        str(row.channel or "").upper() == "PCM_TX" and int(row.packet_count or 0) > 0
+        for row in channel_health
+    )
+    v2_debug = any(
+        str(row.channel or "").upper() in {"DEBUG", "LOG"}
+        and str(row.status or "").upper() == "HEALTHY"
+        for row in channel_health
+    )
     pcap_present = "PCAP" in segment_channels or _has_token(evidences, "PCAP", "PCAPNG")
-    pcm_rx_present = "PCM_RX" in segment_channels or _has_token(evidences, "PCM_RX", "PCM RX")
-    pcm_tx_present = "PCM_TX" in segment_channels or _has_token(evidences, "PCM_TX", "PCM TX")
-    debug_present = bool(segment_channels & {"DEBUG", "LOG"}) or _has_token(evidences, "DEBUG", "AIM.LOG", "AIM_LOG", "SYSLOG")
+    pcm_rx_present = "PCM_RX" in segment_channels or _has_token(evidences, "PCM_RX", "PCM RX") or v2_pcm_rx
+    pcm_tx_present = "PCM_TX" in segment_channels or _has_token(evidences, "PCM_TX", "PCM TX") or v2_pcm_tx
+    debug_present = bool(segment_channels & {"DEBUG", "LOG"}) or _has_token(evidences, "DEBUG", "AIM.LOG", "AIM_LOG", "SYSLOG") or v2_debug
 
     successful = [row for row in analyzers if str(row.status).upper() in SUCCESS_RUN_STATUSES]
     packet_analyzer_success = any(
@@ -259,9 +295,21 @@ def collect_case_signals(db: Session, case: Case) -> tuple[dict[str, bool], dict
     )
 
     cleanup_required_sessions = [row for row in real_sessions if bool(row.cleanup_required)]
-    cleanup_verified = bool(cleanup_required_sessions) and all(
-        str(row.cleanup_status or "").upper() in VERIFIED_CLEANUP_STATUSES
-        for row in cleanup_required_sessions
+    # After a successful cleanup the session flips cleanup_required back to False,
+    # so a completed real session must be considered verified when it shows a
+    # VERIFIED cleanup status (and, when cleanup runs exist, at least one VERIFIED
+    # CleanupRun).  Only sessions still marked cleanup_required need all-of-them
+    # verified.
+    real_verified = any(
+        str(row.cleanup_status or "").upper() in VERIFIED_CLEANUP_STATUSES for row in real_sessions
+    )
+    cleanup_verified = (
+        (not cleanup_required_sessions and real_verified)
+        or bool(cleanup_required_sessions)
+        and all(
+            str(row.cleanup_status or "").upper() in VERIFIED_CLEANUP_STATUSES
+            for row in cleanup_required_sessions
+        )
     )
     real_cleanup_runs = [row for row in cleanup_runs if row.session_id in real_session_ids]
     if real_cleanup_runs:

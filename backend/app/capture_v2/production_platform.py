@@ -327,6 +327,7 @@ class CaptureV2ProductionPlatform(RealReproductionPlatform):
             producer_manager=session.components["producer"],
             pump=session.components["pump"],
             lease_manager=session.components["lease"],
+            mutator=session.components["mutator"],
         )
         result = await finalizer.finalize(
             capture_session_id=bootstrap.capture_session_id,

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select
 
@@ -14,8 +14,14 @@ from app.capture_v2.runtime import (
 )
 from app.contracts.enums import CleanupStatus, LockStatus, ReproductionEvent, ReproductionState
 from app.core.config import settings
+from app.core.errors import AppError
 from app.db.models import DeviceDiagnosticLock, ReproductionSession
 from app.db.session import SessionLocal
+from app.reproduction.fail_closed import (
+    fail_closed_startup,
+    session_has_active_lock,
+    session_has_any_progress_event,
+)
 from app.reproduction.orchestrator import ReproductionOrchestrator
 from app.reproduction.recovery import RecoveryReconciler
 from app.reproduction.state_machine import LOCK_HOLDING_STATES, TERMINAL_STATES, next_state, transition_session
@@ -274,9 +280,44 @@ def start_reproduction(self, session_id: str):
         # Platform close stops only the controller renewer; the producer remains
         # continuous for watcher adoption with no capture gap.
         orch, adapter, close = _build_orchestrator_for(row, connect=True)
+        # Record the platform that actually runs this session.  create_session
+        # snapshots the default Mock platform id even in real mode, which makes
+        # M7/reporting mis-classify a real-DUT session as mock.  Reflect the real
+        # platform (V1 aim-real or V2 capture-v2) on the committed row.
+        try:
+            platform = getattr(orch, "platform", None)
+            if platform is not None and getattr(platform, "platform_id", None):
+                row.platform_profile_id = str(platform.platform_id)
+                row.platform_profile_version = str(getattr(platform, "version", "") or row.platform_profile_version)
+        except Exception:
+            pass
         try:
             orch.start(db,session=row,owner_worker=f'celery:{self.request.id}',actor='reproduction-worker')
             db.commit()
+        except Exception as exc:
+            # Fail-closed safety net: a deterministic startup failure must never
+            # leave the session silently in CREATED.  Transient SSH errors keep
+            # Celery autoretry semantics -- they are only fail-closed after the
+            # final retry exhausts.
+            db.rollback()
+            final_failure = self.request.retries >= int(self.max_retries or 0) or not isinstance(
+                exc, (DeviceConnectionError, DeviceCommandError)
+            )
+            if final_failure:
+                with SessionLocal() as db2:
+                    fresh = db2.get(ReproductionSession, session_id)
+                    if fresh is not None:
+                        ownership = session_has_active_lock(db2, fresh.id) or _session_has_v2_capture(db2, fresh.id)
+                        outcome = fail_closed_startup(
+                            db2, session=fresh, error=exc,
+                            actor='reproduction-worker', ownership=ownership,
+                        )
+                        db2.commit()
+                        if outcome == 'NEEDS_CLEANUP':
+                            cleanup_v2_reproduction.apply_async(
+                                args=[session_id, 'START_FAILED_CLEANUP'], queue='reproduction-watch'
+                            )
+            raise
         finally:
             close()
         if ReproductionState(row.state) in {ReproductionState.WATCHING, ReproductionState.ACTIVITY_DETECTED}:
@@ -508,6 +549,38 @@ def _mark_v2_recovery_needed(db, v2_session_ids: set[str]) -> tuple[list[str], l
     return sorted(recovered), sorted(retry_ids | recovered)
 
 
+def _fail_closed_stale_created(db) -> list[str]:
+    """Watchdog: fail-closed any CREATED session with no legal progress.
+
+    A session left in CREATED beyond the stale threshold with no state events, no
+    active lock and no Capture record has no legitimate in-flight Celery/ARM work;
+    it is audibly fail-closed to ARM_FAILED.  Sessions that already own a lock or
+    Capture record are left to the formal recovery/cleanup paths.
+    """
+    stale_seconds = float(getattr(settings, "reproduction_stale_created_seconds", 300.0) or 300.0)
+    cutoff = _utcnow() - timedelta(seconds=stale_seconds)
+    rows = list(db.scalars(select(ReproductionSession).where(
+        ReproductionSession.state == ReproductionState.CREATED.value,
+    )))
+    closed: list[str] = []
+    for session in rows:
+        created = _aware(session.created_at)
+        if created is None or created > cutoff:
+            continue
+        if session_has_any_progress_event(db, session.id):
+            continue  # a START_ARMING event means legitimate ARM progress
+        if session_has_active_lock(db, session.id) or _session_has_v2_capture(db, session.id):
+            continue  # ownership exists -> formal recovery/cleanup paths
+        outcome = fail_closed_startup(
+            db, session=session,
+            error=AppError("STALE_CREATED_NO_PROGRESS", details={"stale_created_seconds": stale_seconds}),
+            actor="reconcile-watchdog", ownership=False,
+        )
+        if outcome == "FAIL_CLOSED":
+            closed.append(session.id)
+    return closed
+
+
 @celery_app.task(name='reproduction.reconcile', queue='reproduction-control-high')
 def reconcile_reproduction():
     with SessionLocal() as db:
@@ -516,6 +589,7 @@ def reconcile_reproduction():
         r=RecoveryReconciler()
         recovered=r.reconcile_expired_leases(db,exclude_session_ids=v2_session_ids)
         cleanup=r.retry_failed_cleanups(db,exclude_session_ids=v2_session_ids)
+        stale_created=_fail_closed_stale_created(db)
         db.commit()
 
     for session_id in v2_cleanup_ids:
@@ -538,6 +612,7 @@ def reconcile_reproduction():
         'cleanup_retried':cleanup,
         'v2_recovery_marked':v2_recovered,
         'v2_cleanup_queued':v2_cleanup_ids,
+        'stale_created_fail_closed':stale_created,
         'diagnosis_triggered':triggered,
         'diagnosis_skipped':skipped,
     }

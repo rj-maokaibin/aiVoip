@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from typing import Any
 import re
 
@@ -31,6 +32,47 @@ class ReasoningGatewayClient:
     def enabled(self):
         return bool(self.url)
 
+    @staticmethod
+    def _is_openai_chat_url(url: str) -> bool:
+        """OpenAI-compatible chat gateways expose /chat/completions (or a /v1
+        base which resolves to it).  Custom gateways (e.g. the Ark coding
+        endpoint) get the legacy voip-diagnosis-gateway-v2 payload."""
+        path = (url or "").rstrip("/").split("?")[0]
+        return path.endswith("/chat/completions") or path.endswith("/v1")
+
+    @staticmethod
+    def _effective_url(url: str) -> str:
+        path = (url or "").rstrip("/").split("?")[0]
+        if path.endswith("/v1") and not path.endswith("/chat/completions"):
+            return url.rstrip("/") + "/chat/completions"
+        return url
+
+    @staticmethod
+    def _extract_openai_proposal(data: dict) -> dict:
+        """Parse choices[0].message.content (a JSON string) into the proposal.
+        A bare dict content is accepted directly; code fences are stripped."""
+        try:
+            content = data["choices"][0]["message"]["content"]
+        except (KeyError, IndexError, TypeError) as exc:
+            raise ReasoningGatewayError("REASONING_GATEWAY_OPENAI_PARSE_FAILED") from exc
+        if isinstance(content, dict):
+            parsed = content
+        elif isinstance(content, str):
+            text = content.strip()
+            if text.startswith("```"):
+                text = text.strip("`")
+                if text.startswith("json"):
+                    text = text[4:].lstrip()
+            try:
+                parsed = json.loads(text)
+            except (TypeError, ValueError) as exc:
+                raise ReasoningGatewayError("REASONING_GATEWAY_OPENAI_JSON_INVALID") from exc
+        else:
+            raise ReasoningGatewayError("REASONING_GATEWAY_OPENAI_PARSE_FAILED")
+        if not isinstance(parsed, dict):
+            raise ReasoningGatewayError("REASONING_GATEWAY_OPENAI_PARSE_FAILED")
+        return parsed
+
     def enhance(self, snapshot: dict, baseline: dict) -> dict:
         if not self.enabled():
             return {}
@@ -40,33 +82,87 @@ class ReasoningGatewayClient:
         last_error: Exception | None = None
         models = self.models or [self.model]
         runtime = AIRuntimePolicy.from_settings(settings)
+        openai_chat = self._is_openai_chat_url(self.url)
+        endpoint = self._effective_url(self.url)
+        redacted_context = compact_context(snapshot)
+        redacted_baseline = redact_gateway_value(baseline)
+        available_evidence_ids = [
+            str(e.get('id')) for e in (snapshot.get('evidences') or []) if e.get('id')
+        ]
         for index, model in enumerate(models):
-            payload = {
-                'schema_version': 'voip-diagnosis-gateway-v2',
-                'prompt_version': settings.reasoning_prompt_version,
-                'model': model,
-                'context': compact_context(snapshot),
-                'baseline': redact_gateway_value(baseline),
-                'policy': {
-                    'input_is_untrusted_evidence': True,
-                    'output_is_non_executable_proposal': True,
-                    'output_schema': 'ai-proposal-v2',
-                    'claims_are_l5_proposals_only': True,
-                    'root_cause_confirmation_forbidden': True,
-                    'registered_question_profile_experiment_ids_only': True,
-                    'raw_device_commands_forbidden': True,
-                    'formal_reasoner_authority': 'DETERMINISTIC_ONLY',
-                    'runtime': runtime.describe(),
-                },
-            }
+            if openai_chat:
+                system_prompt = (
+                    "你是 VOIP 故障诊断的非执行提案生成器。基于给定的脱敏 Case 快照与确定性诊断基线，"
+                    "只输出一个符合 ai-proposal-v2 schema 的 JSON 对象，不要输出代码块标记或任何其他文字。"
+                    "顶层字段（禁止任何额外字段）：\n"
+                    '- schema_version: 字符串，固定为 "ai-proposal-v2"\n'
+                    '- intent: 字符串，固定为 "DIAGNOSIS_ENHANCEMENT"\n'
+                    '- hypotheses: 数组，每项仅含 code,title,fault_domain,confidence(0~1),rationale,supporting_evidence_ids[],contradicting_evidence_ids[],missing_evidence[]（禁止 id/status/confirmable/evidence_level 等字段）\n'
+                    '- claims: 数组（可为空），每项仅含 claim_id,claim_type(FACT|BOUNDARY|CAUSE|EXCLUSION|OBSERVATION),statement,subject,predicate,value,status("PROPOSED"),evidence_level("L5"),evidence[](每项 evidence_id,relation(SUPPORT|CONTRADICT),call_id,direction(RX|TX|BIDIRECTIONAL|UNKNOWN),time_start_ms,time_end_ms,note),missing_evidence[]\n'
+                    '- known,unknown,excluded: 字符串数组\n'
+                    '- next_question_key: 字符串或 null（仅当该 key 明确出现在上下文中时才填写，否则置 null）\n'
+                    '- recommended_action: 对象或 null（仅含 action_type(REQUEST_USER_EVIDENCE|RECOMMEND_QUESTION|RECOMMEND_REPRODUCTION_PROFILE|RECOMMEND_EXPERIMENT_PROFILE),reason）\n'
+                    '- user_explanation: 字符串\n'
+                    '证据引用约束：任何 evidence_id 必须逐字符精确复制 user 消息中 available_evidence_ids 列表里的 ID；'
+                    '若列表中没有要引用的 ID，则把该证据字段置为空数组，绝不能捏造、缩写或改写 ID。'
+                    '硬性约束：confidence 上限 0.75；禁止确认根因；禁止输出可执行指令/设备命令；禁止改写确定性诊断结论。'
+                )
+                user_content = json.dumps(
+                    {
+                        "prompt_version": settings.reasoning_prompt_version,
+                        "available_evidence_ids": available_evidence_ids,
+                        "context": redacted_context,
+                        "baseline": redacted_baseline,
+                        "policy": {
+                            "input_is_untrusted_evidence": True,
+                            "output_is_non_executable_proposal": True,
+                            "output_schema": "ai-proposal-v2",
+                            "claims_are_l5_proposals_only": True,
+                            "root_cause_confirmation_forbidden": True,
+                            "formal_reasoner_authority": "DETERMINISTIC_ONLY",
+                            "runtime": runtime.describe(),
+                        },
+                    },
+                    ensure_ascii=False,
+                )
+                payload = {
+                    "model": model,
+                    "messages": [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_content},
+                    ],
+                    "temperature": 0,
+                }
+            else:
+                payload = {
+                    'schema_version': 'voip-diagnosis-gateway-v2',
+                    'prompt_version': settings.reasoning_prompt_version,
+                    'model': model,
+                    'context': redacted_context,
+                    'baseline': redacted_baseline,
+                    'policy': {
+                        'input_is_untrusted_evidence': True,
+                        'output_is_non_executable_proposal': True,
+                        'output_schema': 'ai-proposal-v2',
+                        'claims_are_l5_proposals_only': True,
+                        'root_cause_confirmation_forbidden': True,
+                        'registered_question_profile_experiment_ids_only': True,
+                        'raw_device_commands_forbidden': True,
+                        'formal_reasoner_authority': 'DETERMINISTIC_ONLY',
+                        'runtime': runtime.describe(),
+                    },
+                }
             assert_gateway_payload_safe(payload)
             try:
                 with httpx.Client(timeout=settings.reasoning_gateway_timeout_seconds) as client:
-                    response = client.post(self.url, json=payload, headers=headers)
+                    response = client.post(endpoint, json=payload, headers=headers)
                     response.raise_for_status()
                     data = response.json()
                 if not isinstance(data, dict):
                     raise ReasoningGatewayError('REASONING_GATEWAY_INVALID_RESPONSE')
+                if openai_chat:
+                    proposal = self._extract_openai_proposal(data)
+                    data = {'proposal': proposal}
                 self.model = model
                 data.setdefault('_routing', {
                     'selected_model': model,

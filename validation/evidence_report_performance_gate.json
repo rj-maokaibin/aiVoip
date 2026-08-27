@@ -1,43 +1,48 @@
 {
-  "schema_version": "evidence-report-performance-gate-v1",
+  "schema_version": "evidence-report-performance-gate-v2",
   "status": "PASS",
   "iterations": 4,
   "scale": 1,
   "software_core_budget_seconds": 10.0,
+  "workload_boundary": "Measures Finding composition plus PR5 production PNG renderer path with bounded focused visuals. Excludes DB/ObjectStorage/Feishu/network/DUT acquisition.",
   "metrics": {
-    "p50_seconds": 1.811,
-    "p95_seconds": 1.8134,
-    "max_seconds": 1.827,
-    "mean_seconds": 1.8136
+    "p50_seconds": 5.1548,
+    "p95_seconds": 5.164,
+    "max_seconds": 5.1687,
+    "mean_seconds": 5.1604
   },
   "rows": [
     {
-      "compose_seconds": 0.0012,
-      "render_seconds": 1.8258,
-      "total_seconds": 1.827,
+      "compose_seconds": 0.0006,
+      "render_seconds": 5.168,
+      "total_seconds": 5.1687,
       "finding_count": 9,
-      "rendered_bytes": 45550
+      "rendered_image_count": 17,
+      "rendered_bytes": 201115
     },
     {
-      "compose_seconds": 0.0003,
-      "render_seconds": 1.8027,
-      "total_seconds": 1.803,
+      "compose_seconds": 0.0005,
+      "render_seconds": 5.1537,
+      "total_seconds": 5.1542,
       "finding_count": 9,
-      "rendered_bytes": 45550
+      "rendered_image_count": 17,
+      "rendered_bytes": 201115
     },
     {
-      "compose_seconds": 0.0002,
-      "render_seconds": 1.8108,
-      "total_seconds": 1.811,
+      "compose_seconds": 0.0005,
+      "render_seconds": 5.1543,
+      "total_seconds": 5.1548,
       "finding_count": 9,
-      "rendered_bytes": 45550
+      "rendered_image_count": 17,
+      "rendered_bytes": 201115
     },
     {
-      "compose_seconds": 0.0002,
-      "render_seconds": 1.8131,
-      "total_seconds": 1.8134,
+      "compose_seconds": 0.0005,
+      "render_seconds": 5.1635,
+      "total_seconds": 5.164,
       "finding_count": 9,
-      "rendered_bytes": 45550
+      "rendered_image_count": 17,
+      "rendered_bytes": 201115
     }
   ],
   "production_sla": {

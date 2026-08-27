@@ -9,6 +9,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.capture_v2.db_models import CaptureSession
 from app.capture_v2.factory import build_capture_v2_ab
+from app.capture_v2.profiles.fingerprint import DeviceFingerprint, DeviceFingerprintResolver
 from app.capture_v2.profiles.resolver import EffectiveProfileResolver
 from app.capture_v2.profiles.schema import EffectiveCaptureProfile
 from app.capture_v2.repository.core import CaptureSessionRepository
@@ -93,11 +94,26 @@ class CaptureV2ABBridge:
             # restart/takeover must replay the persisted snapshot, never silently
             # re-resolve today's YAML into yesterday's session.
             effective = EffectiveCaptureProfile.model_validate(existing.effective_profile)
+            fingerprint: DeviceFingerprint | None = None
         else:
+            # Case creation does not fingerprint the DUT, so DB-derived platform
+            # tokens may be empty.  Probe the real DUT (read-only) and enrich the
+            # resolution tokens so platform profiles match by SoC/model even for
+            # an unpopulated CaseDevice row (e.g. APF3260-M -> mt7981).
+            reader = ReadOnlyDeviceTransport(self.adapter)
+            fingerprint = None
+            try:
+                fingerprint = await DeviceFingerprintResolver(reader).resolve()
+            except Exception:
+                fingerprint = None
+            extra_tokens = fingerprint.tokens() if fingerprint is not None else None
             effective = EffectiveProfileResolver(self.profile_root).resolve(
                 device=device,
                 requested_profile_id=self.requested_profile_id,
+                extra_tokens=extra_tokens,
             )
+            if fingerprint is not None:
+                self._persist_fingerprint(device, fingerprint)
 
         supervisor = build_capture_v2_ab(adapter=self.adapter, effective_profile=effective)
         capture_session_id = self._ensure_capture_session(
@@ -120,3 +136,43 @@ class CaptureV2ABBridge:
             voice_context=voice,
             ownership=ownership,
         )
+
+    def _persist_fingerprint(self, device: Any, fingerprint: DeviceFingerprint) -> None:
+        """Best-effort, auditable persistence of the discovered fingerprint.
+
+        Never fails the establish flow; a stale DB row or a non-CaseDevice test
+        stub simply skips the update.
+        """
+        device_id = getattr(device, "id", None)
+        if not device_id:
+            return
+        info: dict[str, Any] = {
+            "platform_id": fingerprint.platform_id,
+            "models": list(fingerprint.models),
+            "vendor": fingerprint.vendor,
+            "soc": fingerprint.soc,
+            "fingerprint_source": "dut-read-only-probe",
+            "fingerprint_raw": fingerprint.raw,
+        }
+        if fingerprint.models:
+            info["model"] = fingerprint.models[0]
+        try:
+            with self.session_factory() as db:
+                from app.db.models import CaseDevice
+
+                row = db.get(CaseDevice, device_id)
+                if row is None:
+                    return
+                changed = False
+                if fingerprint.platform_id and row.platform_id != fingerprint.platform_id:
+                    row.platform_id = fingerprint.platform_id
+                    changed = True
+                existing_info = dict(row.device_info or {})
+                merged = {**existing_info, **info}
+                if merged != existing_info:
+                    row.device_info = merged
+                    changed = True
+                if changed:
+                    db.commit()
+        except Exception:
+            pass

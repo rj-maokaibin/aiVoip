@@ -47,6 +47,10 @@ class Settings(BaseSettings):
     reproduction_capture_root: Path = Path("/tmp/voip-reproduction-capture")
     reproduction_object_root: Path = Path("/tmp/voip-reproduction-objects")
     reproduction_storage_mode: str = "local"
+    # Fail-closed watchdog: a ReproductionSession stuck in CREATED longer than this
+    # with no legal ARM progress (no event, no lock, no Capture record) is audibly
+    # moved to ARM_FAILED by the reconcile worker instead of staying silent forever.
+    reproduction_stale_created_seconds: float = 300.0
     # Capture Engine V2 authority is introduced behind an explicit version flag.
     # V1 remains the production default until V2.1 C/D complete reliable transfer
     # and two-stage readiness. The lease values are bootstrap defaults only;

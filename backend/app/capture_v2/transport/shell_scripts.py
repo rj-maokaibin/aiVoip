@@ -89,3 +89,34 @@ if [ "$current" != {q(lease_epoch)} ]; then
 fi
 {body}
 '''
+
+
+def release_fence_script(*, lease_epoch: int, operation_id: str) -> str:
+    """Fenced removal of the DUT-side capture fence.
+
+    Only the current lease authority may clear it, so a completed session leaves
+    the DUT pristine and a stale worker cannot un-fence a live capture.  Removing
+    the control files is the durable "capture fence released" signal for the next
+    reproduction to publish a fresh epoch.
+    """
+    return _lock_prefix(operation_id) + f'''
+current=$(cat "$CONTROL/lease_epoch" 2>/dev/null || true)
+if [ "$current" != {q(lease_epoch)} ]; then
+  echo AIVOIP_FENCED
+  exit 73
+fi
+rm -f "$CONTROL/lease_epoch" "$CONTROL/session_id" "$CONTROL/owner_worker" "$CONTROL/boot_id"
+echo AIVOIP_FENCE_RELEASED
+'''
+
+
+def clear_stale_fence_script(*, operation_id: str) -> str:
+    """Unfenced removal of stale capture fence state.
+
+    Caller must already have proven (via recovery scan) that no live capture
+    producer exists on the DUT; otherwise the strict publish fence is preserved.
+    """
+    return _lock_prefix(operation_id) + f'''
+rm -f "$CONTROL/lease_epoch" "$CONTROL/session_id" "$CONTROL/owner_worker" "$CONTROL/boot_id"
+echo AIVOIP_STALE_FENCE_CLEARED
+'''

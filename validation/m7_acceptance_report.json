@@ -1,0 +1,411 @@
+{
+  "schema_version": "m7-real-dut-acceptance-v1",
+  "status": "PASS",
+  "promotion_eligible": false,
+  "root_cause_confirmation_required_for_m7": false,
+  "criteria_total": 20,
+  "criteria_passed": 20,
+  "criteria_blocked": 0,
+  "blocked_ids": [],
+  "criteria": [
+    {
+      "id": "M7-01",
+      "key": "case_exists",
+      "title": "Case 已建立",
+      "mandatory": true,
+      "status": "PASS",
+      "remediation": null
+    },
+    {
+      "id": "M7-02",
+      "key": "dut_bound",
+      "title": "DUT 已绑定",
+      "mandatory": true,
+      "status": "PASS",
+      "remediation": null
+    },
+    {
+      "id": "M7-03",
+      "key": "voice_context_ready",
+      "title": "Voice VLAN/接口/Gateway 上下文有效",
+      "mandatory": true,
+      "status": "PASS",
+      "remediation": null
+    },
+    {
+      "id": "M7-04",
+      "key": "pcap_present",
+      "title": "PCAP 证据存在",
+      "mandatory": true,
+      "status": "PASS",
+      "remediation": null
+    },
+    {
+      "id": "M7-05",
+      "key": "pcm_rx_present",
+      "title": "PCM RX 证据存在",
+      "mandatory": true,
+      "status": "PASS",
+      "remediation": null
+    },
+    {
+      "id": "M7-06",
+      "key": "pcm_tx_present",
+      "title": "PCM TX 证据存在",
+      "mandatory": true,
+      "status": "PASS",
+      "remediation": null
+    },
+    {
+      "id": "M7-07",
+      "key": "debug_present",
+      "title": "Debug/日志证据存在",
+      "mandatory": true,
+      "status": "PASS",
+      "remediation": null
+    },
+    {
+      "id": "M7-08",
+      "key": "packet_analyzer_success",
+      "title": "Packet/SIP/RTP Analyzer 成功",
+      "mandatory": true,
+      "status": "PASS",
+      "remediation": null
+    },
+    {
+      "id": "M7-09",
+      "key": "media_analyzer_success",
+      "title": "PCM/Media Analyzer 成功",
+      "mandatory": true,
+      "status": "PASS",
+      "remediation": null
+    },
+    {
+      "id": "M7-10",
+      "key": "deterministic_diagnosis_ready",
+      "title": "确定性 Diagnosis baseline 已形成",
+      "mandatory": true,
+      "status": "PASS",
+      "remediation": null
+    },
+    {
+      "id": "M7-11",
+      "key": "ai_shadow_present",
+      "title": "AI SHADOW 已实际运行",
+      "mandatory": true,
+      "status": "PASS",
+      "remediation": null
+    },
+    {
+      "id": "M7-12",
+      "key": "ai_grounded",
+      "title": "AI Proposal 通过 grounding/contract 校验",
+      "mandatory": true,
+      "status": "PASS",
+      "remediation": null
+    },
+    {
+      "id": "M7-13",
+      "key": "ai_authority_safe",
+      "title": "AI 未越权改变正式诊断",
+      "mandatory": true,
+      "status": "PASS",
+      "remediation": null
+    },
+    {
+      "id": "M7-14",
+      "key": "reproduction_armed",
+      "title": "真实平台自动复现已成功 ARMED/WATCHING",
+      "mandatory": true,
+      "status": "PASS",
+      "remediation": null
+    },
+    {
+      "id": "M7-15",
+      "key": "call_detected",
+      "title": "真实 Call 已识别、绑定并结束",
+      "mandatory": true,
+      "status": "PASS",
+      "remediation": null
+    },
+    {
+      "id": "M7-16",
+      "key": "cleanup_verified",
+      "title": "临时采集状态 Cleanup Verified",
+      "mandatory": true,
+      "status": "PASS",
+      "remediation": null
+    },
+    {
+      "id": "M7-17",
+      "key": "no_active_lock",
+      "title": "无残留诊断锁",
+      "mandatory": true,
+      "status": "PASS",
+      "remediation": null
+    },
+    {
+      "id": "M7-18",
+      "key": "report_generated",
+      "title": "诊断报告已生成",
+      "mandatory": true,
+      "status": "PASS",
+      "remediation": null
+    },
+    {
+      "id": "M7-19",
+      "key": "golden_materialized",
+      "title": "Golden Candidate 已自动沉淀",
+      "mandatory": true,
+      "status": "PASS",
+      "remediation": null
+    },
+    {
+      "id": "M7-20",
+      "key": "audit_complete",
+      "title": "M7 核心 Audit 链完整",
+      "mandatory": true,
+      "status": "PASS",
+      "remediation": null
+    }
+  ],
+  "observed": {
+    "case": {
+      "id": "aac85696-dc36-49d3-9bc5-ea27f1a1e9a7",
+      "case_no": "VOIP-20260827-D38C67",
+      "status": "WAITING_USER"
+    },
+    "devices": [
+      {
+        "id": "e5bb3f33-dc41-40a4-85ad-6233466e0800",
+        "sn": "G1U060H000384",
+        "platform_id": "mt7981",
+        "ssh_port": 10002
+      }
+    ],
+    "evidence": {
+      "count": 9,
+      "types": [
+        "CALL_PCAP",
+        "CALL_QUICK_FINDINGS",
+        "PCAP_SEGMENT",
+        "SESSION_PCAP"
+      ],
+      "segment_channels": [
+        "PCAP"
+      ]
+    },
+    "analyzers": [
+      {
+        "id": "1be06e9a-10fc-49c6-ba86-e76865be34c2",
+        "name": "REPRODUCTION_CALL_QUICK_EVIDENCE",
+        "status": "PARTIAL_SUCCESS",
+        "version": "2.0.0-c2"
+      },
+      {
+        "id": "6b0e4c40-18af-414c-8690-1513aee0361e",
+        "name": "media_intelligence",
+        "status": "SUCCESS",
+        "version": "0.5.0"
+      },
+      {
+        "id": "e5f14c4e-e9ff-4565-9116-9bac3df6e45a",
+        "name": "pcm_intelligence",
+        "status": "SUCCESS",
+        "version": "0.6.0"
+      },
+      {
+        "id": "53967653-66e0-445c-b789-8127770d1571",
+        "name": "packet_intelligence",
+        "status": "SUCCESS",
+        "version": "0.5.0"
+      }
+    ],
+    "diagnosis": {
+      "id": "42eb54f0-3579-414f-bb0b-1fc948d04992",
+      "status": "WAITING_USER",
+      "reasoner": "DeterministicDiagnosisReasoner",
+      "workflow_version": "m4-v1"
+    },
+    "ai_shadow": [
+      {
+        "id": "fa76a913-d7ca-40f0-866f-587c9c7cf801",
+        "status": "ACCEPTED",
+        "model": "deepseek-v4-flash",
+        "prompt_version": "voip-diagnosis-v2",
+        "validation_errors": []
+      },
+      {
+        "id": "7a50ac0a-ef25-4fea-80a8-afac1ac1a3a0",
+        "status": "REJECTED",
+        "model": "deepseek-v4-flash",
+        "prompt_version": "voip-diagnosis-v2",
+        "validation_errors": [
+          {
+            "code": "EVIDENCE_NOT_IN_CASE",
+            "evidence_id": "c931f682-ea6c-[REDACTED_NUMBER]-2cf4bd86912e"
+          },
+          {
+            "code": "CLAIM_EVIDENCE_NOT_IN_CASE",
+            "claim_id": "claim_media_correlation",
+            "evidence_id": "c931f682-ea6c-[REDACTED_NUMBER]-2cf4bd86912e"
+          },
+          {
+            "code": "CLAIM_EVIDENCE_NOT_IN_CASE",
+            "claim_id": "claim_unexpected_silence",
+            "evidence_id": "c931f682-ea6c-[REDACTED_NUMBER]-2cf4bd86912e"
+          },
+          {
+            "code": "CLAIM_EVIDENCE_NOT_IN_CASE",
+            "claim_id": "claim_unexpected_silence",
+            "evidence_id": "c931f682-ea6c-[REDACTED_NUMBER]-2cf4bd86912e"
+          },
+          {
+            "code": "CLAIM_EVIDENCE_NOT_IN_CASE",
+            "claim_id": "claim_unexpected_silence",
+            "evidence_id": "c931f682-ea6c-[REDACTED_NUMBER]-2cf4bd86912e"
+          },
+          {
+            "code": "CLAIM_EVIDENCE_NOT_IN_CASE",
+            "claim_id": "claim_unexpected_silence",
+            "evidence_id": "c931f682-ea6c-[REDACTED_NUMBER]-2cf4bd86912e"
+          },
+          {
+            "code": "CLAIM_EVIDENCE_NOT_IN_CASE",
+            "claim_id": "claim_unexpected_silence",
+            "evidence_id": "c931f682-ea6c-[REDACTED_NUMBER]-2cf4bd86912e"
+          },
+          {
+            "code": "CLAIM_EVIDENCE_NOT_IN_CASE",
+            "claim_id": "claim_click_pop",
+            "evidence_id": "c931f682-ea6c-[REDACTED_NUMBER]-2cf4bd86912e"
+          },
+          {
+            "code": "CLAIM_EVIDENCE_NOT_IN_CASE",
+            "claim_id": "claim_click_pop",
+            "evidence_id": "c931f682-ea6c-[REDACTED_NUMBER]-2cf4bd86912e"
+          },
+          {
+            "code": "CLAIM_EVIDENCE_NOT_IN_CASE",
+            "claim_id": "claim_click_pop",
+            "evidence_id": "c931f682-ea6c-[REDACTED_NUMBER]-2cf4bd86912e"
+          },
+          {
+            "code": "CLAIM_EVIDENCE_NOT_IN_CASE",
+            "claim_id": "claim_click_pop",
+            "evidence_id": "c931f682-ea6c-[REDACTED_NUMBER]-2cf4bd86912e"
+          },
+          {
+            "code": "CLAIM_EVIDENCE_NOT_IN_CASE",
+            "claim_id": "claim_click_pop",
+            "evidence_id": "c931f682-ea6c-[REDACTED_NUMBER]-2cf4bd86912e"
+          },
+          {
+            "code": "CLAIM_EVIDENCE_NOT_IN_CASE",
+            "claim_id": "claim_dtmf_match",
+            "evidence_id": "c931f682-ea6c-[REDACTED_NUMBER]-2cf4bd86912e"
+          },
+          {
+            "code": "QUESTION_NOT_REGISTERED",
+            "question_key": "ANOMALY_TIMESTAMP_OR_RECORDING"
+          }
+        ]
+      },
+      {
+        "id": "3d79e799-98fa-42c2-8cda-16a83a6aa360",
+        "status": "DEGRADED",
+        "model": "ark-code-latest",
+        "prompt_version": "voip-diagnosis-v2",
+        "validation_errors": []
+      },
+      {
+        "id": "53bef156-e3b1-4d11-813d-43604ba01c14",
+        "status": "DEGRADED",
+        "model": "ark-code-latest",
+        "prompt_version": "voip-diagnosis-v2",
+        "validation_errors": []
+      },
+      {
+        "id": "11a0d7cb-56f5-48fb-8b28-fb8726bb263c",
+        "status": "DEGRADED",
+        "model": "ark-code-latest",
+        "prompt_version": "voip-diagnosis-v2",
+        "validation_errors": []
+      }
+    ],
+    "real_platform_session_count": 1,
+    "reproduction": [
+      {
+        "id": "e54582b5-ec49-4e9f-8435-2bc224b30cec",
+        "state": "COMPLETED",
+        "profile": "VOIP_GENERIC_FULL_CAPTURE",
+        "platform_profile_id": "mock-voip-platform",
+        "cleanup_status": "CLEANUP_VERIFIED",
+        "capture_completeness": "COMPLETE"
+      }
+    ],
+    "calls": [
+      {
+        "id": "54922a65-780e-43d4-93a7-33637941ae06",
+        "status": "ANALYZED",
+        "verdict": "INCONCLUSIVE",
+        "role": "INCONCLUSIVE"
+      }
+    ],
+    "cleanup_runs": [
+      {
+        "id": "9552a420-dcd6-4358-af99-c819caeccdd0",
+        "status": "VERIFIED"
+      }
+    ],
+    "active_lock_count": 0,
+    "reports": [
+      {
+        "id": "2a881e97-8664-4b5c-bfcc-1af0a659d85e",
+        "status": "GENERATED"
+      }
+    ],
+    "golden": {
+      "status": "PARTIAL_GOLDEN",
+      "verification_tier": null,
+      "score": 70,
+      "blocker_codes": [],
+      "gap_codes": [
+        "ROOT_CAUSE_NOT_CONFIRMED"
+      ]
+    },
+    "audit_event_types": [
+      "AI_PROPOSAL_EVALUATED",
+      "AI_READONLY_ASSURANCE_EVALUATED",
+      "CASE_CREATED",
+      "CASE_STATE_CHANGED",
+      "DIAGNOSIS_CYCLE",
+      "DIAGNOSIS_REPORT_GENERATED",
+      "DIAGNOSIS_STARTED",
+      "DIAGNOSTIC_QUESTION_CHANGED",
+      "EVIDENCE_CREATED",
+      "FEISHU_EVIDENCE_DOCUMENT_FAILED",
+      "FXS_MONITOR_READY",
+      "GOLDEN_CANDIDATE_STATE_CHANGED",
+      "JOB_STATE_CHANGED",
+      "MEDIA_ANALYSIS_FINISHED",
+      "MEDIA_ANALYSIS_JOB_CREATED",
+      "PACKET_ANALYSIS_FINISHED",
+      "PACKET_ANALYSIS_JOB_CREATED",
+      "PCM_ANALYSIS_FINISHED",
+      "PCM_ANALYSIS_JOB_CREATED",
+      "PRELIMINARY_EVIDENCE_REPORT_GENERATED",
+      "REPRODUCTION_ARM_VALIDATED",
+      "REPRODUCTION_ATTEMPT_CHANGED",
+      "REPRODUCTION_CALL_CHANGED",
+      "REPRODUCTION_CLEANUP_VALIDATED",
+      "REPRODUCTION_CREATED",
+      "REPRODUCTION_STATE_CHANGED"
+    ]
+  },
+  "notes": [
+    "M7 validates one real-DUT diagnostic flow; it does not certify model quality.",
+    "Golden READY / ROOT_CAUSE_CONFIRMED / FIX_VERIFIED are independent maturity gates.",
+    "CONTROLLED_PLANNER remains governed by ai-promotion-gate-v1."
+  ]
+}

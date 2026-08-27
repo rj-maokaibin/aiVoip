@@ -8,7 +8,11 @@ from celery.utils.log import get_task_logger
 from sqlalchemy import select
 
 from app.collectors.asyncssh_adapter import DeviceCommandError, DeviceConnectionError
-from app.capture_v2.runtime import assert_v1_live_capture_allowed
+from app.capture_v2.runtime import (
+    assert_selected_v2_live_capture_allowed,
+    assert_v1_live_capture_allowed,
+    capture_v2_enabled,
+)
 from app.contracts.enums import (
     CallVerdict, CaptureChannel, CaptureSegmentStatus, ChannelHealth, EvidenceCompleteness,
     EventType, ReproductionState, TimestampSource,
@@ -258,10 +262,14 @@ async def _watch(session_id: str, *, max_seconds: int | None = None) -> dict:
         if resolve_platform_mode() == 'mock':
             configured=int(((session.effective_profile_snapshot or {}).get('timeouts') or {}).get('watching_timeout_seconds') or 900)
             return await _watch_mock(db, session, device, int(max_seconds or configured))
-        # A stale queued V1 watcher must not become a second capture authority after
-        # CAPTURE_ENGINE_VERSION flips to V2. Fail closed before _watch_real_v11
-        # can construct/start the legacy segmented ring.
-        assert_v1_live_capture_allowed()
+        # Capture authority selection mirrors start_reproduction: under V2 the
+        # watcher adopts the Capture V2 platform (never a second V1 ring), so it
+        # must validate the V2 production/rehearsal gate instead of the V1-only
+        # gate. V1 stays fail-closed via the legacy gate.
+        if capture_v2_enabled():
+            assert_selected_v2_live_capture_allowed()
+        else:
+            assert_v1_live_capture_allowed()
         return await _watch_real_v11(db, session, device, max_seconds)
     finally:
         db.close()
