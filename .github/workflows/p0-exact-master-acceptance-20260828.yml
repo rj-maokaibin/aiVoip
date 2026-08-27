@@ -1,0 +1,144 @@
+name: P0 Exact Master Full Software Acceptance 20260828
+
+on:
+  push:
+    branches:
+      - ops/p0-exact-master-acceptance-20260828
+
+permissions:
+  contents: read
+
+jobs:
+  exact-master-full-software-acceptance:
+    runs-on:
+      - self-hosted
+      - linux
+      - x64
+      - voip-controlled-linux
+    timeout-minutes: 60
+    env:
+      TARGET_MASTER_SHA: 44fdff09c7a912afda6c642ca9c0bf19cbc393ca
+      OFFLINE_GOLDEN_PCAP: /tmp/tcpdump-2026-08-14.pcap
+      OFFLINE_GOLDEN_SHA256: b038aa7c9a0644581f2815f654fcdee4620860796382265b178823fccba2e3f0
+      PRELIMINARY_EVIDENCE_V1_VENV: /tmp/voip-ai-p0-preliminary-${{ github.run_id }}-${{ github.run_attempt }}
+      VOIP_AI_GATE_VENV: /tmp/voip-ai-p0-release-gate-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - name: Checkout validation workflow branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Freeze and checkout exact master
+        run: |
+          set -euo pipefail
+          git fetch origin master --force
+          test "$(git rev-parse origin/master)" = "$TARGET_MASTER_SHA"
+          git checkout --detach "$TARGET_MASTER_SHA"
+          test "$(git rev-parse HEAD)" = "$TARGET_MASTER_SHA"
+          printf 'P0_EXACT_MASTER_SHA=%s\n' "$TARGET_MASTER_SHA" | tee p0-exact-master-summary.txt
+          printf 'VALIDATION_WORKFLOW_SOURCE_SHA=%s\n' "$GITHUB_SHA" | tee -a p0-exact-master-summary.txt
+
+      - name: Environment and prepared-PCAP identity
+        run: |
+          set -euo pipefail
+          printf 'ACCEPTANCE_HEAD=%s\n' "$(git rev-parse HEAD)" | tee -a p0-exact-master-summary.txt
+          printf 'PYTHON=%s\n' "$(python3 --version 2>&1)" | tee -a p0-exact-master-summary.txt
+          printf 'NODE=%s\n' "$(node --version 2>&1)" | tee -a p0-exact-master-summary.txt
+          printf 'NPM=%s\n' "$(npm --version 2>&1)" | tee -a p0-exact-master-summary.txt
+          docker info >/dev/null
+
+          fixture="$OFFLINE_GOLDEN_PCAP"
+          if [ ! -r "$fixture" ]; then
+            staged="$RUNNER_TEMP/offline-e2e-prepared.pcap"
+            rm -f "$staged"
+            docker run --rm \
+              -v /tmp:/source:ro \
+              -v "$RUNNER_TEMP":/output \
+              --entrypoint sh postgres:16 \
+              -c "cp /source/tcpdump-2026-08-14.pcap /output/offline-e2e-prepared.pcap && chmod 0644 /output/offline-e2e-prepared.pcap"
+            fixture="$staged"
+          fi
+          test -r "$fixture"
+          actual_sha="$(sha256sum "$fixture" | awk '{print $1}')"
+          test "$actual_sha" = "$OFFLINE_GOLDEN_SHA256"
+          echo "OFFLINE_GOLDEN_PCAP=$fixture" >> "$GITHUB_ENV"
+          printf 'PREPARED_PCAP=%s\n' "$fixture" | tee -a p0-exact-master-summary.txt
+          printf 'PREPARED_PCAP_SHA256=%s\n' "$actual_sha" | tee -a p0-exact-master-summary.txt
+
+      - name: Prepare userspace TShark 4.2.2-compatible runtime
+        run: |
+          set -euo pipefail
+          if command -v tshark >/dev/null 2>&1; then
+            tshark_bin="$(command -v tshark)"
+          else
+            root="$RUNNER_TEMP/tshark-root-p0"
+            debs="$RUNNER_TEMP/tshark-debs-p0"
+            rm -rf "$root" "$debs"
+            mkdir -p "$root" "$debs"
+            cd "$debs"
+            mapfile -t pkgs < <(apt-cache depends --recurse --no-recommends --no-suggests --no-conflicts --no-breaks --no-replaces --no-enhances tshark | awk '/^[^ <][^:]*$/ {print $1}' | sort -u)
+            miss=()
+            for p in "${pkgs[@]}"; do
+              dpkg-query -W -f='${Status}' "$p" 2>/dev/null | grep -q 'install ok installed' || miss+=("$p")
+            done
+            [ ${#miss[@]} -eq 0 ] || apt-get download "${miss[@]}"
+            shopt -s nullglob
+            for d in ./*.deb; do dpkg-deb -x "$d" "$root"; done
+            tshark_bin="$RUNNER_TEMP/tshark-userspace-p0"
+            printf '#!/bin/bash\nexport LD_LIBRARY_PATH="%s/usr/lib/x86_64-linux-gnu:%s/lib/x86_64-linux-gnu:${LD_LIBRARY_PATH:-}"\nexport WIRESHARK_DATA_DIR="%s/usr/share/wireshark"\nexec "%s/usr/bin/tshark" "$@"\n' "$root" "$root" "$root" "$root" > "$tshark_bin"
+            chmod +x "$tshark_bin"
+          fi
+          "$tshark_bin" -v | head -n1 | tee -a p0-exact-master-summary.txt
+          echo "TSHARK_BINARY=$tshark_bin" >> "$GITHUB_ENV"
+
+      - name: Frozen PRD SPEC contracts
+        run: |
+          set -euo pipefail
+          bash tools/preliminary_evidence_v1_gate.sh
+          echo 'FROZEN_PRD_SPEC_CONTRACTS=PASS' | tee -a p0-exact-master-summary.txt
+
+      - name: Full VOIP AI software release gate
+        run: |
+          set -euo pipefail
+          bash tools/voip_ai_release_gate.sh
+          echo 'VOIP_AI_SOFTWARE_RELEASE_GATE=PASS' | tee -a p0-exact-master-summary.txt
+
+      - name: Prepared-PCAP Real Offline Golden 001
+        run: |
+          set -euo pipefail
+          source "$VOIP_AI_GATE_VENV/bin/activate"
+          rm -rf offline-golden-artifacts offline-golden-result.json
+          TSHARK_BINARY="$TSHARK_BINARY" python tools/offline_analysis_golden_replay.py \
+            --pcap "$OFFLINE_GOLDEN_PCAP" \
+            --require-fixture \
+            --artifacts offline-golden-artifacts \
+            --result offline-golden-result.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p = json.loads(Path('offline-golden-result.json').read_text(encoding='utf-8'))
+          assert p['status'] == 'PASS', p
+          assert p['passed'] is True, p
+          assert p['checks_passed'] == 142, p
+          assert p['checks_total'] == 142, p
+          print('REAL_OFFLINE_GOLDEN_001=PASS 142/142')
+          PY
+          echo 'REAL_OFFLINE_GOLDEN_001=PASS 142/142' | tee -a p0-exact-master-summary.txt
+
+      - name: Exact-master acceptance summary
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$TARGET_MASTER_SHA"
+          echo 'P0_2_EXACT_MASTER_FULL_SOFTWARE_ACCEPTANCE=PASS' | tee -a p0-exact-master-summary.txt
+          cat p0-exact-master-summary.txt
+
+      - name: Upload P0 exact-master evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: p0-exact-master-full-software-acceptance
+          path: |
+            p0-exact-master-summary.txt
+            offline-golden-result.json
+            offline-golden-artifacts
+          if-no-files-found: warn
