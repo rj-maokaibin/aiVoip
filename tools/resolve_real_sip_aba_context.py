@@ -125,19 +125,24 @@ def _resolve_database(containers: list[dict[str, Any]], output_root: Path, runti
                 "target_network": target_network,
             },
             indent=2,
-        )
-        + "\n",
+        ) + "\n",
         encoding="utf-8",
     )
     return db_source
 
 
 def _resolve_dut(output_root: Path, runtime_root: Path, db_source: str) -> None:
-    # Import after DATABASE_URL is made host-reachable.
+    # Import only after DATABASE_URL is made host-reachable.
     from sqlalchemy import select
 
-    from app.db.models import CaseDevice, DeviceCredential, ReproductionSession
+    from app.db.models import CaseDevice, ReproductionSession
     from app.db.session import SessionLocal
+    from app.integrations.credentials import get_credential_provider
+
+    provider = get_credential_provider()
+    provider_id = str(getattr(provider, "provider_id", type(provider).__name__))
+    if not bool(getattr(provider, "production_capable", False)):
+        raise SystemExit(f"SIP_ABA_CREDENTIAL_PROVIDER_NOT_PRODUCTION_CAPABLE provider={provider_id}")
 
     selector_id = next(
         (
@@ -159,6 +164,7 @@ def _resolve_dut(output_root: Path, runtime_root: Path, db_source: str) -> None:
     with SessionLocal() as db:
         devices = list(db.scalars(select(CaseDevice).order_by(CaseDevice.created_at.desc())).all())
         eligible: list[tuple[Any, Any, str]] = []
+        rejected: list[dict[str, Any]] = []
         for device in devices:
             template = db.scalar(
                 select(ReproductionSession)
@@ -166,18 +172,27 @@ def _resolve_dut(output_root: Path, runtime_root: Path, db_source: str) -> None:
                 .order_by(ReproductionSession.created_at.desc())
                 .limit(1)
             )
-            credential = db.scalar(select(DeviceCredential).where(DeviceCredential.sn == device.sn))
             info = dict(device.device_info or {})
             model = str(info.get("model") or info.get("product_model") or device.platform_id or "").strip()
-            if (
-                template is not None
-                and credential is not None
-                and str(credential.password or "")
-                and str(device.ip or "").strip()
-                and str(device.sn or "").strip()
-                and model
-            ):
-                eligible.append((device, template, model))
+            reasons: list[str] = []
+            if template is None:
+                reasons.append("NO_REPRODUCTION_TEMPLATE")
+            if not str(device.ip or "").strip():
+                reasons.append("IP_MISSING")
+            if not str(device.sn or "").strip():
+                reasons.append("SN_MISSING")
+            if not model:
+                reasons.append("MODEL_MISSING")
+            if reasons:
+                rejected.append(
+                    {
+                        "device_id": str(device.id),
+                        "sn_sha256_12": hashlib.sha256(str(device.sn or "").encode()).hexdigest()[:12],
+                        "reasons": reasons,
+                    }
+                )
+                continue
+            eligible.append((device, template, model))
 
         if selector_id:
             selected = [row for row in eligible if str(row[0].id) == selector_id]
@@ -196,34 +211,41 @@ def _resolve_dut(output_root: Path, runtime_root: Path, db_source: str) -> None:
                     "platform_id": device.platform_id,
                     "device_created_at": device.created_at.isoformat() if device.created_at else None,
                     "latest_reproduction_session_id": str(template.id),
-                    "latest_reproduction_created_at": (
-                        template.created_at.isoformat() if template.created_at else None
-                    ),
+                    "latest_reproduction_created_at": template.created_at.isoformat() if template.created_at else None,
                 }
             )
         (output_root / "dut_candidates.json").write_text(
             json.dumps(
                 {
+                    "credential_provider": provider_id,
+                    "credential_provider_production_capable": True,
                     "selector_id_present": bool(selector_id),
                     "selector_sn_present": bool(selector_sn),
+                    "eligible_count_before_selector": len(eligible),
                     "candidate_count": len(selected),
                     "candidates": inventory,
+                    "rejected": rejected,
                 },
                 indent=2,
-            )
-            + "\n",
+            ) + "\n",
             encoding="utf-8",
         )
         if len(selected) != 1:
             raise SystemExit(f"SIP_ABA_DUT_SELECTION_NOT_UNIQUE count={len(selected)}")
 
         device, template, model = selected[0]
+        username = str(device.username or "").strip()
+        resolve_username = getattr(provider, "resolve_username", None)
+        if callable(resolve_username):
+            username = str(resolve_username(ip=str(device.ip), fallback=username or "root"))
+        if not username:
+            username = "root"
         values = {
             "DEVICE_ID": str(device.id),
             "DEVICE_SN": str(device.sn),
             "DEVICE_HOST": str(device.ip),
             "DEVICE_PORT": str(int(device.ssh_port or 22)),
-            "DEVICE_USER": str(device.username or "admin"),
+            "DEVICE_USER": username,
             "DEVICE_MODEL": model,
             "DEVICE_PLATFORM": str(device.platform_id or ""),
         }
@@ -236,6 +258,7 @@ def _resolve_dut(output_root: Path, runtime_root: Path, db_source: str) -> None:
             json.dumps(
                 {
                     "database_source": db_source,
+                    "credential_provider": provider_id,
                     "device_id": str(device.id),
                     "model": model,
                     "platform_id": device.platform_id,
