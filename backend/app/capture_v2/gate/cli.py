@@ -18,6 +18,7 @@ from app.capture_v2.gate.evaluator import GateEvaluator
 from app.capture_v2.gate.faults import GateFaultInjector, GateFaultPlan
 from app.capture_v2.gate.models import GateDeviceSpec, GateRunPaths
 from app.capture_v2.gate.runner import GateRunner
+from app.capture_v2.gate.sip_registration_aba import SipRegistrationABAGate
 from app.contracts.enums import (
     CaptureStage,
     CleanupStatus,
@@ -230,6 +231,40 @@ async def _cmd_segment(args) -> int:
         await adapter.disconnect()
 
 
+async def _cmd_sip_registration_aba(args) -> int:
+    spec = _device(args)
+    reproduction_session_id = _resolve_reproduction_session_id(
+        args.reproduction_session_id,
+        device_id=spec.device_id,
+    )
+    adapter = build_asyncssh_adapter(spec, password_env=args.password_env)
+    await adapter.connect()
+    try:
+        gate = SipRegistrationABAGate(
+            session_factory=SessionLocal,
+            adapter=adapter,
+            profile_root=Path(args.profile_root),
+            requested_profile_id=args.profile_id,
+            output_root=Path(args.output_root),
+        )
+        result = await gate.run(
+            device=spec,
+            reproduction_session_id=reproduction_session_id,
+            worker_id=args.worker_id,
+            gate_id=args.gate_id,
+            phase_seconds=args.phase_seconds,
+            transport=args.sip_transport,
+            trigger_command=args.registration_trigger_command,
+            serial_command=args.serial_command,
+            software_version_command=args.software_version_command,
+            allow_live_mutation=args.allow_live_mutation,
+        )
+        _json(result)
+        return 0 if result.verdict.value == "PASS" else 2
+    finally:
+        await adapter.disconnect()
+
+
 async def _cmd_collect(args) -> int:
     spec = _device(args)
     adapter = build_asyncssh_adapter(spec, password_env=args.password_env)
@@ -276,7 +311,6 @@ def _cmd_fault(args) -> int:
 
 
 def _cmd_lease_race(args) -> int:
-    # No DUT connection is required; this Gate must point at the real PostgreSQL DB.
     runner = GateRunner(
         session_factory=SessionLocal, adapter=None,
         profile_root=Path(args.profile_root), requested_profile_id=args.profile_id,
@@ -326,6 +360,22 @@ def build_parser() -> argparse.ArgumentParser:
     seg.add_argument("--transport", choices=["sftp", "scp"], default="sftp",
                     help="Exact download transport (scp for Dropbear without SFTP subsystem)")
 
+    sip = sub.add_parser("sip-registration-aba", help="Run explicit real-DUT SIP registration A-B-A causal Gate")
+    _common_device(sip); _base_paths(sip)
+    sip.add_argument("--reproduction-session-id", required=True, help="Existing UUID or AUTO_NEW")
+    sip.add_argument("--worker-id", required=True)
+    sip.add_argument("--gate-id", default="SIP-REGISTRATION-ABA")
+    sip.add_argument("--phase-seconds", type=float, default=20.0)
+    sip.add_argument("--sip-transport", choices=["udp", "tcp"], default="udp")
+    sip.add_argument("--registration-trigger-command", default="",
+                     help="Optional identical DUT-local command run after capture starts in A1/B/A2 to force REGISTER")
+    sip.add_argument("--serial-command", required=True,
+                     help="Read-only DUT command that returns exactly one serial value")
+    sip.add_argument("--software-version-command", required=True,
+                     help="Read-only DUT command that returns exactly one software-version value")
+    sip.add_argument("--allow-live-mutation", action="store_true",
+                     help="Required explicit authorization; REAL_LIVE_MUTATION must also equal EXPLICIT_ONLY")
+
     collect = sub.add_parser("collect", help="Collect immutable Gate evidence bundle")
     _common_device(collect); _base_paths(collect)
     collect.add_argument("--capture-session-id", required=True)
@@ -363,6 +413,8 @@ def main(argv: list[str] | None = None) -> int:
             return asyncio.run(_cmd_ownership_adopt(args))
         if args.command == "segment":
             return asyncio.run(_cmd_segment(args))
+        if args.command == "sip-registration-aba":
+            return asyncio.run(_cmd_sip_registration_aba(args))
         if args.command == "collect":
             return asyncio.run(_cmd_collect(args))
         if args.command == "evaluate":
@@ -376,8 +428,6 @@ def main(argv: list[str] | None = None) -> int:
         _json({"ok": False, "error": exc.code, "details": exc.details})
         return 2
     except Exception as exc:
-        # Fail closed but return a structured, bounded diagnostic to the remote
-        # controller. No credential values are included in this payload.
         _json({
             "ok": False,
             "error": f"GATE_COMMAND_EXCEPTION:{type(exc).__name__}",
