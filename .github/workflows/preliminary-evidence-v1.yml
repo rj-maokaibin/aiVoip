@@ -22,28 +22,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  frozen-contracts:
-    runs-on:
-      - self-hosted
-      - linux
-      - x64
-      - voip-controlled-linux
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
-          fetch-depth: 1
-      - name: Environment identity
-        run: |
-          set -euo pipefail
-          printf 'FROZEN_GATE_HEAD=%s\n' "$(git rev-parse HEAD)"
-          python3 --version
-      - name: Frozen PRD/SPEC software contract gate
-        run: bash tools/preliminary_evidence_v1_gate.sh
-
   full-software-acceptance:
-    needs: frozen-contracts
     runs-on:
       - self-hosted
       - linux
@@ -86,6 +65,9 @@ jobs:
           echo "VOIP_AI_GATE_VENV=$RUNNER_TEMP/voip-ai-release-gate" >> "$GITHUB_ENV"
           printf 'PREPARED_PCAP=%s\n' "$fixture"
           printf 'PREPARED_PCAP_SHA256=%s\n' "$actual_sha"
+
+      - name: Frozen PRD/SPEC software contract gate
+        run: bash tools/preliminary_evidence_v1_gate.sh
 
       - name: Prepare exact userspace TShark 4.2.2 runtime
         run: |

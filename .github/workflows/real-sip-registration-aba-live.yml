@@ -65,7 +65,6 @@ jobs:
           chmod 0700 "$SIP_ABA_RUNTIME_ROOT"
           python3 -m venv "$SIP_ABA_VENV"
           "$SIP_ABA_VENV/bin/pip" install --disable-pip-version-check -q -r backend/requirements.txt
-
           if command -v tshark >/dev/null 2>&1; then
             tshark_bin="$(command -v tshark)"
           else
@@ -97,6 +96,11 @@ jobs:
           source "$SIP_ABA_ENV_FILE"
           set +a
           export PYTHONPATH="$GITHUB_WORKSPACE/backend"
+          "$SIP_ABA_VENV/bin/python" tools/resolve_real_sip_aba_database_env.py > "$SIP_ABA_RUNTIME_ROOT/production_db.env"
+          chmod 0600 "$SIP_ABA_RUNTIME_ROOT/production_db.env"
+          set -a
+          source "$SIP_ABA_RUNTIME_ROOT/production_db.env"
+          set +a
           "$SIP_ABA_VENV/bin/python" tools/resolve_real_sip_aba_context.py \
             --output-root "$SIP_ABA_OUTPUT_ROOT" \
             --runtime-root "$SIP_ABA_RUNTIME_ROOT"
@@ -115,12 +119,10 @@ jobs:
           export REAL_LIVE_MUTATION=EXPLICIT_ONLY
           export REPRODUCTION_PLATFORM_MODE=real
           export TSHARK_BINARY="$TSHARK_BINARY"
-
           phase_seconds="${SIP_ABA_PHASE_SECONDS:-$SIP_ABA_PHASE_SECONDS_DEFAULT}"
           trigger_command="${SIP_ABA_REGISTRATION_TRIGGER_COMMAND:-}"
           serial_command='v="$(uci -q get sysinfo.@sysinfo[0].serial_number 2>/dev/null || true)"; [ -n "$v" ] || v="$(uci -q get sysinfo.@sysinfo[0].sn 2>/dev/null || true)"; [ -n "$v" ] || v="$(uci -q get sysinfo.@sysinfo[0].serial 2>/dev/null || true)"; [ -n "$v" ] || exit 44; printf "%s\\n" "$v"'
           version_command='uci -q get sysinfo.@sysinfo[0].software_version'
-
           args=(
             -m app.capture_v2.gate.cli sip-registration-aba
             --device-id "$DEVICE_ID"
@@ -143,10 +145,7 @@ jobs:
           case "$DEVICE_PLATFORM" in
             mt7621|mt7981) args+=(--platform-id "$DEVICE_PLATFORM") ;;
           esac
-          if [ -n "$trigger_command" ]; then
-            args+=(--registration-trigger-command "$trigger_command")
-          fi
-
+          if [ -n "$trigger_command" ]; then args+=(--registration-trigger-command "$trigger_command"); fi
           set +e
           "$SIP_ABA_VENV/bin/python" "${args[@]}" 2>&1 | tee "$SIP_ABA_OUTPUT_ROOT/cli-output.log"
           rc=${PIPESTATUS[0]}
