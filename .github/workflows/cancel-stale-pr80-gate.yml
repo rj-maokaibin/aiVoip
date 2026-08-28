@@ -1,0 +1,38 @@
+name: Cancel Stale PR80 Gate
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  cancel-stale-pr80-gate:
+    if: >-
+      github.event.issue.pull_request != null &&
+      github.event.comment.user.login == github.repository_owner &&
+      github.event.comment.body == '/cancel-stale-pr80-gate 33171362293'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify exact stale run and cancel
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_RUN_ID: '33171362293'
+          EXPECTED_HEAD_SHA: d2cec8bedd5cfa42ad00ffdd52ce437a575b1a55
+          EXPECTED_WORKFLOW: PRD SPEC V1 Full Software Acceptance
+        shell: bash
+        run: |
+          set -euo pipefail
+          payload="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${TARGET_RUN_ID}")"
+          name="$(jq -r '.name' <<<"$payload")"
+          sha="$(jq -r '.head_sha' <<<"$payload")"
+          event="$(jq -r '.event' <<<"$payload")"
+          status="$(jq -r '.status' <<<"$payload")"
+          test "$name" = "$EXPECTED_WORKFLOW"
+          test "$sha" = "$EXPECTED_HEAD_SHA"
+          test "$event" = 'pull_request'
+          test "$status" = 'in_progress'
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/actions/runs/${TARGET_RUN_ID}/cancel"
+          printf 'cancelled_run=%s workflow=%s head_sha=%s\n' "$TARGET_RUN_ID" "$name" "$sha"
