@@ -1,0 +1,907 @@
+{
+  "schema_version": "ai-model-eval-dataset-v2",
+  "dataset_id": "field-20260828T202012Z",
+  "generated_at": "2026-08-28T20:20:12.720517+00:00",
+  "source": "VOIP_CASE_DATABASE",
+  "audit_coverage_complete": true,
+  "thresholds": {},
+  "cases": [
+    {
+      "ground_truth": {
+        "case_id": "e6b66a36-201e-4aa7-97e9-5bec8d227ac3",
+        "category": "FIELD_OTHER",
+        "source_kind": "REAL",
+        "verification_status": "ROOT_CAUSE_CONFIRMED",
+        "expected_hypothesis_codes": [
+          "SIP_REGISTRATION_PATH_FAILURE"
+        ],
+        "expected_fault_domains": [
+          "SIP/Register"
+        ],
+        "allowed_evidence_ids": [
+          "89a50140a7cea2b6e033f5ba3ad2729e",
+          "40178239bef22b639d8c2667f9658e20",
+          "9c612ec5232ae737672f2f1eb7fabadc",
+          "1f6ad1773c06fc1418f3ee092aef27e2"
+        ],
+        "expected_question_keys": [],
+        "expected_profile_ids": [],
+        "required_behavior": [
+          "NO_FALSE_ROOT_CAUSE"
+        ],
+        "notes": "exported_from_case:VOIP-20260828-FBCF64"
+      },
+      "golden_candidate": {
+        "status": "GOLDEN_READY",
+        "verification_tier": "B",
+        "assessment_version": "golden-candidate-v1",
+        "score": 96
+      },
+      "snapshot": {
+        "case": {
+          "id": "e6b66a36-201e-4aa7-97e9-5bec8d227ac3",
+          "case_no": "VOIP-20260828-FBCF64",
+          "summary": "Real DUT SIP registration egress-block controlled-fault A-B-A (C01)",
+          "status": "ROOT_CAUSE_CONFIRMED"
+        },
+        "devices": [
+          {
+            "id": "5c2f6460-15da-4985-908d-f3486fb784d8",
+            "ip": "10.48.8.74",
+            "ssh_port": 10002,
+            "sn": "G1U060H000384",
+            "platform_id": null,
+            "device_info": {}
+          }
+        ],
+        "evidences": [
+          {
+            "id": "89a50140a7cea2b6e033f5ba3ad2729e",
+            "type": "PCAP",
+            "source": "REAL_SIP_ABA_GATE",
+            "filename": "a1.pcap",
+            "sha256": "4e6a020e1e6f47b79bb6ec623773c9ff2d1e97908aca940a92f503801e8073bd",
+            "kind": "RAW",
+            "scope": "CASE",
+            "level": "L1",
+            "completeness": "COMPLETE",
+            "content_type": "application/vnd.tcpdump.pcap",
+            "metadata": {}
+          },
+          {
+            "id": "40178239bef22b639d8c2667f9658e20",
+            "type": "PCAP",
+            "source": "REAL_SIP_ABA_GATE",
+            "filename": "a2.pcap",
+            "sha256": "5de88685af46016ba09b01d660ff1f71dcbf8f203f2a16e8488ce22c8fd9b674",
+            "kind": "RAW",
+            "scope": "CASE",
+            "level": "L1",
+            "completeness": "COMPLETE",
+            "content_type": "application/vnd.tcpdump.pcap",
+            "metadata": {}
+          },
+          {
+            "id": "9c612ec5232ae737672f2f1eb7fabadc",
+            "type": "PCAP",
+            "source": "REAL_SIP_ABA_GATE",
+            "filename": "b.pcap",
+            "sha256": "704e5e5b3234433c01fcfd1b20a306e77e985038120492dc53965c3edd38a4ea",
+            "kind": "RAW",
+            "scope": "CASE",
+            "level": "L1",
+            "completeness": "COMPLETE",
+            "content_type": "application/vnd.tcpdump.pcap",
+            "metadata": {}
+          },
+          {
+            "id": "1f6ad1773c06fc1418f3ee092aef27e2",
+            "type": "SIP_ABA_REPORT",
+            "source": "REAL_SIP_ABA_GATE",
+            "filename": "sip_registration_aba.json",
+            "sha256": "4328239559916f00c84e36f3dcb8f9fbea8a8037646468580712080cb1c4ab4e",
+            "kind": "DERIVED",
+            "scope": "CASE",
+            "level": "L1",
+            "completeness": "COMPLETE",
+            "content_type": "application/json",
+            "metadata": {}
+          }
+        ],
+        "analyzers": {
+          "packet_intelligence": {
+            "run_id": "9ee396d216b12ca5f417a44c5e17839f",
+            "status": "SUCCESS",
+            "version": "0.5.0",
+            "config_version": "voip_analyzer_v1@1.3.0",
+            "config_snapshot": {
+              "analyzer_profile": {
+                "schema_version": 1,
+                "id": "voip_analyzer_v1",
+                "version": "1.3.0",
+                "status": "GOLDEN_CALIBRATED",
+                "checksum": "3369d8f6c7b69a13aec1c836f8ca3bd80ba3f6510a402cdbac1d5d7e64e1b602",
+                "config": {
+                  "rtp": {
+                    "ptime_min_ms": 1.0,
+                    "ptime_max_ms": 200.0,
+                    "high_delta_multiplier": 2.5,
+                    "high_delta_additive_ms": 40.0,
+                    "high_delta_catch_up_max_packets": 8,
+                    "high_delta_catch_up_accelerated_ratio": 0.75,
+                    "high_delta_catch_up_full_recovery_ratio": 0.8,
+                    "high_delta_catch_up_partial_recovery_ratio": 0.1,
+                    "high_delta_timestamp_tolerance_ratio": 0.05,
+                    "burst_high_lost_packets": 3,
+                    "jitter_filter_divisor": 16.0,
+                    "call_scope_tolerance_seconds": 1.0,
+                    "one_way_min_packets": 20
+                  },
+                  "silence": {
+                    "frame_ms": 20,
+                    "min_duration_ms": 200,
+                    "noise_floor_percentile": 15.0,
+                    "speech_percentile": 70.0,
+                    "threshold_min_dbfs": -68.0,
+                    "threshold_max_dbfs": -42.0,
+                    "noise_floor_margin_db": 7.0,
+                    "speech_margin_db": 18.0,
+                    "context_ms": 120,
+                    "context_voice_margin_db": 8.0,
+                    "active_media_min_seconds": 0.5
+                  },
+                  "click_pop": {
+                    "min_jump": 5500.0,
+                    "mad_multiplier": 16.0,
+                    "min_energy_rise_db": 7.0,
+                    "min_highband_ratio": 0.08,
+                    "merge_ms": 6.0,
+                    "short_window_ms": 6.0,
+                    "guard_ms": 25.0,
+                    "highband_min_hz": 1000.0,
+                    "max_events": 200,
+                    "confidence": {
+                      "base": 0.35,
+                      "jump_weight": 0.25,
+                      "rise_weight": 0.25,
+                      "highband_weight": 0.15,
+                      "rise_full_scale_db": 18.0,
+                      "highband_full_scale_ratio": 0.35
+                    }
+                  },
+                  "candidate_decision": {
+                    "dtmf_guard_ms": 80.0,
+                    "media_boundary_guard_ms": 120.0,
+                    "silence_counterpart_overlap_ratio": 0.5,
+                    "silence_min_correlation": 0.55,
+                    "silence_counterpart_active_ratio": 0.5,
+                    "silence_counterpart_active_margin_db": 6.0
+                  },
+                  "echo": {
+                    "min_delay_ms": 20,
+                    "max_delay_ms": 500,
+                    "min_correlation": 0.55,
+                    "high_correlation": 0.75,
+                    "downsample_rate": 2000,
+                    "max_seconds": 20.0,
+                    "min_signal_seconds": 1.0,
+                    "min_overlap_seconds": 2.0
+                  },
+                  "periodic": {
+                    "window_seconds": 1.0,
+                    "min_window_seconds": 0.5,
+                    "hop_seconds": 0.1,
+                    "low_energy_quantile": 0.3,
+                    "low_energy_quantile_min": 0.05,
+                    "low_energy_quantile_max": 0.8,
+                    "max_candidates": 12,
+                    "ac_lags_ms": [
+                      10.0,
+                      20.0,
+                      40.0
+                    ],
+                    "period_search_min_ms": 15.0,
+                    "period_search_max_ms": 25.0,
+                    "period_search_step_ms": 0.25,
+                    "comb_start_hz": 150,
+                    "comb_end_hz": 950,
+                    "comb_step_hz": 100,
+                    "comb_target_tolerance_hz": 2.0,
+                    "comb_exclusion_hz": 4.0,
+                    "comb_background_hz": 20.0,
+                    "comb_prominence_db": 10.0,
+                    "comb_detect_min_hits": 5,
+                    "strong": {
+                      "ac10_max": -0.5,
+                      "ac20_min": 0.8,
+                      "ac40_min": 0.75,
+                      "min_comb_hits": 5
+                    },
+                    "medium": {
+                      "ac10_max": -0.35,
+                      "ac20_min": 0.65,
+                      "ac40_min": 0.6,
+                      "min_comb_hits": 4
+                    },
+                    "strength": {
+                      "periodicity_weight": 0.65,
+                      "comb_weight": 0.35,
+                      "comb_full_hits": 7.0
+                    },
+                    "path": {
+                      "correlation_min": 0.55,
+                      "downstream_margin": 0.2,
+                      "medium_pcm_strength": 0.7,
+                      "medium_upstream_strength": 0.55,
+                      "min_scope_seconds": 1.0
+                    }
+                  },
+                  "spectral": {
+                    "max_seconds": 30.0,
+                    "min_frequency_hz": 30.0,
+                    "max_frequency_hz": 3800.0,
+                    "peak_merge_hz": 8.0,
+                    "max_peaks": 12,
+                    "candidate_peaks": 30,
+                    "narrowband_energy_ratio": 0.015,
+                    "comb_spacing_min_hz": 30,
+                    "comb_spacing_max_hz": 400,
+                    "comb_spacing_step_hz": 5,
+                    "comb_min_members": 3,
+                    "comb_error_min_hz": 6.0,
+                    "comb_error_ratio": 0.04
+                  },
+                  "dtmf": {
+                    "frame_ms": 40,
+                    "hop_ms": 20,
+                    "min_rms": 100.0,
+                    "min_row_dominance": 8.0,
+                    "min_col_dominance": 8.0,
+                    "min_row_energy": 0.05,
+                    "min_col_energy": 0.05,
+                    "max_abs_twist_db": 8.0,
+                    "min_duration_ms": 60.0,
+                    "dominance_confidence_full_scale": 20.0,
+                    "energy_confidence_full_scale": 0.15,
+                    "max_interdigit_gap_ms": 1500.0,
+                    "min_interdigit_gap_ms": 40.0,
+                    "quality_min_confidence": 0.55
+                  },
+                  "basic_metrics": {
+                    "clipping_abs_threshold": 32760.0
+                  },
+                  "hum": {
+                    "frequencies_hz": [
+                      50,
+                      60,
+                      100,
+                      120,
+                      150,
+                      180,
+                      200,
+                      240,
+                      250,
+                      300,
+                      360
+                    ],
+                    "family_50_hz": [
+                      50,
+                      100,
+                      150,
+                      200,
+                      250,
+                      300
+                    ],
+                    "family_60_hz": [
+                      60,
+                      120,
+                      180,
+                      240,
+                      300,
+                      360
+                    ],
+                    "high_score": 0.15,
+                    "medium_score": 0.04
+                  },
+                  "correlation": {
+                    "target_rate": 1000,
+                    "max_lag_ms": 1000,
+                    "max_seconds": 25.0,
+                    "high_quality": 0.8,
+                    "medium_quality": 0.55,
+                    "emit_min_correlation": 0.35,
+                    "min_overlap_seconds": 1.0
+                  }
+                }
+              }
+            },
+            "input_evidence_ids": [
+              "40178239bef22b639d8c2667f9658e20"
+            ],
+            "summary": {
+              "packet_count": 4,
+              "sip_message_count": 4,
+              "registration_count": 1,
+              "call_count": 0,
+              "rtp_stream_count": 0,
+              "rtcp_report_count": 0,
+              "anomaly_count": 0
+            },
+            "result": {
+              "analyzer": "packet_intelligence",
+              "version": "0.5.0",
+              "status": "SUCCESS",
+              "analyzer_profile": {
+                "profile_id": "voip_analyzer_v1",
+                "profile_version": "1.3.0",
+                "profile_status": "GOLDEN_CALIBRATED",
+                "profile_checksum": "3369d8f6c7b69a13aec1c836f8ca3bd80ba3f6510a402cdbac1d5d7e64e1b602"
+              },
+              "summary": {
+                "packet_count": 4,
+                "sip_message_count": 4,
+                "registration_count": 1,
+                "call_count": 0,
+                "rtp_stream_count": 0,
+                "rtcp_report_count": 0,
+                "anomaly_count": 0
+              },
+              "registrations": [
+                {
+                  "call_id": "9b1b2dc0e130a775",
+                  "aor": "sip:101@192.168.3.200",
+                  "registrar": "192.168.3.200",
+                  "status": "SUCCESS",
+                  "final_status_code": 200,
+                  "auth_challenges": 1,
+                  "start_time": 1787944285.34197,
+                  "end_time": 1787944285.377395,
+                  "ladder": [
+                    {
+                      "frame_number": 1,
+                      "timestamp": 1787944285.34197,
+                      "src": "192.168.150.12:5060",
+                      "dst": "192.168.3.200:5060",
+                      "label": "REGISTER",
+                      "method": "REGISTER",
+                      "status_code": null,
+                      "reason_phrase": null,
+                      "call_id": "9b1b2dc0e130a775",
+                      "cseq": 1,
+                      "cseq_method": "REGISTER",
+                      "from_uri": "sip:101@192.168.3.200",
+                      "to_uri": "sip:101@192.168.3.200",
+                      "from_tag": "13da7ac0",
+                      "to_tag": null,
+                      "via_branch": "z9hG4bK9b0bc488f04baf75",
+                      "contact": "<sip:101@192.168.150.12:5060>;expires=3600;identifier=starnet",
+                      "request_uri": "sip:192.168.3.200",
+                      "semantic": {
+                        "what_it_is": "向 SIP Registrar 注册当前用户/Contact",
+                        "why_it_appears": "当前端正在执行 REGISTER 协议动作",
+                        "is_expected": true,
+                        "expected_next": "等待认证挑战或 200 OK",
+                        "possible_problem": null,
+                        "case_specific_explanation": "向 SIP Registrar 注册当前用户/Contact"
+                      }
+                    },
+                    {
+                      "frame_number": 2,
+                      "timestamp": 1787944285.354417,
+                      "src": "192.168.3.200:5060",
+                      "dst": "192.168.150.12:5060",
+                      "label": "401 Unauthorized",
+                      "method": null,
+                      "status_code": 401,
+                      "reason_phrase": "Unauthorized",
+                      "call_id": "9b1b2dc0e130a775",
+                      "cseq": 1,
+                      "cseq_method": "REGISTER",
+                      "from_uri": "sip:101@192.168.3.200",
+                      "to_uri": "sip:101@192.168.3.200",
+                      "from_tag": "13da7ac0",
+                      "to_tag": "31561958-0-13c4-6a91ddba-24ac3563-6a91ddba",
+                      "via_branch": "z9hG4bK9b0bc488f04baf75",
+                      "contact": null,
+                      "request_uri": null,
+                      "semantic": {
+                        "what_it_is": "服务器发起 Digest Authentication 认证挑战",
+                        "why_it_appears": "这是 REGISTER Transaction 的 SIP 响应",
+                        "is_expected": true,
+                        "expected_next": "客户端通常携带 Authorization 重新发起请求",
+                        "possible_problem": null,
+                        "case_specific_explanation": "服务器发起 Digest Authentication 认证挑战；当前抓包随后出现同类请求重试，需要结合最终响应判断是否为正常认证流程"
+                      }
+                    },
+                    {
+                      "frame_number": 3,
+                      "timestamp": 1787944285.355453,
+                      "src": "192.168.150.12:5060",
+                      "dst": "192.168.3.200:5060",
+                      "label": "REGISTER",
+                      "method": "REGISTER",
+                      "status_code": null,
+                      "reason_phrase": null,
+                      "call_id": "9b1b2dc0e130a775",
+                      "cseq": 2,
+                      "cseq_method": "REGISTER",
+                      "from_uri": "sip:101@192.168.3.200",
+                      "to_uri": "sip:101@192.168.3.200",
+                      "from_tag": "13da7ac0",
+                      "to_tag": null,
+                      "via_branch": "z9hG4bK9b0bc74094311ed5",
+                      "contact": "<sip:101@192.168.150.12:5060>;expires=3600;identifier=starnet",
+                      "request_uri": "sip:192.168.3.200",
+                      "semantic": {
+                        "what_it_is": "向 SIP Registrar 注册当前用户/Contact",
+                        "why_it_appears": "当前端正在执行 REGISTER 协议动作",
+                        "is_expected": true,
+                        "expected_next": "等待认证挑战或 200 OK",
+                        "possible_problem": null,
+                        "case_specific_explanation": "向 SIP Registrar 注册当前用户/Contact"
+                      }
+                    },
+                    {
+                      "frame_number": 4,
+                      "timestamp": 1787944285.377395,
+                      "src": "192.168.3.200:5060",
+                      "dst": "192.168.150.12:5060",
+                      "label": "200 OK",
+                      "method": null,
+                      "status_code": 200,
+                      "reason_phrase": "OK",
+                      "call_id": "9b1b2dc0e130a775",
+                      "cseq": 2,
+                      "cseq_method": "REGISTER",
+                      "from_uri": "sip:101@192.168.3.200",
+                      "to_uri": "sip:101@192.168.3.200",
+                      "from_tag": "13da7ac0",
+                      "to_tag": "3155e3e8-0-13c4-6a91ddba-a0e6548-6a91ddba",
+                      "via_branch": "z9hG4bK9b0bc74094311ed5",
+                      "contact": "<sip:101@192.168.150.12:5060>;expires=1800",
+                      "request_uri": null,
+                      "semantic": {
+                        "what_it_is": "当前 SIP 请求处理成功",
+                        "why_it_appears": "这是 REGISTER Transaction 的 SIP 响应",
+                        "is_expected": true,
+                        "expected_next": "INVITE 的 200 OK 后应看到 ACK",
+                        "possible_problem": null,
+                        "case_specific_explanation": "当前 SIP 请求处理成功"
+                      }
+                    }
+                  ]
+                }
+              ],
+              "calls": [],
+              "rtp_streams": [],
+              "rtcp_reports": [],
+              "anomalies": [],
+              "source": {
+                "type": "pcap",
+                "tshark_version": "TShark (Wireshark) 4.4.16."
+              }
+            }
+          }
+        },
+        "fingerprint": "2decacf5821cd1f0a5d37dccd6d3072774478bb4564775e88ff5ab626ca6cd03"
+      },
+      "deterministic_baseline": {
+        "hypotheses": [],
+        "plan": [
+          {
+            "action_type": "RUN_MEDIA_ANALYSIS",
+            "reason": "发现PCAP但尚未执行统一SIP/RTP/PCM媒体分析。",
+            "risk_level": "L0",
+            "auto_execute": true,
+            "params": {
+              "evidence_id": "9c612ec5232ae737672f2f1eb7fabadc",
+              "profile_id": "ruijie_aim_diag_v1"
+            },
+            "priority": 5
+          }
+        ],
+        "conclusion_state": "NEED_MORE_EVIDENCE",
+        "summary": {
+          "headline": "需要补充证据",
+          "top_hypotheses": [],
+          "auto_action_count": 1,
+          "planned_action_count": 1
+        },
+        "known": [
+          "已发现 3 份PCAP/PCAPNG。",
+          "SIP注册会话 1 个：成功 1，失败 0。"
+        ],
+        "unknown": [],
+        "excluded": []
+      }
+    }
+  ],
+  "audit_events": [
+    {
+      "id": "57ac75dd-8ee7-450a-85ff-9eb85ec24c2c",
+      "case_id": "e6b66a36-201e-4aa7-97e9-5bec8d227ac3",
+      "actor": "real-sip-aba-promoter",
+      "actor_type": "USER",
+      "event_type": "CASE_CREATED",
+      "action": "CASE_CREATED",
+      "target_type": "case",
+      "target_id": "e6b66a36-201e-4aa7-97e9-5bec8d227ac3",
+      "detail": {
+        "sn": "G1U060H000384",
+        "ip": "10.48.8.74",
+        "ssh_port": 10002
+      },
+      "created_at": "2026-08-28T20:08:14.603331+00:00"
+    },
+    {
+      "id": "c932368f-6f9f-420f-b12b-57c2b4220a09",
+      "case_id": "e6b66a36-201e-4aa7-97e9-5bec8d227ac3",
+      "actor": "golden-candidate-engine",
+      "actor_type": "USER",
+      "event_type": "GOLDEN_CANDIDATE_STATE_CHANGED",
+      "action": "GOLDEN_CANDIDATE_STATE_CHANGED",
+      "target_type": "golden_candidate_assessment",
+      "target_id": "19fa202b-42c5-4485-b4d9-1b6f32cde4a4",
+      "detail": {
+        "assessment_version": "golden-candidate-v1",
+        "blocker_codes": [],
+        "gap_codes": [
+          "AUDIT_DIAGNOSIS_MISSING",
+          "NO_CASE_EVIDENCE",
+          "NO_COMPLETE_EVIDENCE",
+          "NO_DETERMINISTIC_BASELINE",
+          "NO_L1_EVIDENCE",
+          "NO_SUCCESSFUL_ANALYZER",
+          "ROOT_CAUSE_NOT_CONFIRMED",
+          "SNAPSHOT_NOT_READY"
+        ]
+      },
+      "created_at": "2026-08-28T20:08:14.648539+00:00"
+    },
+    {
+      "id": "763bf22a-7e69-49c9-9a33-11fdd1833375",
+      "case_id": "e6b66a36-201e-4aa7-97e9-5bec8d227ac3",
+      "actor": "real-sip-aba-promoter",
+      "actor_type": "USER",
+      "event_type": "EVIDENCE_CREATED",
+      "action": "EVIDENCE_CREATED",
+      "target_type": "evidence",
+      "target_id": "89a50140a7cea2b6e033f5ba3ad2729e",
+      "detail": {
+        "type": "PCAP",
+        "kind": "RAW",
+        "level": "L1",
+        "completeness": "COMPLETE",
+        "filename": "a1.pcap"
+      },
+      "created_at": "2026-08-28T20:08:14.665673+00:00"
+    },
+    {
+      "id": "1c6318b0-0e47-4d23-ab81-27bff6836a20",
+      "case_id": "e6b66a36-201e-4aa7-97e9-5bec8d227ac3",
+      "actor": "real-sip-aba-promoter",
+      "actor_type": "USER",
+      "event_type": "EVIDENCE_CREATED",
+      "action": "EVIDENCE_CREATED",
+      "target_type": "evidence",
+      "target_id": "40178239bef22b639d8c2667f9658e20",
+      "detail": {
+        "type": "PCAP",
+        "kind": "RAW",
+        "level": "L1",
+        "completeness": "COMPLETE",
+        "filename": "a2.pcap"
+      },
+      "created_at": "2026-08-28T20:08:14.674515+00:00"
+    },
+    {
+      "id": "6965994f-86e0-4da7-8395-bbf59fe803a3",
+      "case_id": "e6b66a36-201e-4aa7-97e9-5bec8d227ac3",
+      "actor": "real-sip-aba-promoter",
+      "actor_type": "USER",
+      "event_type": "EVIDENCE_CREATED",
+      "action": "EVIDENCE_CREATED",
+      "target_type": "evidence",
+      "target_id": "9c612ec5232ae737672f2f1eb7fabadc",
+      "detail": {
+        "type": "PCAP",
+        "kind": "RAW",
+        "level": "L1",
+        "completeness": "COMPLETE",
+        "filename": "b.pcap"
+      },
+      "created_at": "2026-08-28T20:08:14.680267+00:00"
+    },
+    {
+      "id": "b5b49e68-ad67-475a-bf36-0742873afb78",
+      "case_id": "e6b66a36-201e-4aa7-97e9-5bec8d227ac3",
+      "actor": "real-sip-aba-promoter",
+      "actor_type": "USER",
+      "event_type": "EVIDENCE_CREATED",
+      "action": "EVIDENCE_CREATED",
+      "target_type": "evidence",
+      "target_id": "1f6ad1773c06fc1418f3ee092aef27e2",
+      "detail": {
+        "type": "SIP_ABA_REPORT",
+        "kind": "DERIVED",
+        "level": "L1",
+        "completeness": "COMPLETE",
+        "filename": "sip_registration_aba.json"
+      },
+      "created_at": "2026-08-28T20:08:14.686258+00:00"
+    },
+    {
+      "id": "34033ff8-3390-4abb-9ec2-d8c9cf33fda7",
+      "case_id": "e6b66a36-201e-4aa7-97e9-5bec8d227ac3",
+      "actor": "real-sip-aba-promoter",
+      "actor_type": "USER",
+      "event_type": "PACKET_ANALYSIS_FINISHED",
+      "action": "PACKET_ANALYSIS_FINISHED",
+      "target_type": "analyzer_run",
+      "target_id": "e893a76d6577434e1f0fe540b2e0609f",
+      "detail": {
+        "evidence_id": "89a50140a7cea2b6e033f5ba3ad2729e",
+        "phase": "a1",
+        "analyzer_version": "0.5.0"
+      },
+      "created_at": "2026-08-28T20:08:16.048147+00:00"
+    },
+    {
+      "id": "ff21ae7b-0f2e-4297-8a4b-724ceaaef4bf",
+      "case_id": "e6b66a36-201e-4aa7-97e9-5bec8d227ac3",
+      "actor": "real-sip-aba-promoter",
+      "actor_type": "USER",
+      "event_type": "PACKET_ANALYSIS_FINISHED",
+      "action": "PACKET_ANALYSIS_FINISHED",
+      "target_type": "analyzer_run",
+      "target_id": "9ee396d216b12ca5f417a44c5e17839f",
+      "detail": {
+        "evidence_id": "40178239bef22b639d8c2667f9658e20",
+        "phase": "a2",
+        "analyzer_version": "0.5.0"
+      },
+      "created_at": "2026-08-28T20:08:16.495415+00:00"
+    },
+    {
+      "id": "5fbe6b7d-9c72-4a06-8a16-75bdd8f25b6b",
+      "case_id": "e6b66a36-201e-4aa7-97e9-5bec8d227ac3",
+      "actor": "real-sip-aba-promoter",
+      "actor_type": "USER",
+      "event_type": "DIAGNOSIS_CYCLE",
+      "action": "DIAGNOSIS_CYCLE",
+      "target_type": "diagnosis_run",
+      "target_id": "0cf204ac-d414-4ffb-9272-089aa90d1437",
+      "detail": {
+        "cycle": 1,
+        "conclusion_state": "NEED_MORE_EVIDENCE",
+        "hypothesis_count": 0
+      },
+      "created_at": "2026-08-28T20:08:16.507986+00:00"
+    },
+    {
+      "id": "d1a5fd8c-ee41-4d57-ac5a-8f095159ac77",
+      "case_id": "e6b66a36-201e-4aa7-97e9-5bec8d227ac3",
+      "actor": "real-sip-aba-promoter",
+      "actor_type": "USER",
+      "event_type": "HYPOTHESIS_CONFIRMED",
+      "action": "HYPOTHESIS_CONFIRMED",
+      "target_type": "hypothesis",
+      "target_id": "748aad91-1e06-463a-a155-061870aee4d1",
+      "detail": {
+        "code": "SIP_REGISTRATION_PATH_FAILURE",
+        "confirm_rule": "EXPERIMENT:SIP_REGISTRATION_EGRESS_BLOCK_ABA:ABA_REQUIRED",
+        "revision_id": "f6771975-2c04-4cc5-9bfb-e69ac6c485d2"
+      },
+      "created_at": "2026-08-28T20:08:16.518326+00:00"
+    },
+    {
+      "id": "d265314e-ede9-4df3-b616-7ac2759b0ac2",
+      "case_id": "e6b66a36-201e-4aa7-97e9-5bec8d227ac3",
+      "actor": "real-sip-aba-promoter",
+      "actor_type": "USER",
+      "event_type": "CASE_STATE_CHANGED",
+      "action": "CASE_STATE_CHANGED",
+      "target_type": "case",
+      "target_id": "e6b66a36-201e-4aa7-97e9-5bec8d227ac3",
+      "detail": {
+        "from": "DIAGNOSED",
+        "to": "ROOT_CAUSE_CONFIRMED",
+        "event": "ROOT_CAUSE_CONFIRMED",
+        "reason": "real DUT A-B-A confirmed",
+        "context": {}
+      },
+      "created_at": "2026-08-28T20:08:16.520818+00:00"
+    },
+    {
+      "id": "2bdd8544-9ff0-4a1e-a19f-d082459b9aa7",
+      "case_id": "e6b66a36-201e-4aa7-97e9-5bec8d227ac3",
+      "actor": "real-sip-aba-promoter",
+      "actor_type": "USER",
+      "event_type": "ROOT_CAUSE_CAUSALLY_CONFIRMED",
+      "action": "ROOT_CAUSE_CAUSALLY_CONFIRMED",
+      "target_type": "causal_assessment",
+      "target_id": "2883c287-985c-483b-930b-1e88e75cf25d",
+      "detail": {
+        "profile_id": "SIP_REGISTRATION_EGRESS_BLOCK_ABA",
+        "assessment_state": "ROOT_CAUSE_CONFIRMED"
+      },
+      "created_at": "2026-08-28T20:08:16.540036+00:00"
+    },
+    {
+      "id": "3f04db7b-d0f3-49b8-bdee-b63748a507b9",
+      "case_id": "e6b66a36-201e-4aa7-97e9-5bec8d227ac3",
+      "actor": "golden-candidate-engine",
+      "actor_type": "USER",
+      "event_type": "GOLDEN_CANDIDATE_STATE_CHANGED",
+      "action": "GOLDEN_CANDIDATE_STATE_CHANGED",
+      "target_type": "golden_candidate_assessment",
+      "target_id": "19fa202b-42c5-4485-b4d9-1b6f32cde4a4",
+      "detail": {
+        "assessment_version": "golden-candidate-v1",
+        "blocker_codes": [],
+        "gap_codes": []
+      },
+      "created_at": "2026-08-28T20:08:16.564586+00:00"
+    }
+  ],
+  "export_summary": {
+    "selected_count": 1,
+    "skipped_count": 6,
+    "skipped": [
+      {
+        "case_no": "VOIP-20260827-D38C67",
+        "reason": "GOLDEN_NOT_READY:PARTIAL_GOLDEN",
+        "blocker_codes": [],
+        "gap_codes": [
+          "ROOT_CAUSE_NOT_CONFIRMED"
+        ],
+        "next_steps": [
+          {
+            "code": "CONFIRM_ROOT_CAUSE",
+            "priority": "P0",
+            "action": "在直接证据支持后，由现有根因确认门禁完成ROOT_CAUSE_CONFIRMED。"
+          }
+        ]
+      },
+      {
+        "case_no": "VOIP-20260827-904B4B",
+        "reason": "GOLDEN_NOT_READY:PARTIAL_GOLDEN",
+        "blocker_codes": [],
+        "gap_codes": [
+          "NO_SUCCESSFUL_ANALYZER",
+          "ROOT_CAUSE_NOT_CONFIRMED"
+        ],
+        "next_steps": [
+          {
+            "code": "RUN_DETERMINISTIC_ANALYZERS",
+            "priority": "P0",
+            "action": "对已有关联证据运行Packet/PCM/Media等确定性Analyzer。"
+          },
+          {
+            "code": "CONFIRM_ROOT_CAUSE",
+            "priority": "P0",
+            "action": "在直接证据支持后，由现有根因确认门禁完成ROOT_CAUSE_CONFIRMED。"
+          }
+        ]
+      },
+      {
+        "case_no": "VOIP-20260826-8DF829",
+        "reason": "GOLDEN_NOT_READY:PARTIAL_GOLDEN",
+        "blocker_codes": [],
+        "gap_codes": [
+          "NO_SUCCESSFUL_ANALYZER",
+          "ROOT_CAUSE_NOT_CONFIRMED"
+        ],
+        "next_steps": [
+          {
+            "code": "RUN_DETERMINISTIC_ANALYZERS",
+            "priority": "P0",
+            "action": "对已有关联证据运行Packet/PCM/Media等确定性Analyzer。"
+          },
+          {
+            "code": "CONFIRM_ROOT_CAUSE",
+            "priority": "P0",
+            "action": "在直接证据支持后，由现有根因确认门禁完成ROOT_CAUSE_CONFIRMED。"
+          }
+        ]
+      },
+      {
+        "case_no": "VOIP-20260826-4645B1",
+        "reason": "GOLDEN_NOT_READY:PARTIAL_GOLDEN",
+        "blocker_codes": [],
+        "gap_codes": [
+          "NO_SUCCESSFUL_ANALYZER",
+          "ROOT_CAUSE_NOT_CONFIRMED"
+        ],
+        "next_steps": [
+          {
+            "code": "RUN_DETERMINISTIC_ANALYZERS",
+            "priority": "P0",
+            "action": "对已有关联证据运行Packet/PCM/Media等确定性Analyzer。"
+          },
+          {
+            "code": "CONFIRM_ROOT_CAUSE",
+            "priority": "P0",
+            "action": "在直接证据支持后，由现有根因确认门禁完成ROOT_CAUSE_CONFIRMED。"
+          }
+        ]
+      },
+      {
+        "case_no": "VOIP-20260826-240E61",
+        "reason": "GOLDEN_NOT_READY:NOT_ELIGIBLE",
+        "blocker_codes": [],
+        "gap_codes": [
+          "AUDIT_DIAGNOSIS_MISSING",
+          "NO_CASE_EVIDENCE",
+          "NO_COMPLETE_EVIDENCE",
+          "NO_DETERMINISTIC_BASELINE",
+          "NO_L1_EVIDENCE",
+          "NO_SUCCESSFUL_ANALYZER",
+          "ROOT_CAUSE_NOT_CONFIRMED",
+          "SNAPSHOT_NOT_READY"
+        ],
+        "next_steps": [
+          {
+            "code": "ADD_REAL_EVIDENCE",
+            "priority": "P0",
+            "action": "上传或自动采集当前Case的PCAP/PCM/日志等真实证据。"
+          },
+          {
+            "code": "RUN_DIAGNOSIS",
+            "priority": "P0",
+            "action": "运行确定性Diagnosis并形成可回放baseline。"
+          },
+          {
+            "code": "CONFIRM_ROOT_CAUSE",
+            "priority": "P0",
+            "action": "在直接证据支持后，由现有根因确认门禁完成ROOT_CAUSE_CONFIRMED。"
+          },
+          {
+            "code": "COMPLETE_AUDIT_TRAIL",
+            "priority": "P1",
+            "action": "补齐Case/Evidence/Analyzer/Diagnosis/根因确认相关审计链。"
+          }
+        ]
+      },
+      {
+        "case_no": "VOIP-20260826-4E6FD5",
+        "reason": "GOLDEN_NOT_READY:NOT_ELIGIBLE",
+        "blocker_codes": [],
+        "gap_codes": [
+          "AUDIT_DIAGNOSIS_MISSING",
+          "NO_CASE_EVIDENCE",
+          "NO_COMPLETE_EVIDENCE",
+          "NO_DETERMINISTIC_BASELINE",
+          "NO_L1_EVIDENCE",
+          "NO_SUCCESSFUL_ANALYZER",
+          "ROOT_CAUSE_NOT_CONFIRMED",
+          "SNAPSHOT_NOT_READY"
+        ],
+        "next_steps": [
+          {
+            "code": "ADD_REAL_EVIDENCE",
+            "priority": "P0",
+            "action": "上传或自动采集当前Case的PCAP/PCM/日志等真实证据。"
+          },
+          {
+            "code": "RUN_DIAGNOSIS",
+            "priority": "P0",
+            "action": "运行确定性Diagnosis并形成可回放baseline。"
+          },
+          {
+            "code": "CONFIRM_ROOT_CAUSE",
+            "priority": "P0",
+            "action": "在直接证据支持后，由现有根因确认门禁完成ROOT_CAUSE_CONFIRMED。"
+          },
+          {
+            "code": "COMPLETE_AUDIT_TRAIL",
+            "priority": "P1",
+            "action": "补齐Case/Evidence/Analyzer/Diagnosis/根因确认相关审计链。"
+          }
+        ]
+      }
+    ],
+    "quality_rule": "GOLDEN_READY + REAL + CONFIRMED hypothesis + ROOT_CAUSE_CONFIRMED/FIX_VERIFIED",
+    "require_golden_ready": true
+  }
+}

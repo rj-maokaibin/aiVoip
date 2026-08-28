@@ -1,0 +1,43 @@
+{
+  "schema_version": "p0-4-m7-production-strict-audit-v1",
+  "generated_at": "2026-08-28T20:23:14Z",
+  "master_sha": "103a3f0e62fdf5edaa38cd2de5f769819c64c823",
+  "aba_run_id": 33202388389,
+  "aba_evidence_artifact": "real-sip-registration-aba-33202388389-1",
+  "c06_m7_strict_audit": {"status": "PASS", "criteria_passed": 20, "criteria_total": 20, "strict_blockers": []},
+  "c01_golden": {
+    "case_no": "VOIP-20260828-FBCF64",
+    "case_id": "e6b66a36-201e-4aa7-97e9-5bec8d227ac3",
+    "status": "GOLDEN_READY",
+    "score": 96,
+    "verification_tier": "B",
+    "root_cause_confirmed": true,
+    "direct_l1_support": true,
+    "deterministic_baseline_ready": true,
+    "audit_coverage_complete": true,
+    "answer_leakage_risk": false,
+    "evidence_count": 4,
+    "confirmed_hypothesis_count": 1
+  },
+  "c06_golden_preserved_as_negative_sample": {
+    "case_no": "VOIP-20260827-D38C67",
+    "status": "PARTIAL_GOLDEN",
+    "gap_codes": ["ROOT_CAUSE_NOT_CONFIRMED"]
+  },
+  "ai_promotion_eligible": {
+    "status": "NOT_YET_ELIGIBLE",
+    "reason": "REAL_GOLDEN_READY_SAMPLE_COUNT_BELOW_MINIMUM",
+    "sample_count": 1,
+    "minimum_required": 10,
+    "note": "Golden contract gates PASS; real GOLDEN_READY samples (1) below ai_eval minimum_samples (10). No threshold lowered; no fabrication."
+  },
+  "safety_boundaries_verified": {
+    "pbx_mutated": false,
+    "persistent_firewall": false,
+    "default_route_mutated": false,
+    "scope": "DUT_LOCAL_OUTPUT_ONLY",
+    "exactly_one_dut": true,
+    "rollback_verified": true,
+    "secrets_0600_never_printed": true
+  }
+}

@@ -2,7 +2,7 @@
 
 > 执行范围：P0-1 → P0-5，按顺序自主推进。  
 > 仓库：`rj-maokaibin/aiVoip`  
-> 状态：**IN PROGRESS**  
+> 状态：**P0-3/P0-4 CLOSED — P0-5 IN PROGRESS**  
 > 维护规则：每个 P0 步骤完成、失败或发现事实修正时立即更新本记录；P0-5 同步 Living Document 与发布/验收材料。
 
 ---
@@ -260,22 +260,73 @@ read-only DUT capability probe
 
 只有该链真实成立后才进入 P0-4。
 
+### 3.6 P0-3 完成证据
+
+```text
+Real DUT A-B-A Live Gate run        = 33202388389 (master 103a3f0, real DUT e5bb3f33)
+Gate verdict                        = PASS
+causal_confirmation                 = CONFIRMED
+6 checks                            = A1_REGISTER_SUCCESS / B_RULE_HIT / B_REGISTER_SUCCESS_ABSENT
+                                      / B_TO_A2_EXACT_CLEANUP / A2_REGISTER_RECOVERED / A1_A2_ENVIRONMENT_INVARIANTS 全 PASS
+A1/A2 environment invariants        = EQUAL (serial/version/vlan/gateway/interface 无漂移)
+fault scope                         = DUT_LOCAL_OUTPUT_ONLY, pbx_mutated=false, persistent=false, default_route=false
+immutable evidence                  = real-sip-registration-aba-33202388389-1 (pcaps a1/a2/b + sip_registration_aba.json)
+DUT cleanup                         = 无残留 iptables / tcpdump / fence control 文件
+```
+
+桥接进 Golden 管线（`tools/promote_real_sip_aba_golden.py`，production worker 内执行）：
+
+```text
+new real-DUT C01 Case               = VOIP-20260828-FBCF64 (id e6b66a36)
+evidence                            = 4×COMPLETE L1 (a1/a2/b.pcap RAW + sip_registration_aba.json DERIVED)
+analyzer                            = packet_intelligence 0.5.0 ×2 SUCCESS (A1/A2)
+diagnosis baseline                  = DeterministicDiagnosisReasoner DIAGNOSED decision_json
+confirmed hypothesis                = SIP_REGISTRATION_PATH_FAILURE CONFIRMED (Direct L1 SUPPORT ×4 refs)
+CausalAssessment                    = ROOT_CAUSE_CONFIRMED (ABA_REQUIRED, gate checks)
+GoldenCandidateService.assess()     = GOLDEN_READY score 96 tier B
+```
+
+落盘：`validation/p0_3_c01_golden_strict_audit.json`、`validation/real_sip_aba_evidence_33202388389/`。
+
 ---
 
 ## 4. P0-4 — M7 Strict / Production Audit
 
-状态：**PENDING**
+状态：**CLOSED — RE-COMPUTED FROM CURRENT EVIDENCE**
 
-P0-3 完成后必须重新计算最终 M7/Golden/Promotion 状态。历史 strict single-session evidence 为 `PASS 20/20`，但不得直接继承旧 `golden_ready` / `ai_promotion_eligible` 布尔值。
+P0-3 完成后重新计算最终 M7/Golden/Promotion 状态。
 
-目标：
+权威 Evidence（本轮）：
+
+```text
+master SHA                          = 103a3f0e62fdf5edaa38cd2de5f769819c64c823
+Real DUT A-B-A Live Gate run        = 33202388389
+Immutable evidence artifact         = real-sip-registration-aba-33202388389-1
+C06 M7 strict single-session        = PASS 20/20 (target e54582b5, COMPLETED real flow)
+C01 real-DUT C01 golden case        = VOIP-20260828-FBCF64 (id e6b66a36)
+C01 GoldenCandidateService.assess() = GOLDEN_READY, score 96, tier B
+C01 root_cause_confirmed            = true
+C01 direct_l1_support               = true
+C01 audit_coverage_complete         = true
+C01 answer_leakage_risk             = false
+```
+
+重新计算结果：
 
 ```text
 strict single-session = PASS 20/20
 strict_blockers       = []
-golden_ready          = true
-ai_promotion_eligible = true
+golden_ready          = true  (real-DUT C01 golden case)
+ai_promotion_eligible = NOT_YET (real GOLDEN_READY samples=1 < minimum=10; 不降阈值)
 ```
+
+说明：
+
+- C06 继续作为正常通话负样本保留（`PARTIAL_GOLDEN`，缺口 `ROOT_CAUSE_NOT_CONFIRMED`），未被强制提升。
+- A-B-A gate 在 C06 下遗留的 4 个 CREATED/ARM_FAILED 占位 ReproductionSession（非真实 flow、无证据）已清理，以恢复 C06 strict single-session target 选择。
+- `ai_promotion_eligible` 依赖 `ai_eval_min_samples=10` 的真实 GOLDEN_READY 样本量；当前仅 1 个 real GOLDEN_READY case，按契约保持 NOT_YET，未人工伪造 PASS。
+
+落盘：`validation/p0_4_m7_production_strict_audit.json`、`validation/p0_4_m7_strict_c06.json`、`validation/p0_4_m7_strict_c01.json`。
 
 ---
 
@@ -297,7 +348,7 @@ ai_promotion_eligible = true
 ```text
 P0-1  CLOSED — evidence revalidation; no code change required
 P0-2  PASS   — exact-master Full Software Acceptance + Offline Golden #001
-P0-3  IN PROGRESS — C06 correctly preserved as negative sample; building real-DUT C01 controlled-fault Golden path
-P0-4  PENDING
-P0-5  PENDING / continuous documentation sync
+P0-3  CLOSED — real-DUT C01 controlled-fault Golden: A-B-A run 33202388389 PASS (CONFIRMED); promoted to GOLDEN_READY (VOIP-20260828-FBCF64)
+P0-4  CLOSED — M7 strict single-session PASS 20/20; C01 golden_ready=true; ai_promotion=NOT_YET (sample<10, no fabrication)
+P0-5  IN PROGRESS — document/evidence sync
 ```

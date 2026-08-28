@@ -1,0 +1,208 @@
+{
+  "schema_version": "m7-real-dut-strict-audit-v1",
+  "status": "BLOCKED",
+  "promotion_eligible": false,
+  "root_cause_confirmation_required_for_m7": false,
+  "criteria_total": 20,
+  "criteria_passed": 0,
+  "criteria_blocked": 20,
+  "blocked_ids": [
+    "M7-01",
+    "M7-02",
+    "M7-03",
+    "M7-04",
+    "M7-05",
+    "M7-06",
+    "M7-07",
+    "M7-08",
+    "M7-09",
+    "M7-10",
+    "M7-11",
+    "M7-12",
+    "M7-13",
+    "M7-14",
+    "M7-15",
+    "M7-16",
+    "M7-17",
+    "M7-18",
+    "M7-19",
+    "M7-20"
+  ],
+  "criteria": [
+    {
+      "id": "M7-01",
+      "key": "case_exists",
+      "title": "Case 已建立",
+      "mandatory": true,
+      "status": "BLOCKED",
+      "remediation": "通过正常入口创建并持久化 Case。"
+    },
+    {
+      "id": "M7-02",
+      "key": "dut_bound",
+      "title": "DUT 已绑定",
+      "mandatory": true,
+      "status": "BLOCKED",
+      "remediation": "为 Case 绑定被测 VOIP 设备。"
+    },
+    {
+      "id": "M7-03",
+      "key": "voice_context_ready",
+      "title": "Voice VLAN/接口/Gateway 上下文有效",
+      "mandatory": true,
+      "status": "BLOCKED",
+      "remediation": "运行真实平台 voice runtime context 解析并确认接口 UP。"
+    },
+    {
+      "id": "M7-04",
+      "key": "pcap_present",
+      "title": "PCAP 证据存在",
+      "mandatory": true,
+      "status": "BLOCKED",
+      "remediation": "通过 Case/Reproduction 流程采集并保留 PCAP。"
+    },
+    {
+      "id": "M7-05",
+      "key": "pcm_rx_present",
+      "title": "PCM RX 证据存在",
+      "mandatory": true,
+      "status": "BLOCKED",
+      "remediation": "启用并保留 PCM RX 采集。"
+    },
+    {
+      "id": "M7-06",
+      "key": "pcm_tx_present",
+      "title": "PCM TX 证据存在",
+      "mandatory": true,
+      "status": "BLOCKED",
+      "remediation": "启用并保留 PCM TX 采集。"
+    },
+    {
+      "id": "M7-07",
+      "key": "debug_present",
+      "title": "Debug/日志证据存在",
+      "mandatory": true,
+      "status": "BLOCKED",
+      "remediation": "启用必要 debug/log 并在结束后形成可追踪证据。"
+    },
+    {
+      "id": "M7-08",
+      "key": "packet_analyzer_success",
+      "title": "Packet/SIP/RTP Analyzer 成功",
+      "mandatory": true,
+      "status": "BLOCKED",
+      "remediation": "对 PCAP 运行确定性 Packet/SIP/RTP Analyzer。"
+    },
+    {
+      "id": "M7-09",
+      "key": "media_analyzer_success",
+      "title": "PCM/Media Analyzer 成功",
+      "mandatory": true,
+      "status": "BLOCKED",
+      "remediation": "对 PCM/Media 运行确定性 Analyzer。"
+    },
+    {
+      "id": "M7-10",
+      "key": "deterministic_diagnosis_ready",
+      "title": "确定性 Diagnosis baseline 已形成",
+      "mandatory": true,
+      "status": "BLOCKED",
+      "remediation": "运行 Diagnosis 直到形成 decision_json baseline。"
+    },
+    {
+      "id": "M7-11",
+      "key": "ai_shadow_present",
+      "title": "AI SHADOW 已实际运行",
+      "mandatory": true,
+      "status": "BLOCKED",
+      "remediation": "配置真实 Reasoning Gateway，并保持 AI_PROMOTION_STAGE=SHADOW。"
+    },
+    {
+      "id": "M7-12",
+      "key": "ai_grounded",
+      "title": "AI Proposal 通过 grounding/contract 校验",
+      "mandatory": true,
+      "status": "BLOCKED",
+      "remediation": "修复 Evidence 引用、Schema 或注册项问题，使至少一个 SHADOW proposal ACCEPTED。"
+    },
+    {
+      "id": "M7-13",
+      "key": "ai_authority_safe",
+      "title": "AI 未越权改变正式诊断",
+      "mandatory": true,
+      "status": "BLOCKED",
+      "remediation": "确保 ACCEPTED AI hypothesis 仍为 L5/OPEN/non-confirmable 且 formal_result_changed=false。"
+    },
+    {
+      "id": "M7-14",
+      "key": "reproduction_armed",
+      "title": "真实平台自动复现已成功 ARMED/WATCHING",
+      "mandatory": true,
+      "status": "BLOCKED",
+      "remediation": "由 real Reproduction Platform 和现有 Orchestrator 完成 arm validation。"
+    },
+    {
+      "id": "M7-15",
+      "key": "call_detected",
+      "title": "真实 Call 已识别、绑定并结束",
+      "mandatory": true,
+      "status": "BLOCKED",
+      "remediation": "完成一次真实拨号/通话，使 Call 生命周期可审计。"
+    },
+    {
+      "id": "M7-16",
+      "key": "cleanup_verified",
+      "title": "临时采集状态 Cleanup Verified",
+      "mandatory": true,
+      "status": "BLOCKED",
+      "remediation": "让 Orchestrator 完成 PCM/debug/tcpdump cleanup 并校验。"
+    },
+    {
+      "id": "M7-17",
+      "key": "no_active_lock",
+      "title": "无残留诊断锁",
+      "mandatory": true,
+      "status": "BLOCKED",
+      "remediation": "清理 ACTIVE/QUARANTINED DeviceDiagnosticLock。"
+    },
+    {
+      "id": "M7-18",
+      "key": "report_generated",
+      "title": "诊断报告已生成",
+      "mandatory": true,
+      "status": "BLOCKED",
+      "remediation": "生成 DiagnosisReport，至少包含 JSON/HTML 对象。"
+    },
+    {
+      "id": "M7-19",
+      "key": "golden_materialized",
+      "title": "Golden Candidate 已自动沉淀",
+      "mandatory": true,
+      "status": "BLOCKED",
+      "remediation": "等待自动评估 sidecar 或对单 Case 执行 refresh；不要求 GOLDEN_READY。"
+    },
+    {
+      "id": "M7-20",
+      "key": "audit_complete",
+      "title": "M7 核心 Audit 链完整",
+      "mandatory": true,
+      "status": "BLOCKED",
+      "remediation": "补齐 Case/Evidence/Analyzer/Diagnosis/AI/Reproduction/Call/Cleanup/Report 审计事件。"
+    }
+  ],
+  "observed": {
+    "case": {
+      "id": "e6b66a36-201e-4aa7-97e9-5bec8d227ac3",
+      "case_no": "VOIP-20260828-FBCF64"
+    },
+    "latest_session": null
+  },
+  "notes": [
+    "M7 validates one real-DUT diagnostic flow; it does not certify model quality.",
+    "Golden READY / ROOT_CAUSE_CONFIRMED / FIX_VERIFIED are independent maturity gates.",
+    "CONTROLLED_PLANNER remains governed by ai-promotion-gate-v1."
+  ],
+  "strict_blockers": [
+    "REPRODUCTION_SESSION_NOT_FOUND"
+  ]
+}

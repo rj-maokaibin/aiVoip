@@ -57,21 +57,21 @@
 但当前仍不能定义为 Production Ready，因为严格 Release Audit 仍显示：
 
 ```text
-GOLDEN_READY=false
-AI_PROMOTION_ELIGIBLE=false
+GOLDEN_READY=true        (real-DUT C01 golden case VOIP-20260828-FBCF64, score 96, tier B — 2026-08-28)
+AI_PROMOTION_ELIGIBLE=false  (real GOLDEN_READY samples=1 < minimum=10; 契约未降阈值)
 WS3_ENABLEMENT_ELIGIBLE=false
 ```
 
 并且当前仍存在：
 
-- Full Backend Release Evidence Integrity blocker；
-- Golden #00 HOLD / NOT READY。
+- Full Backend Release Evidence Integrity blocker 已由 P0-1 revalidation 关闭（不成立，无需代码修改）；
+- Golden #00 已由 real-DUT C01 A-B-A golden case 达成 GOLDEN_READY（C06 保留为负样本）。
 
 因此当前正式定性为：
 
-> **核心平台与主要自动诊断链基本落地，已进入 RC/最终验收阶段；功能工程完成度约 90%～95%（工程估算），但 Production Release Gate 尚未通过。**
+> **核心平台与主要自动诊断链基本落地，已进入 RC/最终验收阶段；功能工程完成度约 90%～95%（工程估算），但 Production Release Gate（含 AI Promotion 样本门槛）尚未全部通过。**
 
-注意：90%～95% 为基于 PRD/SPEC 与当前代码覆盖的工程估算，不是官方 Release Gate。Production Ready 是二值判断，目前仍为 **NOT READY**。
+注意：90%～95% 为基于 PRD/SPEC 与当前代码覆盖的工程估算，不是官方 Release Gate。Production Ready 是二值判断，目前仍为 **NOT READY**（唯一剩余硬门槛为 AI promotion 的 real GOLDEN_READY 样本量 ≥10）。
 
 ---
 
@@ -794,7 +794,17 @@ Production Enablement
 
 ### P0：先打穿 Production Gate
 
-当前最高优先级不是继续重构 Capture，而是收敛 Release Gate：
+当前最高优先级不是继续重构 Capture，而是收敛 Release Gate。2026-08-28 更新：
+
+```text
+1. ✅ Full Backend negative-path middleware contract —— P0-1 revalidation CLOSED（不成立，无代码修改）
+2. ✅ rerun Full Backend Acceptance —— P0-2 exact-master PASS
+3. ✅ FULL_BACKEND_ACCEPTANCE_RC_EVIDENCE_V1 —— integrity_has_blocker=false
+4. ✅ rerun Golden —— P0-3 real-DUT C01 A-B-A golden → GOLDEN_READY (VOIP-20260828-FBCF64)
+5. ✅ rerun M7 strict audit —— PASS 20/20 (C06), strict_blockers=[]
+6. ⏳ AI_PROMOTION_ELIGIBLE=true —— 待 real GOLDEN_READY 样本 ≥10（当前 1，契约未降阈值）
+7. ⏳ WS3_ENABLEMENT_ELIGIBLE=true —— 待 AI promotion 达成后评估
+```
 
 ```text
 1. 修复 / 收敛 Full Backend negative-path middleware contract

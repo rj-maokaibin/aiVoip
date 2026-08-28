@@ -1,0 +1,580 @@
+{
+  "schema_version": "m7-real-dut-strict-audit-v1",
+  "status": "PASS",
+  "promotion_eligible": false,
+  "root_cause_confirmation_required_for_m7": false,
+  "criteria_total": 20,
+  "criteria_passed": 20,
+  "criteria_blocked": 0,
+  "blocked_ids": [],
+  "criteria": [
+    {
+      "id": "M7-01",
+      "key": "case_exists",
+      "title": "Case 已建立",
+      "mandatory": true,
+      "status": "PASS",
+      "remediation": null
+    },
+    {
+      "id": "M7-02",
+      "key": "dut_bound",
+      "title": "DUT 已绑定",
+      "mandatory": true,
+      "status": "PASS",
+      "remediation": null
+    },
+    {
+      "id": "M7-03",
+      "key": "voice_context_ready",
+      "title": "Voice VLAN/接口/Gateway 上下文有效",
+      "mandatory": true,
+      "status": "PASS",
+      "remediation": null
+    },
+    {
+      "id": "M7-04",
+      "key": "pcap_present",
+      "title": "PCAP 证据存在",
+      "mandatory": true,
+      "status": "PASS",
+      "remediation": null
+    },
+    {
+      "id": "M7-05",
+      "key": "pcm_rx_present",
+      "title": "PCM RX 证据存在",
+      "mandatory": true,
+      "status": "PASS",
+      "remediation": null
+    },
+    {
+      "id": "M7-06",
+      "key": "pcm_tx_present",
+      "title": "PCM TX 证据存在",
+      "mandatory": true,
+      "status": "PASS",
+      "remediation": null
+    },
+    {
+      "id": "M7-07",
+      "key": "debug_present",
+      "title": "Debug/日志证据存在",
+      "mandatory": true,
+      "status": "PASS",
+      "remediation": null
+    },
+    {
+      "id": "M7-08",
+      "key": "packet_analyzer_success",
+      "title": "Packet/SIP/RTP Analyzer 成功",
+      "mandatory": true,
+      "status": "PASS",
+      "remediation": null
+    },
+    {
+      "id": "M7-09",
+      "key": "media_analyzer_success",
+      "title": "PCM/Media Analyzer 成功",
+      "mandatory": true,
+      "status": "PASS",
+      "remediation": null
+    },
+    {
+      "id": "M7-10",
+      "key": "deterministic_diagnosis_ready",
+      "title": "确定性 Diagnosis baseline 已形成",
+      "mandatory": true,
+      "status": "PASS",
+      "remediation": null
+    },
+    {
+      "id": "M7-11",
+      "key": "ai_shadow_present",
+      "title": "AI SHADOW 已实际运行",
+      "mandatory": true,
+      "status": "PASS",
+      "remediation": null
+    },
+    {
+      "id": "M7-12",
+      "key": "ai_grounded",
+      "title": "AI Proposal 通过 grounding/contract 校验",
+      "mandatory": true,
+      "status": "PASS",
+      "remediation": null
+    },
+    {
+      "id": "M7-13",
+      "key": "ai_authority_safe",
+      "title": "AI 未越权改变正式诊断",
+      "mandatory": true,
+      "status": "PASS",
+      "remediation": null
+    },
+    {
+      "id": "M7-14",
+      "key": "reproduction_armed",
+      "title": "真实平台自动复现已成功 ARMED/WATCHING",
+      "mandatory": true,
+      "status": "PASS",
+      "remediation": null
+    },
+    {
+      "id": "M7-15",
+      "key": "call_detected",
+      "title": "真实 Call 已识别、绑定并结束",
+      "mandatory": true,
+      "status": "PASS",
+      "remediation": null
+    },
+    {
+      "id": "M7-16",
+      "key": "cleanup_verified",
+      "title": "临时采集状态 Cleanup Verified",
+      "mandatory": true,
+      "status": "PASS",
+      "remediation": null
+    },
+    {
+      "id": "M7-17",
+      "key": "no_active_lock",
+      "title": "无残留诊断锁",
+      "mandatory": true,
+      "status": "PASS",
+      "remediation": null
+    },
+    {
+      "id": "M7-18",
+      "key": "report_generated",
+      "title": "诊断报告已生成",
+      "mandatory": true,
+      "status": "PASS",
+      "remediation": null
+    },
+    {
+      "id": "M7-19",
+      "key": "golden_materialized",
+      "title": "Golden Candidate 已自动沉淀",
+      "mandatory": true,
+      "status": "PASS",
+      "remediation": null
+    },
+    {
+      "id": "M7-20",
+      "key": "audit_complete",
+      "title": "M7 核心 Audit 链完整",
+      "mandatory": true,
+      "status": "PASS",
+      "remediation": null
+    }
+  ],
+  "observed": {
+    "case": {
+      "id": "aac85696-dc36-49d3-9bc5-ea27f1a1e9a7",
+      "case_no": "VOIP-20260827-D38C67",
+      "status": "WAITING_USER"
+    },
+    "target_session": {
+      "id": "e54582b5-ec49-4e9f-8435-2bc224b30cec",
+      "state": "COMPLETED",
+      "platform_profile_id": "mock-voip-platform",
+      "platform_profile_version": "1.0.0",
+      "cleanup_status": "CLEANUP_VERIFIED",
+      "capture_completeness": "COMPLETE",
+      "created_at": "2026-08-27 04:35:41.194528+00:00",
+      "started_at": "2026-08-27 04:35:44.122964+00:00",
+      "legacy_real_resolver_fallback": true
+    },
+    "device": {
+      "id": "e5bb3f33-dc41-40a4-85ad-6233466e0800",
+      "sn": "G1U060H000384",
+      "platform_id": "mt7981",
+      "ssh_port": 10002
+    },
+    "channel_health": {
+      "PCM_RX": {
+        "status": "HEALTHY",
+        "packet_count": 2630,
+        "last_observed_at": "2026-08-27 04:37:22.240208+00:00",
+        "health_json": {
+          "status": "STARTING",
+          "packet_count": 2630,
+          "advancing": true,
+          "enabled": true,
+          "configured": true,
+          "verification_pending": false,
+          "readiness_phase": "DATA_PLANE_VERIFIED",
+          "dst_port": 40000
+        }
+      },
+      "LOG": {
+        "status": "HEALTHY",
+        "packet_count": 0,
+        "last_observed_at": "2026-08-27 04:35:50.653152+00:00",
+        "health_json": {
+          "status": "HEALTHY",
+          "packet_count": 0,
+          "advancing": true,
+          "enabled": true
+        }
+      },
+      "DEBUG": {
+        "status": "HEALTHY",
+        "packet_count": 0,
+        "last_observed_at": "2026-08-27 04:35:53.921245+00:00",
+        "health_json": {
+          "status": "HEALTHY",
+          "packet_count": 0,
+          "advancing": true,
+          "enabled": true,
+          "reader_alive": true,
+          "heartbeat": true,
+          "runtime_ready": true,
+          "readiness_phase": "WATCH_RUNTIME_READY",
+          "debug_enable_acknowledged": true
+        }
+      },
+      "PCAP": {
+        "status": "HEALTHY",
+        "packet_count": 8320,
+        "last_observed_at": "2026-08-27 04:37:22.239616+00:00",
+        "health_json": {
+          "status": "HEALTHY",
+          "packet_count": 8320,
+          "advancing": true,
+          "enabled": true,
+          "pcap_header_valid": false,
+          "capture_path_ready": true,
+          "verification_pending": false,
+          "readiness_phase": "DATA_PLANE_VERIFIED",
+          "capture_engine": "V2",
+          "producer_count": 1,
+          "exact_producer_count": 1,
+          "lease_epoch": 1,
+          "header_size": 24,
+          "header_magic": "",
+          "stage1": {
+            "ready": true,
+            "readiness_status": "READY",
+            "readiness_reasons": [],
+            "checks": {
+              "lease_active": true,
+              "exactly_one_producer": true,
+              "voice_context_ready": true,
+              "pcap_ready": true,
+              "fxs_ready": true,
+              "pcm_control_ready": true,
+              "server_store_ready": true,
+              "transfer_ready": true,
+              "storage_guard_ready": true,
+              "watchdog_ready": true
+            },
+            "producer_count": 1,
+            "exact_producer_count": 1,
+            "active_dir_exists": true,
+            "lease_epoch": 1,
+            "store_probe": {
+              "ok": true,
+              "error": null
+            },
+            "transfer_probe": {
+              "ok": true,
+              "bytes": 264,
+              "error": null
+            },
+            "spool_pressure": {
+              "state": "NORMAL",
+              "unacked_bytes": 0,
+              "oldest_unacked_seconds": 0.0,
+              "reasons": []
+            },
+            "watchdog": {
+              "healthy": true,
+              "reasons": []
+            }
+          }
+        }
+      },
+      "PCM_TX": {
+        "status": "HEALTHY",
+        "packet_count": 2630,
+        "last_observed_at": "2026-08-27 04:37:22.240794+00:00",
+        "health_json": {
+          "status": "STARTING",
+          "packet_count": 2630,
+          "advancing": true,
+          "enabled": true,
+          "configured": true,
+          "verification_pending": false,
+          "readiness_phase": "DATA_PLANE_VERIFIED",
+          "dst_port": 50000
+        }
+      }
+    },
+    "capture_segments": [
+      {
+        "id": "036c2701-3a70-4106-9d6e-252ec000897d",
+        "channel": "PCAP",
+        "status": "EVICTED"
+      },
+      {
+        "id": "6f74ed96-9a9b-48c0-aa98-b5da6437fe3f",
+        "channel": "PCAP",
+        "status": "EVICTED"
+      },
+      {
+        "id": "69fae23e-f330-47a3-8202-cd723e7deb91",
+        "channel": "PCAP",
+        "status": "EVICTED"
+      },
+      {
+        "id": "134f2617-0719-49a1-bc25-766bdbc63bc2",
+        "channel": "PCAP",
+        "status": "RETAINED"
+      },
+      {
+        "id": "3fd938d8-5bb1-4c4e-be65-a49c48e5753f",
+        "channel": "PCAP",
+        "status": "RETAINED"
+      },
+      {
+        "id": "ab32d80c-623d-488f-90c9-83666a425bce",
+        "channel": "PCAP",
+        "status": "RETAINED"
+      },
+      {
+        "id": "ca964a9e-efcd-40e8-845a-e219af7e8e22",
+        "channel": "PCAP",
+        "status": "EVICTED"
+      },
+      {
+        "id": "9a507bec-34d0-47a3-b020-9581a9a5e0fc",
+        "channel": "PCAP",
+        "status": "RETAINED"
+      },
+      {
+        "id": "1e0ff622-c7c6-48ca-8db8-9544b1ea8bb6",
+        "channel": "PCAP",
+        "status": "RETAINED"
+      },
+      {
+        "id": "4ff257f7-0414-45f1-8b7c-c79ed732b588",
+        "channel": "PCAP",
+        "status": "RETAINED"
+      },
+      {
+        "id": "3db37cfb-a94b-42a0-a68d-c779d1a66c69",
+        "channel": "PCAP",
+        "status": "EVICTED"
+      },
+      {
+        "id": "23fa1246-12c0-45e6-b8f3-e92e84c1977a",
+        "channel": "PCAP",
+        "status": "EVICTED"
+      },
+      {
+        "id": "2a534461-519a-4dfa-8145-759c70dc13a0",
+        "channel": "PCAP",
+        "status": "EVICTED"
+      },
+      {
+        "id": "e5d9bab7-aff0-4005-b635-0944fc788b03",
+        "channel": "PCAP",
+        "status": "EVICTED"
+      },
+      {
+        "id": "89413c93-b341-45ef-a459-15c3c819c34e",
+        "channel": "PCAP",
+        "status": "EVICTED"
+      },
+      {
+        "id": "6b158216-52b8-4869-95db-d6bc7c9edc09",
+        "channel": "PCAP",
+        "status": "EVICTED"
+      }
+    ],
+    "target_evidence": {
+      "count": 9,
+      "ids": [
+        "3f7e7318-de60-4b64-a019-56794b897f04",
+        "42543454-d8e1-41c7-950b-87a520b2f3e5",
+        "995dea24-595a-467f-bfa0-eafb8b8c2761",
+        "a12add8b-687c-47a5-823b-f1e9478c717c",
+        "a839ada5-c65b-45e9-9642-980636decee9",
+        "b82c872a-9a36-44b0-928e-70d174a3091a",
+        "c931f682-ea6c-4524-9138-2cf4bd86912e",
+        "e090de5d-dfdd-451e-adc6-e22a871d788e",
+        "f3cf4e35-b858-43e2-afb7-ec17385287d9"
+      ],
+      "types": [
+        "CALL_PCAP",
+        "CALL_QUICK_FINDINGS",
+        "PCAP_SEGMENT",
+        "SESSION_PCAP"
+      ],
+      "provenance_closure_ids": [
+        "3f7e7318-de60-4b64-a019-56794b897f04",
+        "42543454-d8e1-41c7-950b-87a520b2f3e5",
+        "995dea24-595a-467f-bfa0-eafb8b8c2761",
+        "a12add8b-687c-47a5-823b-f1e9478c717c",
+        "a839ada5-c65b-45e9-9642-980636decee9",
+        "b82c872a-9a36-44b0-928e-70d174a3091a",
+        "c931f682-ea6c-4524-9138-2cf4bd86912e",
+        "e090de5d-dfdd-451e-adc6-e22a871d788e",
+        "f3cf4e35-b858-43e2-afb7-ec17385287d9"
+      ]
+    },
+    "linked_analyzers": [
+      {
+        "id": "1be06e9a-10fc-49c6-ba86-e76865be34c2",
+        "name": "REPRODUCTION_CALL_QUICK_EVIDENCE",
+        "status": "PARTIAL_SUCCESS",
+        "input_evidence_ids": [
+          "c931f682-ea6c-4524-9138-2cf4bd86912e"
+        ],
+        "output_evidence_ids": [
+          "a839ada5-c65b-45e9-9642-980636decee9"
+        ]
+      },
+      {
+        "id": "6b0e4c40-18af-414c-8690-1513aee0361e",
+        "name": "media_intelligence",
+        "status": "SUCCESS",
+        "input_evidence_ids": [
+          "a12add8b-687c-47a5-823b-f1e9478c717c"
+        ],
+        "output_evidence_ids": []
+      },
+      {
+        "id": "e5f14c4e-e9ff-4565-9116-9bac3df6e45a",
+        "name": "pcm_intelligence",
+        "status": "SUCCESS",
+        "input_evidence_ids": [
+          "c931f682-ea6c-4524-9138-2cf4bd86912e"
+        ],
+        "output_evidence_ids": []
+      },
+      {
+        "id": "53967653-66e0-445c-b789-8127770d1571",
+        "name": "packet_intelligence",
+        "status": "SUCCESS",
+        "input_evidence_ids": [
+          "c931f682-ea6c-4524-9138-2cf4bd86912e"
+        ],
+        "output_evidence_ids": []
+      }
+    ],
+    "diagnosis": {
+      "id": "42eb54f0-3579-414f-bb0b-1fc948d04992",
+      "status": "WAITING_USER",
+      "reasoner": "DeterministicDiagnosisReasoner"
+    },
+    "ai_shadow": [
+      {
+        "id": "fa76a913-d7ca-40f0-866f-587c9c7cf801",
+        "status": "ACCEPTED",
+        "model": "deepseek-v4-flash",
+        "validation_errors": []
+      }
+    ],
+    "calls": [
+      {
+        "id": "54922a65-780e-43d4-93a7-33637941ae06",
+        "status": "ANALYZED",
+        "verdict": "INCONCLUSIVE",
+        "role": "INCONCLUSIVE"
+      }
+    ],
+    "cleanup_runs": [
+      {
+        "id": "9552a420-dcd6-4358-af99-c819caeccdd0",
+        "status": "VERIFIED"
+      }
+    ],
+    "active_lock_count": 0,
+    "reports": [
+      {
+        "id": "2a881e97-8664-4b5c-bfcc-1af0a659d85e",
+        "status": "GENERATED"
+      }
+    ],
+    "golden": {
+      "status": "PARTIAL_GOLDEN",
+      "verification_tier": null,
+      "score": 70,
+      "blocker_codes": [],
+      "gap_codes": [
+        "ROOT_CAUSE_NOT_CONFIRMED"
+      ]
+    },
+    "case_audit_event_types": [
+      "AI_PROPOSAL_EVALUATED",
+      "AI_READONLY_ASSURANCE_EVALUATED",
+      "CASE_CREATED",
+      "CASE_STATE_CHANGED",
+      "DIAGNOSIS_CYCLE",
+      "DIAGNOSIS_REPORT_GENERATED",
+      "DIAGNOSIS_STARTED",
+      "DIAGNOSTIC_QUESTION_CHANGED",
+      "EVIDENCE_CREATED",
+      "FEISHU_EVIDENCE_DOCUMENT_FAILED",
+      "FXS_MONITOR_READY",
+      "GOLDEN_CANDIDATE_STATE_CHANGED",
+      "JOB_STATE_CHANGED",
+      "MEDIA_ANALYSIS_FINISHED",
+      "MEDIA_ANALYSIS_JOB_CREATED",
+      "PACKET_ANALYSIS_FINISHED",
+      "PACKET_ANALYSIS_JOB_CREATED",
+      "PCM_ANALYSIS_FINISHED",
+      "PCM_ANALYSIS_JOB_CREATED",
+      "PRELIMINARY_EVIDENCE_REPORT_GENERATED",
+      "REPRODUCTION_ARM_VALIDATED",
+      "REPRODUCTION_ATTEMPT_CHANGED",
+      "REPRODUCTION_CALL_CHANGED",
+      "REPRODUCTION_CLEANUP_VALIDATED",
+      "REPRODUCTION_CREATED",
+      "REPRODUCTION_STATE_CHANGED"
+    ],
+    "target_flow_audit_event_types": [
+      "AI_PROPOSAL_EVALUATED",
+      "AI_READONLY_ASSURANCE_EVALUATED",
+      "CASE_STATE_CHANGED",
+      "DIAGNOSIS_CYCLE",
+      "DIAGNOSIS_REPORT_GENERATED",
+      "DIAGNOSIS_STARTED",
+      "DIAGNOSTIC_QUESTION_CHANGED",
+      "EVIDENCE_CREATED",
+      "FEISHU_EVIDENCE_DOCUMENT_FAILED",
+      "FXS_MONITOR_READY",
+      "GOLDEN_CANDIDATE_STATE_CHANGED",
+      "JOB_STATE_CHANGED",
+      "MEDIA_ANALYSIS_FINISHED",
+      "MEDIA_ANALYSIS_JOB_CREATED",
+      "PACKET_ANALYSIS_FINISHED",
+      "PACKET_ANALYSIS_JOB_CREATED",
+      "PCM_ANALYSIS_FINISHED",
+      "PCM_ANALYSIS_JOB_CREATED",
+      "PRELIMINARY_EVIDENCE_REPORT_GENERATED",
+      "REPRODUCTION_ARM_VALIDATED",
+      "REPRODUCTION_ATTEMPT_CHANGED",
+      "REPRODUCTION_CALL_CHANGED",
+      "REPRODUCTION_CLEANUP_VALIDATED",
+      "REPRODUCTION_STATE_CHANGED"
+    ]
+  },
+  "notes": [
+    "M7 validates one real-DUT diagnostic flow; it does not certify model quality.",
+    "Golden READY / ROOT_CAUSE_CONFIRMED / FIX_VERIFIED are independent maturity gates.",
+    "CONTROLLED_PLANNER remains governed by ai-promotion-gate-v1."
+  ],
+  "strict_scope": {
+    "mode": "LATEST_REPRODUCTION_MUST_BE_SINGLE_REAL_FLOW",
+    "session_id": "e54582b5-ec49-4e9f-8435-2bc224b30cec",
+    "cross_session_mosaicking_allowed": false,
+    "analyzer_requires_target_evidence_provenance": true
+  },
+  "warnings": [
+    "PLATFORM_PROFILE_ID_LEGACY_MOCK_FALLBACK"
+  ]
+}
