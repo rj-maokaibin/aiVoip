@@ -16,6 +16,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: prd-spec-v1-release-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   full-software-acceptance:
     runs-on:
@@ -31,6 +35,9 @@ jobs:
       VOIP_AI_GATE_VENV: /tmp/voip-ai-release-gate-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 1
 
       - name: Environment and prepared-PCAP identity
         run: |
