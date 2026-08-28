@@ -1,0 +1,231 @@
+name: Real DUT SIP Registration A-B-A Live Gate
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: real-dut-sip-registration-aba-live
+  cancel-in-progress: false
+
+jobs:
+  real-sip-registration-aba:
+    if: >-
+      github.event.issue.pull_request != null &&
+      github.event.comment.user.login == github.repository_owner &&
+      startsWith(github.event.comment.body, '/run-real-sip-aba ')
+    runs-on:
+      - self-hosted
+      - linux
+      - x64
+      - voip-controlled-linux
+    timeout-minutes: 30
+    env:
+      REAL_LIVE_MUTATION: EXPLICIT_ONLY
+      REPRODUCTION_PLATFORM_MODE: real
+      SIP_ABA_ENV_FILE: /home/github-runner/.config/voip-ai/.env
+      SIP_ABA_VENV: /tmp/voip-ai-real-sip-aba-${{ github.run_id }}-${{ github.run_attempt }}
+      SIP_ABA_OUTPUT_ROOT: /tmp/voip-ai-real-sip-aba-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+      SIP_ABA_PHASE_SECONDS_DEFAULT: '75'
+    steps:
+      - name: Checkout exact master
+        uses: actions/checkout@v4
+        with:
+          ref: master
+
+      - name: Authorize exact master SHA
+        shell: bash
+        env:
+          TRIGGER_BODY: ${{ github.event.comment.body }}
+          TRIGGER_ACTOR: ${{ github.event.comment.user.login }}
+        run: |
+          set -euo pipefail
+          head_sha="$(git rev-parse HEAD)"
+          expected="/run-real-sip-aba ${head_sha}"
+          test "$TRIGGER_ACTOR" = "$GITHUB_REPOSITORY_OWNER"
+          if [ "$TRIGGER_BODY" != "$expected" ]; then
+            printf 'Refusing stale or malformed live trigger. expected=%s\n' "$expected" >&2
+            exit 64
+          fi
+          printf 'LIVE_GATE_MASTER_SHA=%s\n' "$head_sha"
+          printf 'LIVE_GATE_TRIGGER_ACTOR=%s\n' "$TRIGGER_ACTOR"
+
+      - name: Prepare isolated Python and TShark runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -r "$SIP_ABA_ENV_FILE"
+          rm -rf "$SIP_ABA_VENV"
+          python3 -m venv "$SIP_ABA_VENV"
+          "$SIP_ABA_VENV/bin/pip" install --disable-pip-version-check -q -r backend/requirements.txt
+
+          if command -v tshark >/dev/null 2>&1; then
+            tshark_bin="$(command -v tshark)"
+          else
+            root="$RUNNER_TEMP/tshark-root-sip-aba"
+            debs="$RUNNER_TEMP/tshark-debs-sip-aba"
+            rm -rf "$root" "$debs"
+            mkdir -p "$root" "$debs"
+            cd "$debs"
+            mapfile -t pkgs < <(apt-cache depends --recurse --no-recommends --no-suggests --no-conflicts --no-breaks --no-replaces --no-enhances tshark | awk '/^[^ <][^:]*$/ {print $1}' | sort -u)
+            miss=()
+            for p in "${pkgs[@]}"; do
+              dpkg-query -W -f='${Status}' "$p" 2>/dev/null | grep -q 'install ok installed' || miss+=("$p")
+            done
+            [ ${#miss[@]} -eq 0 ] || apt-get download "${miss[@]}"
+            shopt -s nullglob
+            for d in ./*.deb; do dpkg-deb -x "$d" "$root"; done
+            tshark_bin="$RUNNER_TEMP/tshark-userspace-sip-aba"
+            printf '#!/bin/bash\nexport LD_LIBRARY_PATH="%s/usr/lib/x86_64-linux-gnu:%s/lib/x86_64-linux-gnu:${LD_LIBRARY_PATH:-}"\nexport WIRESHARK_DATA_DIR="%s/usr/share/wireshark"\nexec "%s/usr/bin/tshark" "$@"\n' "$root" "$root" "$root" "$root" > "$tshark_bin"
+            chmod +x "$tshark_bin"
+          fi
+          "$tshark_bin" -v | head -n1
+          printf 'TSHARK_BINARY=%s\n' "$tshark_bin" >> "$GITHUB_ENV"
+
+      - name: Resolve exactly one eligible DUT
+        id: resolve
+        shell: bash
+        run: |
+          set -euo pipefail
+          set -a
+          source "$SIP_ABA_ENV_FILE"
+          set +a
+          export PYTHONPATH="$GITHUB_WORKSPACE/backend"
+          mkdir -p "$SIP_ABA_OUTPUT_ROOT"
+          "$SIP_ABA_VENV/bin/python" - <<'PY'
+          import json
+          import os
+          import shlex
+          from pathlib import Path
+          from sqlalchemy import select
+          from app.db.models import CaseDevice, ReproductionSession
+          from app.db.session import SessionLocal
+
+          selector_id = next((os.getenv(k, '').strip() for k in (
+              'SIP_ABA_DEVICE_ID', 'REAL_DUT_DEVICE_ID', 'CAPTURE_GATE_DEVICE_ID'
+          ) if os.getenv(k, '').strip()), '')
+          selector_sn = next((os.getenv(k, '').strip() for k in (
+              'SIP_ABA_DEVICE_SN', 'REAL_DUT_DEVICE_SN', 'CAPTURE_GATE_DEVICE_SN'
+          ) if os.getenv(k, '').strip()), '')
+
+          with SessionLocal() as db:
+              devices = list(db.scalars(select(CaseDevice).order_by(CaseDevice.created_at.desc())).all())
+              eligible = []
+              for device in devices:
+                  template = db.scalar(
+                      select(ReproductionSession.id)
+                      .where(ReproductionSession.device_id == device.id)
+                      .order_by(ReproductionSession.created_at.desc())
+                      .limit(1)
+                  )
+                  if template is not None and str(device.ip or '').strip() and str(device.sn or '').strip():
+                      eligible.append(device)
+
+              if selector_id:
+                  selected = [d for d in eligible if str(d.id) == selector_id]
+              elif selector_sn:
+                  selected = [d for d in eligible if str(d.sn) == selector_sn]
+              else:
+                  selected = eligible
+
+              inventory = [
+                  {
+                      'device_id': str(d.id),
+                      'sn': str(d.sn),
+                      'ip': str(d.ip),
+                      'platform_id': d.platform_id,
+                      'model': (d.device_info or {}).get('model') or (d.device_info or {}).get('product_model'),
+                      'created_at': d.created_at.isoformat() if d.created_at else None,
+                  }
+                  for d in selected
+              ]
+              Path(os.environ['SIP_ABA_OUTPUT_ROOT'], 'dut_candidates.json').write_text(
+                  json.dumps({'selector_id': bool(selector_id), 'selector_sn': bool(selector_sn), 'candidates': inventory}, indent=2) + '\n',
+                  encoding='utf-8',
+              )
+              if len(selected) != 1:
+                  raise SystemExit(f'SIP_ABA_DUT_SELECTION_NOT_UNIQUE count={len(selected)}')
+              d = selected[0]
+              info = dict(d.device_info or {})
+              model = str(info.get('model') or info.get('product_model') or d.platform_id or '').strip()
+              if not model:
+                  raise SystemExit('SIP_ABA_DEVICE_MODEL_UNAVAILABLE')
+
+              values = {
+                  'DEVICE_ID': str(d.id),
+                  'DEVICE_SN': str(d.sn),
+                  'DEVICE_HOST': str(d.ip),
+                  'DEVICE_PORT': str(int(d.ssh_port or 22)),
+                  'DEVICE_USER': str(d.username or 'admin'),
+                  'DEVICE_MODEL': model,
+                  'DEVICE_PLATFORM': str(d.platform_id or ''),
+              }
+              shell_path = Path(os.environ['SIP_ABA_OUTPUT_ROOT'], 'resolved_dut.env')
+              shell_path.write_text(''.join(f'{k}={shlex.quote(v)}\n' for k, v in values.items()), encoding='utf-8')
+              print(json.dumps({k: v for k, v in values.items() if k not in {'DEVICE_SN'}}, sort_keys=True))
+          PY
+
+      - name: Execute real A1 B A2 with mandatory cleanup
+        id: aba
+        shell: bash
+        run: |
+          set -uo pipefail
+          set -a
+          source "$SIP_ABA_ENV_FILE"
+          source "$SIP_ABA_OUTPUT_ROOT/resolved_dut.env"
+          set +a
+          export PYTHONPATH="$GITHUB_WORKSPACE/backend"
+          export REAL_LIVE_MUTATION=EXPLICIT_ONLY
+          export REPRODUCTION_PLATFORM_MODE=real
+          export TSHARK_BINARY="$TSHARK_BINARY"
+
+          phase_seconds="${SIP_ABA_PHASE_SECONDS:-$SIP_ABA_PHASE_SECONDS_DEFAULT}"
+          trigger_command="${SIP_ABA_REGISTRATION_TRIGGER_COMMAND:-}"
+          serial_command='v="$(uci -q get sysinfo.@sysinfo[0].serial_number 2>/dev/null || true)"; [ -n "$v" ] || v="$(uci -q get sysinfo.@sysinfo[0].sn 2>/dev/null || true)"; [ -n "$v" ] || v="$(uci -q get sysinfo.@sysinfo[0].serial 2>/dev/null || true)"; [ -n "$v" ] || exit 44; printf "%s\\n" "$v"'
+          version_command='uci -q get sysinfo.@sysinfo[0].software_version'
+
+          args=(
+            -m app.capture_v2.gate.cli sip-registration-aba
+            --device-id "$DEVICE_ID"
+            --model "$DEVICE_MODEL"
+            --host "$DEVICE_HOST"
+            --port "$DEVICE_PORT"
+            --username "$DEVICE_USER"
+            --password-env "DB:$DEVICE_SN"
+            --reproduction-session-id AUTO_NEW
+            --worker-id "github-real-sip-aba-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+            --gate-id SIP-REGISTRATION-ABA
+            --phase-seconds "$phase_seconds"
+            --sip-transport "${SIP_ABA_SIP_TRANSPORT:-udp}"
+            --serial-command "$serial_command"
+            --software-version-command "$version_command"
+            --profile-root "$GITHUB_WORKSPACE/profiles"
+            --output-root "$SIP_ABA_OUTPUT_ROOT"
+            --allow-live-mutation
+          )
+          if [ -n "$DEVICE_PLATFORM" ]; then
+            args+=(--platform-id "$DEVICE_PLATFORM")
+          fi
+          if [ -n "$trigger_command" ]; then
+            args+=(--registration-trigger-command "$trigger_command")
+          fi
+
+          set +e
+          "$SIP_ABA_VENV/bin/python" "${args[@]}" 2>&1 | tee "$SIP_ABA_OUTPUT_ROOT/cli-output.log"
+          rc=${PIPESTATUS[0]}
+          set -e
+          printf '%s\n' "$rc" > "$SIP_ABA_OUTPUT_ROOT/exit_code.txt"
+          printf 'REAL_SIP_ABA_EXIT_CODE=%s\n' "$rc" >> "$GITHUB_STEP_SUMMARY"
+          exit "$rc"
+
+      - name: Upload immutable A-B-A evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: real-sip-registration-aba-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.SIP_ABA_OUTPUT_ROOT }}
+          if-no-files-found: warn
+          retention-days: 30
