@@ -14,13 +14,17 @@ from app.db.session import SessionLocal
 
 
 def _lease_ttl(*, effective_profile: EffectiveCaptureProfile | None, explicit: float | None) -> float:
+    # An explicit lease TTL (requested by a controlled gate/experiment) wins over
+    # the profile default. The SIP A-B-A gate needs the lease to survive multiple
+    # phase_seconds-long captures between renewals; the profile's short default
+    # (30s) expired mid-flow and caused LEASE_FENCED on the renew before phase B.
+    if explicit is not None:
+        return float(explicit)
     if effective_profile is not None:
         lease = dict((effective_profile.resolved or {}).get("lease") or {})
         value = lease.get("ttl_seconds")
         if value is not None:
             return float(value)
-    if explicit is not None:
-        return float(explicit)
     return float(settings.capture_v2_lease_ttl_seconds)
 
 
