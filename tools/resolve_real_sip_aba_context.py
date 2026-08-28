@@ -132,17 +132,18 @@ def _resolve_database(containers: list[dict[str, Any]], output_root: Path, runti
 
 
 def _resolve_dut(output_root: Path, runtime_root: Path, db_source: str) -> None:
-    # Import only after DATABASE_URL is made host-reachable.
+    # The credential provider is intentionally not instantiated on the runner.
+    # Its authoritative identity/runtime was derived from the Production real-mode
+    # stack and the actual secret resolution happens inside that Production worker.
     from sqlalchemy import select
 
     from app.db.models import CaseDevice, ReproductionSession
     from app.db.session import SessionLocal
-    from app.integrations.credentials import get_credential_provider
 
-    provider = get_credential_provider()
-    provider_id = str(getattr(provider, "provider_id", type(provider).__name__))
-    if not bool(getattr(provider, "production_capable", False)):
-        raise SystemExit(f"SIP_ABA_CREDENTIAL_PROVIDER_NOT_PRODUCTION_CAPABLE provider={provider_id}")
+    provider_id = os.getenv("SIP_ABA_PRODUCTION_CREDENTIAL_PROVIDER", "").strip().lower()
+    credential_container = os.getenv("SIP_ABA_PRODUCTION_CREDENTIAL_CONTAINER", "").strip()
+    if not provider_id or not credential_container:
+        raise SystemExit("SIP_ABA_PRODUCTION_CREDENTIAL_RUNTIME_CONTEXT_MISSING")
 
     selector_id = next(
         (
@@ -218,7 +219,7 @@ def _resolve_dut(output_root: Path, runtime_root: Path, db_source: str) -> None:
             json.dumps(
                 {
                     "credential_provider": provider_id,
-                    "credential_provider_production_capable": True,
+                    "credential_runtime_service": "reproduction-worker",
                     "selector_id_present": bool(selector_id),
                     "selector_sn_present": bool(selector_sn),
                     "eligible_count_before_selector": len(eligible),
@@ -234,18 +235,12 @@ def _resolve_dut(output_root: Path, runtime_root: Path, db_source: str) -> None:
             raise SystemExit(f"SIP_ABA_DUT_SELECTION_NOT_UNIQUE count={len(selected)}")
 
         device, template, model = selected[0]
-        username = str(device.username or "").strip()
-        resolve_username = getattr(provider, "resolve_username", None)
-        if callable(resolve_username):
-            username = str(resolve_username(ip=str(device.ip), fallback=username or "root"))
-        if not username:
-            username = "root"
         values = {
             "DEVICE_ID": str(device.id),
             "DEVICE_SN": str(device.sn),
             "DEVICE_HOST": str(device.ip),
             "DEVICE_PORT": str(int(device.ssh_port or 22)),
-            "DEVICE_USER": username,
+            "DEVICE_USER": str(device.username or "root"),
             "DEVICE_MODEL": model,
             "DEVICE_PLATFORM": str(device.platform_id or ""),
         }
@@ -259,6 +254,7 @@ def _resolve_dut(output_root: Path, runtime_root: Path, db_source: str) -> None:
                 {
                     "database_source": db_source,
                     "credential_provider": provider_id,
+                    "credential_runtime_service": "reproduction-worker",
                     "device_id": str(device.id),
                     "model": model,
                     "platform_id": device.platform_id,
