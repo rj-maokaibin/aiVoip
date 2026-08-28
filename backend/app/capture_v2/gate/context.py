@@ -34,13 +34,7 @@ def password_from_env(env_name: str = "CAPTURE_GATE_SSH_PASSWORD") -> str:
 
 
 def password_from_source(source: str = "CAPTURE_GATE_SSH_PASSWORD") -> str:
-    """Resolve a Gate-only SSH password without ever placing it in Git.
-
-    Backward compatibility: a plain value is treated as an environment-variable
-    name. ``ENV:<name>`` is an explicit environment reference. ``DB:<SN>`` reads
-    the already-provisioned local ``device_credentials`` row by SN.  The password
-    itself is never returned in Gate output or logs.
-    """
+    """Resolve legacy Gate SSH password sources without logging plaintext."""
     ref = str(source or "CAPTURE_GATE_SSH_PASSWORD").strip()
     if ref.startswith("ENV:"):
         return password_from_env(ref[4:])
@@ -51,9 +45,7 @@ def password_from_source(source: str = "CAPTURE_GATE_SSH_PASSWORD") -> str:
     if not sn:
         raise CaptureV2Error("CAPTURE_GATE_SSH_CREDENTIAL_REF_INVALID")
     with SessionLocal() as db:
-        credential = db.scalar(
-            select(DeviceCredential).where(DeviceCredential.sn == sn)
-        )
+        credential = db.scalar(select(DeviceCredential).where(DeviceCredential.sn == sn))
         if credential is None or not str(credential.password or ""):
             raise CaptureV2Error(
                 "CAPTURE_GATE_SSH_CREDENTIAL_MISSING",
@@ -62,13 +54,40 @@ def password_from_source(source: str = "CAPTURE_GATE_SSH_PASSWORD") -> str:
         return str(credential.password)
 
 
-class GateSftpAdapter:
-    """Gate compatibility proxy for master revisions without ``sftp_get`` yet.
+async def password_from_source_async(source: str, spec: GateDeviceSpec) -> str:
+    """Resolve provider-backed credentials for Production live Gates, fail closed."""
+    ref = str(source or "CAPTURE_GATE_SSH_PASSWORD").strip()
+    if not ref.startswith("PROVIDER:"):
+        return password_from_source(ref)
 
-    The product integration patch still adds ``sftp_get`` to AsyncSSHDeviceAdapter.
-    This proxy makes the validation branch runnable before that production patch is
-    merged; it does not change retry semantics and one call is one exact transfer.
-    """
+    sn = ref[len("PROVIDER:"):].strip()
+    if not sn:
+        raise CaptureV2Error("CAPTURE_GATE_SSH_CREDENTIAL_REF_INVALID")
+    from app.integrations.credentials import get_credential_provider
+
+    provider = get_credential_provider()
+    if not bool(getattr(provider, "production_capable", False)):
+        raise CaptureV2Error(
+            "CAPTURE_GATE_CREDENTIAL_PROVIDER_NOT_PRODUCTION_CAPABLE",
+            details={"provider": str(getattr(provider, "provider_id", type(provider).__name__))},
+        )
+    try:
+        password = await provider.get_password(sn=sn, ip=spec.host, product=spec.model)
+    except Exception as exc:
+        raise CaptureV2Error(
+            "CAPTURE_GATE_CREDENTIAL_PROVIDER_FAILED",
+            details={
+                "provider": str(getattr(provider, "provider_id", type(provider).__name__)),
+                "exception": type(exc).__name__,
+            },
+        ) from exc
+    if not str(password or ""):
+        raise CaptureV2Error("CAPTURE_GATE_CREDENTIAL_PROVIDER_EMPTY_PASSWORD")
+    return str(password)
+
+
+class GateSftpAdapter:
+    """Gate compatibility proxy for master revisions without ``sftp_get`` yet."""
 
     def __init__(self, adapter):
         self._adapter = adapter
@@ -112,14 +131,24 @@ class GateSftpAdapter:
             raise CaptureV2Error("SCP_GET_FAILED", details={"exception": type(exc).__name__}) from exc
 
 
-def build_asyncssh_adapter(spec: GateDeviceSpec, *, password_env: str = "CAPTURE_GATE_SSH_PASSWORD"):
-    # Delayed import keeps unit tests independent from asyncssh.
+def _adapter(spec: GateDeviceSpec, password: str):
     from app.collectors.asyncssh_adapter import AsyncSSHDeviceAdapter
 
-    adapter = AsyncSSHDeviceAdapter(
-        ip=spec.host,
-        port=int(spec.port),
-        username=spec.username,
-        password=password_from_source(password_env),
+    return GateSftpAdapter(
+        AsyncSSHDeviceAdapter(
+            ip=spec.host,
+            port=int(spec.port),
+            username=spec.username,
+            password=password,
+        )
     )
-    return GateSftpAdapter(adapter)
+
+
+def build_asyncssh_adapter(spec: GateDeviceSpec, *, password_env: str = "CAPTURE_GATE_SSH_PASSWORD"):
+    return _adapter(spec, password_from_source(password_env))
+
+
+async def build_asyncssh_adapter_async(
+    spec: GateDeviceSpec, *, password_env: str = "CAPTURE_GATE_SSH_PASSWORD"
+):
+    return _adapter(spec, await password_from_source_async(password_env, spec))
