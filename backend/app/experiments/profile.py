@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import yaml
 from pydantic import BaseModel, Field
@@ -28,8 +28,17 @@ class ExperimentProfileDefinition(BaseModel):
     target_finding: str
     confirmation_policy: ConfirmationPolicy
     sequence: list[ExperimentVariant]
+    # Existing swap/removal experiments start with the symptom present in A1,
+    # remove it in B, then restore it in A2. Controlled fault injection has the
+    # inverse causal shape: healthy A1, fault in B, healthy A2. Make the direction
+    # explicit so the causal engine never infers it from names or confidence.
+    causal_pattern: Literal[
+        "A1_TARGET_B_CONTROL_A2_TARGET",
+        "A1_CONTROL_B_TARGET_A2_CONTROL",
+    ] = "A1_TARGET_B_CONTROL_A2_TARGET"
     external_action_required: bool = True
     external_action_instructions: str = ""
+    controlled_action_id: str | None = None
     expected_change_paths: list[str] = Field(default_factory=list)
     must_equal_paths: list[str] = Field(default_factory=list)
     soft_drift_paths: list[str] = Field(default_factory=list)
@@ -71,6 +80,13 @@ class ExperimentProfileRegistry:
                 overlap = set(d.expected_change_paths) & set(d.must_equal_paths)
                 if overlap:
                     raise ValueError(f"EXPERIMENT_CONTROL_CONFLICT:{d.id}:{','.join(sorted(overlap))}")
+                if d.controlled_action_id:
+                    if d.controlled_action_id != "SIP_GATEWAY_EGRESS_BLOCK_V1":
+                        raise ValueError(f"EXPERIMENT_CONTROLLED_ACTION_UNKNOWN:{d.id}:{d.controlled_action_id}")
+                    if d.external_action_required:
+                        raise ValueError(f"EXPERIMENT_CONTROLLED_ACTION_EXTERNAL_CONFLICT:{d.id}")
+                    if d.causal_pattern != "A1_CONTROL_B_TARGET_A2_CONTROL":
+                        raise ValueError(f"EXPERIMENT_CONTROLLED_ACTION_PATTERN_INVALID:{d.id}")
                 try:
                     self.reproduction_registry.get(d.reproduction_profile_id)
                 except Exception as exc:
