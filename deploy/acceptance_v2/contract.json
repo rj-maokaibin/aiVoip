@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "contract": "voip-acceptance-infrastructure-v2",
+  "version": "2.0.0",
+  "root_default": "/opt/voip-acceptance",
+  "runner_state": {"ready": "READY", "degraded": "DEGRADED", "unready": "UNREADY"},
+  "failure_classes": ["CODE_FAIL", "INFRA_RECOVERED", "INFRA_BLOCKED", "TRANSIENT_INFRA_RETRYING"],
+  "golden_manifest": "golden_registry/real_offline_001/manifest.json",
+  "runtime": {
+    "image": "voip-acceptance-runtime:v2.0.0",
+    "dockerfile": "deploy/acceptance_v2/Dockerfile",
+    "tshark_version": "4.2.2",
+    "python_major_minor": "3.12"
+  },
+  "persistent_paths": {
+    "golden_cache": "golden-cache",
+    "runtime_cache": "runtime",
+    "state": "state",
+    "logs": "logs",
+    "work": "work"
+  },
+  "acceptance_stack": {
+    "compose_file": "deploy/acceptance_v2/docker-compose.yml",
+    "project": "voip-acceptance-v2",
+    "services": ["postgres", "redis", "minio"]
+  }
+}

@@ -1,0 +1,51 @@
+name: voip-acceptance-v2
+
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: voip_acceptance
+      POSTGRES_USER: voip
+      POSTGRES_PASSWORD: voip_acceptance_local
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U voip -d voip_acceptance"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    tmpfs:
+      - /var/lib/postgresql/data
+    labels:
+      io.ruijie.voip.acceptance: "true"
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    tmpfs:
+      - /data
+    labels:
+      io.ruijie.voip.acceptance: "true"
+
+  minio:
+    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+    command: server /data
+    environment:
+      MINIO_ROOT_USER: voipacceptance
+      MINIO_ROOT_PASSWORD: voipacceptance-secret-local
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:9000/minio/health/live"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    tmpfs:
+      - /data
+    labels:
+      io.ruijie.voip.acceptance: "true"
+
+networks:
+  default:
+    name: voip-acceptance-v2

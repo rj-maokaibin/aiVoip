@@ -7,9 +7,10 @@ on:
       - 'frontend/**'
       - 'tools/**'
       - 'golden_cases/**'
+      - 'golden_registry/**'
       - 'profiles/**'
-      - 'deploy/live_acceptance/**'
-      - 'docs/LIVE_ACCEPTANCE_RUNTIME_V1.md'
+      - 'deploy/acceptance_v2/**'
+      - 'docs/ACCEPTANCE_INFRA_V2.md'
       - 'docs/02_Core_Documents/Preliminary_Evidence_Report_V1.0/**'
       - '.github/workflows/preliminary-evidence-v1.yml'
   workflow_dispatch:
@@ -21,8 +22,82 @@ concurrency:
   group: preliminary-evidence-v1-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
+env:
+  VOIP_ACCEPTANCE_ROOT: /opt/voip-acceptance
+  OFFLINE_GOLDEN_SHA256: b038aa7c9a0644581f2815f654fcdee4620860796382265b178823fccba2e3f0
+  GIT_CONFIG_COUNT: '2'
+  GIT_CONFIG_KEY_0: http.lowSpeedLimit
+  GIT_CONFIG_VALUE_0: '1024'
+  GIT_CONFIG_KEY_1: http.lowSpeedTime
+  GIT_CONFIG_VALUE_1: '15'
+
 jobs:
+  infra-preflight:
+    runs-on:
+      - self-hosted
+      - linux
+      - x64
+      - voip-controlled-linux
+    timeout-minutes: 10
+    steps:
+      - name: Observe host network before checkout
+        id: network_probe
+        continue-on-error: true
+        run: |
+          set +e
+          ok=0
+          for attempt in 1 2; do
+            getent ahosts github.com >/dev/null || { sleep 3; continue; }
+            timeout 8 bash -c '</dev/tcp/github.com/443' || { sleep 3; continue; }
+            timeout 20 git -c http.lowSpeedLimit=1024 -c http.lowSpeedTime=10 \
+              ls-remote https://github.com/actions/checkout.git HEAD >/dev/null && { ok=1; break; }
+            sleep 5
+          done
+          if [ "$ok" -eq 1 ]; then
+            echo 'PRECHECK_NETWORK=PASS'
+            exit 0
+          fi
+          echo 'PRECHECK_NETWORK=DEGRADED transient probe failed; actual checkout will retry'
+          exit 1
+
+      - name: Checkout exact head attempt 1
+        id: checkout1
+        continue-on-error: true
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 1
+
+      - name: Cooldown after transient checkout failure
+        if: steps.checkout1.outcome == 'failure'
+        run: sleep 15
+
+      - name: Checkout exact head attempt 2
+        if: steps.checkout1.outcome == 'failure'
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 1
+
+      - name: Runner Doctor - merge gate prerequisites only
+        run: |
+          set -euo pipefail
+          mkdir -p validation
+          python3 tools/acceptance_runner_doctor.py \
+            --root "$VOIP_ACCEPTANCE_ROOT" \
+            --require-docker --require-golden --require-tshark --require-runtime \
+            --out validation/runner-doctor.json
+
+      - name: Upload sanitized infrastructure evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: acceptance-infra-v2-doctor
+          path: validation/runner-doctor.json
+          if-no-files-found: warn
+
   frozen-contracts:
+    needs: infra-preflight
     runs-on:
       - self-hosted
       - linux
@@ -30,7 +105,18 @@ jobs:
       - voip-controlled-linux
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout exact head attempt 1
+        id: checkout1
+        continue-on-error: true
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 1
+      - if: steps.checkout1.outcome == 'failure'
+        run: sleep 10
+      - name: Checkout exact head attempt 2
+        if: steps.checkout1.outcome == 'failure'
+        uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 1
@@ -50,81 +136,72 @@ jobs:
       - x64
       - voip-controlled-linux
     timeout-minutes: 60
-    env:
-      OFFLINE_GOLDEN_PCAP: /tmp/tcpdump-2026-08-14.pcap
-      OFFLINE_GOLDEN_SHA256: b038aa7c9a0644581f2815f654fcdee4620860796382265b178823fccba2e3f0
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout exact head attempt 1
+        id: checkout1
+        continue-on-error: true
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 1
+      - if: steps.checkout1.outcome == 'failure'
+        run: sleep 10
+      - name: Checkout exact head attempt 2
+        if: steps.checkout1.outcome == 'failure'
+        uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 1
 
-      - name: Environment and prepared-PCAP identity
+      - name: Resolve immutable Golden and prepared runtime
         run: |
           set -euo pipefail
-          printf 'ACCEPTANCE_HEAD=%s\n' "$(git rev-parse HEAD)"
-          printf 'PYTHON=%s\n' "$(python3 --version 2>&1)"
-          printf 'NODE=%s\n' "$(node --version 2>&1)"
-          printf 'NPM=%s\n' "$(npm --version 2>&1)"
-          docker info >/dev/null
-
-          fixture="$OFFLINE_GOLDEN_PCAP"
-          if [ ! -r "$fixture" ]; then
-            staged="$RUNNER_TEMP/offline-e2e-prepared.pcap"
-            rm -f "$staged"
-            docker run --rm \
-              -v /tmp:/source:ro \
-              -v "$RUNNER_TEMP":/output \
-              --entrypoint sh postgres:16 \
-              -c "cp /source/tcpdump-2026-08-14.pcap /output/offline-e2e-prepared.pcap && chmod 0644 /output/offline-e2e-prepared.pcap"
-            fixture="$staged"
-          fi
-          test -r "$fixture"
-          actual_sha="$(sha256sum "$fixture" | awk '{print $1}')"
+          golden_json="$(python3 tools/acceptance_golden.py ensure --root "$VOIP_ACCEPTANCE_ROOT")"
+          golden_path="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["path"])' <<<"$golden_json")"
+          test -r "$golden_path"
+          actual_sha="$(sha256sum "$golden_path" | awk '{print $1}')"
           test "$actual_sha" = "$OFFLINE_GOLDEN_SHA256"
-          echo "OFFLINE_GOLDEN_PCAP=$fixture" >> "$GITHUB_ENV"
-          echo "VOIP_AI_GATE_VENV=$RUNNER_TEMP/voip-ai-release-gate" >> "$GITHUB_ENV"
-          printf 'PREPARED_PCAP=%s\n' "$fixture"
-          printf 'PREPARED_PCAP_SHA256=%s\n' "$actual_sha"
-
-      - name: Prepare exact userspace TShark 4.2.2 runtime
-        run: |
-          set -euo pipefail
-          tshark_bin=""
-          if command -v tshark >/dev/null 2>&1; then
-            candidate="$(command -v tshark)"
-            candidate_version="$($candidate -v | head -n1)"
-            if [[ "$candidate_version" == *"4.2.2"* ]]; then
-              tshark_bin="$candidate"
-            fi
-          fi
-          if [ -z "$tshark_bin" ]; then
-            root="$RUNNER_TEMP/tshark-root"
-            debs="$RUNNER_TEMP/tshark-debs"
-            rm -rf "$root" "$debs"
-            mkdir -p "$root" "$debs"
-            cd "$debs"
-            mapfile -t pkgs < <(apt-cache depends --recurse --no-recommends --no-suggests --no-conflicts --no-breaks --no-replaces --no-enhances tshark | awk '/^[^ <][^:]*$/ {print $1}' | sort -u)
-            miss=()
-            for p in "${pkgs[@]}"; do
-              dpkg-query -W -f='${Status}' "$p" 2>/dev/null | grep -q 'install ok installed' || miss+=("$p")
-            done
-            [ ${#miss[@]} -eq 0 ] || apt-get download "${miss[@]}"
-            shopt -s nullglob
-            for d in ./*.deb; do dpkg-deb -x "$d" "$root"; done
-            tshark_bin="$RUNNER_TEMP/tshark-userspace"
-            printf '#!/bin/bash\nexport LD_LIBRARY_PATH="%s/usr/lib/x86_64-linux-gnu:%s/lib/x86_64-linux-gnu:${LD_LIBRARY_PATH:-}"\nexport WIRESHARK_DATA_DIR="%s/usr/share/wireshark"\nexec "%s/usr/bin/tshark" "$@"\n' "$root" "$root" "$root" "$root" > "$tshark_bin"
-            chmod +x "$tshark_bin"
-          fi
-          tshark_version="$($tshark_bin -v | head -n1)"
-          printf 'TSHARK=%s\n' "$tshark_version"
-          [[ "$tshark_version" == *"4.2.2"* ]]
+          tshark_bin="$VOIP_ACCEPTANCE_ROOT/runtime/bin/tshark"
+          test -x "$tshark_bin"
+          "$tshark_bin" -v | head -n1 | grep -q '4.2.2'
+          python3 tools/acceptance_runtime.py verify --root "$VOIP_ACCEPTANCE_ROOT" >/dev/null
+          runtime_env="$(python3 tools/acceptance_runtime.py env --root "$VOIP_ACCEPTANCE_ROOT")"
+          printf '%s\n' "$runtime_env" >> "$GITHUB_ENV"
+          prepared_venv="$(printf '%s\n' "$runtime_env" | awk -F= '$1=="VOIP_AI_PREPARED_VENV"{print substr($0,index($0,"=")+1)}')"
+          runtime_fp="$(printf '%s\n' "$runtime_env" | awk -F= '$1=="ACCEPTANCE_RUNTIME_FINGERPRINT"{print substr($0,index($0,"=")+1)}')"
+          test -x "$prepared_venv/bin/python"
+          test -n "$runtime_fp"
+          echo "OFFLINE_GOLDEN_PCAP=$golden_path" >> "$GITHUB_ENV"
           echo "TSHARK_BINARY=$tshark_bin" >> "$GITHUB_ENV"
+          echo "VOIP_AI_GATE_VENV=$prepared_venv" >> "$GITHUB_ENV"
+          printf 'PREPARED_PCAP_SHA256=%s\n' "$actual_sha"
+          printf 'TSHARK=%s\n' "$("$tshark_bin" -v | head -n1)"
+          printf 'ACCEPTANCE_RUNTIME_FINGERPRINT=%s\n' "$runtime_fp"
+
+      - name: Check exact-SHA software evidence cache
+        id: evidence
+        run: |
+          set +e
+          result="$(python3 tools/acceptance_evidence.py check \
+            --root "$VOIP_ACCEPTANCE_ROOT" \
+            --commit "$(git rev-parse HEAD)" \
+            --golden-sha "$OFFLINE_GOLDEN_SHA256" \
+            --runtime-id "$ACCEPTANCE_RUNTIME_FINGERPRINT")"
+          rc=$?
+          set -e
+          echo "$result"
+          if [ "$rc" -eq 0 ]; then
+            echo "reuse=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "reuse=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Full VOIP AI software release gate
+        if: steps.evidence.outputs.reuse != 'true'
         run: bash tools/voip_ai_release_gate.sh
 
-      - name: Prepared-PCAP Real Offline Golden 001
+      - name: Real Offline Golden 001
+        if: steps.evidence.outputs.reuse != 'true'
         run: |
           set -euo pipefail
           source "$VOIP_AI_GATE_VENV/bin/activate"
@@ -137,15 +214,14 @@ jobs:
           python - <<'PY'
           import json
           from pathlib import Path
-          p = json.loads(Path('offline-golden-result.json').read_text(encoding='utf-8'))
-          assert p['status'] == 'PASS', p
-          assert p['passed'] is True, p
-          assert p['checks_passed'] == 142, p
-          assert p['checks_total'] == 142, p
+          p=json.loads(Path('offline-golden-result.json').read_text(encoding='utf-8'))
+          assert p['status']=='PASS' and p['passed'] is True, p
+          assert p['checks_passed']==142 and p['checks_total']==142, p
           print('REAL_OFFLINE_GOLDEN_001=PASS 142/142')
           PY
 
       - name: Real Offline Golden 001 Human Evidence Gate
+        if: steps.evidence.outputs.reuse != 'true'
         run: |
           set -euo pipefail
           source "$VOIP_AI_GATE_VENV/bin/activate"
@@ -159,13 +235,26 @@ jobs:
           test -s offline-golden-human-artifacts/human-golden-result.json
           echo 'HUMAN_REAL_OFFLINE_GOLDEN_001=PASS'
 
+      - name: Record exact-SHA software evidence
+        if: steps.evidence.outputs.reuse != 'true'
+        run: |
+          python3 tools/acceptance_evidence.py record \
+            --root "$VOIP_ACCEPTANCE_ROOT" \
+            --commit "$(git rev-parse HEAD)" \
+            --golden-sha "$OFFLINE_GOLDEN_SHA256" \
+            --runtime-id "$ACCEPTANCE_RUNTIME_FINGERPRINT"
+
       - name: Acceptance summary
         run: |
           set -euo pipefail
           printf 'PRD_SPEC_V1_FROZEN_CONTRACTS=PASS\n'
-          printf 'VOIP_AI_SOFTWARE_RELEASE_GATE=PASS\n'
-          printf 'REAL_OFFLINE_GOLDEN_001=PASS 142/142\n'
-          printf 'HUMAN_REAL_OFFLINE_GOLDEN_001=PASS\n'
+          if [ "${{ steps.evidence.outputs.reuse }}" = "true" ]; then
+            printf 'SOFTWARE_EVIDENCE_REUSED=PASS exact-sha\n'
+          else
+            printf 'VOIP_AI_SOFTWARE_RELEASE_GATE=PASS\n'
+            printf 'REAL_OFFLINE_GOLDEN_001=PASS 142/142\n'
+            printf 'HUMAN_REAL_OFFLINE_GOLDEN_001=PASS\n'
+          fi
           printf 'ACCEPTANCE_COMMIT=%s\n' "$(git rev-parse HEAD)"
 
       - name: Upload Golden evidence
@@ -179,7 +268,42 @@ jobs:
             offline-golden-human-artifacts
           if-no-files-found: ignore
 
-  # Human Feishu live mutation was intentionally removed after the captured
-  # PR #45 live acceptance PASS. Reusable runtime/preflight and the explicit
-  # fail-closed manual acceptance helper remain in the repository; normal PR CI
-  # must not mutate a real Feishu document.
+  acceptance-stack-smoke:
+    needs: full-software-acceptance
+    continue-on-error: true
+    runs-on:
+      - self-hosted
+      - linux
+      - x64
+      - voip-controlled-linux
+    timeout-minutes: 10
+    steps:
+      - name: Checkout exact head attempt 1
+        id: stack_checkout1
+        continue-on-error: true
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 1
+      - if: steps.stack_checkout1.outcome == 'failure'
+        run: sleep 10
+      - name: Checkout exact head attempt 2
+        if: steps.stack_checkout1.outcome == 'failure'
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 1
+      - name: Isolated Acceptance Stack health
+        run: |
+          set -euo pipefail
+          mkdir -p validation
+          python3 tools/acceptance_runner_doctor.py \
+            --root "$VOIP_ACCEPTANCE_ROOT" \
+            --require-docker --require-stack --repair \
+            --out validation/acceptance-stack-doctor.json
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: acceptance-stack-v2-doctor
+          path: validation/acceptance-stack-doctor.json
+          if-no-files-found: warn

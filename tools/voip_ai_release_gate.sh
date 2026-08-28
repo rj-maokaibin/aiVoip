@@ -6,7 +6,7 @@ cd "$ROOT_DIR"
 
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 VENV_BASE="${RUNNER_TEMP:-/tmp}"
-VENV_DIR="${VOIP_AI_GATE_VENV:-$VENV_BASE/voip-ai-release-gate}"
+VENV_DIR="${VOIP_AI_PREPARED_VENV:-${VOIP_AI_GATE_VENV:-$VENV_BASE/voip-ai-release-gate}}"
 PG_CONTAINER="voip-ai-gate-pg-$$"
 REDIS_CONTAINER="voip-ai-gate-redis-$$"
 PG_PORT=""
@@ -28,13 +28,20 @@ need curl
 
 docker info >/dev/null 2>&1 || fail "Docker daemon is not available"
 
-log "Preparing isolated Python environment: $VENV_DIR"
-if [[ ! -x "$VENV_DIR/bin/python" ]]; then
-  "$PYTHON_BIN" -m venv "$VENV_DIR"
+if [[ -n "${VOIP_AI_PREPARED_VENV:-}" ]]; then
+  log "Using prepared Python runtime: $VENV_DIR"
+  [[ -x "$VENV_DIR/bin/python" ]] || fail "prepared venv missing: $VENV_DIR"
+  source "$VENV_DIR/bin/activate"
+  python -m pip check >/dev/null || fail "prepared Python runtime failed pip check"
+else
+  log "Preparing isolated Python environment: $VENV_DIR"
+  if [[ ! -x "$VENV_DIR/bin/python" ]]; then
+    "$PYTHON_BIN" -m venv "$VENV_DIR"
+  fi
+  source "$VENV_DIR/bin/activate"
+  python -m pip install --upgrade pip
+  pip install -r backend/requirements.txt
 fi
-source "$VENV_DIR/bin/activate"
-python -m pip install --upgrade pip
-pip install -r backend/requirements.txt
 
 log "Starting ephemeral PostgreSQL 16 and Redis 7"
 docker run -d --rm --name "$PG_CONTAINER" -e POSTGRES_DB=voip -e POSTGRES_USER=voip -e POSTGRES_PASSWORD=voip -p 127.0.0.1::5432 postgres:16 >/dev/null
@@ -48,10 +55,6 @@ export REDIS_URL="redis://127.0.0.1:${REDIS_PORT}/0"
 export REPRODUCTION_PLATFORM_MODE="real"
 export PYTHONPATH="backend:."
 
-# postgres's entrypoint runs a transient init server (CREATE DATABASE) before
-# exec'ing the final server. A single ready probe can catch the init server and
-# then fail during the init->final handoff, so require two consecutive ready
-# states before declaring PostgreSQL ready.
 pg_ready=0
 for _ in $(seq 1 60); do
   if docker exec "$PG_CONTAINER" pg_isready -U voip -d voip >/dev/null 2>&1; then
@@ -94,8 +97,21 @@ log "9/11 Full backend regression"
 pytest -q backend/tests --tb=line
 log "10/11 Preliminary Evidence Report software gate"
 python tools/evidence_report_release_gate.py --skip-tests
-log "11/11 Frontend dependency audit and production build"
-(cd frontend && npm ci && npm audit --audit-level=low && npm run build && test -s dist/index.html && test -s dist/evidence-report.html)
+log "11/11 Frontend deterministic install and production build"
+(
+  cd frontend
+  if [[ "${VOIP_AI_OFFLINE_GATE:-0}" == "1" ]]; then
+    npm ci --offline
+  else
+    npm ci
+  fi
+  if [[ "${VOIP_AI_OFFLINE_GATE:-0}" != "1" ]]; then
+    npm audit --audit-level=low
+  fi
+  npm run build
+  test -s dist/index.html
+  test -s dist/evidence-report.html
+)
 
 printf '\n=============================================\nVOIP AI SOFTWARE RELEASE GATE: PASS\n'
 printf 'Branch: %s\n' "$(git branch --show-current 2>/dev/null || echo unknown)"
