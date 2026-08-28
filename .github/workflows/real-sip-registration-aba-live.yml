@@ -96,13 +96,11 @@ jobs:
           source "$SIP_ABA_ENV_FILE"
           set +a
           export PYTHONPATH="$GITHUB_WORKSPACE/backend"
-          if [ -z "${DATABASE_URL:-}" ]; then
-            "$SIP_ABA_VENV/bin/python" tools/resolve_real_sip_aba_database_env.py > "$SIP_ABA_RUNTIME_ROOT/production_db.env"
-            chmod 0600 "$SIP_ABA_RUNTIME_ROOT/production_db.env"
-            set -a
-            source "$SIP_ABA_RUNTIME_ROOT/production_db.env"
-            set +a
-          fi
+          "$SIP_ABA_VENV/bin/python" tools/resolve_real_sip_aba_database_env.py > "$SIP_ABA_RUNTIME_ROOT/production_db.env"
+          chmod 0600 "$SIP_ABA_RUNTIME_ROOT/production_db.env"
+          set -a
+          source "$SIP_ABA_RUNTIME_ROOT/production_db.env"
+          set +a
           "$SIP_ABA_VENV/bin/python" tools/resolve_real_sip_aba_context.py \
             --output-root "$SIP_ABA_OUTPUT_ROOT" \
             --runtime-root "$SIP_ABA_RUNTIME_ROOT"
