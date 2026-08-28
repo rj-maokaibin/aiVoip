@@ -146,7 +146,7 @@ jobs:
           export TSHARK_BINARY="$TSHARK_BINARY"
           phase_seconds="${SIP_ABA_PHASE_SECONDS:-$SIP_ABA_PHASE_SECONDS_DEFAULT}"
           trigger_command="${SIP_ABA_REGISTRATION_TRIGGER_COMMAND:-}"
-          serial_command='v="$(uci -q get sysinfo.@sysinfo[0].serial_number 2>/dev/null || true)"; [ -n "$v" ] || v="$(uci -q get sysinfo.@sysinfo[0].sn 2>/dev/null || true)"; [ -n "$v" ] || v="$(uci -q get sysinfo.@sysinfo[0].serial 2>/dev/null || true)"; [ -n "$v" ] || exit 44; printf "%s\\n" "$v"'
+          serial_command='v="$(uci -q get sysinfo.@sysinfo[0].serial_num 2>/dev/null || true)"; [ -n "$v" ] || v="$(uci -q get sysinfo.@sysinfo[0].serial_number 2>/dev/null || true)"; [ -n "$v" ] || v="$(uci -q get sysinfo.@sysinfo[0].sn 2>/dev/null || true)"; [ -n "$v" ] || v="$(uci -q get sysinfo.@sysinfo[0].serial 2>/dev/null || true)"; [ -n "$v" ] || exit 44; printf "%s\\n" "$v"'
           version_command='uci -q get sysinfo.@sysinfo[0].software_version'
           args=(
             -m app.capture_v2.gate.cli sip-registration-aba
