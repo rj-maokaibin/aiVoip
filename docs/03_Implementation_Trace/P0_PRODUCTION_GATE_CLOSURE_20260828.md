@@ -138,7 +138,7 @@ PREPARED-PCAP REAL OFFLINE GOLDEN #001 = PASS 142/142
 
 ## 3. P0-3 — Golden #00
 
-状态：**IN PROGRESS**
+状态：**IN PROGRESS — ROOT CAUSE CONFIRMATION CHAIN NARROWED**
 
 注意：P0-2 的 Prepared-PCAP Real Offline Golden #001 是离线分析 Golden replay；P0-3 要关闭的是 Production M7 Golden Candidate readiness。两者不是同一个 Gate，不能用前者的 142/142 替代后者。
 
@@ -152,7 +152,80 @@ ai_promotion_eligible      = false
 remaining_gap              = ROOT_CAUSE_NOT_CONFIRMED
 ```
 
-当前正在按 Golden contract 追踪 `root_cause_confirmed` 的事实来源与可信 confirmation source。只有真实 Evidence 满足 contract 才允许 READY；不得为过 Gate 人工写 `true`。
+### 2026-08-28 Production Golden 只读核查
+
+为避免凭历史 JSON 推断，在 controlled runner 上对当前 Production Case 做了数据库只读核查并调用 `GoldenCandidateService.assess()` 重新计算；事务最终 `rollback`，没有修改 Golden 状态。
+
+```text
+Workflow Run: 33114983584
+Job:          98667182656
+Runner:       voip-controlled-linux-01
+Conclusion:   success
+Case:         VOIP-20260827-D38C67
+```
+
+当前事实：
+
+```text
+evidence_count                = 9
+complete_evidence_count       = 9
+l1_evidence_count             = 9
+successful_analyzer_count     = 4
+deterministic_baseline_ready  = true
+snapshot_ready                = true
+audit_coverage_complete       = true
+answer_leakage_risk           = false
+blocker_codes                 = []
+status                        = PARTIAL_GOLDEN
+score                         = 70
+```
+
+但根因确认链尚未成立：
+
+```text
+confirmed_hypothesis_count    = 0
+causal_assessments            = []
+fix_verification_runs         = []
+root_cause_audit_events       = []
+root_cause_confirmed          = false
+direct_l1_support             = false
+gap_codes                     = [ROOT_CAUSE_NOT_CONFIRMED]
+```
+
+当前三个 Hypothesis 均仍为 `OPEN`：
+
+```text
+MEDIA_PATH_CORRELATED_PCM_TX  OPEN  confidence=9500
+PCM_UNEXPECTED_SILENCE        OPEN  confidence=8500
+PCM_CLICK_POP                 OPEN  confidence=7500
+```
+
+其中已存在与 AnalyzerRun 关联的 L1/L2/L3 关系，但现有唯一 L1 关系用于 `MEDIA_PATH_CORRELATED_PCM_TX` 时方向为 `CONTEXT`，不是 Golden contract 所要求的 `L1 + SUPPORT`。因此当前不是“缺少原始证据”，而是**尚未产生一个经过根因确认门禁的 CONFIRMED hypothesis / ROOT_CAUSE_CONFIRMED causal assessment，并且相应 confirmed hypothesis 还必须有 Direct L1 SUPPORT**。
+
+当前 Golden 规则由代码明确要求：
+
+```text
+COMPLETE_L1_EVIDENCE
++ SUCCESSFUL_ANALYZER
++ ROOT_CAUSE_CONFIRMED
++ DIRECT_L1_SUPPORT
++ DETERMINISTIC_BASELINE
++ SNAPSHOT
++ AUDIT_COMPLETE
++ NO_ANSWER_LEAKAGE
+```
+
+目前前后端基础证据链中，仅 `ROOT_CAUSE_CONFIRMED` / `DIRECT_L1_SUPPORT` 这一段尚未闭环。
+
+### 当前执行动作
+
+下一步继续核查并执行现有 Hypothesis/Causal 根因确认门禁，而不是人工改数据库：
+
+1. 确认哪一个当前 Hypothesis 的确定性事实足以升级为 Direct L1 `SUPPORT`；
+2. 检查自动因果确认链是否能从 Analyzer/Evidence 合法地产生 `ROOT_CAUSE_CONFIRMED`；
+3. 如当前实现缺少 Analyzer/Causal → Direct L1 Support 的合法桥接，则补代码+测试，而不是降低 Golden 规则；
+4. 在 controlled runner 上重新运行 Production Case 根因确认与 Golden assessment；
+5. 只有真实评估达到 `GOLDEN_READY` 后才进入 P0-4。
 
 ---
 
@@ -182,7 +255,7 @@ remaining_gap              = ROOT_CAUSE_NOT_CONFIRMED
 ```text
 P0-1  CLOSED — evidence revalidation; no code change required
 P0-2  PASS   — exact-master Full Software Acceptance + Offline Golden #001
-P0-3  IN PROGRESS — Production M7 Golden readiness / root-cause confirmation
+P0-3  IN PROGRESS — root-cause confirmation / Direct L1 SUPPORT chain
 P0-4  PENDING
 P0-5  PENDING
 ```
