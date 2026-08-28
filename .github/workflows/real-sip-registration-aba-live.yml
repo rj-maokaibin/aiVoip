@@ -85,6 +85,109 @@ jobs:
           "$tshark_bin" -v | head -n1
           printf 'TSHARK_BINARY=%s\n' "$tshark_bin" >> "$GITHUB_ENV"
 
+      - name: Resolve host database endpoint
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$SIP_ABA_OUTPUT_ROOT"
+          set -a
+          source "$SIP_ABA_ENV_FILE"
+          set +a
+          export PYTHONPATH="$GITHUB_WORKSPACE/backend"
+          "$SIP_ABA_VENV/bin/python" - <<'PY'
+          import json
+          import os
+          import shlex
+          import socket
+          import subprocess
+          from pathlib import Path
+          from sqlalchemy.engine import make_url
+
+          output_root = Path(os.environ['SIP_ABA_OUTPUT_ROOT'])
+          raw_url = os.getenv('DATABASE_URL', '').strip()
+          if not raw_url:
+              raise SystemExit('SIP_ABA_DATABASE_URL_MISSING')
+          url = make_url(raw_url)
+          host = str(url.host or '').strip()
+          port = int(url.port or 5432)
+          if not host:
+              raise SystemExit('SIP_ABA_DATABASE_HOST_MISSING')
+
+          resolved_via = 'native-dns'
+          resolved_host = host
+          container_name = None
+          docker_network = None
+          try:
+              socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
+          except socket.gaierror:
+              ps = subprocess.check_output(
+                  ['docker', 'ps', '--format', '{{.ID}}\t{{.Image}}\t{{.Names}}'], text=True
+              )
+              postgres = []
+              for line in ps.splitlines():
+                  parts = line.split('\t', 2)
+                  if len(parts) != 3:
+                      continue
+                  cid, image, name = parts
+                  image_base = image.split('@', 1)[0].split(':', 1)[0]
+                  if image_base == 'postgres':
+                      postgres.append((cid, name))
+              if not postgres:
+                  raise SystemExit(f'SIP_ABA_POSTGRES_CONTAINER_NOT_FOUND db_host={host}')
+
+              alias_matches = []
+              fallback_ips = []
+              for cid, name in postgres:
+                  inspect = json.loads(subprocess.check_output(['docker', 'inspect', cid], text=True))[0]
+                  networks = (inspect.get('NetworkSettings') or {}).get('Networks') or {}
+                  for network, info in networks.items():
+                      ip = str((info or {}).get('IPAddress') or '').strip()
+                      aliases = set((info or {}).get('Aliases') or [])
+                      if ip:
+                          fallback_ips.append((cid, name, network, ip))
+                          if host == name or host in aliases:
+                              alias_matches.append((cid, name, network, ip))
+
+              matches = alias_matches
+              if not matches and len(postgres) == 1:
+                  unique_ips = {(name, network, ip) for _, name, network, ip in fallback_ips}
+                  if len(unique_ips) == 1:
+                      name, network, ip = next(iter(unique_ips))
+                      matches = [(postgres[0][0], name, network, ip)]
+              unique_matches = {(name, network, ip) for _, name, network, ip in matches}
+              if len(unique_matches) != 1:
+                  raise SystemExit(
+                      f'SIP_ABA_POSTGRES_CONTAINER_AMBIGUOUS db_host={host} '
+                      f'postgres_count={len(postgres)} match_count={len(unique_matches)}'
+                  )
+              container_name, docker_network, resolved_host = next(iter(unique_matches))
+              url = url.set(host=resolved_host)
+              resolved_via = 'docker-bridge-ip'
+
+          runtime_url = url.render_as_string(hide_password=False)
+          runtime_env = output_root / 'db_runtime.env'
+          runtime_env.write_text(f'DATABASE_URL={shlex.quote(runtime_url)}\n', encoding='utf-8')
+          runtime_env.chmod(0o600)
+          (output_root / 'db_resolution.json').write_text(
+              json.dumps({
+                  'original_host': host,
+                  'port': port,
+                  'resolved_via': resolved_via,
+                  'resolved_host': resolved_host,
+                  'container_name': container_name,
+                  'docker_network': docker_network,
+              }, indent=2) + '\n',
+              encoding='utf-8',
+          )
+          print(json.dumps({
+              'database_host': host,
+              'resolved_via': resolved_via,
+              'resolved_host': resolved_host,
+              'container_name': container_name,
+              'docker_network': docker_network,
+          }, sort_keys=True))
+          PY
+
       - name: Resolve exactly one eligible DUT
         id: resolve
         shell: bash
@@ -92,9 +195,9 @@ jobs:
           set -euo pipefail
           set -a
           source "$SIP_ABA_ENV_FILE"
+          source "$SIP_ABA_OUTPUT_ROOT/db_runtime.env"
           set +a
           export PYTHONPATH="$GITHUB_WORKSPACE/backend"
-          mkdir -p "$SIP_ABA_OUTPUT_ROOT"
           "$SIP_ABA_VENV/bin/python" - <<'PY'
           import json
           import os
@@ -165,6 +268,7 @@ jobs:
               }
               shell_path = Path(os.environ['SIP_ABA_OUTPUT_ROOT'], 'resolved_dut.env')
               shell_path.write_text(''.join(f'{k}={shlex.quote(v)}\n' for k, v in values.items()), encoding='utf-8')
+              shell_path.chmod(0o600)
               print(json.dumps({k: v for k, v in values.items() if k not in {'DEVICE_SN'}}, sort_keys=True))
           PY
 
@@ -175,6 +279,7 @@ jobs:
           set -uo pipefail
           set -a
           source "$SIP_ABA_ENV_FILE"
+          source "$SIP_ABA_OUTPUT_ROOT/db_runtime.env"
           source "$SIP_ABA_OUTPUT_ROOT/resolved_dut.env"
           set +a
           export PYTHONPATH="$GITHUB_WORKSPACE/backend"
@@ -206,9 +311,9 @@ jobs:
             --output-root "$SIP_ABA_OUTPUT_ROOT"
             --allow-live-mutation
           )
-          if [ -n "$DEVICE_PLATFORM" ]; then
-            args+=(--platform-id "$DEVICE_PLATFORM")
-          fi
+          case "$DEVICE_PLATFORM" in
+            mt7621|mt7981) args+=(--platform-id "$DEVICE_PLATFORM") ;;
+          esac
           if [ -n "$trigger_command" ]; then
             args+=(--registration-trigger-command "$trigger_command")
           fi
