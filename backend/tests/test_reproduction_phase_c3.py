@@ -234,10 +234,18 @@ def test_question_answer_rejects_missing_required_deterministic_finding():
         assert q.state != DiagnosticQuestionState.ANSWERED.value
 
 
-def test_experiment_registry_loads_six_frozen_profiles_without_real_commands():
+def test_experiment_registry_loads_seven_frozen_profiles_without_real_commands():
     registry = ExperimentProfileRegistry(ROOT / "profiles" / "experiments")
     ids = {x.definition.id for x in registry.list()}
-    assert ids == {"PHONE_SWAP_AB", "LINE_SWAP_AB", "FXS_PORT_SWAP_AB", "POWER_SUPPLY_AB", "DEVICE_SWAP_AB", "POST_REBOOT_FIRST_CALL"}
+    assert ids == {
+        "PHONE_SWAP_AB",
+        "LINE_SWAP_AB",
+        "FXS_PORT_SWAP_AB",
+        "POWER_SUPPLY_AB",
+        "DEVICE_SWAP_AB",
+        "POST_REBOOT_FIRST_CALL",
+        "SIP_REGISTRATION_EGRESS_BLOCK_ABA",
+    }
     for item in registry.list():
         blob = item.definition.model_dump_json().lower()
         assert "shell" not in blob and "ssh_command" not in blob and "aim_command" not in blob
