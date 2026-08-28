@@ -2,14 +2,10 @@
 from __future__ import annotations
 
 import json
-import os
 import subprocess
 
 
 def main() -> int:
-    if os.getenv("DATABASE_URL", "").strip():
-        return 0
-
     ps = subprocess.check_output(
         ["docker", "ps", "--format", "{{.ID}}"], text=True
     )
@@ -27,9 +23,9 @@ def main() -> int:
         url = str(env.get("DATABASE_URL") or "").strip()
         if not url:
             continue
-        # The live Gate is a Production-only mutation path. Development/acceptance
-        # stacks may coexist on the controlled runner and must never participate
-        # in Production DB consensus.
+        # This is a Production-only live-mutation Gate. A runner .env value is not
+        # authoritative: the runtime DB must be derived from the currently running
+        # Production real-mode stack so development/acceptance DBs cannot leak in.
         if str(env.get("APP_ENV") or "").strip().lower() != "production":
             continue
         if str(env.get("REPRODUCTION_PLATFORM_MODE") or "").strip().lower() != "real":
@@ -48,6 +44,7 @@ def main() -> int:
     # Emit only shell syntax. Caller redirects this into the private runtime dir;
     # never print the URL to logs or uploaded evidence.
     import shlex
+
     print(f"DATABASE_URL={shlex.quote(url)}")
     return 0
 
