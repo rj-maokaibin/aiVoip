@@ -43,7 +43,8 @@ class SipGatewayEgressBlock:
     - a pre-existing identical rule is a hard conflict (never delete operator state);
     - mutation commands are non-retried;
     - every apply is verified;
-    - cleanup deletes only the exact rule and must restore the whole iptables-save hash;
+    - cleanup deletes only exact rules and must restore the whole iptables-save hash;
+    - cleanup failure preserves ownership so a reconciler can retry;
     - any ambiguity fails closed.
 
     The adapter is expected to provide execute_shell(command, timeout=..., retries=0).
@@ -62,6 +63,10 @@ class SipGatewayEgressBlock:
     @staticmethod
     def _hash_text(text: str) -> str:
         return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+    @property
+    def cleanup_required(self) -> bool:
+        return bool(self._applied)
 
     def _rule_args(self, transport: str) -> str:
         s = self.spec
@@ -133,8 +138,8 @@ class SipGatewayEgressBlock:
                         f"CONTROLLED_FAULT_APPLY_VERIFY_FAILED:{transport}"
                     )
         except Exception:
-            # Best-effort immediate reversal, but preserve a cleanup failure as the
-            # stronger safety signal.
+            # Best-effort immediate reversal. If cleanup itself is uncertain, keep
+            # ownership in self._applied so the caller/reconciler can retry.
             try:
                 await self.restore()
             except Exception as cleanup_exc:
@@ -157,17 +162,20 @@ class SipGatewayEgressBlock:
 
     async def restore(self) -> dict[str, Any]:
         errors: list[str] = []
+        remaining: list[str] = []
         for transport in reversed(self._applied):
             args = self._rule_args(transport)
             result = await self._exec(f"iptables -D OUTPUT {args}")
             if result.exit_status != 0:
                 errors.append(f"delete:{transport}:{result.exit_status}")
+                remaining.append(transport)
                 continue
             verify = await self._exec(f"iptables -C OUTPUT {args}")
             if verify.exit_status == 0:
                 errors.append(f"still_present:{transport}")
-        self._applied.clear()
+                remaining.append(transport)
 
+        self._applied = list(reversed(remaining))
         current = await self._iptables_save()
         current_hash = self._hash_text(current)
         if self._baseline_hash is not None and current_hash != self._baseline_hash:
@@ -175,6 +183,7 @@ class SipGatewayEgressBlock:
         if errors:
             raise ControlledFaultError("CONTROLLED_FAULT_CLEANUP_UNVERIFIED:" + ";".join(errors))
 
+        self._applied.clear()
         return {
             "action_id": self.action_id,
             "state": "RESTORED_VERIFIED",
