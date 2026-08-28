@@ -105,6 +105,23 @@ jobs:
             --output-root "$SIP_ABA_OUTPUT_ROOT" \
             --runtime-root "$SIP_ABA_RUNTIME_ROOT"
 
+      - name: Resolve Production SSH credential
+        shell: bash
+        run: |
+          set -euo pipefail
+          set -a
+          source "$SIP_ABA_ENV_FILE"
+          source "$SIP_ABA_RUNTIME_ROOT/db_runtime.env"
+          source "$SIP_ABA_RUNTIME_ROOT/resolved_dut.env"
+          set +a
+          export PYTHONPATH="$GITHUB_WORKSPACE/backend"
+          credential_file="$SIP_ABA_RUNTIME_ROOT/credential.env"
+          "$SIP_ABA_VENV/bin/python" tools/resolve_real_sip_aba_credential_env.py \
+            --sn "$DEVICE_SN" --ip "$DEVICE_HOST" --product "$DEVICE_MODEL" > "$credential_file"
+          chmod 0600 "$credential_file"
+          test -s "$credential_file"
+          echo 'SIP_ABA_PRODUCTION_CREDENTIAL_RESOLUTION=PASS'
+
       - name: Execute real A1 B A2 with mandatory cleanup
         id: aba
         shell: bash
@@ -114,6 +131,7 @@ jobs:
           source "$SIP_ABA_ENV_FILE"
           source "$SIP_ABA_RUNTIME_ROOT/db_runtime.env"
           source "$SIP_ABA_RUNTIME_ROOT/resolved_dut.env"
+          source "$SIP_ABA_RUNTIME_ROOT/credential.env"
           set +a
           export PYTHONPATH="$GITHUB_WORKSPACE/backend"
           export REAL_LIVE_MUTATION=EXPLICIT_ONLY
@@ -130,7 +148,7 @@ jobs:
             --host "$DEVICE_HOST"
             --port "$DEVICE_PORT"
             --username "$DEVICE_USER"
-            --password-env "DB:$DEVICE_SN"
+            --password-env "ENV:SIP_ABA_SSH_PASSWORD"
             --reproduction-session-id AUTO_NEW
             --worker-id "github-real-sip-aba-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
             --gate-id SIP-REGISTRATION-ABA
