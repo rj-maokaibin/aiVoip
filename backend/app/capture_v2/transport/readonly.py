@@ -62,10 +62,15 @@ class ReadOnlyDeviceTransport:
         return [line.strip() for line in out.splitlines() if line.strip()]
 
     async def list_tcpdump_processes(self) -> list[ProcessRecord]:
+        # Match by process comm (name), not cmdline substring: the scanning
+        # shell's own cmdline contains the literal "tcpdump" pattern, which
+        # previously caused a self-match and a false SIP_ABA_EXISTING_TCPDUMP_PRESENT.
         command = r'''for p in /proc/[0-9]*; do
+  [ -r "$p/comm" ] || continue
+  c=$(cat "$p/comm" 2>/dev/null)
+  case "$c" in tcpdump|tshark) ;; *) continue ;; esac
   [ -r "$p/cmdline" ] || continue
   cmd=$(tr '\000' ' ' < "$p/cmdline" 2>/dev/null)
-  case "$cmd" in *tcpdump*) ;; *) continue ;; esac
   st=$(awk '{print $22}' "$p/stat" 2>/dev/null) || continue
   printf '%s\t%s\t%s\n' "${p##*/}" "$st" "$cmd"
 done'''
