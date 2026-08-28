@@ -19,7 +19,7 @@ jobs:
     env:
       P0_CASE: VOIP-20260827-D38C67
     steps:
-      - name: Inspect production Golden state read-only
+      - name: Inspect production Golden root-cause paths read-only
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -33,10 +33,17 @@ jobs:
 
           docker exec -i -e P0_CASE="$P0_CASE" "$backend" python - <<'PY'
           import json, os
+          from collections import Counter
           from sqlalchemy import select
           from app.db.session import SessionLocal
           from app.db.golden_models import GoldenCandidateAssessment
-          from app.db.models import Case, Hypothesis, HypothesisEvidence, CausalAssessment, AuditLog, FixVerificationRun
+          from app.db.models import (
+              AnalyzerRun, Case, CausalAssessment, DiagnosticExperiment, DiagnosisRun,
+              Evidence, Hypothesis, HypothesisEvidence, ReproductionSession,
+          )
+          from app.diagnosis.factory import get_diagnosis_reasoner
+          from app.diagnosis.snapshot import CaseEvidenceSnapshotBuilder
+          from app.experiments.profile import ExperimentProfileRegistry
           from app.golden.service import GoldenCandidateService
 
           case_no = os.environ['P0_CASE']
@@ -44,61 +51,184 @@ jobs:
           try:
               case = db.scalar(select(Case).where(Case.case_no == case_no))
               assert case is not None, f'CASE_NOT_FOUND:{case_no}'
-              hypotheses = list(db.scalars(select(Hypothesis).where(Hypothesis.case_id == case.id).order_by(Hypothesis.created_at.asc())))
+              snapshot = CaseEvidenceSnapshotBuilder().build(db, case.id)
+              fresh_decision = get_diagnosis_reasoner().reason(snapshot)
+              registry = ExperimentProfileRegistry()
+
+              hypotheses = list(db.scalars(
+                  select(Hypothesis).where(Hypothesis.case_id == case.id)
+                  .order_by(Hypothesis.created_at.asc())
+              ))
               hyp_ids = [h.id for h in hypotheses]
-              links = list(db.scalars(select(HypothesisEvidence).where(HypothesisEvidence.hypothesis_id.in_(hyp_ids)))) if hyp_ids else []
-              causals = list(db.scalars(select(CausalAssessment).where(CausalAssessment.case_id == case.id).order_by(CausalAssessment.created_at.asc())))
-              audits = list(db.scalars(select(AuditLog).where(AuditLog.case_id == case.id).order_by(AuditLog.created_at.asc())))
-              fixes = list(db.scalars(select(FixVerificationRun).where(FixVerificationRun.case_id == case.id).order_by(FixVerificationRun.created_at.asc())))
+              links = list(db.scalars(
+                  select(HypothesisEvidence).where(HypothesisEvidence.hypothesis_id.in_(hyp_ids))
+              )) if hyp_ids else []
+              experiments = list(db.scalars(
+                  select(DiagnosticExperiment).where(DiagnosticExperiment.case_id == case.id)
+                  .order_by(DiagnosticExperiment.created_at.asc())
+              ))
+              causals = list(db.scalars(
+                  select(CausalAssessment).where(CausalAssessment.case_id == case.id)
+                  .order_by(CausalAssessment.created_at.asc())
+              ))
+              analyzers = list(db.scalars(
+                  select(AnalyzerRun).where(AnalyzerRun.case_id == case.id)
+                  .order_by(AnalyzerRun.created_at.asc())
+              ))
+              evidences = list(db.scalars(
+                  select(Evidence).where(Evidence.case_id == case.id)
+                  .order_by(Evidence.created_at.asc())
+              ))
               golden = db.scalar(select(GoldenCandidateAssessment).where(GoldenCandidateAssessment.case_id == case.id))
               assessed = GoldenCandidateService().assess(db, case.id)
-              db.rollback()
 
               def attrs(obj, names):
                   return {n: getattr(obj, n, None) for n in names}
 
-              result = {
-                  'schema_version': 'p0-production-golden-root-cause-inspect-v2',
-                  'case': {'id': case.id, 'case_no': case.case_no},
-                  'hypotheses': [attrs(h, ['id','code','title','status','confidence','fault_domain']) for h in hypotheses],
-                  'hypothesis_evidence': [attrs(x, ['id','hypothesis_id','evidence_level','direction','ref_type','ref_id']) for x in links],
-                  'causal_assessments': [attrs(c, ['id','state','hypothesis_id','confidence','reason_code']) for c in causals],
-                  'fix_verification_runs': [attrs(f, ['id','status','hypothesis_id']) for f in fixes],
-                  'root_cause_audit_events': [
-                      {'event_type': a.event_type, 'created_at': a.created_at.isoformat() if a.created_at else None}
-                      for a in audits
-                      if any(t in str(a.event_type or '').upper() for t in ('HYPOTHESIS','ROOT_CAUSE','CAUSAL','FIX_VERIFICATION'))
+              def evidence_refs(proposal):
+                  return [
+                      {
+                          'ref_type': x.ref_type, 'ref_id': x.ref_id, 'level': x.level,
+                          'direction': x.direction, 'weight': x.weight,
+                      }
+                      for x in (proposal.evidence or [])
+                  ]
+
+              # Summarize deterministic analyzer outputs without printing payload/audio content.
+              analyzer_facts = {}
+              for name, item in (snapshot.get('analyzers') or {}).items():
+                  result = item.get('result') or {}
+                  packet = result.get('packet', result) if isinstance(result, dict) else {}
+                  anomalies = packet.get('anomalies', []) if isinstance(packet, dict) else []
+                  cross = result.get('cross_layer_events', []) if isinstance(result, dict) else []
+                  correlations = result.get('correlations', []) if isinstance(result, dict) else []
+                  analyzer_facts[name] = {
+                      'run_id': item.get('run_id'),
+                      'status': item.get('status'),
+                      'version': item.get('version'),
+                      'input_evidence_ids': item.get('input_evidence_ids') or [],
+                      'summary': item.get('summary') or {},
+                      'anomaly_types': dict(Counter(str(x.get('type')) for x in anomalies if isinstance(x, dict))),
+                      'cross_layer_types': dict(Counter(str(x.get('type')) for x in cross if isinstance(x, dict))),
+                      'correlation_qualities': dict(Counter(
+                          str((((x.get('details') or {}).get('correlation') or {}).get('quality')))
+                          for x in correlations if isinstance(x, dict)
+                      )),
+                  }
+
+              target = {
+                  'case': {
+                      'id': case.id, 'case_no': case.case_no, 'status': case.status,
+                      'summary': case.summary,
+                  },
+                  'evidence': [
+                      attrs(e, ['id','type','source','level','completeness','filename','sha256','session_id','call_id'])
+                      for e in evidences
                   ],
+                  'analyzers': [
+                      attrs(a, ['id','analyzer_name','analyzer_version','status','input_evidence_ids','output_evidence_ids'])
+                      for a in analyzers
+                  ],
+                  'analyzer_facts': analyzer_facts,
+                  'persisted_hypotheses': [
+                      {
+                          **attrs(h, ['id','code','title','status','confidence','fault_domain','confirmable','confirm_rule']),
+                          'profile_candidates': [x.definition.id for x in registry.candidates_for_hypothesis(h.code)],
+                          'links': [attrs(x, ['evidence_level','direction','ref_type','ref_id']) for x in links if x.hypothesis_id == h.id],
+                      }
+                      for h in hypotheses
+                  ],
+                  'fresh_reasoner': {
+                      'conclusion_state': fresh_decision.conclusion_state,
+                      'summary': fresh_decision.summary,
+                      'known': fresh_decision.known,
+                      'unknown': fresh_decision.unknown,
+                      'excluded': fresh_decision.excluded,
+                      'hypotheses': [
+                          {
+                              'code': h.code, 'title': h.title, 'status': h.status,
+                              'confidence': h.confidence, 'confirmable': h.confirmable,
+                              'confirm_rule': h.confirm_rule,
+                              'profile_candidates': [x.definition.id for x in registry.candidates_for_hypothesis(h.code)],
+                              'evidence': evidence_refs(h),
+                          }
+                          for h in fresh_decision.hypotheses
+                      ],
+                      'plan': [x.to_dict() for x in fresh_decision.plan],
+                  },
+                  'experiments': [attrs(x, ['id','profile_key','hypothesis_id','state','causal_state','confirmation_policy']) for x in experiments],
+                  'causal_assessments': [attrs(x, ['id','experiment_id','hypothesis_id','state','confirmation_policy']) for x in causals],
+                  'fresh_golden': assessed,
                   'materialized_golden': None if golden is None else {
-                      'status': golden.status,
+                      'status': golden.status, 'score': golden.score,
                       'verification_tier': golden.verification_tier,
                       'root_cause_confirmed': bool(golden.root_cause_confirmed),
-                      'fix_verified': bool(golden.fix_verified),
                       'direct_l1_support': bool(golden.direct_l1_support),
-                      'deterministic_baseline_ready': bool(golden.deterministic_baseline_ready),
-                      'snapshot_ready': bool(golden.snapshot_ready),
-                      'audit_coverage_complete': bool(golden.audit_coverage_complete),
-                      'blocker_codes': golden.blocker_codes,
-                      'gap_codes': golden.gap_codes,
-                      'details_json': golden.details_json,
+                      'blocker_codes': golden.blocker_codes, 'gap_codes': golden.gap_codes,
                   },
-                  'fresh_assessment': assessed,
               }
-              print('P0_GOLDEN_INSPECT_JSON_BEGIN')
+
+              # Scan recent Production cases for a legitimate nearer Golden candidate.
+              candidate_rows = []
+              cases = list(db.scalars(select(Case).order_by(Case.created_at.desc()).limit(100)))
+              for c in cases:
+                  hs = list(db.scalars(select(Hypothesis).where(Hypothesis.case_id == c.id)))
+                  hids = [h.id for h in hs]
+                  ls = list(db.scalars(select(HypothesisEvidence).where(HypothesisEvidence.hypothesis_id.in_(hids)))) if hids else []
+                  confirmed = [h for h in hs if str(h.status).upper() == 'CONFIRMED']
+                  direct = [x for x in ls if x.hypothesis_id in {h.id for h in confirmed} and x.evidence_level == 'L1' and x.direction == 'SUPPORT' and x.ref_type in {'EVIDENCE','ANALYZER_RUN'}]
+                  causal = db.scalar(select(CausalAssessment).where(CausalAssessment.case_id == c.id, CausalAssessment.state == 'ROOT_CAUSE_CONFIRMED').limit(1))
+                  mat = db.scalar(select(GoldenCandidateAssessment).where(GoldenCandidateAssessment.case_id == c.id))
+                  sessions = list(db.scalars(select(ReproductionSession).where(ReproductionSession.case_id == c.id)))
+                  real_session = any(
+                      str(getattr(s, 'platform_profile_id', '') or '').lower() in {'ruijie-voip-aim-real','ruijie-voip-capture-v2'}
+                      or str(((getattr(s, 'voice_runtime_context_json', None) or {}).get('resolver_id') or '')).upper() == 'REAL_VOICE_CONTEXT_V1'
+                      for s in sessions
+                  )
+                  if confirmed or causal or direct or mat or real_session:
+                      candidate_rows.append({
+                          'case_no': c.case_no,
+                          'status': c.status,
+                          'summary': (c.summary or '')[:240],
+                          'real_dut_session': real_session,
+                          'hypotheses': [(h.code, h.status, h.confidence) for h in hs],
+                          'confirmed_hypothesis_count': len(confirmed),
+                          'direct_l1_support_count': len(direct),
+                          'causal_root_confirmed': bool(causal),
+                          'materialized_golden': None if mat is None else {
+                              'status': mat.status, 'score': mat.score,
+                              'verification_tier': mat.verification_tier,
+                              'root_cause_confirmed': bool(mat.root_cause_confirmed),
+                              'direct_l1_support': bool(mat.direct_l1_support),
+                              'gap_codes': mat.gap_codes, 'blocker_codes': mat.blocker_codes,
+                          },
+                      })
+
+              db.rollback()
+              result = {
+                  'schema_version': 'p0-production-golden-root-cause-inspect-v3',
+                  'target': target,
+                  'candidate_scan': candidate_rows,
+              }
+              print('P0_GOLDEN_DEEP_INSPECT_JSON_BEGIN')
               print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
-              print('P0_GOLDEN_INSPECT_JSON_END')
-              fresh = assessed
-              print('P0_GOLDEN_SUMMARY=' + json.dumps({
-                  'case': result['case'],
-                  'hypothesis_statuses': [(x.get('code'), x.get('status')) for x in result['hypotheses']],
-                  'causal_states': [x.get('state') for x in result['causal_assessments']],
-                  'materialized_status': (result.get('materialized_golden') or {}).get('status'),
-                  'materialized_root_cause_confirmed': (result.get('materialized_golden') or {}).get('root_cause_confirmed'),
-                  'fresh_status': fresh.get('status'),
-                  'fresh_root_cause_confirmed': (fresh.get('signals') or {}).get('root_cause_confirmed'),
-                  'fresh_direct_l1_support': (fresh.get('signals') or {}).get('direct_l1_support'),
-                  'fresh_gap_codes': fresh.get('gap_codes'),
-                  'fresh_blocker_codes': fresh.get('blocker_codes'),
+              print('P0_GOLDEN_DEEP_INSPECT_JSON_END')
+              print('P0_GOLDEN_DEEP_SUMMARY=' + json.dumps({
+                  'target_case': case.case_no,
+                  'target_fresh_status': assessed.get('status'),
+                  'target_gap_codes': assessed.get('gap_codes'),
+                  'fresh_hypotheses': [(h.code, h.status, h.confirmable) for h in fresh_decision.hypotheses],
+                  'fresh_profile_candidates': {
+                      h.code: [x.definition.id for x in registry.candidates_for_hypothesis(h.code)]
+                      for h in fresh_decision.hypotheses
+                  },
+                  'candidate_scan_count': len(candidate_rows),
+                  'ready_or_confirmed_cases': [
+                      x['case_no'] for x in candidate_rows
+                      if (x.get('materialized_golden') or {}).get('status') == 'GOLDEN_READY'
+                      or x.get('confirmed_hypothesis_count', 0) > 0
+                      or x.get('causal_root_confirmed')
+                  ],
               }, ensure_ascii=False, default=str))
           finally:
               db.close()
