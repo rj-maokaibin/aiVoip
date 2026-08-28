@@ -35,6 +35,7 @@ jobs:
     steps:
       - name: Checkout exact master
         uses: actions/checkout@v4
+        timeout-minutes: 5
         with:
           ref: master
 
