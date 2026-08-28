@@ -94,3 +94,19 @@ experiments:
     expected_change_paths: [boot.boot_id]
     must_equal_paths: [device.serial, software.version, voice.voice_vlan_id, voice.gateway_ip, voice.fxs_port, external.phone_id, external.line_id, call.codec, call.called_number]
     soft_drift_paths: [boot.uptime_seconds, call.remote_endpoint]
+
+  - id: SIP_REGISTRATION_EGRESS_BLOCK_ABA
+    name: SIP注册出口阻断单变量A-B-A实验
+    version: "1.0.0"
+    status: ACTIVE
+    hypothesis_codes: [SIP_REGISTRATION_PATH_FAILURE]
+    reproduction_profile_id: REGISTER_FAILURE
+    independent_variable: external.sip_egress_blocked
+    target_finding: SIP_REGISTRATION_FAILED
+    confirmation_policy: ABA_REQUIRED
+    sequence: [A1, B, A2]
+    external_action_required: true
+    external_action_instructions: 仅在受控DUT上对当前Registrar目的IP/5060实施可回滚的临时OUTPUT阻断；B完成后必须删除精确规则并验证A2注册恢复。禁止修改PBX、默认路由或持久化防火墙配置。
+    expected_change_paths: [external.sip_egress_blocked]
+    must_equal_paths: [device.serial, software.version, voice.voice_vlan_id, voice.gateway_ip]
+    soft_drift_paths: [boot.uptime_seconds]
