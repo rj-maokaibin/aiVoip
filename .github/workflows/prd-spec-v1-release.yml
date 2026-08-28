@@ -35,6 +35,7 @@ jobs:
       VOIP_AI_GATE_VENV: /tmp/voip-ai-release-gate-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       - uses: actions/checkout@v4
+        timeout-minutes: 5
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 1

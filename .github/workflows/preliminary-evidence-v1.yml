@@ -34,6 +34,7 @@ jobs:
       OFFLINE_GOLDEN_SHA256: b038aa7c9a0644581f2815f654fcdee4620860796382265b178823fccba2e3f0
     steps:
       - uses: actions/checkout@v4
+        timeout-minutes: 5
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 1
