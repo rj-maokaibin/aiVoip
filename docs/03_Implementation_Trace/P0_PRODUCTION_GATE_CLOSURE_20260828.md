@@ -23,55 +23,30 @@
 
 ## 1. P0-1 — Full Backend negative-path middleware blocker 复核
 
-### 原计划
+状态：**CLOSED BY EVIDENCE REVALIDATION**
 
-原 Living Document 记录：
+原 Living Document 记录的 `Full Backend Release Evidence / negative-path middleware explicit-status exactness` blocker 经当前有效 Evidence 复核后不成立，不应为不存在的 blocker 修改产品代码。
 
-```text
-Full Backend suite = PASS
-Full Backend Release Evidence = blocker
-blocker = negative-path middleware explicit-status exactness
-```
-
-因此原 P0-1 计划是定位并修复该 middleware contract。
-
-### 当前仓库复核结果
-
-**结论：原 P0-1 blocker 结论不成立；当前有效 Evidence 已证明 Full Software Gate PASS，因此不应为不存在的 blocker 修改产品代码。**
-
-证据：
+权威 Evidence：
 
 - PR #72：`fix: harden M7 real-DUT audit and Actions startup`；
 - exact PR #72 head：`61bc6c83a8ceac6e893682233063da9fa9e328ec`；
-- Actions Run：`33086259866`，`PRD SPEC V1 Full Software Acceptance`；
-- Job：`98566602747`，runner=`voip-controlled-linux-01`；
-- Job conclusion：`success`；
-- `Frozen PRD/SPEC contracts`：success；
-- `Full VOIP AI software release gate`：success；
-- `Prepared-PCAP Real Offline Golden 001`：success；
-- PR #73 明确记录：PR #72 最新 Head 的 Full Software Acceptance 与 Preliminary Evidence Acceptance 均已 PASS；
-- PR #73 的 Production M7 Strict Audit 也已持久化 `PASS 20/20`。
+- Actions Run：`33086259866`；
+- Job：`98566602747`；
+- runner：`voip-controlled-linux-01`；
+- Frozen PRD/SPEC contracts：PASS；
+- Full VOIP AI software release gate：PASS；
+- Prepared-PCAP Real Offline Golden #001：PASS；
+- PR #73 Production M7 Strict Audit：PASS 20/20。
 
-当前 `master` 在 PR #73 merge commit `b6057716cca20414ca918fc683b9840bdf61e869` 之后，未发现会重新引入该 blocker 的 backend/frontend/runtime/DUT 产品代码变化。
-
-### P0-1 决策
+结论：
 
 ```text
 P0-1 = CLOSED BY EVIDENCE REVALIDATION
 CODE FIX = NOT REQUIRED
-REASON = previously recorded blocker is stale/unsupported by latest authoritative evidence
 ```
 
-这次修正遵守 Evidence-first：不存在当前失败证据时，不为了匹配旧计划而制造代码修改。
-
-### 对 Living Document 的影响
-
-P0-5 必须移除/修正以下旧结论：
-
-- `Full Backend Release Evidence Integrity blocker`；
-- `full_backend_pass=false`；
-- `negative-path middleware contract blocker`；
-- Release Path 中 Full Backend blocker 节点。
+P0-5 必须从 Living Document 移除旧的 Full Backend blocker / `full_backend_pass=false` 等陈旧结论。
 
 ---
 
@@ -79,17 +54,13 @@ P0-5 必须移除/修正以下旧结论：
 
 状态：**PASS / CLOSED**
 
-### 冻结基线
-
-执行时冻结的 exact `master`：
+执行时冻结 exact master：
 
 ```text
 44fdff09c7a912afda6c642ca9c0bf19cbc393ca
 ```
 
-为了在当前连接能力下触发 controlled self-hosted runner，使用临时验证分支承载触发 workflow；workflow 开始后强制 `fetch origin/master`、断言 `origin/master == TARGET_MASTER_SHA`，再 `checkout --detach TARGET_MASTER_SHA`。因此真正被验收的代码仍然是上面的 exact master，而不是临时分支中的 workflow 文件。
-
-### 执行 Evidence
+执行 Evidence：
 
 ```text
 Workflow Run: 33103163634
@@ -101,70 +72,41 @@ Artifact ID:  9659478053
 Artifact SHA: sha256:5355a4d63db57d52bc2bc003e60c25adaedd51b35a3b0304505cc8a7f7d6bae8
 ```
 
-关键 Gate 全部成功：
-
-```text
-Freeze and checkout exact master             PASS
-Environment and prepared-PCAP identity       PASS
-TShark 4.2.2-compatible runtime              PASS
-Frozen PRD SPEC contracts                    PASS
-Full VOIP AI software release gate           PASS
-Prepared-PCAP Real Offline Golden 001        PASS
-Exact-master acceptance summary              PASS
-Evidence artifact upload                     PASS
-```
-
-Prepared-PCAP 身份按 Frozen contract 校验：
+Prepared-PCAP：
 
 ```text
 /tmp/tcpdump-2026-08-14.pcap
 sha256=b038aa7c9a0644581f2815f654fcdee4620860796382265b178823fccba2e3f0
 ```
 
-Offline Golden #001 仍要求并通过 `142/142` checks。
-
-### P0-2 结论
+关键 Gate：
 
 ```text
-P0-2 = PASS
-EXACT_MASTER_FULL_SOFTWARE_ACCEPTANCE = PASS
-FULL SOFTWARE RELEASE GATE = PASS
-PREPARED-PCAP REAL OFFLINE GOLDEN #001 = PASS 142/142
+Frozen PRD SPEC contracts                    PASS
+Full VOIP AI software release gate           PASS
+Prepared-PCAP Real Offline Golden #001        PASS 142/142
 ```
 
-因此 Full Backend / Full Software 不是当前 P0 blocker。后续只要 master 继续仅发生状态文档更新，不应把文档-only commit 误解为软件实现失效；若产品代码再次变化，则按维护规则重新冻结 SHA 并复跑。
+注意：Offline Golden #001 是离线分析 Golden replay，不等于 Production Golden Candidate readiness。
 
 ---
 
-## 3. P0-3 — Golden #00
+## 3. P0-3 — Production Golden
 
-状态：**IN PROGRESS — ROOT CAUSE CONFIRMATION CHAIN NARROWED**
+状态：**IN PROGRESS — VALID REAL-FAULT GOLDEN PATH IDENTIFIED**
 
-注意：P0-2 的 Prepared-PCAP Real Offline Golden #001 是离线分析 Golden replay；P0-3 要关闭的是 Production M7 Golden Candidate readiness。两者不是同一个 Gate，不能用前者的 142/142 替代后者。
+### 3.1 第一轮 Production Golden 只读核查
 
-当前持久化 M7 strict evidence 已知：
-
-```text
-strict single-session audit = PASS 20/20
-strict_blockers            = []
-golden_ready               = false
-ai_promotion_eligible      = false
-remaining_gap              = ROOT_CAUSE_NOT_CONFIRMED
-```
-
-### 2026-08-28 Production Golden 只读核查
-
-为避免凭历史 JSON 推断，在 controlled runner 上对当前 Production Case 做了数据库只读核查并调用 `GoldenCandidateService.assess()` 重新计算；事务最终 `rollback`，没有修改 Golden 状态。
+对 Production Case `VOIP-20260827-D38C67` 在 controlled runner 上进行 DB 只读核查并调用 `GoldenCandidateService.assess()` 重新计算；事务最终 rollback，没有修改 Production 状态。
 
 ```text
 Workflow Run: 33114983584
 Job:          98667182656
 Runner:       voip-controlled-linux-01
 Conclusion:   success
-Case:         VOIP-20260827-D38C67
 ```
 
-当前事实：
+基础 Golden 条件：
 
 ```text
 evidence_count                = 9
@@ -180,29 +122,26 @@ status                        = PARTIAL_GOLDEN
 score                         = 70
 ```
 
-但根因确认链尚未成立：
+缺口：
 
 ```text
 confirmed_hypothesis_count    = 0
 causal_assessments            = []
 fix_verification_runs         = []
-root_cause_audit_events       = []
 root_cause_confirmed          = false
 direct_l1_support             = false
 gap_codes                     = [ROOT_CAUSE_NOT_CONFIRMED]
 ```
 
-当前三个 Hypothesis 均仍为 `OPEN`：
+持久化 Hypothesis：
 
 ```text
-MEDIA_PATH_CORRELATED_PCM_TX  OPEN  confidence=9500
-PCM_UNEXPECTED_SILENCE        OPEN  confidence=8500
-PCM_CLICK_POP                 OPEN  confidence=7500
+MEDIA_PATH_CORRELATED_PCM_TX  OPEN
+PCM_UNEXPECTED_SILENCE        OPEN
+PCM_CLICK_POP                 OPEN
 ```
 
-其中已存在与 AnalyzerRun 关联的 L1/L2/L3 关系，但现有唯一 L1 关系用于 `MEDIA_PATH_CORRELATED_PCM_TX` 时方向为 `CONTEXT`，不是 Golden contract 所要求的 `L1 + SUPPORT`。因此当前不是“缺少原始证据”，而是**尚未产生一个经过根因确认门禁的 CONFIRMED hypothesis / ROOT_CAUSE_CONFIRMED causal assessment，并且相应 confirmed hypothesis 还必须有 Direct L1 SUPPORT**。
-
-当前 Golden 规则由代码明确要求：
+Golden contract 仍保持：
 
 ```text
 COMPLETE_L1_EVIDENCE
@@ -215,17 +154,111 @@ COMPLETE_L1_EVIDENCE
 + NO_ANSWER_LEAKAGE
 ```
 
-目前前后端基础证据链中，仅 `ROOT_CAUSE_CONFIRMED` / `DIRECT_L1_SUPPORT` 这一段尚未闭环。
+### 3.2 深度只读核查：C06 是正常通话负样本，不应被强制提升为 Golden
 
-### 当前执行动作
+为了判断 P0-3 是代码桥接缺陷还是验收场景本身缺少真实根因，又在 Production backend 上执行了第二轮只读深度检查：重建 Evidence Snapshot、重新运行 deterministic reasoner、检查 ExperimentProfile candidacy，并扫描最近 100 个 Case 是否存在更合适的已确认 Golden 候选。
 
-下一步继续核查并执行现有 Hypothesis/Causal 根因确认门禁，而不是人工改数据库：
+```text
+Workflow Run: 33149605958
+Job:          98778278865
+Runner:       voip-controlled-linux-01
+Conclusion:   success
+Target Case:  VOIP-20260827-D38C67
+Case Summary: Production M7 C06 (round 6) REAL CALL acceptance - APF3260-M
+```
 
-1. 确认哪一个当前 Hypothesis 的确定性事实足以升级为 Direct L1 `SUPPORT`；
-2. 检查自动因果确认链是否能从 Analyzer/Evidence 合法地产生 `ROOT_CAUSE_CONFIRMED`；
-3. 如当前实现缺少 Analyzer/Causal → Direct L1 Support 的合法桥接，则补代码+测试，而不是降低 Golden 规则；
-4. 在 controlled runner 上重新运行 Production Case 根因确认与 Golden assessment；
-5. 只有真实评估达到 `GOLDEN_READY` 后才进入 P0-4。
+Fresh reasoner 结果：
+
+```text
+conclusion_state = WAITING_USER
+MEDIA_PATH_CORRELATED_PCM_TX = OPEN / non-confirmable
+PCM_UNEXPECTED_SILENCE       = OPEN / non-confirmable
+PCM_CLICK_POP                 = OPEN / non-confirmable
+experiment_profile_candidates = []
+```
+
+真实媒体事实：
+
+```text
+SIP calls                    = 2
+RTP streams                  = 3
+PCM sessions                 = 2
+high PCM↔RTP correlation     = 1
+periodic_interference_count  = 0
+unexpected_silence_count     = 5
+click_pop_count              = 8
+packet anomaly_count         = 0
+```
+
+这些 silence/click 候选在无对应用户症状/异常时间锚时只能保留为 context candidate。M6.2 V1.1 也明确要求：正常通话中的 hum/silence/click 候选不得脱离症状直接形成 `SUPPORTED` 故障，更不能成为确认根因。
+
+最近 Production Case 扫描：
+
+```text
+candidate_scan_count      = 6
+ready_or_confirmed_cases  = []
+```
+
+因此不存在一个可以直接替换 C06、且已经拥有真实 ROOT_CAUSE_CONFIRMED 的 Production Case。
+
+### 3.3 根因确认代码链本身存在，不是缺失模块
+
+当前实现已确认：
+
+- `CausalConfirmationEngine` 已支持 Direct Evidence / A-B / A-B-A / Environment Gate / hard contradiction；
+- `DiagnosticExperimentOrchestrator` 已能驱动 ReproductionSession、环境快照、比较和 Causal Assessment；
+- reviewer confirmation 也要求真实 `L1 + SUPPORT`；
+- Golden 只接受 confirmed hypothesis 上来自 `EVIDENCE` / `ANALYZER_RUN` 的 Direct L1 SUPPORT；
+- CausalAssessment 自身不能替代原始 Direct L1 Evidence。
+
+因此不应通过修改 Golden 规则或把 `L1 + CONTEXT` 改名为 SUPPORT 来过 Gate。
+
+### 3.4 新的正确 P0-3 路径：真实 DUT 受控故障 Case
+
+M7 Frozen 验收文档明确允许：
+
+> 实验室制造的真实 DUT 故障属于有效的 M7 验收输入。
+
+同时明确禁止为凑样本伪造 `GOLDEN_READY`。因此 C06 应继续作为正常通话负样本；P0-3 应建立一个新的真实 DUT 故障 Case。
+
+优先选择 **C01 SIP 注册失败**，原因：
+
+- M7 验收文档推荐 C01；
+- `REGISTER_FAILURE` ReproductionProfile 已 ACTIVE；
+- 它不需要人工摘机/拨号，可依赖 DUT 周期 REGISTER 自动触发；
+- 比音质、单通、DTMF 等场景更适合全自动、可回滚的实验室单变量故障；
+- 可以采用 A1/B/A2，验证“正常 → 单变量故障 → 恢复”的因果链。
+
+候选安全机制是：仅在 DUT 上、仅针对解析出的 Voice Gateway/SIP 目的流量施加临时可回滚阻断；然后明确移除并验证注册恢复。**不能控制或修改 PBX。**
+
+在真正执行 mutation 前，必须先通过只读能力探测确认：
+
+1. DUT 是否存在 `iptables` / `nft` / `ip` 等可用且可精确回滚的机制；
+2. 实际 Voice Gateway、SIP transport/port；
+3. 当前规则集基线 fingerprint；
+4. mutation 是否能严格限定到单一 Gateway/SIP 流量；
+5. Cleanup/Restoration 能否被确定性验证。
+
+当前已启动上述只读 Capability Probe。只有能力成立后才允许新增 allowlisted Controlled Fault Action；不会通过任意 shell 命令直接修改 DUT。
+
+### 3.5 当前执行顺序
+
+```text
+read-only DUT capability probe
+→ freeze safe fault contract
+→ implement allowlisted controlled-fault action + cleanup verification
+→ unit/integration/release gates
+→ create new real-DUT C01 Case
+→ A1 baseline
+→ B controlled fault
+→ A2 restore
+→ Analyzer + Direct L1 SUPPORT
+→ CausalAssessment ROOT_CAUSE_CONFIRMED
+→ Golden assessment
+→ GOLDEN_READY
+```
+
+只有该链真实成立后才进入 P0-4。
 
 ---
 
@@ -233,20 +266,29 @@ COMPLETE_L1_EVIDENCE
 
 状态：**PENDING**
 
-目标：在 P0-3 完成后重新汇总严格 Release 状态。历史 M7 strict single-session evidence 已为 `PASS 20/20`，但本步骤仍须按新的 Gate 证据重新计算最终 promotion/readiness，而不是直接继承旧布尔值。
+P0-3 完成后必须重新计算最终 M7/Golden/Promotion 状态。历史 strict single-session evidence 为 `PASS 20/20`，但不得直接继承旧 `golden_ready` / `ai_promotion_eligible` 布尔值。
+
+目标：
+
+```text
+strict single-session = PASS 20/20
+strict_blockers       = []
+golden_ready          = true
+ai_promotion_eligible = true
+```
 
 ---
 
 ## 5. P0-5 — 文档与交付同步
 
-状态：**PENDING**
+状态：**PENDING / CONTINUOUS SYNC**
 
-至少同步：
+最终至少同步：
 
 - `docs/03_Implementation_Trace/VOIP_AI_ASSISTANT_IMPLEMENTATION_STATUS.md`；
 - 本执行日志；
-- 与最终 Gate 直接冲突的 Quality/Release/Traceability Markdown/JSON 状态材料；
-- 对不可在当前接口中安全重写的二进制交付件，必须明确标注是否需要重生成，不伪称已同步。
+- 与最终 Gate 冲突的 Quality/Release/Traceability Markdown/JSON；
+- 不可安全重写的二进制交付件必须明确标注是否需要重生成，不伪称已同步。
 
 ---
 
@@ -255,7 +297,7 @@ COMPLETE_L1_EVIDENCE
 ```text
 P0-1  CLOSED — evidence revalidation; no code change required
 P0-2  PASS   — exact-master Full Software Acceptance + Offline Golden #001
-P0-3  IN PROGRESS — root-cause confirmation / Direct L1 SUPPORT chain
+P0-3  IN PROGRESS — C06 correctly preserved as negative sample; building real-DUT C01 controlled-fault Golden path
 P0-4  PENDING
-P0-5  PENDING
+P0-5  PENDING / continuous documentation sync
 ```
