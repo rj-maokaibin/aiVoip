@@ -1,4 +1,4 @@
-name: Cancel Stale PR80 Gate
+name: Cancel Stale Controlled Gate
 
 on:
   issue_comment:
@@ -9,19 +9,19 @@ permissions:
   contents: read
 
 jobs:
-  cancel-stale-pr80-gate:
+  cancel-stale-controlled-gate:
     if: >-
       github.event.issue.pull_request != null &&
       github.event.comment.user.login == github.repository_owner &&
-      github.event.comment.body == '/cancel-stale-pr80-gate 33171362293'
+      github.event.comment.body == '/cancel-stale-controlled-gate 33187032610'
     runs-on: ubuntu-latest
     steps:
       - name: Verify exact stale run and cancel
         env:
           GH_TOKEN: ${{ github.token }}
-          TARGET_RUN_ID: '33171362293'
-          EXPECTED_HEAD_SHA: d2cec8bedd5cfa42ad00ffdd52ce437a575b1a55
-          EXPECTED_WORKFLOW: PRD SPEC V1 Full Software Acceptance
+          TARGET_RUN_ID: '33187032610'
+          EXPECTED_HEAD_SHA: a1af254ea9c6fc011f9967224ea9cb8368ebf061
+          EXPECTED_WORKFLOW: Preliminary Evidence Report V1 Acceptance
         shell: bash
         run: |
           set -euo pipefail
