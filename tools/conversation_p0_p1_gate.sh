@@ -15,6 +15,7 @@ pytest -q \
   backend/tests/test_conversation_question_planner_v1.py \
   backend/tests/test_conversation_progress_push_v1.py \
   backend/tests/test_conversation_orchestrator_v1.py \
+  backend/tests/test_conversation_golden_corpus_v1.py \
   backend/tests/test_product_fact_v1.py \
   backend/tests/test_product_fact_importer_v1.py \
   backend/tests/test_knowledge_hybrid_retrieval_v1.py
@@ -33,9 +34,14 @@ required = [
     'backend/app/knowledge/importer.py',
     'backend/app/knowledge/retrieval.py',
     'backend/migrations/versions/0027_conversation_knowledge_v1.py',
+    'backend/tests/fixtures/conversation_p0_p1_corpus_v1.json',
 ]
 missing = [path for path in required if not Path(path).is_file()]
 assert not missing, missing
+
+migration = Path('backend/migrations/versions/0027_conversation_knowledge_v1.py').read_text(encoding='utf-8')
+assert 'revision: str = "0032_conversation_knowledge_v1"' in migration
+assert 'down_revision: Union[str, None] = "0031_capture_v2_quality_report"' in migration
 
 feedback = Path('backend/app/integrations/feishu/feedback.py').read_text(encoding='utf-8')
 events = Path('backend/app/integrations/feishu/events.py').read_text(encoding='utf-8')
