@@ -84,9 +84,9 @@ def deterministic_interpret_turn(
 ) -> dict[str, Any]:
     """Fail-closed local interpretation for P0 conversational correctness.
 
-    This intentionally handles only high-confidence interaction semantics. Novel
-    language may be proposed by the optional LLM path but cannot bypass the
-    material-evidence boundary.
+    Status/knowledge/hybrid turns are resolved before active-slot answers. This is
+    intentional: a user may ask a knowledge question while the Case is waiting for
+    a timestamp, and that question must not accidentally close the timestamp slot.
     """
     normalized = (text or "").strip()
     if attachments:
@@ -118,6 +118,24 @@ def deterministic_interpret_turn(
             classification="CHAT_ONLY",
             route_mode="CASE_CHAT",
             confidence=0.98,
+        )
+
+    if has_case and deterministic.reason == "knowledge_in_case":
+        return _proposal(
+            intent="KNOWLEDGE_IN_CASE",
+            classification="KNOWLEDGE",
+            route_mode="KNOWLEDGE_IN_CASE",
+            confidence=max(0.92, float(deterministic.confidence)),
+            entities={"knowledge_query": normalized[:2000]},
+        )
+    if has_case and deterministic.reason == "mixed_incident_question":
+        return _proposal(
+            intent="HYBRID_KNOWLEDGE_DIAGNOSIS",
+            classification="DIAGNOSTIC_CONTEXT",
+            route_mode="HYBRID",
+            confidence=max(0.94, float(deterministic.confidence)),
+            entities={"knowledge_query": normalized[:2000], "incident_context": normalized[:2000]},
+            material=True,
         )
 
     active_question = dict(active_question or {})
@@ -262,15 +280,6 @@ def deterministic_interpret_turn(
             confidence=max(0.90, float(deterministic.confidence)),
             entities={"knowledge_query": normalized[:2000]},
         )
-    if has_case and deterministic.reason == "mixed_incident_question":
-        return _proposal(
-            intent="HYBRID_KNOWLEDGE_DIAGNOSIS",
-            classification="DIAGNOSTIC_CONTEXT",
-            route_mode="HYBRID",
-            confidence=max(0.94, float(deterministic.confidence)),
-            entities={"knowledge_query": normalized[:2000], "incident_context": normalized[:2000]},
-            material=True,
-        )
     if has_case and deterministic.intent == "CASE_FOLLOW_UP":
         return _proposal(
             intent="DIAGNOSTIC_CONTEXT",
@@ -296,8 +305,6 @@ def deterministic_interpret_turn(
 
 
 def _ai_can_override(deterministic: dict[str, Any], ai: ConversationTurnProposal) -> bool:
-    # AI may make a turn less diagnostic, but it may not upgrade a deterministic
-    # non-material turn into Evidence on its own.
     if not deterministic.get("material_diagnostic_context") and ai.material_diagnostic_context:
         return False
     if ai.classification in {"CHAT_ONLY", "KNOWLEDGE", "CONTROL"} and ai.material_diagnostic_context:
