@@ -120,7 +120,11 @@ def deterministic_interpret_turn(
             confidence=0.98,
         )
 
-    if has_case and deterministic.reason == "knowledge_in_case":
+    # Preserve the frozen deterministic router contract (GENERAL_QUESTION) while
+    # giving the Conversation layer Case-aware semantics. This branch MUST run
+    # before active-question answer matching so a knowledge interruption never
+    # consumes the pending diagnostic slot.
+    if has_case and deterministic.intent == "GENERAL_QUESTION":
         return _proposal(
             intent="KNOWLEDGE_IN_CASE",
             classification="KNOWLEDGE",
@@ -274,9 +278,9 @@ def deterministic_interpret_turn(
 
     if deterministic.intent == "GENERAL_QUESTION":
         return _proposal(
-            intent="KNOWLEDGE_IN_CASE" if has_case else "KNOWLEDGE_QUERY",
+            intent="KNOWLEDGE_QUERY",
             classification="KNOWLEDGE",
-            route_mode="KNOWLEDGE_IN_CASE" if has_case else "KNOWLEDGE",
+            route_mode="KNOWLEDGE",
             confidence=max(0.90, float(deterministic.confidence)),
             entities={"knowledge_query": normalized[:2000]},
         )
