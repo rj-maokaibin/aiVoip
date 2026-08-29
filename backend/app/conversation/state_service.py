@@ -53,6 +53,22 @@ class ConversationStateService:
             return "", f"case:{case_id}"
         return str(binding.source_tenant_key or ""), str(binding.receive_id or f"case:{case_id}")
 
+    def _state_for(self, db: Session, conversation: Conversation) -> ConversationState:
+        state = db.scalar(
+            select(ConversationState).where(
+                ConversationState.conversation_id == conversation.id
+            ).limit(1)
+        )
+        if state is None:
+            state = ConversationState(
+                conversation_id=conversation.id,
+                slots_json={},
+                unavailable_needs_json=[],
+            )
+            db.add(state)
+            db.flush()
+        return state
+
     def get_or_create(
         self,
         db: Session,
@@ -63,6 +79,20 @@ class ConversationStateService:
         source_context = source_context or {}
         tenant_key = str(source_context.get("tenant_key") or "")
         chat_id = str(source_context.get("chat_id") or "")
+
+        # Async diagnosis feedback often knows only case_id. Reuse the already
+        # active Conversation before deriving a fallback chat key; otherwise the
+        # question and the user's later answer could land in different slot maps.
+        if case_id and not chat_id:
+            existing_case_conversation = db.scalar(
+                select(Conversation)
+                .where(Conversation.active_case_id == case_id, Conversation.status == "ACTIVE")
+                .order_by(Conversation.updated_at.desc())
+                .limit(1)
+            )
+            if existing_case_conversation is not None:
+                return existing_case_conversation, self._state_for(db, existing_case_conversation)
+
         if not chat_id:
             bound_tenant, bound_chat = self._binding_context(db, case_id)
             tenant_key = tenant_key or bound_tenant
@@ -89,20 +119,7 @@ class ConversationStateService:
         elif case_id and conversation.active_case_id != case_id:
             conversation.active_case_id = case_id
             db.flush()
-        state = db.scalar(
-            select(ConversationState).where(
-                ConversationState.conversation_id == conversation.id
-            ).limit(1)
-        )
-        if state is None:
-            state = ConversationState(
-                conversation_id=conversation.id,
-                slots_json={},
-                unavailable_needs_json=[],
-            )
-            db.add(state)
-            db.flush()
-        return conversation, state
+        return conversation, self._state_for(db, conversation)
 
     def case_state(self, db: Session, case_id: str) -> tuple[Conversation | None, ConversationState | None]:
         conversation = db.scalar(
