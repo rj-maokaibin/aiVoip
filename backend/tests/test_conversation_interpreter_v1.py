@@ -72,6 +72,28 @@ def test_case_knowledge_question_is_non_material():
     assert result["intent"] == "KNOWLEDGE_IN_CASE"
     assert result["classification"] == "KNOWLEDGE"
     assert result["material_diagnostic_context"] is False
+    assert result["entities"]["knowledge_query"] == "RFC2833 是什么？"
+
+
+def test_mixed_knowledge_and_current_incident_is_hybrid_and_material():
+    intake = route_intake(
+        text="客户现在 DTMF 按键没反应，会不会和 RFC2833 有关？",
+        attachments=[],
+        has_thread_case=True,
+    )
+    assert intake.reason == "mixed_incident_question"
+    result = deterministic_interpret_turn(
+        text="客户现在 DTMF 按键没反应，会不会和 RFC2833 有关？",
+        attachments=[],
+        deterministic=intake,
+        active_question=None,
+        has_case=True,
+    )
+    assert result["intent"] == "HYBRID_KNOWLEDGE_DIAGNOSIS"
+    assert result["route_mode"] == "HYBRID"
+    assert result["classification"] == "DIAGNOSTIC_CONTEXT"
+    assert result["material_diagnostic_context"] is True
+    assert "RFC2833" in result["entities"]["knowledge_query"]
 
 
 def test_substantive_case_follow_up_is_material():
