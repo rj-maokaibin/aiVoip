@@ -84,7 +84,7 @@ def deterministic_interpret_turn(
 ) -> dict[str, Any]:
     """Fail-closed local interpretation for P0 conversational correctness.
 
-    This intentionally handles only high-confidence interaction semantics.  Novel
+    This intentionally handles only high-confidence interaction semantics. Novel
     language may be proposed by the optional LLM path but cannot bypass the
     material-evidence boundary.
     """
@@ -211,6 +211,26 @@ def deterministic_interpret_turn(
                 },
                 material=True,
             )
+
+    # Upgrade compatibility: a Case may already be WAITING_USER from the previous
+    # release without a persisted active_question. Standalone inability answers are
+    # therefore fail-safe chat constraints, never new L1 technical Evidence.
+    if has_case and _UNKNOWN.fullmatch(normalized):
+        return _proposal(
+            intent="CASE_CHAT",
+            classification="CHAT_ONLY",
+            route_mode="CASE_CHAT",
+            confidence=0.97,
+            entities={"legacy_unresolved_answer": "UNKNOWN_BY_USER"},
+        )
+    if has_case and (_UNAVAILABLE.fullmatch(normalized) or _NONE.fullmatch(normalized)):
+        return _proposal(
+            intent="CASE_CHAT",
+            classification="CHAT_ONLY",
+            route_mode="CASE_CHAT",
+            confidence=0.97,
+            entities={"legacy_unresolved_answer": "UNAVAILABLE"},
+        )
 
     if _STOP.fullmatch(normalized):
         return _proposal(
