@@ -11,6 +11,7 @@ from app.conversation.gateway import ConversationGatewayClient, ConversationGate
 from app.core.config import settings
 from app.integrations.feishu.intake import IntakeResult
 
+
 _PROGRESS = re.compile(r"(?:进度|状态|到哪(?:了)?|分析到哪|结果(?:出来|有了|了吗)|现在怎么样|什么情况)", re.I)
 _COMPLETION = re.compile(r"(?:什么时候.*(?:结束|完成)|还要多久|多久.*(?:结束|完成)|分析.*(?:结束|完成)(?:了吗|了没|没有)?|可以结束(?:分析|诊断)?吗|能结束(?:分析|诊断)?吗)", re.I)
 _NEXT_ACTION = re.compile(r"(?:还需要我做什么|需要我做什么|我还要做什么|下一步(?:做什么|怎么办)?|还缺什么|还需要什么|需要补充什么)", re.I)
@@ -22,6 +23,7 @@ _ACK = re.compile(r"^(?:好的?|行|可以|收到|明白|知道了|谢谢|感谢
 _STOP = re.compile(r"^(?:结束吧|结束分析|结束诊断|按现有证据出结论|按现有结果出结论|给阶段结论)[。.!！ ]*$", re.I)
 _TIME_4 = re.compile(r"^(?:[01]?\d|2[0-3])(?:[0-5]\d)$")
 _TIME_COLON = re.compile(r"^(?:[01]?\d|2[0-3]):[0-5]\d$")
+_CONTROL_PUNCT = re.compile(r"[\s，,。.!！；;：:、]+")
 
 
 @dataclass(frozen=True)
@@ -74,6 +76,72 @@ def _normalize_hhmm(text: str) -> str | None:
     return None
 
 
+def _compact_control_text(text: str) -> str:
+    return _CONTROL_PUNCT.sub("", (text or "").strip().lower())
+
+
+def _is_finish_control(text: str) -> bool:
+    """Recognize explicit user commands to stop waiting and close with current evidence.
+
+    This intentionally rejects questions and negated phrases. It is broader than
+    the frozen exact-phrase regex because live Feishu users naturally combine the
+    stop command with a grounding constraint such as "按现有证据给阶段结论".
+    """
+    raw = (text or "").strip()
+    if not raw:
+        return False
+    compact = _compact_control_text(raw)
+    if not compact:
+        return False
+
+    # Questions/completion checks are handled earlier, but keep a fail-closed guard
+    # here so phrases such as "为什么结束分析了" never mutate control state.
+    if raw.endswith(("?", "？")) or compact.startswith(("为什么", "为何", "怎么")):
+        return False
+    if any(token in compact for token in ("不要结束", "别结束", "先不要结束", "暂时不要结束", "不用结束")):
+        return False
+
+    if _STOP.fullmatch(raw):
+        return True
+    if any(token in compact for token in (
+        "结束本轮分析",
+        "停止本轮分析",
+        "停止分析",
+        "停止诊断",
+        "本轮先结束",
+        "先结束本轮分析",
+    )):
+        return True
+
+    has_conclusion = "阶段结论" in compact or compact.endswith("出结论") or "形成结论" in compact
+    grounded_scope = any(token in compact for token in (
+        "现有证据",
+        "当前证据",
+        "现有结果",
+        "当前结果",
+        "当前pcap",
+        "当前这个pcap",
+        "已有证据",
+    ))
+    stop_waiting = any(token in compact for token in (
+        "不要再等",
+        "不再等",
+        "不用再等",
+        "别再等",
+    ))
+    conclusion_verb = any(token in compact for token in (
+        "给阶段结论",
+        "出阶段结论",
+        "形成阶段结论",
+        "直接给阶段结论",
+        "先给阶段结论",
+        "给出阶段结论",
+        "出结论",
+        "形成结论",
+    ))
+    return bool(has_conclusion and (grounded_scope or stop_waiting or conclusion_verb))
+
+
 def deterministic_interpret_turn(
     *,
     text: str,
@@ -84,9 +152,10 @@ def deterministic_interpret_turn(
 ) -> dict[str, Any]:
     """Fail-closed local interpretation for P0 conversational correctness.
 
-    Status/knowledge/hybrid turns are resolved before active-slot answers. This is
-    intentional: a user may ask a knowledge question while the Case is waiting for
-    a timestamp, and that question must not accidentally close the timestamp slot.
+    Status/knowledge/control turns are resolved before the generic active-slot
+    fallback. A user may ask a knowledge question or explicitly finish the current
+    analysis while a diagnostic question is pending; neither may be consumed as a
+    technical answer to that slot.
     """
     normalized = (text or "").strip()
     if attachments:
@@ -140,6 +209,25 @@ def deterministic_interpret_turn(
             confidence=max(0.94, float(deterministic.confidence)),
             entities={"knowledge_query": normalized[:2000], "incident_context": normalized[:2000]},
             material=True,
+        )
+
+    # Explicit control outranks the generic active-question fallback. A finish
+    # command is a Case-level instruction, never USER_RESPONSE technical Evidence.
+    if has_case and _is_finish_control(normalized):
+        return _proposal(
+            intent="CONTROL",
+            classification="CONTROL",
+            route_mode="CONTROL",
+            confidence=0.99,
+            entities={"control": "FINISH_WITH_PARTIAL_CONCLUSION"},
+        )
+    if has_case and _CONTINUE.fullmatch(normalized):
+        return _proposal(
+            intent="CONTROL",
+            classification="CONTROL",
+            route_mode="CONTROL",
+            confidence=0.97,
+            entities={"control": "CONTINUE_ANALYSIS"},
         )
 
     active_question = dict(active_question or {})
@@ -217,20 +305,31 @@ def deterministic_interpret_turn(
                         "confidence": 0.98,
                     },
                 )
-        if normalized:
-            return _proposal(
-                intent="ANSWER_ACTIVE_QUESTION",
-                classification="DIAGNOSTIC_CONTEXT",
-                route_mode="DIAGNOSIS_FOLLOW_UP",
-                confidence=0.82,
-                active_question_answer={
-                    "slot_key": slot_key,
-                    "state": "ANSWERED",
-                    "value": normalized[:500],
-                    "confidence": 0.82,
-                },
-                material=True,
-            )
+
+    # Passive acknowledgements must not accidentally satisfy an active diagnostic
+    # slot. Specific slot answers above keep "可以复现" and similar valid.
+    if _ACK.fullmatch(normalized):
+        return _proposal(
+            intent="GENERAL_CHAT",
+            classification="CHAT_ONLY",
+            route_mode="CASE_CHAT" if has_case else "KNOWLEDGE",
+            confidence=0.98,
+        )
+
+    if slot_key and normalized:
+        return _proposal(
+            intent="ANSWER_ACTIVE_QUESTION",
+            classification="DIAGNOSTIC_CONTEXT",
+            route_mode="DIAGNOSIS_FOLLOW_UP",
+            confidence=0.82,
+            active_question_answer={
+                "slot_key": slot_key,
+                "state": "ANSWERED",
+                "value": normalized[:500],
+                "confidence": 0.82,
+            },
+            material=True,
+        )
 
     # Upgrade compatibility: old Cases can already be WAITING_USER without the
     # new persisted active question. Standalone inability answers are fail-safe
@@ -250,30 +349,6 @@ def deterministic_interpret_turn(
             route_mode="CASE_CHAT",
             confidence=0.97,
             entities={"legacy_unresolved_answer": "UNAVAILABLE"},
-        )
-
-    if _STOP.fullmatch(normalized):
-        return _proposal(
-            intent="CONTROL",
-            classification="CONTROL",
-            route_mode="CONTROL",
-            confidence=0.99,
-            entities={"control": "FINISH_WITH_PARTIAL_CONCLUSION"},
-        )
-    if _CONTINUE.fullmatch(normalized):
-        return _proposal(
-            intent="CONTROL",
-            classification="CONTROL",
-            route_mode="CONTROL",
-            confidence=0.97,
-            entities={"control": "CONTINUE_ANALYSIS"},
-        )
-    if _ACK.fullmatch(normalized):
-        return _proposal(
-            intent="GENERAL_CHAT",
-            classification="CHAT_ONLY",
-            route_mode="CASE_CHAT" if has_case else "KNOWLEDGE",
-            confidence=0.98,
         )
 
     if deterministic.intent == "GENERAL_QUESTION":
