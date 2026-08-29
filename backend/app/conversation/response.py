@@ -156,9 +156,15 @@ class GroundedConversationResponder:
                 suffix = f"当前结论：{headline}。" if headline else "当前已经形成可查看的诊断结果。"
                 return f"Case {case_no} 当前自动分析已经结束。{suffix}"
             detail = f"当前阻塞点是：{blocking}。" if blocking else "当前没有新的后台任务在运行。"
-            recommended = self._recommended_next(snapshot)
-            if recommended:
-                return f"Case {case_no} 当前没有后台任务继续运行。{detail}{recommended}"
+            recommended = conversation.get("recommended_question") or {}
+            if recommended.get("id") == "partial-conclusion":
+                return (
+                    f"Case {case_no} 当前没有后台任务继续运行。{detail}"
+                    "现在已经可以基于现有证据形成阶段结论；如果你要求本轮结束，系统会明确列出已确认、仍未确认和后续可选证据。"
+                )
+            recommended_text = self._recommended_next(snapshot)
+            if recommended_text:
+                return f"Case {case_no} 当前没有后台任务继续运行。{detail}{recommended_text}"
             choice = actions.get("FINISH_WITH_PARTIAL_CONCLUSION")
             return f"Case {case_no} 当前没有后台任务继续运行。{detail}{choice or '可以按现有证据先形成阶段结论。'}"
 
@@ -174,11 +180,15 @@ class GroundedConversationResponder:
             elif unknown:
                 parts.append("仍未确认：" + "；".join(str(x) for x in unknown) + "。")
             if not running:
-                recommended = self._recommended_next(snapshot)
-                if recommended:
-                    parts.append(recommended)
-                elif actions.get("FINISH_WITH_PARTIAL_CONCLUSION"):
-                    parts.append(actions["FINISH_WITH_PARTIAL_CONCLUSION"])
+                recommended = conversation.get("recommended_question") or {}
+                if recommended.get("id") == "partial-conclusion":
+                    parts.append("当前没有必须继续追问的信息，可以直接按现有证据形成阶段结论。")
+                else:
+                    recommended_text = self._recommended_next(snapshot)
+                    if recommended_text:
+                        parts.append(recommended_text)
+                    elif actions.get("FINISH_WITH_PARTIAL_CONCLUSION"):
+                        parts.append(actions["FINISH_WITH_PARTIAL_CONCLUSION"])
             return "".join(parts)
 
         if intent == "CASE_NEXT_ACTION_QUERY":
@@ -186,18 +196,31 @@ class GroundedConversationResponder:
             if active.get("text"):
                 return f"当前如果方便，最有价值的是：{active['text']} 如果暂时拿不到，也可以直接告诉我，我会改走其他路径。"
             if running:
-                return "当前不需要你额外操作，系统仍在自动分析。等有新的结论或明确需要现场配合时，我会直接说明。"
-            recommended = self._recommended_next(snapshot)
-            if recommended:
-                return recommended
+                return "当前没有必须由你补充的信息。系统仍在自动分析；等有新的结论或明确需要现场配合时会直接说明。"
+
+            recommended = conversation.get("recommended_question") or {}
+            if recommended.get("text"):
+                return (
+                    "当前有一项可选但有价值的补充信息："
+                    f"{recommended['text']} "
+                    f"{recommended.get('fallback') or ''}".strip()
+                )
+            if recommended.get("id") == "partial-conclusion":
+                return self._missing_evidence_summary(snapshot)
+
             if actions.get("FINISH_WITH_PARTIAL_CONCLUSION"):
-                return "当前没有必须补充的操作。你可以继续补充新的直接证据，也可以按现有证据先形成阶段结论。"
-            return "当前没有需要你立即处理的动作；我会按现有证据状态继续给出下一步。"
+                return self._missing_evidence_summary(snapshot)
+            return "当前没有必须由你补充的信息，也没有可确定推荐的新证据项。"
 
         if intent == "CONTROL":
             control = str((interpretation.get("entities") or {}).get("control") or "")
             if control == "FINISH_WITH_PARTIAL_CONCLUSION":
-                return "收到。本轮按现有证据收敛，不再把缺失但暂时无法获得的信息作为重复追问条件。"
+                if running:
+                    return (
+                        "收到。系统不再等待新的外部证据，也不会把缺失信息继续作为重复追问条件。"
+                        "当前已启动的分析任务完成后，将只基于现有证据收敛为阶段结论，不会因此标记 Root Cause Confirmed、Resolved 或 Fix Verified。"
+                    )
+                return self._partial_conclusion(snapshot, prefix="收到。本轮按现有证据收敛。")
             if control == "CONTINUE_ANALYSIS":
                 if running:
                     return "收到，继续按当前证据推进；现在已有后台任务在运行，不需要重复触发。"
@@ -215,6 +238,68 @@ class GroundedConversationResponder:
         if interpretation.get("material_diagnostic_context"):
             return f"收到，这条补充已经作为 Case {case_no} 的新诊断上下文记录，系统会据此重新判断；普通聊天不会被计入诊断循环。"
         return self._short_next(snapshot)
+
+    @staticmethod
+    def _optional_evidence_actions(snapshot: dict[str, Any]) -> list[str]:
+        actions = snapshot.get("allowed_actions") or {}
+        keys = ("UPLOAD_RECORDING", "UPLOAD_PCAP", "REPRODUCE_WHEN_AVAILABLE")
+        return [str(actions[key]).strip() for key in keys if actions.get(key)]
+
+    @classmethod
+    def _missing_evidence_summary(cls, snapshot: dict[str, Any]) -> str:
+        diagnosis = snapshot.get("diagnosis") or {}
+        known = list(diagnosis.get("known") or [])[:3]
+        unknown = list(diagnosis.get("unknown") or [])[:3]
+        blocking = str(diagnosis.get("blocking_reason") or "").strip()
+        optional = cls._optional_evidence_actions(snapshot)
+
+        parts = ["当前没有必须由你补充的信息。"]
+        if known:
+            parts.append("已经确认：" + "；".join(str(x) for x in known) + "。")
+        if unknown:
+            parts.append("仍未确认：" + "；".join(str(x) for x in unknown) + "。")
+        elif blocking:
+            parts.append(f"仍未确认的边界：{blocking}。")
+        parts.append("当前没有可安全继续向你追问的必需证据；现在可以直接基于现有证据形成阶段结论。")
+        if optional:
+            parts.append("如果后续继续定位，可选的补充证据包括：" + "；".join(optional) + "。")
+        else:
+            parts.append("如果后续继续定位，当前没有可确定推荐的新证据项。")
+        return "".join(parts)
+
+    @classmethod
+    def _partial_conclusion(cls, snapshot: dict[str, Any], *, prefix: str = "") -> str:
+        case = snapshot.get("case") or {}
+        diagnosis = snapshot.get("diagnosis") or {}
+        runtime = snapshot.get("runtime") or {}
+        headline = str(diagnosis.get("headline") or "").strip()
+        known = list(diagnosis.get("known") or [])[:5]
+        unknown = list(diagnosis.get("unknown") or [])[:5]
+        blocking = str(diagnosis.get("blocking_reason") or "").strip()
+        optional = cls._optional_evidence_actions(snapshot)
+
+        parts: list[str] = []
+        if prefix:
+            parts.append(prefix)
+        if headline:
+            parts.append(f"当前阶段结论：{headline}。")
+        else:
+            parts.append("当前阶段结论：现有证据不足以形成更强的正式根因结论。")
+        if known:
+            parts.append("已经确认：" + "；".join(str(x) for x in known) + "。")
+        if unknown:
+            parts.append("仍不能确认：" + "；".join(str(x) for x in unknown) + "。")
+        elif blocking:
+            parts.append(f"仍不能确认的边界：{blocking}。")
+        if runtime.get("has_running_work"):
+            parts.append("当前仍有已启动后台任务，阶段结论将在这些任务完成后按同一证据边界更新。")
+        if optional:
+            parts.append("如后续继续定位，最有价值的可选证据/动作来自当前允许集合：" + "；".join(optional) + "。")
+        else:
+            parts.append("如后续继续定位，当前没有可确定推荐的新证据项。")
+        if case.get("status") not in {"ROOT_CAUSE_CONFIRMED", "RESOLVED"}:
+            parts.append("以上是阶段结论，不等于 Root Cause Confirmed，也不表示问题已 Resolved 或 Fix Verified。")
+        return "".join(parts)
 
     @staticmethod
     def _recommended_next(snapshot: dict[str, Any]) -> str:
@@ -235,9 +320,12 @@ class GroundedConversationResponder:
         actions = snapshot.get("allowed_actions") or {}
         if runtime.get("has_running_work"):
             return "当前自动任务仍在运行，有新发现会直接更新。"
-        recommended = cls._recommended_next(snapshot)
-        if recommended:
-            return recommended
+        recommended = snapshot.get("conversation", {}).get("recommended_question") or {}
+        if recommended.get("id") == "partial-conclusion":
+            return cls._partial_conclusion(snapshot)
+        recommended_text = cls._recommended_next(snapshot)
+        if recommended_text:
+            return recommended_text
         if diagnosis.get("blocking_reason"):
             partial = actions.get("FINISH_WITH_PARTIAL_CONCLUSION")
             return f"当前阻塞点是：{diagnosis['blocking_reason']}。{partial or ''}"
