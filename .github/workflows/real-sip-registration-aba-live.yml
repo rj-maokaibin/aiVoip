@@ -31,7 +31,6 @@ jobs:
       SIP_ABA_OUTPUT_ROOT: /tmp/voip-ai-real-sip-aba-evidence-${{ github.run_id }}-${{ github.run_attempt }}
       SIP_ABA_RUNTIME_ROOT: /tmp/voip-ai-real-sip-aba-runtime-${{ github.run_id }}-${{ github.run_attempt }}
       SIP_ABA_PHASE_SECONDS_DEFAULT: '75'
-      SIP_ABA_TRIGGER_ACTION_ID: TRIGGER_SIP_REGISTER_RC1
 
     steps:
       - name: Checkout exact master
@@ -146,7 +145,8 @@ jobs:
           export REPRODUCTION_PLATFORM_MODE=real
           export TSHARK_BINARY="$TSHARK_BINARY"
           phase_seconds="${SIP_ABA_PHASE_SECONDS:-$SIP_ABA_PHASE_SECONDS_DEFAULT}"
-          trigger_command="$(SIP_ABA_TRIGGER_ACTION_ID="$SIP_ABA_TRIGGER_ACTION_ID" "$SIP_ABA_VENV/bin/python" - <<'PY'
+          readonly trigger_action_id='TRIGGER_SIP_REGISTER_RC1'
+          trigger_command="$(SIP_ABA_TRIGGER_ACTION_ID="$trigger_action_id" "$SIP_ABA_VENV/bin/python" - <<'PY'
           import os
           from pathlib import Path
           from app.actions.registry import ActionRegistry
@@ -168,7 +168,7 @@ jobs:
           PY
           )"
           test -n "$trigger_command"
-          printf 'SIP_ABA_TRIGGER_ACTION=%s\n' "$SIP_ABA_TRIGGER_ACTION_ID" >> "$GITHUB_STEP_SUMMARY"
+          printf 'SIP_ABA_TRIGGER_ACTION=%s\n' "$trigger_action_id" >> "$GITHUB_STEP_SUMMARY"
           serial_command='v="$(uci -q get sysinfo.@sysinfo[0].serial_num 2>/dev/null || true)"; [ -n "$v" ] || v="$(uci -q get sysinfo.@sysinfo[0].serial_number 2>/dev/null || true)"; [ -n "$v" ] || v="$(uci -q get sysinfo.@sysinfo[0].sn 2>/dev/null || true)"; [ -n "$v" ] || v="$(uci -q get sysinfo.@sysinfo[0].serial 2>/dev/null || true)"; [ -n "$v" ] || exit 44; printf "%s\\n" "$v"'
           version_command='uci -q get sysinfo.@sysinfo[0].software_version'
           args=(
