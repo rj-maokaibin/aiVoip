@@ -12,6 +12,7 @@ TurnIntent = Literal[
     "ANSWER_ACTIVE_QUESTION",
     "KNOWLEDGE_QUERY",
     "KNOWLEDGE_IN_CASE",
+    "HYBRID_KNOWLEDGE_DIAGNOSIS",
     "DIAGNOSTIC_CONTEXT",
     "CASE_CHAT",
     "CONTROL",
@@ -22,7 +23,7 @@ TurnClassification = Literal[
     "CHAT_ONLY", "CONTROL", "DIAGNOSTIC_CONTEXT", "KNOWLEDGE", "ATTACHMENT"
 ]
 RouteMode = Literal[
-    "CASE_CHAT", "CONTROL", "DIAGNOSIS_FOLLOW_UP", "KNOWLEDGE", "KNOWLEDGE_IN_CASE", "ATTACHMENT"
+    "CASE_CHAT", "CONTROL", "DIAGNOSIS_FOLLOW_UP", "KNOWLEDGE", "KNOWLEDGE_IN_CASE", "HYBRID", "ATTACHMENT"
 ]
 SlotState = Literal[
     "UNASKED", "ASKED", "ANSWERED", "UNKNOWN_BY_USER", "UNAVAILABLE", "DECLINED", "NOT_APPLICABLE"
@@ -67,6 +68,8 @@ class ConversationTurnProposal(BaseModel):
             raise ValueError("CONVERSATION_EXECUTABLE_CONTENT_FORBIDDEN")
         if self.classification in {"CHAT_ONLY", "KNOWLEDGE", "CONTROL"} and self.material_diagnostic_context:
             raise ValueError("CONVERSATION_NON_DIAGNOSTIC_CLASS_CANNOT_BE_MATERIAL")
+        if self.route_mode == "HYBRID" and self.classification != "DIAGNOSTIC_CONTEXT":
+            raise ValueError("CONVERSATION_HYBRID_MUST_CARRY_DIAGNOSTIC_CONTEXT")
         return self
 
 
