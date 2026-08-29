@@ -60,22 +60,27 @@ def test_administrative_close_is_audited_without_fake_fix(monkeypatch):
 
 def test_administrative_close_requires_controlled_actor_and_reason(monkeypatch):
     monkeypatch.setattr(case_transitions, "audit", lambda *args, **kwargs: None)
-    with pytest.raises(AppError, match="CASE_ADMIN_CLOSE_FORBIDDEN"):
+    with pytest.raises(AppError) as forbidden:
         CaseTransitionService.administrative_close(
             _FakeDb(), _case(), actor="feishu:user", reason="close"
         )
-    with pytest.raises(AppError, match="CASE_ADMIN_CLOSE_REASON_REQUIRED"):
+    assert forbidden.value.code == "CASE_ADMIN_CLOSE_FORBIDDEN"
+
+    with pytest.raises(AppError) as missing_reason:
         CaseTransitionService.administrative_close(
             _FakeDb(), _case(), actor="github-admin:owner", reason=""
         )
+    assert missing_reason.value.code == "CASE_ADMIN_CLOSE_REASON_REQUIRED"
 
 
 def test_administrative_close_preserves_failed_and_is_idempotent_for_closed(monkeypatch):
     monkeypatch.setattr(case_transitions, "audit", lambda *args, **kwargs: None)
-    with pytest.raises(AppError, match="CASE_ADMIN_CLOSE_FAILED_CASE_FORBIDDEN"):
+    with pytest.raises(AppError) as failed_case:
         CaseTransitionService.administrative_close(
             _FakeDb(), _case(CaseStatus.FAILED.value), actor="github-admin:owner", reason="close"
         )
+    assert failed_case.value.code == "CASE_ADMIN_CLOSE_FAILED_CASE_FORBIDDEN"
+
     db = _FakeDb()
     case = _case(CaseStatus.CLOSED.value)
     returned = CaseTransitionService.administrative_close(
