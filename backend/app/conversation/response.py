@@ -6,9 +6,10 @@ from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from app.conversation.contracts import ResponsePlan
+from app.conversation.entities import resolve_catalog_entities
 from app.conversation.gateway import ConversationGatewayClient, ConversationGatewayError
 from app.conversation.snapshot import ConversationSnapshotBuilder
-from app.conversation.state_service import slot_label
+from app.conversation.state_service import ConversationStateService, slot_label
 from app.core.config import settings
 
 
@@ -38,7 +39,7 @@ class GroundedConversationResponder:
 
         # Knowledge inside a Case is allowed without changing diagnosis state.
         if intent in {"KNOWLEDGE_IN_CASE", "HYBRID_KNOWLEDGE_DIAGNOSIS"}:
-            knowledge = self._knowledge_answer(db, interpretation)
+            knowledge = self._knowledge_answer(db, case_id, interpretation)
             if intent == "KNOWLEDGE_IN_CASE":
                 return knowledge
             diagnosis_reply = self._deterministic_render(snapshot, intent, interpretation)
@@ -54,14 +55,25 @@ class GroundedConversationResponder:
         return self._deterministic_render(snapshot, intent, interpretation)
 
     @staticmethod
-    def _knowledge_answer(db: Session, interpretation: dict[str, Any]) -> str:
+    def _knowledge_answer(db: Session, case_id: str, interpretation: dict[str, Any]) -> str:
         from app.knowledge.conversation_service import answer_grounded_knowledge
 
-        entities = dict(interpretation.get("entities") or {})
-        query = str(entities.get("knowledge_query") or entities.get("incident_context") or "").strip()
+        parsed_entities = dict(interpretation.get("entities") or {})
+        query = str(parsed_entities.get("knowledge_query") or parsed_entities.get("incident_context") or "").strip()
         if not query:
             return "当前没有解析出明确的知识查询内容；我不会凭空补一个规格或协议结论。"
-        answer = answer_grounded_knowledge(db, query, entities=entities)
+
+        conversation, _state = ConversationStateService().case_state(db, case_id)
+        persisted = dict((conversation.entities_json or {}) if conversation else {})
+        grounded_entities = resolve_catalog_entities(db, query, persisted)
+        grounded_entities.update({
+            key: value for key, value in parsed_entities.items()
+            if value not in (None, "", [], {}) and key not in {"knowledge_query", "incident_context"}
+        })
+        if conversation is not None and grounded_entities != persisted:
+            conversation.entities_json = grounded_entities
+            db.flush()
+        answer = answer_grounded_knowledge(db, query, entities=grounded_entities)
         return str(answer.get("text") or "").strip()
 
     def _plan(self, *, snapshot: dict[str, Any], intent: str) -> ResponsePlan | None:
