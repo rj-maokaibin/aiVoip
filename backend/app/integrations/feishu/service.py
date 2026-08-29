@@ -71,6 +71,61 @@ def _raise_active_case_conflict(db: Session, *, chat_id: str, existing_case_id: 
     raise FeishuActiveCaseConflict(chat_id=chat_id, existing_case_id=existing_case_id)
 
 
+def _ensure_initial_conversation_turn(db: Session, binding: FeishuCaseBinding) -> None:
+    """Materialize the authoritative first Feishu diagnosis message in Conversation.
+
+    The Feishu Case binding is the source-of-truth correlation created during
+    provisioning. Conversation V1 originally persisted only later Case follow-ups,
+    leaving the initial NEW_DIAGNOSIS outside ConversationTurn. Persisting it here
+    keeps source-message -> Case -> Conversation atomic and idempotent without
+    creating Evidence or resuming Diagnosis.
+    """
+    if binding.receive_id_type != "chat_id":
+        return
+    message_id = str(binding.source_message_id or "").strip()
+    text = str(binding.source_normalized_text or "").strip()
+    if not message_id or not text:
+        return
+
+    from app.conversation.state_service import ConversationStateService
+
+    source_context = {
+        "tenant_key": binding.source_tenant_key,
+        "chat_id": binding.receive_id,
+        "event_id": binding.source_event_id,
+        "message_id": message_id,
+        "root_message_id": binding.source_root_message_id,
+        "parent_message_id": binding.source_parent_message_id,
+        "sender_open_id": binding.source_sender_open_id,
+        "chat_type": binding.source_chat_type,
+        "create_time": binding.source_message_timestamp,
+        "normalized_text": text,
+        "attachments": binding.source_attachment_refs or [],
+    }
+    interpretation = {
+        "schema_version": "conversation-turn-v1",
+        "intent": "DIAGNOSTIC_CONTEXT",
+        "classification": "DIAGNOSTIC_CONTEXT",
+        "route_mode": "DIAGNOSIS_FOLLOW_UP",
+        "active_question_answer": None,
+        "entities": {},
+        "material_diagnostic_context": True,
+        "needs_clarification": False,
+        "clarification_question": None,
+        "confidence": 1.0,
+        "safety_class": "NON_EXECUTING_SEMANTIC_PROPOSAL",
+    }
+    ConversationStateService().record_user_turn(
+        db,
+        case_id=binding.case_id,
+        source_context=source_context,
+        text=text,
+        interpretation=interpretation,
+        model_name=None,
+        prompt_version=None,
+    )
+
+
 def bind_case_to_chat(db: Session, *, case_id: str, chat_id: str, chat_type: str | None = None,
                       receive_id_type: str | None = None,
                       source_context: dict | None = None) -> FeishuCaseBinding | None:
@@ -111,6 +166,8 @@ def bind_case_to_chat(db: Session, *, case_id: str, chat_id: str, chat_type: str
                 db, binding_id=binding.id, tenant_key=tenant_key, chat_id=chat_id,
                 created_by_open_id=created_by_open_id,
             )
+        _ensure_initial_conversation_turn(db, binding)
+        db.flush()
         return binding
 
     if receive_id_type == 'chat_id':
@@ -134,6 +191,8 @@ def bind_case_to_chat(db: Session, *, case_id: str, chat_id: str, chat_type: str
                 _raise_active_case_conflict(db, chat_id=chat_id, existing_case_id=active_case.id)
         existing = db.scalar(select(FeishuCaseBinding).where(FeishuCaseBinding.case_id == case_id).limit(1))
         if existing is not None:
+            _ensure_initial_conversation_turn(db, existing)
+            db.flush()
             return existing
         raise
 
@@ -142,6 +201,7 @@ def bind_case_to_chat(db: Session, *, case_id: str, chat_id: str, chat_type: str
             db, binding_id=candidate.id, tenant_key=tenant_key, chat_id=chat_id,
             created_by_open_id=created_by_open_id,
         )
+    _ensure_initial_conversation_turn(db, candidate)
     db.flush()
     return candidate
 

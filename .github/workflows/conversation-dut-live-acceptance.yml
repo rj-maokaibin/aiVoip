@@ -1,0 +1,214 @@
+name: Conversation DUT Live Acceptance V1
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - 'tools/conversation_dut_live_acceptance.py'
+      - 'backend/tests/test_conversation_dut_live_acceptance_v1.py'
+      - 'tools/m7_acceptance_strict_audit.py'
+      - 'backend/app/conversation/**'
+      - 'backend/app/integrations/feishu/**'
+      - 'backend/app/workers/reproduction_tasks.py'
+      - 'backend/app/workers/reproduction_event_tasks.py'
+      - 'backend/app/workers/diagnosis_tasks.py'
+      - 'docs/CONVERSATION_DUT_LIVE_ACCEPTANCE_V1.md'
+      - '.github/workflows/conversation-dut-live-acceptance.yml'
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: conversation-dut-live-${{ github.event_name }}-${{ github.event.pull_request.number || github.event.issue.number || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  conversation-dut-contract:
+    if: github.event_name == 'pull_request'
+    runs-on:
+      - self-hosted
+      - linux
+      - x64
+      - voip-controlled-linux
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        timeout-minutes: 5
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 1
+
+      - name: Prepare isolated contract runtime
+        run: |
+          set -Eeuo pipefail
+          venv="/tmp/voip-conversation-dut-contract-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          rm -rf "$venv"
+          python3 -m venv "$venv"
+          source "$venv/bin/activate"
+          python -m pip install --disable-pip-version-check -q -r backend/requirements.txt
+          echo "CONVERSATION_DUT_VENV=$venv" >> "$GITHUB_ENV"
+
+      - name: Read-only Conversation DUT contract
+        run: |
+          set -Eeuo pipefail
+          source "$CONVERSATION_DUT_VENV/bin/activate"
+          python -m py_compile tools/conversation_dut_live_acceptance.py
+          PYTHONPATH=backend:. pytest -q backend/tests/test_conversation_dut_live_acceptance_v1.py
+          PYTHONPATH=backend:. python tools/github_actions_context_gate.py
+          printf 'CONVERSATION_DUT_LIVE_CONTRACT=PASS\n'
+          printf 'PRODUCTION_MUTATION=NOT_EXECUTED\n'
+
+  real-conversation-dut-observer:
+    if: >-
+      github.event_name == 'issue_comment' &&
+      github.event.issue.pull_request != null &&
+      github.event.comment.user.login == github.repository_owner &&
+      startsWith(github.event.comment.body, '/run-conversation-dut-e2e ')
+    runs-on:
+      - self-hosted
+      - linux
+      - x64
+      - voip-controlled-linux
+    timeout-minutes: 50
+    env:
+      LIVE_CONTEXT: /tmp/voip-conversation-dut-live-context-${{ github.run_id }}-${{ github.run_attempt }}.json
+      LIVE_PREFLIGHT: validation/conversation_dut_live_preflight_v2.json
+      LIVE_RESULT: validation/conversation_dut_live_acceptance_v1.json
+    steps:
+      - uses: actions/checkout@v4
+        timeout-minutes: 5
+        with:
+          ref: master
+          fetch-depth: 1
+
+      - name: Authorize exact master and dedicated acceptance Case
+        shell: bash
+        env:
+          TRIGGER_BODY: ${{ github.event.comment.body }}
+          TRIGGER_ACTOR: ${{ github.event.comment.user.login }}
+        run: |
+          set -Eeuo pipefail
+          test "$TRIGGER_ACTOR" = "$GITHUB_REPOSITORY_OWNER"
+          export TRIGGER_BODY
+          python3 - <<'PY' > /tmp/conversation-dut-trigger.env
+          import os, re, shlex
+          body=os.environ['TRIGGER_BODY']
+          if '\n' in body or '\r' in body:
+              raise SystemExit('multiline trigger forbidden')
+          parts=shlex.split(body)
+          if len(parts) != 4 or parts[0] != '/run-conversation-dut-e2e':
+              raise SystemExit('expected: /run-conversation-dut-e2e <master-sha> <case-no> <acceptance-tag>')
+          sha, case_no, tag = parts[1:]
+          if not re.fullmatch(r'[0-9a-f]{40}', sha):
+              raise SystemExit('invalid master sha')
+          if not re.fullmatch(r'VOIP-[A-Za-z0-9-]{6,80}', case_no):
+              raise SystemExit('invalid case number')
+          if not re.fullmatch(r'CONV-DUT-E2E-[A-Z0-9_-]{8,64}', tag):
+              raise SystemExit('invalid acceptance tag')
+          print(f'LIVE_EXPECTED_SHA={sha}')
+          print(f'LIVE_CASE_NO={case_no}')
+          print(f'LIVE_ACCEPTANCE_TAG={tag}')
+          PY
+          source /tmp/conversation-dut-trigger.env
+          test "$(git rev-parse HEAD)" = "$LIVE_EXPECTED_SHA"
+          test -r /home/github-runner/.config/voip-ai/.env
+          test -r /home/github-runner/.config/voip-ai/feishu_app_secret
+          mkdir -p validation
+          rm -f "$LIVE_PREFLIGHT" "$LIVE_RESULT"
+          {
+            echo "LIVE_EXPECTED_SHA=$LIVE_EXPECTED_SHA"
+            echo "LIVE_CASE_NO=$LIVE_CASE_NO"
+            echo "LIVE_ACCEPTANCE_TAG=$LIVE_ACCEPTANCE_TAG"
+          } >> "$GITHUB_ENV"
+          printf 'LIVE_GATE_MASTER_SHA=%s\n' "$LIVE_EXPECTED_SHA"
+          printf 'LIVE_GATE_CASE_NO=%s\n' "$LIVE_CASE_NO"
+          printf 'LIVE_GATE_ACCEPTANCE_TAG_SHA256=%s\n' "$(printf '%s' "$LIVE_ACCEPTANCE_TAG" | sha256sum | awk '{print $1}')"
+          rm -f /tmp/conversation-dut-trigger.env
+
+      - name: Prepare Acceptance Infrastructure V2 runtime
+        run: |
+          set -Eeuo pipefail
+          rm -f "$LIVE_CONTEXT"
+          python3 deploy/live_acceptance/runtime_v2.py prepare \
+            --context "$LIVE_CONTEXT" \
+            --feishu-secret-file /home/github-runner/.config/voip-ai/feishu_app_secret
+
+      - name: Production exact-runtime read-only preflight
+        run: |
+          set -Eeuo pipefail
+          python3 deploy/live_acceptance/runtime_v2.py run \
+            --context "$LIVE_CONTEXT" \
+            --env-file /home/github-runner/.config/voip-ai/.env \
+            --workspace "$GITHUB_WORKSPACE" \
+            -- python deploy/live_acceptance/preflight_v2.py \
+                 --profile human-feishu-golden-001 \
+                 --out "$LIVE_PREFLIGHT"
+          python3 - <<'PY'
+          import json, os
+          p=json.load(open(os.environ['LIVE_PREFLIGHT'], encoding='utf-8'))
+          assert p.get('contract') == 'voip-live-acceptance-preflight-v2', p
+          assert p.get('status') == 'PASS', p
+          assert p.get('source_revision') == os.environ['LIVE_EXPECTED_SHA'], p
+          assert str(p.get('runtime_fingerprint') or '').strip(), p
+          print('CONVERSATION_DUT_PREFLIGHT=PASS')
+          PY
+
+      - name: Observe real Feishu to DUT product flow
+        run: |
+          set -Eeuo pipefail
+          python3 deploy/live_acceptance/runtime_v2.py run \
+            --context "$LIVE_CONTEXT" \
+            --env-file /home/github-runner/.config/voip-ai/.env \
+            --workspace "$GITHUB_WORKSPACE" \
+            -- python tools/conversation_dut_live_acceptance.py \
+                 --case "$LIVE_CASE_NO" \
+                 --acceptance-tag "$LIVE_ACCEPTANCE_TAG" \
+                 --wait-seconds 2400 \
+                 --poll-seconds 10 \
+                 --out "$LIVE_RESULT" \
+                 --strict
+
+      - name: Verify sanitized immutable result
+        if: always()
+        run: |
+          set -Eeuo pipefail
+          test -s "$LIVE_RESULT"
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          path=Path(os.environ['LIVE_RESULT'])
+          raw=path.read_text(encoding='utf-8')
+          p=json.loads(raw)
+          if p.get('status') == 'PASS':
+              assert p.get('contract') == 'conversation-dut-live-acceptance-v1', p
+              assert all((p.get('checks') or {}).values()), p
+              safety=p.get('safety') or {}
+              assert safety.get('auditor_read_only') is True, p
+              assert safety.get('synthetic_feishu_turn_created') is False, p
+              assert safety.get('synthetic_call_event_created') is False, p
+              assert safety.get('dut_action_executed_by_gate') is False, p
+              assert safety.get('pbx_action_executed_by_gate') is False, p
+              assert 'om_' not in raw, 'raw Feishu message id leaked into artifact'
+              print('CONVERSATION_DUT_LIVE_ACCEPTANCE=PASS')
+          else:
+              print(json.dumps({'status':p.get('status'),'phase':p.get('phase'),'blockers':p.get('blocker_codes')}, ensure_ascii=False))
+              raise SystemExit(2)
+          PY
+
+      - name: Upload sanitized Conversation DUT evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: conversation-dut-live-acceptance-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            validation/conversation_dut_live_preflight_v2.json
+            validation/conversation_dut_live_acceptance_v1.json
+          if-no-files-found: warn
+          retention-days: 90
+
+      - name: Remove runtime context
+        if: always()
+        run: |
+          rm -f "$LIVE_CONTEXT" /tmp/conversation-dut-trigger.env
