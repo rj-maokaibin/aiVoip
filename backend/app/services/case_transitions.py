@@ -12,6 +12,8 @@ from app.db.models import Case, CaseStateHistory, Evidence
 from app.services.audit import audit
 
 Guard = Callable[[dict[str, Any]], bool]
+ADMIN_CLOSE_EVENT = "CASE_ADMIN_CLOSED"
+_ADMIN_CLOSE_ACTOR_PREFIXES = ("github-admin:", "system-admin:")
 
 
 @dataclass(frozen=True)
@@ -42,6 +44,7 @@ _FAILABLE = frozenset({
     CaseStatus.NEED_MORE_EVIDENCE, CaseStatus.WAITING_USER, CaseStatus.DIAGNOSED,
     CaseStatus.ROOT_CAUSE_CONFIRMED, CaseStatus.RESOLVING,
 })
+_ADMIN_CLOSABLE = _FAILABLE | frozenset({CaseStatus.RESOLVED})
 
 
 def _guard_ok(db: Session, case: Case, name: str | None, context: dict[str, Any]) -> bool:
@@ -83,7 +86,6 @@ class CaseTransitionService:
         else:
             rule = next((x for x in TRANSITIONS if x.event == event and current in x.from_states), None)
             if not rule:
-                # Idempotent delivery of an event is harmless if the state already equals its target.
                 candidates = [x for x in TRANSITIONS if x.event == event]
                 if any(x.to_state == current for x in candidates):
                     return case
@@ -106,6 +108,72 @@ class CaseTransitionService:
             target_type="case",
             target_id=case.id,
             before={"status": old}, after={"status": target.value}, reason=reason, detail={"from": old, "to": target.value, "event": event.value, "reason": reason, "context": context},
+        )
+        db.flush()
+        return case
+
+    @staticmethod
+    def administrative_close(
+        db: Session,
+        case: Case,
+        *,
+        reason: str,
+        actor: str,
+        context: dict[str, Any] | None = None,
+    ) -> Case:
+        """Close a stale/administratively retired Case without claiming a verified fix.
+
+        This is deliberately separate from CASE_CLOSED (RESOLVED -> CLOSED). It
+        never emits FIX_VERIFIED or RESOLVED. Only controlled administrator actors
+        may use it, and FAILED is preserved as a distinct terminal outcome.
+        """
+        actor = str(actor or "").strip()
+        reason = str(reason or "").strip()
+        if not actor.startswith(_ADMIN_CLOSE_ACTOR_PREFIXES):
+            raise AppError("CASE_ADMIN_CLOSE_FORBIDDEN")
+        if not reason:
+            raise AppError("CASE_ADMIN_CLOSE_REASON_REQUIRED")
+
+        current = CaseStatus(case.status)
+        if current == CaseStatus.CLOSED:
+            return case
+        if current == CaseStatus.FAILED:
+            raise AppError("CASE_ADMIN_CLOSE_FAILED_CASE_FORBIDDEN")
+        if current not in _ADMIN_CLOSABLE:
+            raise AppError("CASE_TRANSITION_NOT_ALLOWED", details={"from": current.value, "event": ADMIN_CLOSE_EVENT})
+
+        details = dict(context or {})
+        details["administrative"] = True
+        details["preserves_fix_semantics"] = True
+        old = case.status
+        case.status = CaseStatus.CLOSED.value
+        case.updated_at = datetime.now(timezone.utc)
+        db.add(CaseStateHistory(
+            case_id=case.id,
+            from_status=old,
+            to_status=CaseStatus.CLOSED.value,
+            event=ADMIN_CLOSE_EVENT,
+            actor=actor,
+            reason=reason,
+            context_json=details,
+        ))
+        audit(
+            db,
+            case_id=case.id,
+            actor=actor,
+            event_type="CASE_STATE_CHANGED",
+            target_type="case",
+            target_id=case.id,
+            before={"status": old},
+            after={"status": CaseStatus.CLOSED.value},
+            reason=reason,
+            detail={
+                "from": old,
+                "to": CaseStatus.CLOSED.value,
+                "event": ADMIN_CLOSE_EVENT,
+                "reason": reason,
+                "context": details,
+            },
         )
         db.flush()
         return case
