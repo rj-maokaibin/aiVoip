@@ -115,12 +115,43 @@ def _dispatch_case_conversation(*, case_id: str, text: str, source_context: dict
     ingest_feishu_follow_up.apply_async(args=[case_id, text, source_context], queue='diagnosis')
 
 
-def _dispatch_knowledge_conversation(*, text: str, source_context: dict, attachments: list[dict]) -> None:
+def _dispatch_knowledge_conversation(
+    *, text: str, source_context: dict, attachments: list[dict], suppress_reply: bool = False
+) -> None:
     """Persist no-Case knowledge chat without creating Case/Evidence."""
     from app.workers.conversation_tasks import ingest_knowledge_turn
     ingest_knowledge_turn.apply_async(
-        args=[text, source_context, attachments], queue='diagnosis'
+        args=[text, source_context, attachments, suppress_reply], queue='diagnosis'
     )
+
+
+def _preview_no_case_knowledge(db: Session, *, text: str, source_context: dict) -> dict:
+    """Build the immediate deterministic knowledge answer for Feishu callback.
+
+    The historical Feishu contract returns ``answered`` and ``citations`` from the
+    callback itself.  Keep that contract without running an LLM in the callback:
+    reuse any already-persisted Conversation entities, resolve only catalog-backed
+    product/version/feature context, and answer from ProductFact / verified
+    KnowledgeItem authorities.  The async Conversation worker then persists the
+    turn with ``suppress_reply=True`` so the user sees exactly one response.
+    """
+    from app.conversation.entities import resolve_catalog_entities
+    from app.db.conversation_models import Conversation
+    from app.knowledge.conversation_service import answer_grounded_knowledge
+
+    tenant_key = str(source_context.get('tenant_key') or '')
+    chat_id = str(source_context.get('chat_id') or '')
+    conversation = db.scalar(
+        select(Conversation).where(
+            Conversation.tenant_key == tenant_key,
+            Conversation.channel == 'FEISHU',
+            Conversation.chat_id == chat_id,
+            Conversation.status == 'ACTIVE',
+        ).limit(1)
+    ) if chat_id else None
+    existing_entities = dict(conversation.entities_json or {}) if conversation else {}
+    entities = resolve_catalog_entities(db, text, existing_entities)
+    return answer_grounded_knowledge(db, text, entities=entities)
 
 
 def dispatch_event(db: Session, *, payload: dict, actor: str = "feishu:callback") -> dict:
@@ -377,16 +408,32 @@ def dispatch_event(db: Session, *, payload: dict, actor: str = "feishu:callback"
                 result = {**base, 'handled': 'general_question', 'case_no': case.case_no,
                           'conversation_dispatched': True}
             else:
-                _dispatch_knowledge_conversation(
-                    text=text, source_context=source_context, attachments=attachments
+                answer = _preview_no_case_knowledge(
+                    db, text=text, source_context=source_context
                 )
-                result = {**base, 'handled': 'general_question', 'answered': None,
-                          'citations': [], 'conversation_dispatched': True}
+                _reply_intake(message_id, str(answer.get('text') or ''))
+                _dispatch_knowledge_conversation(
+                    text=text, source_context=source_context, attachments=attachments,
+                    suppress_reply=True,
+                )
+                result = {
+                    **base,
+                    'handled': 'general_question',
+                    'answered': bool(answer.get('answered')),
+                    'citations': list(answer.get('citations') or []),
+                    'answer_type': answer.get('answer_type'),
+                    'conversation_dispatched': True,
+                }
                 from app.services.audit import audit
                 audit(db, case_id=None, actor=actor,
                       event_type='FEISHU_KNOWLEDGE_CONVERSATION_DISPATCHED', target_type='feishu_message',
                       target_id=message_id or event_id or None,
-                      detail={'query': text[:500], 'case_created': False})
+                      detail={
+                          'query': text[:500],
+                          'case_created': False,
+                          'answered': bool(answer.get('answered')),
+                          'citations': list(answer.get('citations') or []),
+                      })
         elif intake.intent == 'NEW_DIAGNOSIS' and intake.missing_user_inputs:
             result = {**base, 'handled': 'needs_clarification',
                       'missing_user_inputs': intake.missing_user_inputs}
