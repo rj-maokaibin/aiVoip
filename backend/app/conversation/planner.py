@@ -6,6 +6,8 @@ from typing import Any
 
 _TERMINAL_BLOCKERS = {"MAX_CYCLES", "NO_PROGRESS"}
 _UNAVAILABLE_STATES = {"ANSWERED", "UNKNOWN_BY_USER", "UNAVAILABLE", "DECLINED", "NOT_APPLICABLE"}
+_CONTROL_SLOT_KEY = "__conversation_control__"
+_FINISH_CONTROL = "FINISH_WITH_PARTIAL_CONCLUSION"
 
 # Higher means the answer can materially reduce the diagnosis search space.
 _INFORMATION_GAIN = {
@@ -114,6 +116,20 @@ def select_user_question(
     summary = summary or {}
     slots = slots or {}
     unavailable = {str(x) for x in (unavailable_needs or [])}
+
+    control_state = str((slots.get(_CONTROL_SLOT_KEY) or {}).get("state") or "")
+    if control_state == _FINISH_CONTROL:
+        return QuestionPlan(
+            kind="PARTIAL_CONCLUSION",
+            need=None,
+            question=None,
+            reason="USER_REQUESTED_PARTIAL_CONCLUSION",
+            fallback=(
+                "已收到结束本轮分析的指令。系统不再等待新的用户证据，"
+                "将基于当前已确认事实和未确认边界形成阶段结论；后续有新的直接证据时仍可继续分析。"
+            ),
+        )
+
     blocker = str(summary.get("blocking_reason") or "").upper()
     if blocker in _TERMINAL_BLOCKERS:
         return QuestionPlan(
@@ -121,7 +137,10 @@ def select_user_question(
             need=None,
             question=None,
             reason=blocker,
-            fallback="按现有证据形成阶段结论；后续有新的直接证据时再继续。",
+            fallback=(
+                "当前自动分析已达到本轮停止条件。系统将基于现有证据形成阶段结论，"
+                "并明确已确认与仍未确认的边界；后续有新的直接证据时再继续。"
+            ),
         )
 
     candidates = _candidate_needs(decision)
@@ -146,7 +165,10 @@ def select_user_question(
             need=None,
             question=None,
             reason="NO_ASKABLE_NEED",
-            fallback="当前没有值得重复追问的信息；请按现有证据形成阶段结论，或等待新的直接证据。",
+            fallback=(
+                "当前没有值得继续向你追问的信息。系统可以直接基于现有证据形成阶段结论；"
+                "后续有新的直接证据时仍可继续分析。"
+            ),
         )
 
     ranked.sort(key=lambda item: item[0], reverse=True)
