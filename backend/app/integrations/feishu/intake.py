@@ -67,12 +67,13 @@ def _symptoms(text: str) -> list[str]:
 
 def route_intake(*, text: str, attachments: list[dict] | None = None,
                  has_thread_case: bool = False) -> IntakeResult:
-    """Deterministic, fail-closed Feishu intent router.
+    """Deterministic, fail-closed Feishu workflow router.
 
-    The router only decides workflow routing. It never infers protocol facts or
-    executes actions. In-Case knowledge questions are intentionally sent through
-    CASE_FOLLOW_UP with a ``knowledge_in_case`` reason so the Conversation layer
-    can preserve context without turning that question into diagnostic Evidence.
+    The deterministic layer preserves the frozen AI1 routing contract.  It does
+    not infer protocol facts or execute actions.  Conversation semantics such as
+    ``KNOWLEDGE_IN_CASE`` and ``HYBRID`` are resolved by the Conversation layer
+    after a Case is correlated.  This keeps legacy router behavior stable while
+    allowing the richer Conversation Platform to own context-aware interpretation.
     """
     text = (text or '').strip()
     lowered = text.lower()
@@ -109,9 +110,6 @@ def route_intake(*, text: str, attachments: list[dict] | None = None,
     )
     if (question_language and not attachments and not device.is_open_intent()
             and not explicit_diagnosis and not incident_language):
-        if has_thread_case:
-            return IntakeResult('CASE_FOLLOW_UP', 0.92, case_ref, devices, symptoms,
-                                attachments, [], False, 'knowledge_in_case')
         return IntakeResult('GENERAL_QUESTION', 0.88, case_ref, devices, symptoms,
                             attachments, [], False, 'question_language')
 
