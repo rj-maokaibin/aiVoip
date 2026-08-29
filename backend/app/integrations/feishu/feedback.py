@@ -66,47 +66,41 @@ def failed_text(case_no: str | None = None) -> str:
 
 def build_single_user_question(*, decision: dict | None = None,
                                summary: dict | None = None) -> str:
-    """Return one field-facing question with explicit answer paths.
+    """Return one field-facing prompt from deterministic allowed needs.
 
-    Internal PCM/SLIC/aimd/SIP/RTP questions are intentionally never surfaced.
-    ConversationState performs semantic de-duplication before this text is sent.
-    Terminal no-progress/max-cycle states return a partial-conclusion notice rather
-    than manufacturing yet another user question.
+    Selection is delegated to ConversationQuestionPlanner so multiple evidence
+    requests are ranked by information gain/acquisition cost instead of taking the
+    first action in a list. Slot/capability suppression is applied again when the
+    prompt is sent through ``notify_case_once`` and in GroundedSnapshot responses.
     """
+    from app.conversation.planner import select_user_question
+
     decision = decision or {}
     summary = summary or {}
-    blocker = str(summary.get('blocking_reason') or '').upper()
-    if blocker in {'MAX_CYCLES', 'NO_PROGRESS'}:
-        known = list(summary.get('known') or [])[:3]
-        unknown = list(summary.get('unknown') or [])[:3]
+    selected = select_user_question(decision=decision, summary=summary)
+    if selected.kind == 'PARTIAL_CONCLUSION':
+        known = list(summary.get('known') or decision.get('known') or [])[:3]
+        unknown = list(summary.get('unknown') or decision.get('unknown') or [])[:3]
         parts = ['自动诊断已暂停，本轮不会继续重复追问同一信息。']
         if known:
             parts.append('当前已确认：' + '；'.join(str(x) for x in known) + '。')
         if unknown:
             parts.append('仍未确认：' + '；'.join(str(x) for x in unknown) + '。')
-        parts.append('如果暂时没有新的直接证据，可以按现有证据先形成阶段结论；有新的抓包、录音或复现结果时也可以继续补充。')
+        parts.append(selected.fallback or '如果暂时没有新的直接证据，可以按现有证据先形成阶段结论。')
         return ''.join(parts)
-    for action in decision.get('plan') or []:
-        if str(action.get('action_type') or '') != 'REQUEST_USER_EVIDENCE':
-            continue
-        need = {str(x).lower() for x in ((action.get('params') or {}).get('need') or [])}
-        if need & {'device_or_pcap', 'device_url', 'device'}:
-            return '请提供设备入口（URL，或 IP+SN）；如果暂时无法提供，也可以直接上传 PCAP/PCAPNG。'
-        if any('timestamp' in x for x in need):
-            return '请提供本次异常发生的大致时间；如果不知道，请回复“不知道”。'
-        if any(x in {'pcap', 'pcap_or_pcapng', 'anomaly_timestamp_or_recording_or_new_capture'} or 'pcap' in x for x in need):
-            return '请上传包含异常过程的 PCAP/PCAPNG；如果暂时无法抓取，请回复“暂时不能”。'
-        if any('recording' in x or 'audio' in x for x in need):
-            return '请上传异常时的现场录音；如果没有录音，请回复“没有”。'
-    return '这个故障现在还能复现吗？请回复：可以 / 暂时不能 / 不确定。'
+    question = str(selected.question or '').strip()
+    fallback = str(selected.fallback or '').strip()
+    if question and fallback:
+        return f'{question} {fallback}'
+    return question or '当前没有值得重复追问的信息；可以按现有证据先形成阶段结论。'
 
 
 def enqueue_reply(message_id: str | None, text: str) -> bool:
     if not settings.feishu_live_enabled or not message_id:
         return False
-    # The old CASE_FOLLOW_UP branch emitted this ack before the async worker knew
-    # what the user's sentence meant. Conversation V1 lets the worker reply with
-    # "what I understood + what changed + what happens next" instead.
+    # Compatibility guard: older event handlers may still call the old generic
+    # follow-up ack. Conversation V1 deliberately suppresses that zero-information
+    # reply so the interpreted worker response remains the single visible answer.
     if settings.conversation_cycle_decoupled and text.startswith('已将补充信息关联到 Case '):
         return True
     from app.workers.device_provision_task import reply_feishu_text
@@ -119,7 +113,7 @@ def notify_case_once(db: Session, *, case_id: str, feedback_type: str,
     """Idempotently enqueue one active Feishu reply for a Case milestone.
 
     WAITING_USER questions are semantically de-duplicated using ConversationState
-    rather than cycle number.  Non-question WAITING_USER notices such as
+    rather than cycle number. Non-question WAITING_USER notices such as
     MAX_CYCLES/NO_PROGRESS are delivered but never become an active question.
     """
     if not settings.feishu_live_enabled:
