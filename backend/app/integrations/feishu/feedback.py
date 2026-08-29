@@ -70,9 +70,22 @@ def build_single_user_question(*, decision: dict | None = None,
 
     Internal PCM/SLIC/aimd/SIP/RTP questions are intentionally never surfaced.
     ConversationState performs semantic de-duplication before this text is sent.
+    Terminal no-progress/max-cycle states return a partial-conclusion notice rather
+    than manufacturing yet another user question.
     """
     decision = decision or {}
     summary = summary or {}
+    blocker = str(summary.get('blocking_reason') or '').upper()
+    if blocker in {'MAX_CYCLES', 'NO_PROGRESS'}:
+        known = list(summary.get('known') or [])[:3]
+        unknown = list(summary.get('unknown') or [])[:3]
+        parts = ['自动诊断已暂停，本轮不会继续重复追问同一信息。']
+        if known:
+            parts.append('当前已确认：' + '；'.join(str(x) for x in known) + '。')
+        if unknown:
+            parts.append('仍未确认：' + '；'.join(str(x) for x in unknown) + '。')
+        parts.append('如果暂时没有新的直接证据，可以按现有证据先形成阶段结论；有新的抓包、录音或复现结果时也可以继续补充。')
+        return ''.join(parts)
     for action in decision.get('plan') or []:
         if str(action.get('action_type') or '') != 'REQUEST_USER_EVIDENCE':
             continue
@@ -91,6 +104,11 @@ def build_single_user_question(*, decision: dict | None = None,
 def enqueue_reply(message_id: str | None, text: str) -> bool:
     if not settings.feishu_live_enabled or not message_id:
         return False
+    # The old CASE_FOLLOW_UP branch emitted this ack before the async worker knew
+    # what the user's sentence meant. Conversation V1 lets the worker reply with
+    # "what I understood + what changed + what happens next" instead.
+    if settings.conversation_cycle_decoupled and text.startswith('已将补充信息关联到 Case '):
+        return True
     from app.workers.device_provision_task import reply_feishu_text
     reply_feishu_text.apply_async(args=[message_id, text], queue='diagnosis')
     return True
@@ -100,10 +118,9 @@ def notify_case_once(db: Session, *, case_id: str, feedback_type: str,
                      token: str, text: str) -> dict[str, Any]:
     """Idempotently enqueue one active Feishu reply for a Case milestone.
 
-    WAITING_USER is semantically de-duplicated using ConversationState rather than
-    cycle number.  If the user already told us the requested slot is unknown or
-    unavailable, the same question is suppressed even when the reasoner asks for
-    it again in a later diagnosis cycle.
+    WAITING_USER questions are semantically de-duplicated using ConversationState
+    rather than cycle number.  Non-question WAITING_USER notices such as
+    MAX_CYCLES/NO_PROGRESS are delivered but never become an active question.
     """
     if not settings.feishu_live_enabled:
         return {'status': 'SKIPPED', 'reason': 'FEISHU_LIVE_DISABLED'}
@@ -118,16 +135,18 @@ def notify_case_once(db: Session, *, case_id: str, feedback_type: str,
     if feedback_type == 'WAITING_USER' and settings.conversation_cycle_decoupled:
         from app.conversation.state_service import ConversationStateService, need_from_question_text
         state_service = ConversationStateService()
-        question_state = state_service.mark_question_asked(
-            db, case_id=case_id, text=text, need=need_from_question_text(text)
-        )
-        if not question_state.get('should_ask'):
-            return {
-                'status': 'SKIPPED',
-                'reason': question_state.get('reason') or 'QUESTION_SEMANTICALLY_SUPPRESSED',
-                'slot_key': question_state.get('slot_key'),
-                'slot_state': question_state.get('slot_state'),
-            }
+        need = need_from_question_text(text)
+        if need:
+            question_state = state_service.mark_question_asked(
+                db, case_id=case_id, text=text, need=need
+            )
+            if not question_state.get('should_ask'):
+                return {
+                    'status': 'SKIPPED',
+                    'reason': question_state.get('reason') or 'QUESTION_SEMANTICALLY_SUPPRESSED',
+                    'slot_key': question_state.get('slot_key'),
+                    'slot_state': question_state.get('slot_state'),
+                }
         semantic_token = state_service.semantic_feedback_key(db, case_id=case_id, text=text)
 
     key = f'{case_id}:{feedback_type}:{semantic_token}'
