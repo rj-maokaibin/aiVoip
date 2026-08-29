@@ -25,9 +25,13 @@ _STATUS_RE = re.compile(
 _SYMPTOM_WORDS = (
     '故障', '异常', '问题', '无声', '单通', '杂音', '噪音', '电流音', '回声', '断续', '卡顿',
     '丢包', '抖动', 'dtmf', '按键', '首位', '拨号', '呼叫失败', '注册失败', '打不通',
-    '接不通', '没有声音', '听不到', '不响铃', '掉线', '音质', 'sip', 'rtp',
+    '接不通', '没有声音', '听不到', '不响铃', '掉线', '音质', 'sip', 'rtp', '不生效', '没反应',
 )
 _DIAGNOSIS_WORDS = ('诊断', '排查', '分析', '帮忙看', '帮我看', '定位', '看看')
+_INCIDENT_WORDS = (
+    '客户', '现场', '这台', '这个设备', '我这边', '我们这边', '当前', '现在', '一直', '实际',
+    '出现', '发生', '复现', '不生效', '没反应', '失败', '异常', '故障',
+)
 
 
 @dataclass(frozen=True)
@@ -70,9 +74,9 @@ def route_intake(*, text: str, attachments: list[dict] | None = None,
     missing-input list so the caller can ask one user-facing question.
 
     Conversational progress/completion/next-action queries are deliberately
-    recognized before generic diagnosis language.  Phrases such as
-    ``什么时候可以结束分析`` therefore never become a new diagnosis merely because
-    they contain the word ``分析``.
+    recognized before generic diagnosis language. Mixed questions that explicitly
+    describe a current field incident remain on the Case path so the Conversation
+    layer can answer knowledge and preserve new incident context together.
     """
     text = (text or '').strip()
     lowered = text.lower()
@@ -101,10 +105,14 @@ def route_intake(*, text: str, attachments: list[dict] | None = None,
                             symptoms, attachments, missing, False, 'status_or_completion_phrase')
 
     question_language = text.endswith(('?', '？')) or any(
-        word in lowered for word in ('怎么', '什么', '为什么', '如何')
+        word in lowered for word in ('怎么', '什么', '为什么', '如何', '会不会', '是不是')
     )
     explicit_diagnosis = any(word in lowered for word in _DIAGNOSIS_WORDS)
-    if question_language and not attachments and not device.is_open_intent() and not explicit_diagnosis:
+    incident_language = bool(
+        has_thread_case and symptoms and any(word in lowered for word in _INCIDENT_WORDS)
+    )
+    if (question_language and not attachments and not device.is_open_intent()
+            and not explicit_diagnosis and not incident_language):
         return IntakeResult('GENERAL_QUESTION', 0.88, case_ref, devices, symptoms,
                             attachments, [], False, 'question_language')
 
@@ -113,13 +121,13 @@ def route_intake(*, text: str, attachments: list[dict] | None = None,
         missing: list[str] = []
         if not attachments and not symptoms and not any(word in lowered for word in _DIAGNOSIS_WORDS):
             missing.append('symptom_description')
-        if not attachments and not device.has_minimal():
+        if not attachments and not device.has_minimal() and not has_thread_case:
             missing.append('device_url_or_ip_and_sn_or_attachment')
         confidence = 0.95 if not missing else 0.68
         return IntakeResult(
             'NEW_DIAGNOSIS', confidence, case_ref, devices, symptoms, attachments,
             missing, bool(not attachments and device.has_minimal() and not missing),
-            'attachment_or_diagnosis_signal',
+            'mixed_incident_question' if incident_language else 'attachment_or_diagnosis_signal',
         )
 
     if has_thread_case and text:
