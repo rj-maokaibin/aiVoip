@@ -1,0 +1,175 @@
+name: Admin Close Case Live V1
+
+on:
+  pull_request:
+    paths:
+      - 'backend/app/services/case_transitions.py'
+      - 'tools/admin_close_case.py'
+      - 'backend/tests/test_admin_close_case_v1.py'
+      - '.github/workflows/admin-close-case-live.yml'
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: admin-close-case-live
+  cancel-in-progress: false
+
+jobs:
+  admin-close-contract:
+    if: github.event_name == 'pull_request'
+    runs-on:
+      - self-hosted
+      - linux
+      - x64
+      - voip-controlled-linux
+    timeout-minutes: 20
+    steps:
+      - name: Checkout exact PR head
+        uses: actions/checkout@v4
+        timeout-minutes: 5
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Prepare isolated contract runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          venv="/tmp/voip-admin-close-contract-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          rm -rf "$venv"
+          python3 -m venv "$venv"
+          "$venv/bin/pip" install --disable-pip-version-check -q -r backend/requirements.txt
+          echo "ADMIN_CLOSE_CONTRACT_VENV=$venv" >> "$GITHUB_ENV"
+
+      - name: Admin close non-mutating contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$ADMIN_CLOSE_CONTRACT_VENV/bin/python" -m py_compile tools/admin_close_case.py backend/app/services/case_transitions.py
+          PYTHONPATH=backend:. "$ADMIN_CLOSE_CONTRACT_VENV/bin/pytest" -q backend/tests/test_admin_close_case_v1.py
+          PYTHONPATH=backend:. "$ADMIN_CLOSE_CONTRACT_VENV/bin/python" tools/github_actions_context_gate.py
+          printf 'ADMIN_CLOSE_CASE_CONTRACT=PASS\n'
+          printf 'PRODUCTION_MUTATION=NOT_EXECUTED\n'
+
+  admin-close-live:
+    if: >-
+      github.event_name == 'issue_comment' &&
+      github.event.issue.pull_request != null &&
+      github.event.comment.user.login == github.repository_owner &&
+      startsWith(github.event.comment.body, '/admin-close-case ')
+    runs-on:
+      - self-hosted
+      - linux
+      - x64
+      - voip-controlled-linux
+    timeout-minutes: 20
+    env:
+      ADMIN_CLOSE_ENV_FILE: /home/github-runner/.config/voip-ai/.env
+      ADMIN_CLOSE_VENV: /tmp/voip-admin-close-${{ github.run_id }}-${{ github.run_attempt }}
+      ADMIN_CLOSE_RUNTIME_ROOT: /tmp/voip-admin-close-runtime-${{ github.run_id }}-${{ github.run_attempt }}
+      ADMIN_CLOSE_OUTPUT_ROOT: /tmp/voip-admin-close-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+
+    steps:
+      - name: Checkout exact master
+        uses: actions/checkout@v4
+        timeout-minutes: 5
+        with:
+          ref: master
+
+      - name: Authorize exact master and Case
+        shell: bash
+        env:
+          TRIGGER_BODY: ${{ github.event.comment.body }}
+          TRIGGER_ACTOR: ${{ github.event.comment.user.login }}
+        run: |
+          set -euo pipefail
+          head_sha="$(git rev-parse HEAD)"
+          read -r command requested_sha case_no extra <<< "$TRIGGER_BODY"
+          test "$TRIGGER_ACTOR" = "$GITHUB_REPOSITORY_OWNER"
+          test "$command" = "/admin-close-case"
+          test -z "${extra:-}"
+          test "$requested_sha" = "$head_sha"
+          [[ "$case_no" =~ ^VOIP-[0-9]{8}-[A-Z0-9]{6}$ ]]
+          expected="/admin-close-case ${head_sha} ${case_no}"
+          if [ "$TRIGGER_BODY" != "$expected" ]; then
+            printf 'Refusing stale or malformed admin close trigger. expected=%s\n' "$expected" >&2
+            exit 64
+          fi
+          printf 'ADMIN_CLOSE_CASE_NO=%s\n' "$case_no" >> "$GITHUB_ENV"
+          printf 'ADMIN_CLOSE_ACTOR=github-admin:%s\n' "$TRIGGER_ACTOR" >> "$GITHUB_ENV"
+          printf 'ADMIN_CLOSE_MASTER_SHA=%s\n' "$head_sha" >> "$GITHUB_STEP_SUMMARY"
+          printf 'ADMIN_CLOSE_CASE_NO=%s\n' "$case_no" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Prepare isolated runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -r "$ADMIN_CLOSE_ENV_FILE"
+          rm -rf "$ADMIN_CLOSE_VENV" "$ADMIN_CLOSE_RUNTIME_ROOT" "$ADMIN_CLOSE_OUTPUT_ROOT"
+          mkdir -p "$ADMIN_CLOSE_RUNTIME_ROOT" "$ADMIN_CLOSE_OUTPUT_ROOT"
+          chmod 0700 "$ADMIN_CLOSE_RUNTIME_ROOT"
+          python3 -m venv "$ADMIN_CLOSE_VENV"
+          "$ADMIN_CLOSE_VENV/bin/pip" install --disable-pip-version-check -q -r backend/requirements.txt
+
+      - name: Resolve Production DB
+        shell: bash
+        run: |
+          set -euo pipefail
+          set -a
+          source "$ADMIN_CLOSE_ENV_FILE"
+          set +a
+          export PYTHONPATH="$GITHUB_WORKSPACE/backend"
+          "$ADMIN_CLOSE_VENV/bin/python" tools/resolve_real_sip_aba_database_env.py > "$ADMIN_CLOSE_RUNTIME_ROOT/production_db.env"
+          chmod 0600 "$ADMIN_CLOSE_RUNTIME_ROOT/production_db.env"
+          test -s "$ADMIN_CLOSE_RUNTIME_ROOT/production_db.env"
+          echo 'ADMIN_CLOSE_PRODUCTION_DB_RESOLUTION=PASS'
+
+      - name: Preflight exact Case close
+        shell: bash
+        run: |
+          set -euo pipefail
+          set -a
+          source "$ADMIN_CLOSE_RUNTIME_ROOT/production_db.env"
+          set +a
+          export PYTHONPATH="$GITHUB_WORKSPACE/backend:$GITHUB_WORKSPACE"
+          "$ADMIN_CLOSE_VENV/bin/python" tools/admin_close_case.py \
+            --case-no "$ADMIN_CLOSE_CASE_NO" \
+            --actor "$ADMIN_CLOSE_ACTOR" \
+            --reason ADMIN_CLOSED_STALE_CASE_FOR_CONVERSATION_ACCEPTANCE \
+            --output "$ADMIN_CLOSE_OUTPUT_ROOT/preflight.json"
+
+      - name: Apply audited Case close
+        shell: bash
+        run: |
+          set -euo pipefail
+          set -a
+          source "$ADMIN_CLOSE_RUNTIME_ROOT/production_db.env"
+          set +a
+          export PYTHONPATH="$GITHUB_WORKSPACE/backend:$GITHUB_WORKSPACE"
+          "$ADMIN_CLOSE_VENV/bin/python" tools/admin_close_case.py \
+            --case-no "$ADMIN_CLOSE_CASE_NO" \
+            --actor "$ADMIN_CLOSE_ACTOR" \
+            --reason ADMIN_CLOSED_STALE_CASE_FOR_CONVERSATION_ACCEPTANCE \
+            --apply \
+            --output "$ADMIN_CLOSE_OUTPUT_ROOT/result.json"
+          grep -q '"status": "PASS"' "$ADMIN_CLOSE_OUTPUT_ROOT/result.json"
+          grep -q '"status_after": "CLOSED"' "$ADMIN_CLOSE_OUTPUT_ROOT/result.json"
+          grep -q '"feishu_active_case_released": true' "$ADMIN_CLOSE_OUTPUT_ROOT/result.json"
+          printf 'ADMIN_CLOSE_CASE=PASS\n' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload immutable sanitized evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: admin-close-case-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.ADMIN_CLOSE_OUTPUT_ROOT }}
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Remove runtime secrets
+        if: always()
+        shell: bash
+        run: |
+          rm -rf "$ADMIN_CLOSE_RUNTIME_ROOT"
