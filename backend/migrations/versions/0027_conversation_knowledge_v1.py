@@ -1,16 +1,21 @@
 """Conversation Platform P0/P1 + Knowledge ProductFact V1
 
-Revision ID: 0027_conversation_knowledge_v1
-Revises: 0026_ai_diagnostic_loop_v1
+Revision ID: 0032_conversation_knowledge_v1
+Revises: 0031_capture_v2_quality_report
 Create Date: 2026-08-29
+
+The filename keeps its original branch-local name for review continuity, but the
+Alembic revision itself is deliberately 0032 and follows the current master head.
+This migration has never shipped, so changing its revision/down_revision is safe
+and avoids introducing a parallel Alembic head beside Capture V2.
 """
 from typing import Sequence, Union
 
 from alembic import op
 import sqlalchemy as sa
 
-revision: str = "0027_conversation_knowledge_v1"
-down_revision: Union[str, None] = "0026_ai_diagnostic_loop_v1"
+revision: str = "0032_conversation_knowledge_v1"
+down_revision: Union[str, None] = "0031_capture_v2_quality_report"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
