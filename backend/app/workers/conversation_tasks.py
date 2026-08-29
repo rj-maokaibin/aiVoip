@@ -14,11 +14,18 @@ def ingest_knowledge_turn(
     text: str,
     source_context: dict | None = None,
     attachments: list[dict] | None = None,
+    suppress_reply: bool = False,
 ):
-    """Persist and answer a no-Case knowledge turn.
+    """Persist and optionally answer a no-Case knowledge turn.
 
     This task never creates a Case or technical Evidence. It is the continuity
     path for product/protocol/configuration conversations before a fault exists.
+
+    Feishu's inbound callback may already have produced a deterministic grounded
+    knowledge answer synchronously in order to preserve its historical
+    ``answered/citations`` response contract.  In that path ``suppress_reply`` is
+    true: this worker still persists Conversation/Turn/context, but must not emit a
+    second user-visible reply.
     """
     from app.conversation.orchestrator import AssistantConversationOrchestrator
     from app.db.session import SessionLocal
@@ -37,7 +44,7 @@ def ingest_knowledge_turn(
             attachments=attachments or [],
         )
         db.commit()
-        if result.response_text:
+        if result.response_text and not suppress_reply:
             enqueue_reply(message_id, result.response_text)
         return {
             "status": "OK",
@@ -47,6 +54,7 @@ def ingest_knowledge_turn(
             "material_diagnostic_context": result.material_diagnostic_context,
             "case_created": False,
             "evidence_id": None,
+            "reply_suppressed": bool(suppress_reply),
         }
     except Exception as exc:
         db.rollback()
