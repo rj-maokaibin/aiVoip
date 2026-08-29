@@ -74,7 +74,7 @@ _CASE_STATUS_CN = {
 
 def _needs_user_action(case: Case, repro, operation_status: str) -> str:
     if case.status in {"WAITING_USER", "NEED_MORE_EVIDENCE"}:
-        return "是，请补充信息/回答问题"
+        return "是，请查看下方“需要你做什么”"
     if repro is not None and operation_status == "可以开始现场复现：FXS 监听已就绪":
         return "是，需现场复现操作"
     return "否（系统自动推进）"
@@ -91,6 +91,40 @@ def _auto_verifying(db: Session, case: Case, repro, diagnosis) -> str:
     if case.status in {"COLLECTING", "ANALYZING"}:
         return "是"
     return "否"
+
+
+def _conversation_action_context(db: Session, case: Case, diagnosis: DiagnosisRun | None) -> dict[str, str]:
+    """Project actionable state without changing diagnosis authority."""
+    summary = dict((diagnosis.summary_json or {}) if diagnosis else {})
+    blocking = str(summary.get("blocking_reason") or "") or "-"
+    manual = str(summary.get("manual_action") or "") or ""
+    active_need = ""
+    unavailable: list[str] = []
+    try:
+        from app.conversation.state_service import ConversationStateService
+        _conversation, state = ConversationStateService().case_state(db, case.id)
+        if state is not None:
+            active = dict(state.active_question_json or {})
+            active_need = str(active.get("text") or "")
+            unavailable = [str(x) for x in (state.unavailable_needs_json or [])]
+    except Exception:
+        pass
+
+    if active_need:
+        user_action = active_need
+    elif manual:
+        user_action = manual
+    elif case.status in {"WAITING_USER", "NEED_MORE_EVIDENCE"}:
+        user_action = "当前没有新的可执行提问；可补充新的直接证据，或按现有证据形成阶段结论。"
+    else:
+        user_action = "当前无需操作，系统自动推进。"
+    unavailable_text = "、".join(unavailable) if unavailable else "-"
+    return {
+        "blocking_reason": blocking,
+        "user_action": user_action,
+        "active_need": active_need or "-",
+        "unavailable_needs": unavailable_text,
+    }
 
 
 @dataclass(frozen=True)
@@ -173,10 +207,19 @@ class FeishuCaseCardBuilder:
         case_state_cn = _CASE_STATUS_CN.get(case.status, case.status)
         needs_user = _needs_user_action(case, repro, operation_status)
         auto_verifying = _auto_verifying(db, case, repro, diagnosis)
+        interaction = _conversation_action_context(db, case, diagnosis)
 
         elements: list[dict[str, Any]] = [
             {"tag":"div","text":_md("\n".join([_kv_line("Case",case.case_no),_kv_line("当前阶段",case_state_cn),_kv_line("问题",case.summary)]))},
-            {"tag":"div","text":_md("\n".join([_kv_line("是否需要操作",needs_user),_kv_line("正在自动验证",auto_verifying)]))},
+            {"tag":"div","text":_md("\n".join([
+                "**当前需要怎么做**",
+                _kv_line("是否需要操作",needs_user),
+                _kv_line("需要你做什么",interaction["user_action"]),
+                _kv_line("当前阻塞",interaction["blocking_reason"]),
+                _kv_line("当前提问",interaction["active_need"]),
+                _kv_line("已记为暂不可用",interaction["unavailable_needs"]),
+                _kv_line("正在自动验证",auto_verifying),
+            ]))},
             {"tag":"hr"},
             {"tag":"div","text":_md("\n".join(report_lines))},
             {"tag":"hr"},

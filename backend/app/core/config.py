@@ -89,6 +89,17 @@ class Settings(BaseSettings):
     ai_semantic_router_enabled: bool = False
     ai_semantic_router_mode: str = "SHADOW"
     ai_semantic_router_min_confidence: float = 0.80
+    # Conversation Platform V1. The cycle decoupling/reply retry fixes are
+    # deterministic safety improvements and default ON. Model-owned semantics and
+    # grounded response planning remain separately staged OFF -> SHADOW -> ON.
+    conversation_cycle_decoupled: bool = True
+    conversation_ai_enabled: bool = False
+    conversation_ai_mode: str = "SHADOW"
+    conversation_ai_min_confidence: float = 0.82
+    grounded_response_enabled: bool = False
+    knowledge_hybrid_retrieval: bool = False
+    feishu_reply_retry_enabled: bool = True
+    feishu_reply_max_retries: int = 3
     # AI3 is read-only. Enabling it permits grounded Case Q&A only; it never
     # enables device/reproduction/experiment/fix execution.
     ai_case_copilot_enabled: bool = False
@@ -188,6 +199,14 @@ class Settings(BaseSettings):
         self.ai_semantic_router_mode = semantic_mode
         if not 0.0 <= float(self.ai_semantic_router_min_confidence) <= 1.0:
             raise ValueError("AI_SEMANTIC_ROUTER_MIN_CONFIDENCE_INVALID")
+        conversation_mode = str(self.conversation_ai_mode or "SHADOW").upper()
+        if conversation_mode not in {"OFF", "SHADOW", "ON"}:
+            raise ValueError("CONVERSATION_AI_MODE_INVALID")
+        self.conversation_ai_mode = conversation_mode
+        if not 0.0 <= float(self.conversation_ai_min_confidence) <= 1.0:
+            raise ValueError("CONVERSATION_AI_MIN_CONFIDENCE_INVALID")
+        if int(self.feishu_reply_max_retries) < 0 or int(self.feishu_reply_max_retries) > 8:
+            raise ValueError("FEISHU_REPLY_MAX_RETRIES_INVALID")
         # Do not allow a stale/deployment-level FEISHU_TIMEOUT_SECONDS=8 override
         # to re-introduce the real 6MB Evidence Bundle WriteTimeout seen in the
         # final acceptance run. The timeout remains finite and configurable upward.

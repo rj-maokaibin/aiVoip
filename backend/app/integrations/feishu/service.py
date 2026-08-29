@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 from sqlalchemy import event, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -15,6 +17,7 @@ from app.integrations.feishu.case_resolver import (
 from app.integrations.feishu.transport import FeishuLiveTransport
 
 
+log = logging.getLogger(__name__)
 _CONFLICT_INFO_KEY = "feishu_active_case_conflict"
 
 
@@ -56,17 +59,11 @@ def _clear_active_case_conflict_after_rollback(session: Session) -> None:
 
 @event.listens_for(Session, "after_soft_rollback")
 def _clear_active_case_conflict_after_soft_rollback(session: Session, _previous_transaction) -> None:
-    # Nested SAVEPOINT rollback after a unique conflict must not accidentally
-    # clear a conflict that has already been promoted to the outer transaction.
     if not session.in_transaction():
         session.info.pop(_CONFLICT_INFO_KEY, None)
 
 
 def _raise_active_case_conflict(db: Session, *, chat_id: str, existing_case_id: str) -> None:
-    # Never call db.rollback() here: this function may execute inside a larger
-    # idempotent Feishu message transaction. Instead mark the transaction
-    # rollback-only; even a legacy caller that catches this exception cannot
-    # commit an orphan loser Case.
     db.info[_CONFLICT_INFO_KEY] = {
         "chat_id": chat_id,
         "existing_case_id": existing_case_id,
@@ -77,14 +74,7 @@ def _raise_active_case_conflict(db: Session, *, chat_id: str, existing_case_id: 
 def bind_case_to_chat(db: Session, *, case_id: str, chat_id: str, chat_type: str | None = None,
                       receive_id_type: str | None = None,
                       source_context: dict | None = None) -> FeishuCaseBinding | None:
-    """Bind one Case to one Feishu conversation under the G1 governance contract.
-
-    For a source conversation (`receive_id_type=chat_id`) the tuple
-    `tenant_key + chat_id` may have at most one ACTIVE Case. The application checks
-    before insert and migration 0021 supplies the partial unique index as the final
-    concurrency guard. A conflicting bind never silently moves or overwrites the
-    existing Case.
-    """
+    """Bind one Case to one Feishu conversation under the G1 governance contract."""
     if receive_id_type is None:
         receive_id_type = 'chat_id'
     if not chat_id:
@@ -134,9 +124,6 @@ def bind_case_to_chat(db: Session, *, case_id: str, chat_id: str, chat_type: str
     )
     apply_source_context(candidate)
     try:
-        # The nested transaction limits a true concurrent partial-unique conflict
-        # to the bind itself; the caller can then roll back the larger Case-create
-        # transaction after this method marks it rollback-only.
         with db.begin_nested():
             db.add(candidate)
             db.flush()
@@ -160,7 +147,8 @@ def bind_case_to_chat(db: Session, *, case_id: str, chat_id: str, chat_type: str
 
 
 class FeishuCaseCardService:
-    async def sync_case_card(self, db: Session, *, case_id: str, receive_id: str | None = None, receive_id_type: str | None = None) -> FeishuCaseBinding:
+    async def sync_case_card(self, db: Session, *, case_id: str, receive_id: str | None = None,
+                             receive_id_type: str | None = None) -> FeishuCaseBinding:
         if not settings.feishu_live_enabled:
             raise ValueError("FEISHU_LIVE_DISABLED")
         built = FeishuCaseCardBuilder().build(db, case_id)
@@ -181,7 +169,10 @@ class FeishuCaseCardService:
             if binding is None:
                 binding = db.scalar(select(FeishuCaseBinding).where(FeishuCaseBinding.case_id == case_id).limit(1))
             if binding is None:
-                candidate = FeishuCaseBinding(case_id=case_id, receive_id=rid, receive_id_type=rtype, message_id=result.message_id, status="ACTIVE", card_version=1)
+                candidate = FeishuCaseBinding(
+                    case_id=case_id, receive_id=rid, receive_id_type=rtype,
+                    message_id=result.message_id, status="ACTIVE", card_version=1,
+                )
                 try:
                     with db.begin_nested():
                         db.add(candidate)
@@ -199,5 +190,16 @@ class FeishuCaseCardService:
                 binding.message_id = result.message_id
                 binding.status = "ACTIVE"
                 binding.card_version += 1
+        db.flush()
+
+        # Card refresh is already the event fan-in for analyzer/diagnosis/repro
+        # milestones. Piggyback a text push only when the grounded user-visible
+        # digest changed; duplicate/cycle-only refreshes remain silent.
+        if settings.conversation_cycle_decoupled:
+            try:
+                from app.conversation.progress import push_meaningful_progress
+                push_meaningful_progress(db, case_id=case_id)
+            except Exception:
+                log.exception('meaningful conversation progress push failed case=%s', case_id)
         db.flush()
         return binding

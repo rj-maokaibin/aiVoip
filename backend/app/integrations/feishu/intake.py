@@ -13,12 +13,25 @@ INTENTS = {
 }
 
 _CASE_RE = re.compile(r'\b(?:VOIP-\d{8}-[A-Z0-9]{6}|CASE[-_:#： ]?[A-Z0-9-]+)\b', re.I)
+_STATUS_RE = re.compile(
+    r'(?:进度|状态|到哪(?:了)?|结果(?:了吗|出来了吗|有了吗)?|诊断结果|status|'
+    r'什么时候.*(?:结束|完成)|还要多久|多久.*(?:结束|完成)|'
+    r'(?:分析|诊断).*(?:结束|完成)(?:了吗|了没|没有)?|'
+    r'可以结束(?:分析|诊断)?吗|能结束(?:分析|诊断)?吗|'
+    r'还需要我做什么|需要我做什么|我还要做什么|下一步(?:做什么|怎么办)?|'
+    r'还缺什么|还需要什么|需要补充什么)',
+    re.I,
+)
 _SYMPTOM_WORDS = (
     '故障', '异常', '问题', '无声', '单通', '杂音', '噪音', '电流音', '回声', '断续', '卡顿',
     '丢包', '抖动', 'dtmf', '按键', '首位', '拨号', '呼叫失败', '注册失败', '打不通',
-    '接不通', '没有声音', '听不到', '不响铃', '掉线', '音质', 'sip', 'rtp',
+    '接不通', '没有声音', '听不到', '不响铃', '掉线', '音质', 'sip', 'rtp', '不生效', '没反应',
 )
 _DIAGNOSIS_WORDS = ('诊断', '排查', '分析', '帮忙看', '帮我看', '定位', '看看')
+_INCIDENT_WORDS = (
+    '客户', '现场', '这台', '这个设备', '我这边', '我们这边', '当前', '现在', '一直', '实际',
+    '出现', '发生', '复现', '不生效', '没反应', '失败', '异常', '故障',
+)
 
 
 @dataclass(frozen=True)
@@ -54,11 +67,13 @@ def _symptoms(text: str) -> list[str]:
 
 def route_intake(*, text: str, attachments: list[dict] | None = None,
                  has_thread_case: bool = False) -> IntakeResult:
-    """Deterministic, fail-closed Feishu intent router.
+    """Deterministic, fail-closed Feishu workflow router.
 
-    This router decides only workflow routing. It does not infer protocol facts,
-    execute device actions, or use an LLM. Ambiguous input is returned with a
-    missing-input list so the caller can ask one user-facing question.
+    The deterministic layer preserves the frozen AI1 routing contract.  It does
+    not infer protocol facts or execute actions.  Conversation semantics such as
+    ``KNOWLEDGE_IN_CASE`` and ``HYBRID`` are resolved by the Conversation layer
+    after a Case is correlated.  This keeps legacy router behavior stable while
+    allowing the richer Conversation Platform to own context-aware interpretation.
     """
     text = (text or '').strip()
     lowered = text.lower()
@@ -81,16 +96,20 @@ def route_intake(*, text: str, attachments: list[dict] | None = None,
     if any(word in lowered for word in ('修复完成', '已经修复', '已修复', 'fix applied', '修复已应用')):
         return IntakeResult('FIX_APPLIED', 0.96, case_ref, devices, symptoms,
                             attachments, [], False, 'explicit_fix_completion')
-    if any(word in lowered for word in ('进度', '状态', '到哪了', '结果了吗', '诊断结果', 'status')):
+    if _STATUS_RE.search(text):
         missing = [] if (case_ref or has_thread_case) else ['case_reference_or_reply_in_case_thread']
-        return IntakeResult('STATUS_QUERY', 0.94 if not missing else 0.65, case_ref, devices,
-                            symptoms, attachments, missing, False, 'status_phrase')
+        return IntakeResult('STATUS_QUERY', 0.97 if not missing else 0.68, case_ref, devices,
+                            symptoms, attachments, missing, False, 'status_or_completion_phrase')
 
     question_language = text.endswith(('?', '？')) or any(
-        word in lowered for word in ('怎么', '什么', '为什么', '如何')
+        word in lowered for word in ('怎么', '什么', '为什么', '如何', '会不会', '是不是')
     )
     explicit_diagnosis = any(word in lowered for word in _DIAGNOSIS_WORDS)
-    if question_language and not attachments and not device.is_open_intent() and not explicit_diagnosis:
+    incident_language = bool(
+        has_thread_case and symptoms and any(word in lowered for word in _INCIDENT_WORDS)
+    )
+    if (question_language and not attachments and not device.is_open_intent()
+            and not explicit_diagnosis and not incident_language):
         return IntakeResult('GENERAL_QUESTION', 0.88, case_ref, devices, symptoms,
                             attachments, [], False, 'question_language')
 
@@ -99,13 +118,13 @@ def route_intake(*, text: str, attachments: list[dict] | None = None,
         missing: list[str] = []
         if not attachments and not symptoms and not any(word in lowered for word in _DIAGNOSIS_WORDS):
             missing.append('symptom_description')
-        if not attachments and not device.has_minimal():
+        if not attachments and not device.has_minimal() and not has_thread_case:
             missing.append('device_url_or_ip_and_sn_or_attachment')
         confidence = 0.95 if not missing else 0.68
         return IntakeResult(
             'NEW_DIAGNOSIS', confidence, case_ref, devices, symptoms, attachments,
             missing, bool(not attachments and device.has_minimal() and not missing),
-            'attachment_or_diagnosis_signal',
+            'mixed_incident_question' if incident_language else 'attachment_or_diagnosis_signal',
         )
 
     if has_thread_case and text:

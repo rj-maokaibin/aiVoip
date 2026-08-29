@@ -1,0 +1,93 @@
+{
+  "schema_version": "conversation-p0-p1-corpus-v1",
+  "cases": [
+    {
+      "id": "timestamp-unknown",
+      "text": "不知道",
+      "has_case": true,
+      "active_question": {"id": "q-time", "slot_key": "anomaly_timestamp", "text": "异常大概几点？"},
+      "expected_intent": "ANSWER_ACTIVE_QUESTION",
+      "expected_classification": "CHAT_ONLY",
+      "expected_material": false,
+      "expected_slot_state": "UNKNOWN_BY_USER"
+    },
+    {
+      "id": "timestamp-short-answer",
+      "text": "0817",
+      "has_case": true,
+      "active_question": {"id": "q-time", "slot_key": "anomaly_timestamp", "text": "异常大概几点？"},
+      "expected_intent": "ANSWER_ACTIVE_QUESTION",
+      "expected_classification": "DIAGNOSTIC_CONTEXT",
+      "expected_material": true,
+      "expected_slot_state": "ANSWERED",
+      "expected_slot_value": "08:17"
+    },
+    {
+      "id": "completion-query",
+      "text": "什么时候可以结束分析",
+      "has_case": true,
+      "expected_intent": "CASE_COMPLETION_QUERY",
+      "expected_classification": "CHAT_ONLY",
+      "expected_material": false
+    },
+    {
+      "id": "next-action-query",
+      "text": "还需要我做什么？",
+      "has_case": true,
+      "expected_intent": "CASE_NEXT_ACTION_QUERY",
+      "expected_classification": "CHAT_ONLY",
+      "expected_material": false
+    },
+    {
+      "id": "knowledge-inside-active-question",
+      "text": "tcpdump 怎么抓 VOIP 包？",
+      "has_case": true,
+      "active_question": {"id": "q-time", "slot_key": "anomaly_timestamp", "text": "异常大概几点？"},
+      "expected_intent": "KNOWLEDGE_IN_CASE",
+      "expected_classification": "KNOWLEDGE",
+      "expected_material": false
+    },
+    {
+      "id": "hybrid-knowledge-diagnosis",
+      "text": "客户现在 DTMF 按键没反应，会不会和 RFC2833 有关？",
+      "has_case": true,
+      "expected_intent": "HYBRID_KNOWLEDGE_DIAGNOSIS",
+      "expected_classification": "DIAGNOSTIC_CONTEXT",
+      "expected_material": true
+    },
+    {
+      "id": "continue-control",
+      "text": "继续分析",
+      "has_case": true,
+      "expected_intent": "CONTROL",
+      "expected_classification": "CONTROL",
+      "expected_material": false,
+      "expected_control": "CONTINUE_ANALYSIS"
+    },
+    {
+      "id": "finish-partial-control",
+      "text": "按现有证据出结论",
+      "has_case": true,
+      "expected_intent": "CONTROL",
+      "expected_classification": "CONTROL",
+      "expected_material": false,
+      "expected_control": "FINISH_WITH_PARTIAL_CONCLUSION"
+    },
+    {
+      "id": "legacy-unavailable-no-active-question",
+      "text": "暂时不能",
+      "has_case": true,
+      "expected_intent": "CASE_CHAT",
+      "expected_classification": "CHAT_ONLY",
+      "expected_material": false
+    },
+    {
+      "id": "simple-ack",
+      "text": "收到",
+      "has_case": true,
+      "expected_intent": "GENERAL_CHAT",
+      "expected_classification": "CHAT_ONLY",
+      "expected_material": false
+    }
+  ]
+}
