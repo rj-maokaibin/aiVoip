@@ -53,6 +53,8 @@ def test_all_needs_unavailable_returns_partial_conclusion():
     )
     assert plan.kind == "PARTIAL_CONCLUSION"
     assert plan.question is None
+    assert "系统可以直接基于现有证据形成阶段结论" in plan.fallback
+    assert "请按现有证据形成阶段结论" not in plan.fallback
 
 
 def test_terminal_blocker_never_asks_another_question():
@@ -62,3 +64,20 @@ def test_terminal_blocker_never_asks_another_question():
     )
     assert plan.kind == "PARTIAL_CONCLUSION"
     assert plan.reason == "MAX_CYCLES"
+    assert "系统将基于现有证据形成阶段结论" in plan.fallback
+
+
+def test_user_finish_control_suppresses_all_future_questions():
+    plan = select_user_question(
+        decision=_decision("anomaly_timestamp", "pcap", "recording"),
+        slots={
+            "__conversation_control__": {
+                "state": "FINISH_WITH_PARTIAL_CONCLUSION",
+                "source": "USER_CONTROL",
+            }
+        },
+    )
+    assert plan.kind == "PARTIAL_CONCLUSION"
+    assert plan.reason == "USER_REQUESTED_PARTIAL_CONCLUSION"
+    assert plan.question is None
+    assert "不再等待新的用户证据" in plan.fallback
