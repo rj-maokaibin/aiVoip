@@ -195,8 +195,6 @@ def deterministic_interpret_turn(
                         "confidence": 0.98,
                     },
                 )
-        # A concise answer while a question is active is diagnostic by default;
-        # keep the model optional rather than discarding potentially useful field context.
         if normalized:
             return _proposal(
                 intent="ANSWER_ACTIVE_QUESTION",
@@ -212,9 +210,9 @@ def deterministic_interpret_turn(
                 material=True,
             )
 
-    # Upgrade compatibility: a Case may already be WAITING_USER from the previous
-    # release without a persisted active_question. Standalone inability answers are
-    # therefore fail-safe chat constraints, never new L1 technical Evidence.
+    # Upgrade compatibility: old Cases can already be WAITING_USER without the
+    # new persisted active question. Standalone inability answers are fail-safe
+    # chat constraints, never L1 technical Evidence.
     if has_case and _UNKNOWN.fullmatch(normalized):
         return _proposal(
             intent="CASE_CHAT",
@@ -262,6 +260,16 @@ def deterministic_interpret_turn(
             classification="KNOWLEDGE",
             route_mode="KNOWLEDGE_IN_CASE" if has_case else "KNOWLEDGE",
             confidence=max(0.90, float(deterministic.confidence)),
+            entities={"knowledge_query": normalized[:2000]},
+        )
+    if has_case and deterministic.reason == "mixed_incident_question":
+        return _proposal(
+            intent="HYBRID_KNOWLEDGE_DIAGNOSIS",
+            classification="DIAGNOSTIC_CONTEXT",
+            route_mode="HYBRID",
+            confidence=max(0.94, float(deterministic.confidence)),
+            entities={"knowledge_query": normalized[:2000], "incident_context": normalized[:2000]},
+            material=True,
         )
     if has_case and deterministic.intent == "CASE_FOLLOW_UP":
         return _proposal(
@@ -288,8 +296,8 @@ def deterministic_interpret_turn(
 
 
 def _ai_can_override(deterministic: dict[str, Any], ai: ConversationTurnProposal) -> bool:
-    # P0 safety: AI may make a turn *less* diagnostic, but may not upgrade a
-    # deterministic non-material turn into technical Evidence on its own.
+    # AI may make a turn less diagnostic, but it may not upgrade a deterministic
+    # non-material turn into Evidence on its own.
     if not deterministic.get("material_diagnostic_context") and ai.material_diagnostic_context:
         return False
     if ai.classification in {"CHAT_ONLY", "KNOWLEDGE", "CONTROL"} and ai.material_diagnostic_context:
