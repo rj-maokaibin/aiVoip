@@ -13,6 +13,15 @@ INTENTS = {
 }
 
 _CASE_RE = re.compile(r'\b(?:VOIP-\d{8}-[A-Z0-9]{6}|CASE[-_:#： ]?[A-Z0-9-]+)\b', re.I)
+_STATUS_RE = re.compile(
+    r'(?:进度|状态|到哪(?:了)?|结果(?:了吗|出来了吗|有了吗)?|诊断结果|status|'
+    r'什么时候.*(?:结束|完成)|还要多久|多久.*(?:结束|完成)|'
+    r'(?:分析|诊断).*(?:结束|完成)(?:了吗|了没|没有)?|'
+    r'可以结束(?:分析|诊断)?吗|能结束(?:分析|诊断)?吗|'
+    r'还需要我做什么|需要我做什么|我还要做什么|下一步(?:做什么|怎么办)?|'
+    r'还缺什么|还需要什么|需要补充什么)',
+    re.I,
+)
 _SYMPTOM_WORDS = (
     '故障', '异常', '问题', '无声', '单通', '杂音', '噪音', '电流音', '回声', '断续', '卡顿',
     '丢包', '抖动', 'dtmf', '按键', '首位', '拨号', '呼叫失败', '注册失败', '打不通',
@@ -59,6 +68,11 @@ def route_intake(*, text: str, attachments: list[dict] | None = None,
     This router decides only workflow routing. It does not infer protocol facts,
     execute device actions, or use an LLM. Ambiguous input is returned with a
     missing-input list so the caller can ask one user-facing question.
+
+    Conversational progress/completion/next-action queries are deliberately
+    recognized before generic diagnosis language.  Phrases such as
+    ``什么时候可以结束分析`` therefore never become a new diagnosis merely because
+    they contain the word ``分析``.
     """
     text = (text or '').strip()
     lowered = text.lower()
@@ -81,10 +95,10 @@ def route_intake(*, text: str, attachments: list[dict] | None = None,
     if any(word in lowered for word in ('修复完成', '已经修复', '已修复', 'fix applied', '修复已应用')):
         return IntakeResult('FIX_APPLIED', 0.96, case_ref, devices, symptoms,
                             attachments, [], False, 'explicit_fix_completion')
-    if any(word in lowered for word in ('进度', '状态', '到哪了', '结果了吗', '诊断结果', 'status')):
+    if _STATUS_RE.search(text):
         missing = [] if (case_ref or has_thread_case) else ['case_reference_or_reply_in_case_thread']
-        return IntakeResult('STATUS_QUERY', 0.94 if not missing else 0.65, case_ref, devices,
-                            symptoms, attachments, missing, False, 'status_phrase')
+        return IntakeResult('STATUS_QUERY', 0.97 if not missing else 0.68, case_ref, devices,
+                            symptoms, attachments, missing, False, 'status_or_completion_phrase')
 
     question_language = text.endswith(('?', '？')) or any(
         word in lowered for word in ('怎么', '什么', '为什么', '如何')
