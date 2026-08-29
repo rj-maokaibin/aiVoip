@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from sqlalchemy import create_engine, func, select
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.conversation.state_service import ConversationStateService
@@ -91,6 +91,7 @@ def test_progress_question_is_chat_only_even_when_case_is_waiting(monkeypatch):
         db.flush()
         run = DiagnosisRun(case_id=case.id, status="WAITING_USER", cycle=4)
         db.add(run)
+        db.flush()
         case_id = case.id
         run_id = run.id
         db.commit()
