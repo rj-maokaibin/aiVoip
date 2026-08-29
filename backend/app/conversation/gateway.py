@@ -16,7 +16,7 @@ class ConversationGatewayClient:
     """Reasoning Gateway client for semantic turn interpretation/response planning.
 
     The gateway never receives raw Evidence payload bytes or credentials and its
-    outputs are non-executing contracts.  Device action authority remains in the
+    outputs are non-executing contracts. Device action authority remains in the
     deterministic Policy/Registry/Orchestrator path.
     """
 
@@ -59,6 +59,7 @@ class ConversationGatewayClient:
         slots: dict[str, Any],
         case_context: dict[str, Any] | None,
         deterministic_candidate: dict[str, Any],
+        conversation_entities: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         payload = {
             "schema_version": "voip-conversation-turn-gateway-v1",
@@ -78,6 +79,7 @@ class ConversationGatewayClient:
             "conversation": {
                 "active_question": active_question,
                 "slots": slots,
+                "entities": dict(conversation_entities or {}),
                 "case_context": case_context,
             },
             "deterministic_candidate": deterministic_candidate,
@@ -85,6 +87,7 @@ class ConversationGatewayClient:
                 "output_schema": "conversation-turn-v1",
                 "output_is_non_executing": True,
                 "active_question_has_priority": True,
+                "knowledge_interruption_may_preempt_active_question": True,
                 "chat_only_must_not_become_diagnostic_evidence": True,
                 "knowledge_in_case_must_not_advance_diagnosis": True,
                 "raw_commands_forbidden": True,
