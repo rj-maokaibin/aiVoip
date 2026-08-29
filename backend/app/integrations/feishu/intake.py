@@ -69,14 +69,10 @@ def route_intake(*, text: str, attachments: list[dict] | None = None,
                  has_thread_case: bool = False) -> IntakeResult:
     """Deterministic, fail-closed Feishu intent router.
 
-    This router decides only workflow routing. It does not infer protocol facts,
-    execute device actions, or use an LLM. Ambiguous input is returned with a
-    missing-input list so the caller can ask one user-facing question.
-
-    Conversational progress/completion/next-action queries are deliberately
-    recognized before generic diagnosis language. Mixed questions that explicitly
-    describe a current field incident remain on the Case path so the Conversation
-    layer can answer knowledge and preserve new incident context together.
+    The router only decides workflow routing. It never infers protocol facts or
+    executes actions. In-Case knowledge questions are intentionally sent through
+    CASE_FOLLOW_UP with a ``knowledge_in_case`` reason so the Conversation layer
+    can preserve context without turning that question into diagnostic Evidence.
     """
     text = (text or '').strip()
     lowered = text.lower()
@@ -113,6 +109,9 @@ def route_intake(*, text: str, attachments: list[dict] | None = None,
     )
     if (question_language and not attachments and not device.is_open_intent()
             and not explicit_diagnosis and not incident_language):
+        if has_thread_case:
+            return IntakeResult('CASE_FOLLOW_UP', 0.92, case_ref, devices, symptoms,
+                                attachments, [], False, 'knowledge_in_case')
         return IntakeResult('GENERAL_QUESTION', 0.88, case_ref, devices, symptoms,
                             attachments, [], False, 'question_language')
 
