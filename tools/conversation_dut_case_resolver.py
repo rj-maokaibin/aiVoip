@@ -58,7 +58,7 @@ def resolve_once(db, *, acceptance_tag: str) -> dict[str, Any]:
             "match_count": 0,
             "safety": {"read_only": True, "fallback_to_recent_case": False},
         }
-    if len(case_ids) != 1:
+    if len(matches) != 1 or len(case_ids) != 1:
         return {
             "contract": CONTRACT,
             "status": "BLOCKED",
@@ -92,7 +92,7 @@ def resolve_once(db, *, acceptance_tag: str) -> dict[str, Any]:
         "binding_id": binding.id,
         "source_message_sha256": _sha256(str(binding.source_message_id)),
         "acceptance_tag_sha256": _sha256(tag),
-        "match_count": len(matches),
+        "match_count": 1,
         "case_count": 1,
         "safety": {"read_only": True, "fallback_to_recent_case": False},
     }
