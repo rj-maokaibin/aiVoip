@@ -2,17 +2,28 @@ from __future__ import annotations
 
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.knowledge.service import search_knowledge_items
+
+
+def _matches(db: Session, query: str, *, limit: int) -> list[dict]:
+    if settings.knowledge_hybrid_retrieval:
+        from app.knowledge.retrieval import hybrid_search_verified_knowledge
+        return hybrid_search_verified_knowledge(db, query, limit=max(1, limit * 3), min_score=0.06)
+    return [
+        item for item in search_knowledge_items(db, query, limit=max(1, limit * 3))
+        if float(item.get('score') or 0) >= 0.03
+    ]
 
 
 def answer_verified_question(db: Session, query: str, *, limit: int = 2) -> dict:
     """Answer only from reviewer-verified KnowledgeItems.
 
-    This is intentionally extractive and deterministic. It does not synthesize
-    protocol facts and therefore remains safe while the AI gateway is disabled.
+    Hybrid retrieval may change ranking, but never authority: only ACTIVE and
+    reviewer-verified items can be returned. The answer remains extractive and
+    deterministic so a language model cannot synthesize unsupported product facts.
     """
-    matches = [item for item in search_knowledge_items(db, query, limit=max(1, limit * 3))
-               if float(item.get('score') or 0) >= 0.03][:limit]
+    matches = _matches(db, query, limit=limit)[:limit]
     if not matches:
         return {
             'answered': False,
@@ -28,8 +39,13 @@ def answer_verified_question(db: Session, query: str, *, limit: int = 2) -> dict
         'answered': True,
         'text': f'{" ".join(sections)}\n来源：已审核知识库 {titles}。',
         'citations': [
-            {'knowledge_id': item['id'], 'title': item['title'],
-             'source_ref': item.get('source_ref'), 'score': item.get('score')}
+            {
+                'knowledge_id': item['id'],
+                'title': item['title'],
+                'source_ref': item.get('source_ref'),
+                'score': item.get('score'),
+                'retrieval': item.get('retrieval'),
+            }
             for item in matches
         ],
     }
