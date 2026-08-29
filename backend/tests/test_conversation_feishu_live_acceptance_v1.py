@@ -38,7 +38,7 @@ def _preflight(tmp_path: Path, **overrides) -> Path:
     return path
 
 
-def test_preflight_requires_v2_pass_mutation_and_exact_revision(tmp_path: Path):
+def test_preflight_requires_v2_pass_mutation_exact_revision_and_runtime_identity(tmp_path: Path):
     path = _preflight(tmp_path)
     payload = live.load_and_validate_preflight(path, expected_revision="abc123")
     assert payload["status"] == "PASS"
@@ -59,6 +59,10 @@ def test_preflight_requires_v2_pass_mutation_and_exact_revision(tmp_path: Path):
     with pytest.raises(RuntimeError, match="PREFLIGHT_REVISION_MISMATCH"):
         live.load_and_validate_preflight(path, expected_revision="abc123")
 
+    path = _preflight(tmp_path, runtime_fingerprint="")
+    with pytest.raises(RuntimeError, match="RUNTIME_FINGERPRINT_MISSING"):
+        live.load_and_validate_preflight(path, expected_revision="abc123")
+
 
 def test_live_target_is_dedicated_message_and_requires_explicit_confirmation():
     target = live.validate_live_target(
@@ -73,6 +77,17 @@ def test_live_target_is_dedicated_message_and_requires_explicit_confirmation():
         live.validate_live_target(message_id="om_1234567890abcdef", confirmation="yes")
 
 
+def test_live_target_file_must_be_private(tmp_path: Path):
+    target = tmp_path / "target"
+    target.write_text("om_1234567890abcdef", encoding="utf-8")
+    target.chmod(0o600)
+    assert live.load_private_target(target, confirmation=live.CONFIRMATION) == "om_1234567890abcdef"
+
+    target.chmod(0o644)
+    with pytest.raises(RuntimeError, match="TARGET_FILE_NOT_PRIVATE"):
+        live.load_private_target(target, confirmation=live.CONFIRMATION)
+
+
 def test_live_helper_uses_production_reply_task_and_persisted_sent_trace():
     text = HELPER.read_text(encoding="utf-8")
     assert "reply_feishu_text.apply" in text
@@ -85,12 +100,14 @@ def test_live_helper_uses_production_reply_task_and_persisted_sent_trace():
     assert "CONVERSATION_LIVE_REPLY_RETRY_REQUIRED" in text
 
 
-def test_live_result_redacts_real_feishu_message_ids():
+def test_live_result_redacts_real_feishu_message_ids_and_cli_uses_file_target():
     text = HELPER.read_text(encoding="utf-8")
     assert '"source_message_sha256"' in text
     assert '"sent_message_sha256"' in text
-    assert '"source_message_id"' not in text.split("return {", 1)[1].split("}", 1)[0]
-    assert '"sent_message_id"' not in text.split("return {", 1)[1].split("}", 1)[0]
+    assert 'parser.add_argument("--message-id-file"' in text
+    assert 'parser.add_argument("--message-id"' not in text
+    assert '"source_message_id":' not in text
+    assert '"sent_message_id":' not in text
 
 
 def test_workflow_is_explicit_only_and_never_mutates_on_pull_request():
@@ -102,6 +119,8 @@ def test_workflow_is_explicit_only_and_never_mutates_on_pull_request():
     assert "expected_head_sha" in workflow
     assert "conversation_feishu_live_acceptance.py" in workflow
     assert "preflight_v2.py" in workflow
+    assert '--message-id-file validation/.conversation_live_target' in workflow
+    assert '--message-id "$target"' not in workflow
 
 
 def test_live_acceptance_is_documented_as_separate_from_dut_and_semantic_contract():
