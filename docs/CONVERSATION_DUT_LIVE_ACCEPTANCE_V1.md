@@ -37,7 +37,7 @@ The gate itself is read-only. It MUST NOT:
 
 All device control and user-visible replies must come from the normal Production product flow.
 
-## 3. Dedicated acceptance Case guard
+## 3. Dedicated acceptance tag and automatic Case discovery
 
 The initial real Feishu incident MUST contain a unique tag matching:
 
@@ -51,7 +51,14 @@ Example:
 CONV-DUT-E2E-20260829A1
 ```
 
-The live observer verifies the tag is present in the authoritative `FeishuCaseBinding.source_normalized_text` for the selected Case. A wrong Case number therefore fails before the observer accepts any downstream evidence.
+The live observer no longer requires a human to copy the generated Case number. `tools/conversation_dut_case_resolver.py` runs read-only inside the Production runtime and waits for exactly one ACTIVE `FeishuCaseBinding` whose authoritative `source_normalized_text` contains the tag and whose source message has the real `om_...` shape.
+
+Resolution is fail-closed:
+
+- zero matches → `WAITING_FEISHU_CASE` until the bounded resolution timeout;
+- exactly one Case → continue with that Case;
+- more than one Case for the tag → `ACCEPTANCE_TAG_NOT_UNIQUE` and BLOCKED;
+- there is no fallback to the newest/recent Case.
 
 Raw Feishu message IDs, sender IDs, tenant keys and chat IDs are never written to the uploaded acceptance artifact; only SHA-256 values are retained.
 
@@ -61,13 +68,13 @@ Raw Feishu message IDs, sender IDs, tenant keys and chat IDs are never written t
 
 Required:
 
-- active `FeishuCaseBinding` for the Case;
+- active `FeishuCaseBinding` for the uniquely resolved Case;
 - real source message ID with `om_...` shape;
 - exact dedicated acceptance tag in source normalized text;
 - active FEISHU Conversation for the same tenant/chat and active Case;
 - at least one real USER `ConversationTurn` in that Conversation.
 
-The authoritative initial message remains `FeishuCaseBinding` on deployments where the first `NEW_DIAGNOSIS` has not yet been mirrored into `ConversationTurn`. The observer records `initial_source_turn_persisted` separately and never fabricates the missing row.
+The current product flow mirrors the initial `NEW_DIAGNOSIS` source message into `ConversationTurn` at Case binding time. The observer records `initial_source_turn_persisted` and never fabricates a missing row.
 
 ### 4.2 Single real-DUT flow
 
@@ -115,26 +122,34 @@ This proves the Production diagnosis-to-user delivery chain, rather than sending
 After this workflow is merged to master, only the repository owner may start the observer through an exact-master PR comment:
 
 ```text
-/run-conversation-dut-e2e <exact-master-sha> <case-no> <acceptance-tag>
+/run-conversation-dut-e2e <exact-master-sha> <acceptance-tag>
 ```
 
 Example shape:
 
 ```text
-/run-conversation-dut-e2e 0123456789abcdef0123456789abcdef01234567 VOIP-20260829-ABCDEF CONV-DUT-E2E-20260829A1
+/run-conversation-dut-e2e 0123456789abcdef0123456789abcdef01234567 CONV-DUT-E2E-20260829A1
 ```
 
-The command is rejected if:
+The observer may be started before the real Feishu incident is sent. It waits up to 900 seconds for a unique matching Case, then observes the resolved Case for the normal Production flow.
+
+The command or resolver is rejected/blocked if:
 
 - actor is not repository owner;
 - master moved;
 - SHA is malformed;
-- Case number is malformed;
-- acceptance tag is malformed or absent from the real Feishu source message.
+- acceptance tag is malformed;
+- the tag resolves to multiple Cases;
+- the matched source is not a real Feishu `om_...` message.
 
 ## 6. Lifecycle phases
 
-The observer reports one of:
+Case discovery adds:
+
+- `WAITING_FEISHU_CASE`
+- `CASE_RESOLVED`
+
+The main observer then reports one of:
 
 - `WAITING_CONVERSATION_TURN`
 - `WAITING_REPRODUCTION`
@@ -155,7 +170,7 @@ Only two environment actions are inherently human/external and cannot be replace
 1. send one dedicated real Feishu incident containing the acceptance tag and real DUT information/symptom;
 2. after the normal product flow reaches WATCHING, perform one real phone call.
 
-Everything else is produced, analyzed, cleaned up and replied by the normal VOIP AI product flow and then verified read-only by this gate.
+The user does not need to copy the generated Case number into GitHub. Case discovery, exact-master preflight, evidence observation, analysis, cleanup/reply verification and artifact upload are automated and read-only from the acceptance gate's perspective.
 
 ## 8. Relation to other gates
 
