@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
-
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
@@ -75,29 +73,22 @@ def test_draft_fact_is_never_answer_authority():
         assert result.status == "NOT_FOUND"
 
 
-def test_equal_authority_conflict_fails_closed():
+def test_more_specific_region_scope_wins_over_wildcard():
     with _db() as db:
-        when_a = datetime(2026, 8, 1, tzinfo=timezone.utc)
-        when_b = datetime(2026, 8, 1, tzinfo=timezone.utc)
         db.add(_fact(
             hw_scope="HW-A",
-            effective_from=when_a,
             value_json={"supported": True},
-            value_text="支持",
+            value_text="通用支持",
             source_document="SPEC-A",
         ))
-        # Use a distinct region so the database unique key is legal while the
-        # query target remains equally specific through exact region matching.
         db.add(_fact(
             hw_scope="HW-A",
             region_scope="CN",
-            effective_from=when_b,
             value_json={"supported": False},
-            value_text="不支持",
+            value_text="中国区不支持",
             source_document="SPEC-B",
         ))
         db.commit()
-        # CN exact scope is more specific, therefore no conflict yet.
         result = lookup_product_fact(
             db,
             product_model="T18",
@@ -106,25 +97,26 @@ def test_equal_authority_conflict_fails_closed():
             region="CN",
         )
         assert result.status == "FOUND"
-        assert result.fact["value_text"] == "不支持"
+        assert result.fact["value_text"] == "中国区不支持"
 
 
-def test_same_rank_conflicting_values_return_conflict():
+def test_equal_authority_same_scope_conflict_returns_conflict():
     with _db() as db:
-        # Different effective_from values normally rank newest first, so create two
-        # equal-ranked facts using different exact SW/region axes that sum to the
-        # same specificity for a query with no exact target on one axis.
+        # SQL unique constraints allow multiple NULL effective_from values. Two
+        # simultaneously approved records with the same authority/scope but
+        # conflicting values are therefore a data-governance conflict that the
+        # answer layer must surface instead of arbitrarily choosing one.
         db.add(_fact(
             hw_scope="HW-A",
             sw_version_scope="R412",
-            region_scope="*",
+            region_scope="CN",
             value_json={"supported": True},
             value_text="支持",
             source_document="SPEC-A",
         ))
         db.add(_fact(
             hw_scope="HW-A",
-            sw_version_scope="*",
+            sw_version_scope="R412",
             region_scope="CN",
             value_json={"supported": False},
             value_text="不支持",
@@ -139,7 +131,7 @@ def test_same_rank_conflicting_values_return_conflict():
             sw_version="R412",
             region="CN",
         )
-        # The explicit ranking intentionally prefers exact SW scope over exact
-        # region scope for version-sensitive VOIP capabilities.
-        assert result.status == "FOUND"
-        assert result.fact["source_document"] == "SPEC-A"
+        assert result.status == "CONFLICT"
+        assert result.fact is None
+        assert result.reason == "EQUAL_AUTHORITY_CONFLICT"
+        assert {item["value_text"] for item in result.candidates} == {"支持", "不支持"}
