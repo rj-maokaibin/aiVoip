@@ -110,14 +110,17 @@ def _complete_message(db: Session, handle, result: dict, message_id: str, event_
 
 
 def _dispatch_case_conversation(*, case_id: str, text: str, source_context: dict) -> None:
-    """Single asynchronous entry for active-Case conversational turns.
-
-    Status/completion/knowledge/follow-up text all pass through the same interpreter
-    so ConversationTurn is persisted before any decision to create technical
-    Evidence. The callback itself sends no zero-information acknowledgement.
-    """
+    """Single asynchronous entry for active-Case conversational turns."""
     from app.workers.device_provision_task import ingest_feishu_follow_up
     ingest_feishu_follow_up.apply_async(args=[case_id, text, source_context], queue='diagnosis')
+
+
+def _dispatch_knowledge_conversation(*, text: str, source_context: dict, attachments: list[dict]) -> None:
+    """Persist no-Case knowledge chat without creating Case/Evidence."""
+    from app.workers.conversation_tasks import ingest_knowledge_turn
+    ingest_knowledge_turn.apply_async(
+        args=[text, source_context, attachments], queue='diagnosis'
+    )
 
 
 def dispatch_event(db: Session, *, payload: dict, actor: str = "feishu:callback") -> dict:
@@ -272,8 +275,8 @@ def dispatch_event(db: Session, *, payload: dict, actor: str = "feishu:callback"
         elif intake.intent == 'STATUS_QUERY':
             if case:
                 _dispatch_case_conversation(case_id=case.id, text=text, source_context=source_context)
-                result = {**base, 'handled': 'case_conversation_dispatched',
-                          'case_no': case.case_no, 'conversation_kind': 'STATUS_QUERY'}
+                result = {**base, 'handled': 'status_query', 'case_no': case.case_no,
+                          'case_status': case.status, 'conversation_dispatched': True}
             else:
                 result = {**base, 'handled': 'needs_clarification',
                           'missing_user_inputs': intake.missing_user_inputs}
@@ -371,20 +374,19 @@ def dispatch_event(db: Session, *, payload: dict, actor: str = "feishu:callback"
         elif intake.intent == 'GENERAL_QUESTION':
             if case:
                 _dispatch_case_conversation(case_id=case.id, text=text, source_context=source_context)
-                result = {**base, 'handled': 'case_conversation_dispatched',
-                          'case_no': case.case_no, 'conversation_kind': 'KNOWLEDGE_OR_CHAT'}
+                result = {**base, 'handled': 'general_question', 'case_no': case.case_no,
+                          'conversation_dispatched': True}
             else:
-                from app.knowledge.answering import answer_verified_question
-                answer = answer_verified_question(db, text)
-                result = {**base, 'handled': 'general_question',
-                          'answered': answer['answered'], 'citations': answer['citations']}
-                _reply_intake(message_id, answer['text'])
+                _dispatch_knowledge_conversation(
+                    text=text, source_context=source_context, attachments=attachments
+                )
+                result = {**base, 'handled': 'general_question', 'answered': None,
+                          'citations': [], 'conversation_dispatched': True}
                 from app.services.audit import audit
                 audit(db, case_id=None, actor=actor,
-                      event_type='FEISHU_KNOWLEDGE_ANSWERED', target_type='feishu_message',
+                      event_type='FEISHU_KNOWLEDGE_CONVERSATION_DISPATCHED', target_type='feishu_message',
                       target_id=message_id or event_id or None,
-                      detail={'answered': answer['answered'],
-                              'citations': answer['citations'], 'query': text[:500]})
+                      detail={'query': text[:500], 'case_created': False})
         elif intake.intent == 'NEW_DIAGNOSIS' and intake.missing_user_inputs:
             result = {**base, 'handled': 'needs_clarification',
                       'missing_user_inputs': intake.missing_user_inputs}
@@ -416,9 +418,10 @@ def dispatch_event(db: Session, *, payload: dict, actor: str = "feishu:callback"
             if text:
                 _dispatch_case_conversation(case_id=case.id, text=text, source_context=source_context)
             result = {
-                **base, 'handled': 'case_conversation_dispatched',
+                **base, 'handled': 'case_follow_up',
                 'follow_up_dispatched': bool(text),
                 'attachment_follow_up_dispatched': bool(attachments),
+                'conversation_dispatched': bool(text),
             }
         else:
             result = {**base, 'handled': 'needs_clarification',
