@@ -31,6 +31,7 @@ jobs:
       SIP_ABA_OUTPUT_ROOT: /tmp/voip-ai-real-sip-aba-evidence-${{ github.run_id }}-${{ github.run_attempt }}
       SIP_ABA_RUNTIME_ROOT: /tmp/voip-ai-real-sip-aba-runtime-${{ github.run_id }}-${{ github.run_attempt }}
       SIP_ABA_PHASE_SECONDS_DEFAULT: '75'
+      SIP_ABA_TRIGGER_ACTION_ID: TRIGGER_SIP_REGISTER_RC1
 
     steps:
       - name: Checkout exact master
@@ -145,7 +146,29 @@ jobs:
           export REPRODUCTION_PLATFORM_MODE=real
           export TSHARK_BINARY="$TSHARK_BINARY"
           phase_seconds="${SIP_ABA_PHASE_SECONDS:-$SIP_ABA_PHASE_SECONDS_DEFAULT}"
-          trigger_command="${SIP_ABA_REGISTRATION_TRIGGER_COMMAND:-}"
+          trigger_command="$(SIP_ABA_TRIGGER_ACTION_ID="$SIP_ABA_TRIGGER_ACTION_ID" "$SIP_ABA_VENV/bin/python" - <<'PY'
+          import os
+          from pathlib import Path
+          from app.actions.registry import ActionRegistry
+
+          action_id = os.environ["SIP_ABA_TRIGGER_ACTION_ID"]
+          action = ActionRegistry(Path(os.environ["GITHUB_WORKSPACE"]) / "profiles").action(action_id)
+          if action.contract_status != "VERIFIED":
+              raise SystemExit(f"trigger action is not VERIFIED: {action.contract_status}")
+          if action.risk_level not in {"L0", "L1"}:
+              raise SystemExit(f"trigger action risk is not permitted: {action.risk_level}")
+          if action.executor != "shell":
+              raise SystemExit(f"trigger action executor must be shell: {action.executor}")
+          if "RUIJIE_VOIP_AIM_V1" not in action.supported_platforms:
+              raise SystemExit("trigger action missing RUIJIE_VOIP_AIM_V1 platform contract")
+          command = action.command.strip()
+          if not command or "\n" in command or "\r" in command:
+              raise SystemExit("trigger action command must be one non-empty line")
+          print(command)
+          PY
+          )"
+          test -n "$trigger_command"
+          printf 'SIP_ABA_TRIGGER_ACTION=%s\n' "$SIP_ABA_TRIGGER_ACTION_ID" >> "$GITHUB_STEP_SUMMARY"
           serial_command='v="$(uci -q get sysinfo.@sysinfo[0].serial_num 2>/dev/null || true)"; [ -n "$v" ] || v="$(uci -q get sysinfo.@sysinfo[0].serial_number 2>/dev/null || true)"; [ -n "$v" ] || v="$(uci -q get sysinfo.@sysinfo[0].sn 2>/dev/null || true)"; [ -n "$v" ] || v="$(uci -q get sysinfo.@sysinfo[0].serial 2>/dev/null || true)"; [ -n "$v" ] || exit 44; printf "%s\\n" "$v"'
           version_command='uci -q get sysinfo.@sysinfo[0].software_version'
           args=(
@@ -161,6 +184,7 @@ jobs:
             --gate-id SIP-REGISTRATION-ABA
             --phase-seconds "$phase_seconds"
             --sip-transport "${SIP_ABA_SIP_TRANSPORT:-udp}"
+            --registration-trigger-command "$trigger_command"
             --serial-command "$serial_command"
             --software-version-command "$version_command"
             --profile-root "$GITHUB_WORKSPACE/profiles"
@@ -170,7 +194,6 @@ jobs:
           case "$DEVICE_PLATFORM" in
             mt7621|mt7981) args+=(--platform-id "$DEVICE_PLATFORM") ;;
           esac
-          if [ -n "$trigger_command" ]; then args+=(--registration-trigger-command "$trigger_command"); fi
           set +e
           "$SIP_ABA_VENV/bin/python" "${args[@]}" 2>&1 | tee "$SIP_ABA_OUTPUT_ROOT/cli-output.log"
           rc=${PIPESTATUS[0]}
