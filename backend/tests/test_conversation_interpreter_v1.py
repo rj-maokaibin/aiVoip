@@ -68,11 +68,27 @@ def test_legacy_unavailable_without_active_question_never_becomes_evidence():
 
 
 def test_case_knowledge_question_is_non_material():
+    intake = route_intake(text="RFC2833 是什么？", attachments=[], has_thread_case=True)
+    assert intake.intent == "CASE_FOLLOW_UP"
+    assert intake.reason == "knowledge_in_case"
     result = _interpret("RFC2833 是什么？", active_question=None, has_case=True)
     assert result["intent"] == "KNOWLEDGE_IN_CASE"
     assert result["classification"] == "KNOWLEDGE"
     assert result["material_diagnostic_context"] is False
     assert result["entities"]["knowledge_query"] == "RFC2833 是什么？"
+
+
+def test_in_case_knowledge_question_does_not_answer_active_timestamp_slot():
+    result = _interpret(
+        "tcpdump 怎么抓 VOIP 包？",
+        active_question={"id": "q-time", "slot_key": "anomaly_timestamp", "text": "异常时间？"},
+        has_case=True,
+    )
+    assert result["intent"] == "KNOWLEDGE_IN_CASE"
+    assert result["classification"] == "KNOWLEDGE"
+    assert result["material_diagnostic_context"] is False
+    assert result.get("active_question_answer") is None
+    assert "tcpdump" in result["entities"]["knowledge_query"]
 
 
 def test_mixed_knowledge_and_current_incident_is_hybrid_and_material():
