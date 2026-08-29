@@ -34,7 +34,7 @@ permissions:
 
 concurrency:
   group: conversation-feishu-live-acceptance-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   conversation-live-contract:
@@ -46,6 +46,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+        timeout-minutes: 5
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 1
@@ -92,6 +93,7 @@ jobs:
       LIVE_CONFIRMATION: ${{ inputs.confirmation }}
     steps:
       - uses: actions/checkout@v4
+        timeout-minutes: 5
         with:
           ref: master
           fetch-depth: 1
@@ -115,7 +117,9 @@ jobs:
           from pathlib import Path
           target = os.environ['LIVE_MESSAGE_ID'].strip()
           assert target.startswith('om_') and len(target) >= 12
-          Path('validation/.conversation_live_target').write_text(target, encoding='utf-8')
+          path = Path('validation/.conversation_live_target')
+          path.write_text(target, encoding='utf-8')
+          path.chmod(0o600)
           PY
           printf 'LIVE_TARGET_GUARD=PASS\n'
           printf 'LIVE_HEAD=%s\n' "$LIVE_HEAD_SHA"
@@ -157,14 +161,13 @@ jobs:
       - name: Explicit one-message real Feishu reply
         run: |
           set -Eeuo pipefail
-          target="$(cat validation/.conversation_live_target)"
           python3 deploy/live_acceptance/runtime_v2.py run \
             --context "$CONVERSATION_LIVE_CONTEXT" \
             --env-file /home/github-runner/.config/voip-ai/.env \
             --workspace "$GITHUB_WORKSPACE" \
             -- python tools/conversation_feishu_live_acceptance.py \
                  --preflight-result validation/conversation_live_preflight_v2.json \
-                 --message-id "$target" \
+                 --message-id-file validation/.conversation_live_target \
                  --confirmation REPLY_TO_DEDICATED_FEISHU_ACCEPTANCE_MESSAGE \
                  --result validation/conversation_feishu_live_acceptance_v1.json
 
