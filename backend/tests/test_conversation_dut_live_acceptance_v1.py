@@ -133,6 +133,74 @@ def test_live_workflow_is_observer_only_and_exact_master_guarded():
         assert forbidden not in workflow, forbidden
 
 
+def test_initial_feishu_binding_materializes_material_conversation_turn(monkeypatch):
+    from app.conversation.state_service import ConversationStateService
+    from app.db.models import FeishuCaseBinding
+    from app.integrations.feishu import service as feishu_service
+
+    calls = []
+
+    def fake_record(self, db, **kwargs):
+        calls.append(kwargs)
+        return object()
+
+    monkeypatch.setattr(ConversationStateService, "record_user_turn", fake_record)
+    binding = FeishuCaseBinding(
+        case_id="case-acceptance",
+        receive_id="oc_acceptance_chat",
+        receive_id_type="chat_id",
+        source_event_id="evt_acceptance",
+        source_message_id="om_acceptance_12345",
+        source_root_message_id="om_acceptance_12345",
+        source_parent_message_id=None,
+        source_sender_open_id="ou_acceptance",
+        source_chat_type="group",
+        source_tenant_key="tenant_acceptance",
+        source_message_timestamp="1234567890",
+        source_normalized_text="CONV-DUT-E2E-ABCDEF12 单通无声，请自动诊断",
+        source_attachment_refs=[],
+    )
+
+    feishu_service._ensure_initial_conversation_turn(object(), binding)
+
+    assert len(calls) == 1
+    payload = calls[0]
+    assert payload["case_id"] == "case-acceptance"
+    assert payload["source_context"]["message_id"] == "om_acceptance_12345"
+    assert payload["source_context"]["chat_id"] == "oc_acceptance_chat"
+    assert payload["text"].startswith("CONV-DUT-E2E-ABCDEF12")
+    assert payload["interpretation"]["intent"] == "DIAGNOSTIC_CONTEXT"
+    assert payload["interpretation"]["classification"] == "DIAGNOSTIC_CONTEXT"
+    assert payload["interpretation"]["route_mode"] == "DIAGNOSIS_FOLLOW_UP"
+    assert payload["interpretation"]["material_diagnostic_context"] is True
+    assert payload["interpretation"]["safety_class"] == "NON_EXECUTING_SEMANTIC_PROPOSAL"
+
+
+def test_initial_feishu_binding_without_authoritative_message_is_not_materialized(monkeypatch):
+    from app.conversation.state_service import ConversationStateService
+    from app.db.models import FeishuCaseBinding
+    from app.integrations.feishu import service as feishu_service
+
+    called = False
+
+    def fake_record(self, db, **kwargs):
+        nonlocal called
+        called = True
+        return object()
+
+    monkeypatch.setattr(ConversationStateService, "record_user_turn", fake_record)
+    binding = FeishuCaseBinding(
+        case_id="case-acceptance",
+        receive_id="oc_acceptance_chat",
+        receive_id_type="chat_id",
+        source_message_id=None,
+        source_normalized_text="CONV-DUT-E2E-ABCDEF12 单通无声",
+    )
+
+    feishu_service._ensure_initial_conversation_turn(object(), binding)
+    assert called is False
+
+
 def test_source_identifiers_are_sanitized_by_hash():
     assert gate._sha256("om_sensitive")
     assert gate._sha256("om_sensitive") != "om_sensitive"
