@@ -21,7 +21,7 @@ from app.db.models import (
 from app.experiments.orchestrator import DiagnosticExperimentOrchestrator
 from app.integrations.feishu.case_resolver import is_explicit_new_fault, resolve_case
 from app.integrations.feishu.intake import extract_message_content, route_intake
-from app.integrations.feishu.feedback import accepted_text, enqueue_reply, status_text
+from app.integrations.feishu.feedback import accepted_text, enqueue_reply
 from app.services.idempotency import begin_idempotent, complete_idempotent
 from app.workers.reproduction_tasks import cancel_reproduction, start_reproduction
 
@@ -109,6 +109,17 @@ def _complete_message(db: Session, handle, result: dict, message_id: str, event_
     return result
 
 
+def _dispatch_case_conversation(*, case_id: str, text: str, source_context: dict) -> None:
+    """Single asynchronous entry for active-Case conversational turns.
+
+    Status/completion/knowledge/follow-up text all pass through the same interpreter
+    so ConversationTurn is persisted before any decision to create technical
+    Evidence. The callback itself sends no zero-information acknowledgement.
+    """
+    from app.workers.device_provision_task import ingest_feishu_follow_up
+    ingest_feishu_follow_up.apply_async(args=[case_id, text, source_context], queue='diagnosis')
+
+
 def dispatch_event(db: Session, *, payload: dict, actor: str = "feishu:callback") -> dict:
     header = payload.get("header") if isinstance(payload.get("header"), dict) else {}
     event_type = str(header.get("event_type") or payload.get("type") or "")
@@ -132,6 +143,7 @@ def dispatch_event(db: Session, *, payload: dict, actor: str = "feishu:callback"
         tenant_key = str(header.get('tenant_key') or sender.get('tenant_key') or '')
         source_context = {
             'tenant_key': tenant_key or None,
+            'chat_id': chat_id or None,
             'event_id': event_id or None,
             'message_id': message_id or None,
             'root_message_id': root_message_id or None,
@@ -259,9 +271,9 @@ def dispatch_event(db: Session, *, payload: dict, actor: str = "feishu:callback"
                 _reply_intake(message_id, '没有定位到要停止的任务，请回复对应 Case 主卡或提供 Case 编号。')
         elif intake.intent == 'STATUS_QUERY':
             if case:
-                result = {**base, 'handled': 'status_query', 'case_no': case.case_no,
-                          'case_status': case.status}
-                _reply_intake(message_id, status_text(case))
+                _dispatch_case_conversation(case_id=case.id, text=text, source_context=source_context)
+                result = {**base, 'handled': 'case_conversation_dispatched',
+                          'case_no': case.case_no, 'conversation_kind': 'STATUS_QUERY'}
             else:
                 result = {**base, 'handled': 'needs_clarification',
                           'missing_user_inputs': intake.missing_user_inputs}
@@ -357,17 +369,22 @@ def dispatch_event(db: Session, *, payload: dict, actor: str = "feishu:callback"
                 from app.workers.device_provision_task import sync_case_card
                 sync_case_card.apply_async(args=[case.id, 'fix_applied'], queue='diagnosis')
         elif intake.intent == 'GENERAL_QUESTION':
-            from app.knowledge.answering import answer_verified_question
-            answer = answer_verified_question(db, text)
-            result = {**base, 'handled': 'general_question',
-                      'answered': answer['answered'], 'citations': answer['citations']}
-            _reply_intake(message_id, answer['text'])
-            from app.services.audit import audit
-            audit(db, case_id=case.id if case else None, actor=actor,
-                  event_type='FEISHU_KNOWLEDGE_ANSWERED', target_type='feishu_message',
-                  target_id=message_id or event_id or None,
-                  detail={'answered': answer['answered'],
-                          'citations': answer['citations'], 'query': text[:500]})
+            if case:
+                _dispatch_case_conversation(case_id=case.id, text=text, source_context=source_context)
+                result = {**base, 'handled': 'case_conversation_dispatched',
+                          'case_no': case.case_no, 'conversation_kind': 'KNOWLEDGE_OR_CHAT'}
+            else:
+                from app.knowledge.answering import answer_verified_question
+                answer = answer_verified_question(db, text)
+                result = {**base, 'handled': 'general_question',
+                          'answered': answer['answered'], 'citations': answer['citations']}
+                _reply_intake(message_id, answer['text'])
+                from app.services.audit import audit
+                audit(db, case_id=None, actor=actor,
+                      event_type='FEISHU_KNOWLEDGE_ANSWERED', target_type='feishu_message',
+                      target_id=message_id or event_id or None,
+                      detail={'answered': answer['answered'],
+                              'citations': answer['citations'], 'query': text[:500]})
         elif intake.intent == 'NEW_DIAGNOSIS' and intake.missing_user_inputs:
             result = {**base, 'handled': 'needs_clarification',
                       'missing_user_inputs': intake.missing_user_inputs}
@@ -397,16 +414,12 @@ def dispatch_event(db: Session, *, payload: dict, actor: str = "feishu:callback"
                     args=[text, chat_id, chat_type, source_context, attachments], queue='diagnosis'
                 )
             if text:
-                from app.workers.device_provision_task import ingest_feishu_follow_up
-                ingest_feishu_follow_up.apply_async(
-                    args=[case.id, text, source_context], queue='diagnosis'
-                )
+                _dispatch_case_conversation(case_id=case.id, text=text, source_context=source_context)
             result = {
-                **base, 'handled': 'case_follow_up',
+                **base, 'handled': 'case_conversation_dispatched',
                 'follow_up_dispatched': bool(text),
                 'attachment_follow_up_dispatched': bool(attachments),
             }
-            _reply_intake(message_id, f'已将补充信息关联到 Case {case.case_no}。')
         else:
             result = {**base, 'handled': 'needs_clarification',
                       'missing_user_inputs': intake.missing_user_inputs or ['clarify_intent']}
