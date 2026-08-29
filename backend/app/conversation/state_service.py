@@ -12,6 +12,9 @@ from app.db.conversation_models import Conversation, ConversationState, Conversa
 from app.db.models import FeishuCaseBinding
 
 _BLOCKING_SLOT_STATES = {"UNKNOWN_BY_USER", "UNAVAILABLE", "DECLINED", "NOT_APPLICABLE"}
+_CONTROL_SLOT_KEY = "__conversation_control__"
+_FINISH_CONTROL = "FINISH_WITH_PARTIAL_CONCLUSION"
+_CONTINUE_CONTROL = "CONTINUE_ANALYSIS"
 
 
 def need_from_question_text(text: str) -> str | None:
@@ -146,6 +149,16 @@ class ConversationStateService:
         conversation, state = self.get_or_create(db, case_id=case_id)
         slot_key = need or need_from_question_text(text)
         slots = dict(state.slots_json or {})
+
+        control_state = str((slots.get(_CONTROL_SLOT_KEY) or {}).get("state") or "")
+        if control_state == _FINISH_CONTROL:
+            return {
+                "should_ask": False,
+                "reason": "PARTIAL_CONCLUSION_REQUESTED",
+                "slot_key": slot_key,
+                "conversation_id": conversation.id,
+            }
+
         prior = dict(slots.get(slot_key) or {}) if slot_key else {}
         if slot_key and str(prior.get("state") or "") in _BLOCKING_SLOT_STATES:
             return {
@@ -196,6 +209,24 @@ class ConversationStateService:
         conversation, state = self.get_or_create(db, case_id=case_id, source_context=source_context)
         answer = interpretation.get("active_question_answer") or None
         slots = dict(state.slots_json or {})
+
+        intent = str(interpretation.get("intent") or "")
+        entities = interpretation.get("entities") or {}
+        control = str(entities.get("control") or "") if isinstance(entities, dict) else ""
+        if intent == "CONTROL" and control == _FINISH_CONTROL:
+            slots[_CONTROL_SLOT_KEY] = {
+                "state": _FINISH_CONTROL,
+                "source": "USER_CONTROL",
+            }
+            state.slots_json = slots
+            # Finishing the current analysis is Case-level control. It must not
+            # consume the active question as a technical answer, but the UI should
+            # stop presenting that question while the finish request is active.
+            state.active_question_json = None
+        elif intent == "CONTROL" and control == _CONTINUE_CONTROL:
+            slots.pop(_CONTROL_SLOT_KEY, None)
+            state.slots_json = slots
+
         if isinstance(answer, dict) and answer.get("slot_key"):
             slot_key = str(answer["slot_key"])
             previous = dict(slots.get(slot_key) or {})
@@ -216,14 +247,14 @@ class ConversationStateService:
             active = dict(state.active_question_json or {})
             if active.get("slot_key") == slot_key:
                 state.active_question_json = None
-        entities = interpretation.get("entities") or {}
+
         if isinstance(entities, dict) and entities:
             current = dict(conversation.entities_json or {})
             for key, value in entities.items():
                 if value not in (None, "", [], {}):
                     current[str(key)[:64]] = value
             conversation.entities_json = current
-        state.last_user_intent = str(interpretation.get("intent") or "")[:64] or None
+        state.last_user_intent = intent[:64] or None
         if interpretation.get("material_diagnostic_context"):
             material = json.dumps(
                 {

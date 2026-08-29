@@ -108,3 +108,70 @@ def test_material_timestamp_answer_updates_context_hash():
         _conversation, state = service.case_state(db, case.id)
         assert state.material_context_hash and len(state.material_context_hash) == 64
         assert state.slots_json["anomaly_timestamp"]["value"] == "08:17"
+
+
+def test_finish_control_persists_and_blocks_new_questions_until_continue():
+    with _db() as db:
+        case = Case(case_no="CASE-CONV-003", summary="用户反馈通话异常", status="WAITING_USER")
+        db.add(case)
+        db.commit()
+        service = ConversationStateService()
+        first = service.mark_question_asked(
+            db,
+            case_id=case.id,
+            text="请提供本次异常发生的大致时间",
+            need="anomaly_timestamp",
+        )
+        assert first["should_ask"] is True
+
+        finish_turn = service.record_user_turn(
+            db,
+            case_id=case.id,
+            source_context={"message_id": "m-finish"},
+            text="结束本轮分析，按现有证据给出阶段结论。",
+            interpretation={
+                "intent": "CONTROL",
+                "classification": "CONTROL",
+                "route_mode": "CONTROL",
+                "material_diagnostic_context": False,
+                "active_question_answer": None,
+                "entities": {"control": "FINISH_WITH_PARTIAL_CONCLUSION"},
+            },
+        )
+        assert finish_turn.material_diagnostic_context is False
+        _conversation, state = service.case_state(db, case.id)
+        assert state.active_question_json is None
+        assert state.slots_json["__conversation_control__"]["state"] == "FINISH_WITH_PARTIAL_CONCLUSION"
+
+        blocked = service.mark_question_asked(
+            db,
+            case_id=case.id,
+            text="请上传新的 PCAP",
+            need="pcap",
+        )
+        assert blocked["should_ask"] is False
+        assert blocked["reason"] == "PARTIAL_CONCLUSION_REQUESTED"
+
+        service.record_user_turn(
+            db,
+            case_id=case.id,
+            source_context={"message_id": "m-continue"},
+            text="继续分析",
+            interpretation={
+                "intent": "CONTROL",
+                "classification": "CONTROL",
+                "route_mode": "CONTROL",
+                "material_diagnostic_context": False,
+                "active_question_answer": None,
+                "entities": {"control": "CONTINUE_ANALYSIS"},
+            },
+        )
+        _conversation, state = service.case_state(db, case.id)
+        assert "__conversation_control__" not in state.slots_json
+        resumed = service.mark_question_asked(
+            db,
+            case_id=case.id,
+            text="请上传新的 PCAP",
+            need="pcap",
+        )
+        assert resumed["should_ask"] is True

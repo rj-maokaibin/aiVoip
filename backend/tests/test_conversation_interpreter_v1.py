@@ -120,6 +120,71 @@ def test_substantive_case_follow_up_is_material():
     assert result["material_diagnostic_context"] is True
 
 
+def test_live_finish_phrase_is_control_not_diagnostic_context():
+    result = _interpret("结束本轮分析，按现有证据给出阶段结论。")
+    assert result["intent"] == "CONTROL"
+    assert result["classification"] == "CONTROL"
+    assert result["route_mode"] == "CONTROL"
+    assert result["material_diagnostic_context"] is False
+    assert result["entities"]["control"] == "FINISH_WITH_PARTIAL_CONCLUSION"
+
+
+def test_long_finish_phrase_is_control():
+    result = _interpret("不要再等新的证据了，请直接基于当前这个 PCAP 给我阶段结论")
+    assert result["intent"] == "CONTROL"
+    assert result["classification"] == "CONTROL"
+    assert result["material_diagnostic_context"] is False
+    assert result["entities"]["control"] == "FINISH_WITH_PARTIAL_CONCLUSION"
+
+
+def test_finish_control_outweighs_active_question():
+    result = _interpret(
+        "结束本轮分析",
+        active_question={"id": "q-time", "slot_key": "anomaly_timestamp", "text": "异常时间？"},
+    )
+    assert result["intent"] == "CONTROL"
+    assert result["material_diagnostic_context"] is False
+    assert result.get("active_question_answer") is None
+    assert result["entities"]["control"] == "FINISH_WITH_PARTIAL_CONCLUSION"
+
+
+def test_continue_control_outweighs_active_question():
+    result = _interpret(
+        "继续分析",
+        active_question={"id": "q-time", "slot_key": "anomaly_timestamp", "text": "异常时间？"},
+    )
+    assert result["intent"] == "CONTROL"
+    assert result["material_diagnostic_context"] is False
+    assert result.get("active_question_answer") is None
+    assert result["entities"]["control"] == "CONTINUE_ANALYSIS"
+
+
+def test_passive_ack_does_not_answer_active_question():
+    result = _interpret(
+        "收到",
+        active_question={"id": "q-time", "slot_key": "anomaly_timestamp", "text": "异常时间？"},
+    )
+    assert result["intent"] == "GENERAL_CHAT"
+    assert result["classification"] == "CHAT_ONLY"
+    assert result["material_diagnostic_context"] is False
+    assert result.get("active_question_answer") is None
+
+
+def test_negated_finish_is_not_finish_control():
+    result = _interpret("不要结束分析")
+    assert not (
+        result["intent"] == "CONTROL"
+        and (result.get("entities") or {}).get("control") == "FINISH_WITH_PARTIAL_CONCLUSION"
+    )
+
+
+def test_finish_question_is_completion_query_not_control():
+    result = _interpret("现在能结束分析了吗？")
+    assert result["intent"] == "CASE_COMPLETION_QUERY"
+    assert result["classification"] == "CHAT_ONLY"
+    assert result["material_diagnostic_context"] is False
+
+
 class FakeGateway:
     def enabled(self):
         return True

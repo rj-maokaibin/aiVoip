@@ -13,6 +13,7 @@ pytest -q \
   backend/tests/test_conversation_state_v1.py \
   backend/tests/test_feishu_conversation_cycle_decoupling.py \
   backend/tests/test_conversation_question_planner_v1.py \
+  backend/tests/test_conversation_control_response_v1.py \
   backend/tests/test_conversation_progress_push_v1.py \
   backend/tests/test_conversation_orchestrator_v1.py \
   backend/tests/test_conversation_golden_corpus_v1.py \

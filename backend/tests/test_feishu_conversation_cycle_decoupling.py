@@ -108,3 +108,74 @@ def test_progress_question_is_chat_only_even_when_case_is_waiting(monkeypatch):
     with Local() as db:
         assert db.scalar(select(func.count(Evidence.id)).where(Evidence.case_id == case_id)) == 0
         assert db.get(DiagnosisRun, run_id).cycle == 4
+
+
+def test_finish_control_is_conversation_only_and_suppresses_reask(monkeypatch):
+    from app.db import session as db_session
+    from app.core.config import settings
+    from app.workers.device_provision_task import ingest_feishu_follow_up
+
+    engine = _engine()
+    Local = sessionmaker(bind=engine, expire_on_commit=False)
+    monkeypatch.setattr(db_session, "SessionLocal", Local)
+    monkeypatch.setattr(settings, "conversation_cycle_decoupled", True)
+    monkeypatch.setattr(settings, "conversation_ai_enabled", False)
+
+    with Local() as db:
+        case = Case(case_no="CASE-CYCLE-003", summary="现场通话异常", status="WAITING_USER")
+        db.add(case)
+        db.flush()
+        run = DiagnosisRun(
+            case_id=case.id,
+            status="WAITING_USER",
+            cycle=6,
+            summary_json={
+                "headline": "候选方向，需补证",
+                "known": ["已发现 1 份PCAP/PCAPNG"],
+                "unknown": ["尚不能确认最终根因"],
+            },
+            decision_json={"plan": []},
+        )
+        db.add(run)
+        db.flush()
+        ConversationStateService().mark_question_asked(
+            db,
+            case_id=case.id,
+            text="请提供本次异常发生的大致时间",
+            need="anomaly_timestamp",
+        )
+        case_id = case.id
+        run_id = run.id
+        db.commit()
+
+    result = ingest_feishu_follow_up.run(
+        case_id,
+        "结束本轮分析，按现有证据给出阶段结论。",
+        {
+            "message_id": "msg-finish-1",
+            "sender_open_id": "ou-test",
+            "tenant_key": "tenant-a",
+        },
+    )
+
+    assert result["diagnosis_resumed"] is False
+    assert result["evidence_id"] is None
+    assert result["intent"] == "CONTROL"
+
+    with Local() as db:
+        assert db.scalar(select(func.count(Evidence.id)).where(Evidence.case_id == case_id)) == 0
+        assert db.scalar(select(func.count(ConversationTurn.id)).where(ConversationTurn.case_id == case_id)) == 1
+        run = db.get(DiagnosisRun, run_id)
+        assert run.cycle == 6
+        assert run.status == "WAITING_USER"
+        _conversation, state = ConversationStateService().case_state(db, case_id)
+        assert state.active_question_json is None
+        assert state.slots_json["__conversation_control__"]["state"] == "FINISH_WITH_PARTIAL_CONCLUSION"
+        blocked = ConversationStateService().mark_question_asked(
+            db,
+            case_id=case_id,
+            text="请上传新的抓包",
+            need="pcap",
+        )
+        assert blocked["should_ask"] is False
+        assert blocked["reason"] == "PARTIAL_CONCLUSION_REQUESTED"
