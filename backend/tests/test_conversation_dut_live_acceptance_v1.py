@@ -1,10 +1,15 @@
 from __future__ import annotations
 
 import inspect
+from pathlib import Path
 
 import pytest
 
 from tools import conversation_dut_live_acceptance as gate
+
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+WORKFLOW = REPO_ROOT / ".github" / "workflows" / "conversation-dut-live-acceptance.yml"
 
 
 def _base_checks(**overrides):
@@ -106,6 +111,26 @@ def test_auditor_source_is_read_only_and_has_no_device_or_synthetic_execution_pa
     assert '"synthetic_call_event_created": False' in source
     assert '"dut_action_executed_by_gate": False' in source
     assert '"pbx_action_executed_by_gate": False' in source
+
+
+def test_live_workflow_is_observer_only_and_exact_master_guarded():
+    workflow = WORKFLOW.read_text(encoding="utf-8")
+    assert "/run-conversation-dut-e2e " in workflow
+    assert "github.event.comment.user.login == github.repository_owner" in workflow
+    assert 'test "$(git rev-parse HEAD)" = "$LIVE_EXPECTED_SHA"' in workflow
+    assert "CONV-DUT-E2E-[A-Z0-9_-]{8,64}" in workflow
+    assert "tools/conversation_dut_live_acceptance.py" in workflow
+    for forbidden in [
+        "reply_feishu_text",
+        "start_reproduction",
+        "cancel_reproduction",
+        "execute_shell",
+        "execute_cli",
+        "ssh ",
+        "tcpdump -i",
+        "voip dsp diag set",
+    ]:
+        assert forbidden not in workflow, forbidden
 
 
 def test_source_identifiers_are_sanitized_by_hash():
