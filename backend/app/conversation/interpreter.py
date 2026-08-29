@@ -13,7 +13,7 @@ from app.integrations.feishu.intake import IntakeResult
 
 
 _PROGRESS = re.compile(r"(?:进度|状态|到哪(?:了)?|分析到哪|结果(?:出来|有了|了吗)|现在怎么样|什么情况)", re.I)
-_COMPLETION = re.compile(r"(?:什么时候.*(?:结束|完成)|还要多久|多久.*(?:结束|完成)|分析.*(?:结束|完成)(?:了吗|了没|没有)?|可以结束(?:分析|诊断)?吗|能结束(?:分析|诊断)?吗)", re.I)
+_COMPLETION = re.compile(r"(?:什么时候.*(?:结束|完成)|还要多久|多久.*(?:结束|完成)|分析.*(?:结束|完成)(?:了吗|了没|没有)?|可以结束(?:分析|诊断)?(?:吗|了吗)|能结束(?:分析|诊断)?(?:吗|了吗))", re.I)
 _NEXT_ACTION = re.compile(r"(?:还需要我做什么|需要我做什么|我还要做什么|下一步(?:做什么|怎么办)?|还缺什么|还需要什么|需要补充什么)", re.I)
 _UNKNOWN = re.compile(r"^(?:不知道|不清楚|不确定|记不住|想不起来|忘了|未知)[。.!！ ]*$", re.I)
 _UNAVAILABLE = re.compile(r"^(?:暂时不能|现在不能|目前不能|没法|无法|暂时没法|做不了|不能复现|没法复现)[。.!！ ]*$", re.I)
@@ -384,6 +384,10 @@ def deterministic_interpret_turn(
 
 
 def _ai_can_override(deterministic: dict[str, Any], ai: ConversationTurnProposal) -> bool:
+    # Explicit user control is fail-closed deterministic authority. An optional
+    # semantic model may not turn "finish/continue" into a different route.
+    if str(deterministic.get("intent") or "") == "CONTROL":
+        return False
     if not deterministic.get("material_diagnostic_context") and ai.material_diagnostic_context:
         return False
     if ai.classification in {"CHAT_ONLY", "KNOWLEDGE", "CONTROL"} and ai.material_diagnostic_context:
