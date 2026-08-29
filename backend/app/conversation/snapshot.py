@@ -13,7 +13,10 @@ from app.db.models import AnalyzerRun, Case, DiagnosisRun, Job, ReproductionSess
 
 
 _ACTIVE_JOB_STATES = {"PENDING", "RUNNING"}
-_ACTIVE_DIAGNOSIS_STATES = {"PENDING", "ANALYZING", "WAITING_EVIDENCE"}
+# WAITING_EVIDENCE is a logical wait state, not proof that background work exists.
+# Running truth must come from a real Job/Analyzer/Reproduction or an actively
+# executing DiagnosisRun.
+_ACTIVE_DIAGNOSIS_STATES = {"PENDING", "ANALYZING"}
 _ACTIVE_REPRO_STATES = {"CREATED", "AUTO_ARMING", "ARMED", "WATCHING", "CAPTURING", "POST_CAPTURE", "CLEANUP"}
 
 
@@ -21,7 +24,7 @@ class ConversationSnapshotBuilder:
     """Build a bounded, user-facing truth catalog for grounded replies.
 
     The snapshot is the only technical truth surface available to the response
-    planner.  It contains deterministic runtime/diagnosis facts plus one optional
+    planner. It contains deterministic runtime/diagnosis facts plus one optional
     next question selected from DiagnosisDecision.allowed user-evidence needs.
     """
 
