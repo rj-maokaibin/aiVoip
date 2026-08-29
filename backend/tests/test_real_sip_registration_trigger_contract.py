@@ -29,7 +29,8 @@ def test_live_workflow_does_not_accept_runner_registration_trigger_command() -> 
     workflow = WORKFLOW.read_text(encoding="utf-8")
 
     assert "SIP_ABA_REGISTRATION_TRIGGER_COMMAND" not in workflow
-    assert f"SIP_ABA_TRIGGER_ACTION_ID: {TRIGGER_ACTION_ID}" in workflow
+    assert "SIP_ABA_TRIGGER_ACTION_ID:" not in workflow
+    assert f"readonly trigger_action_id='{TRIGGER_ACTION_ID}'" in workflow
     assert 'action = ActionRegistry(Path(os.environ["GITHUB_WORKSPACE"]) / "profiles").action(action_id)' in workflow
     assert 'action.contract_status != "VERIFIED"' in workflow
     assert 'action.risk_level not in {"L0", "L1"}' in workflow
