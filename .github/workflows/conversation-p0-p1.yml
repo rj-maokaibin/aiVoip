@@ -1,0 +1,58 @@
+name: Conversation P0 P1 Acceptance
+
+on:
+  pull_request:
+    paths:
+      - 'backend/app/conversation/**'
+      - 'backend/app/knowledge/**'
+      - 'backend/app/integrations/feishu/**'
+      - 'backend/app/workers/**'
+      - 'backend/app/db/**'
+      - 'backend/migrations/**'
+      - 'backend/tests/test_conversation_*'
+      - 'backend/tests/test_feishu_conversation_cycle_decoupling.py'
+      - 'backend/tests/test_product_fact*'
+      - 'backend/tests/test_knowledge_hybrid_retrieval_v1.py'
+      - 'tools/conversation_p0_p1_gate.sh'
+      - '.github/workflows/conversation-p0-p1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: conversation-p0-p1-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  conversation-p0-p1:
+    runs-on:
+      - self-hosted
+      - linux
+      - x64
+      - voip-controlled-linux
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 1
+      - name: Prepare isolated Python environment
+        run: |
+          set -euo pipefail
+          VENV="$RUNNER_TEMP/voip-conversation-p0-p1"
+          rm -rf "$VENV"
+          python3 -m venv "$VENV"
+          source "$VENV/bin/activate"
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt
+          echo "CONVERSATION_GATE_VENV=$VENV" >> "$GITHUB_ENV"
+      - name: Conversation P0 P1 gate
+        run: |
+          set -euo pipefail
+          source "$CONVERSATION_GATE_VENV/bin/activate"
+          bash tools/conversation_p0_p1_gate.sh
+      - name: Summary
+        run: |
+          printf 'CONVERSATION_P0_P1_ACCEPTANCE=PASS\n'
+          printf 'ACCEPTANCE_COMMIT=%s\n' "$(git rev-parse HEAD)"
