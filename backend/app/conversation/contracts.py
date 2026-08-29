@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import re
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -29,10 +28,27 @@ SlotState = Literal[
     "UNASKED", "ASKED", "ANSWERED", "UNKNOWN_BY_USER", "UNAVAILABLE", "DECLINED", "NOT_APPLICABLE"
 ]
 
-_DANGEROUS_PROPOSAL_TEXT = re.compile(
-    r"(?i)(?:\b(?:ssh|telnet|bash|shell|exec|system)\b|\b(?:reboot|sysupgrade|kill|rm\s+-rf|tcpdump)\b|"
-    r"\bvoip\s+dsp\s+diag\b|\baim>\b|(?:原始|raw)\s*(?:命令|command))"
-)
+# A semantic proposal may quote or classify user text that mentions SSH/tcpdump/
+# reboot/etc. That is normal VOIP support language and is not execution. What is
+# forbidden is a model-authored executable instruction encoded as a structured
+# entity. Formal actions have their own Policy/Registry/Orchestrator contracts.
+_FORBIDDEN_EXECUTION_ENTITY_KEYS = {
+    "command", "commands", "raw_command", "shell_command", "ssh_command",
+    "exec", "execute", "execution", "device_action", "action_id",
+    "orchestrator_action", "reproduction_action", "fix_action",
+}
+
+
+def _contains_execution_key(value: Any) -> bool:
+    if isinstance(value, dict):
+        for key, child in value.items():
+            if str(key).strip().lower() in _FORBIDDEN_EXECUTION_ENTITY_KEYS:
+                return True
+            if _contains_execution_key(child):
+                return True
+    elif isinstance(value, list):
+        return any(_contains_execution_key(child) for child in value)
+    return False
 
 
 class ActiveQuestionAnswer(BaseModel):
@@ -63,9 +79,8 @@ class ConversationTurnProposal(BaseModel):
 
     @model_validator(mode="after")
     def enforce_semantic_only(self):
-        dump = self.model_dump_json(exclude={"schema_version"})
-        if _DANGEROUS_PROPOSAL_TEXT.search(dump):
-            raise ValueError("CONVERSATION_EXECUTABLE_CONTENT_FORBIDDEN")
+        if _contains_execution_key(self.entities):
+            raise ValueError("CONVERSATION_EXECUTABLE_ENTITY_FORBIDDEN")
         if self.classification in {"CHAT_ONLY", "KNOWLEDGE", "CONTROL"} and self.material_diagnostic_context:
             raise ValueError("CONVERSATION_NON_DIAGNOSTIC_CLASS_CANNOT_BE_MATERIAL")
         if self.route_mode == "HYBRID" and self.classification != "DIAGNOSTIC_CONTEXT":
@@ -77,7 +92,7 @@ class ResponsePlan(BaseModel):
     """Grounded response selection contract.
 
     The model selects identifiers from a deterministic catalog instead of writing
-    protocol facts.  The renderer resolves those identifiers to trusted text.
+    protocol facts. The renderer resolves those identifiers to trusted text.
     """
 
     model_config = ConfigDict(extra="forbid")
