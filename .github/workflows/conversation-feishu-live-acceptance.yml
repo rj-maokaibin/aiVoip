@@ -1,0 +1,213 @@
+name: Conversation Feishu Live Acceptance V1
+
+on:
+  pull_request:
+    branches:
+      - master
+    paths:
+      - 'tools/conversation_feishu_live_acceptance.py'
+      - 'backend/tests/test_conversation_feishu_live_acceptance_v1.py'
+      - 'backend/tests/test_feishu_conversation_cycle_decoupling.py'
+      - 'backend/app/conversation/**'
+      - 'backend/app/integrations/feishu/**'
+      - 'backend/app/workers/device_provision_task.py'
+      - 'deploy/live_acceptance/**'
+      - 'docs/CONVERSATION_FEISHU_LIVE_ACCEPTANCE_V1.md'
+      - '.github/workflows/conversation-feishu-live-acceptance.yml'
+  workflow_dispatch:
+    inputs:
+      expected_head_sha:
+        description: 'Exact master SHA to validate; live mutation is rejected if master moved'
+        required: true
+        type: string
+      message_id:
+        description: 'Dedicated Feishu acceptance source message ID (om_...)'
+        required: true
+        type: string
+      confirmation:
+        description: 'Type REPLY_TO_DEDICATED_FEISHU_ACCEPTANCE_MESSAGE'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: conversation-feishu-live-acceptance-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  conversation-live-contract:
+    runs-on:
+      - self-hosted
+      - linux
+      - x64
+      - voip-controlled-linux
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        timeout-minutes: 5
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 1
+
+      - name: Verify exact contract head
+        run: |
+          set -Eeuo pipefail
+          printf 'CONVERSATION_LIVE_CONTRACT_HEAD=%s\n' "$(git rev-parse HEAD)"
+
+      - name: Prepare isolated Python environment
+        run: |
+          set -Eeuo pipefail
+          VENV="$RUNNER_TEMP/voip-conversation-live-contract"
+          rm -rf "$VENV"
+          python3 -m venv "$VENV"
+          source "$VENV/bin/activate"
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt
+          echo "CONVERSATION_LIVE_VENV=$VENV" >> "$GITHUB_ENV"
+
+      - name: Conversation live non-mutating contract
+        run: |
+          set -Eeuo pipefail
+          source "$CONVERSATION_LIVE_VENV/bin/activate"
+          python -m py_compile tools/conversation_feishu_live_acceptance.py
+          PYTHONPATH=backend:. pytest -q \
+            backend/tests/test_conversation_feishu_live_acceptance_v1.py \
+            backend/tests/test_feishu_conversation_cycle_decoupling.py
+          PYTHONPATH=backend:. python tools/github_actions_context_gate.py
+          printf 'CONVERSATION_FEISHU_LIVE_CONTRACT=PASS\n'
+          printf 'REAL_FEISHU_MUTATION=NOT_EXECUTED\n'
+
+  real-feishu-reply:
+    if: github.event_name == 'workflow_dispatch'
+    needs: conversation-live-contract
+    runs-on:
+      - self-hosted
+      - linux
+      - x64
+      - voip-controlled-linux
+    timeout-minutes: 30
+    env:
+      LIVE_HEAD_SHA: ${{ inputs.expected_head_sha }}
+      LIVE_CONFIRMATION: ${{ inputs.confirmation }}
+    steps:
+      - uses: actions/checkout@v4
+        timeout-minutes: 5
+        with:
+          ref: master
+          fetch-depth: 1
+
+      - name: Fail closed on actor branch head and confirmation
+        env:
+          LIVE_MESSAGE_ID: ${{ inputs.message_id }}
+        run: |
+          set -Eeuo pipefail
+          test "$GITHUB_REF_NAME" = "master"
+          test "$GITHUB_ACTOR" = "$GITHUB_REPOSITORY_OWNER"
+          test "$LIVE_CONFIRMATION" = "REPLY_TO_DEDICATED_FEISHU_ACCEPTANCE_MESSAGE"
+          test "$(git rev-parse HEAD)" = "$LIVE_HEAD_SHA"
+          case "$LIVE_MESSAGE_ID" in om_????????*) ;; *) exit 41 ;; esac
+          test -r /home/github-runner/.config/voip-ai/.env
+          test -r /home/github-runner/.config/voip-ai/feishu_app_secret
+          mkdir -p validation
+          umask 077
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          target = os.environ['LIVE_MESSAGE_ID'].strip()
+          assert target.startswith('om_') and len(target) >= 12
+          path = Path('validation/.conversation_live_target')
+          path.write_text(target, encoding='utf-8')
+          path.chmod(0o600)
+          PY
+          printf 'LIVE_TARGET_GUARD=PASS\n'
+          printf 'LIVE_HEAD=%s\n' "$LIVE_HEAD_SHA"
+
+      - name: Prepare Acceptance Infrastructure V2 runtime
+        run: |
+          set -Eeuo pipefail
+          context="$RUNNER_TEMP/conversation-live-v2-context.json"
+          rm -f "$context"
+          python3 deploy/live_acceptance/runtime_v2.py prepare \
+            --context "$context" \
+            --feishu-secret-file /home/github-runner/.config/voip-ai/feishu_app_secret
+          echo "CONVERSATION_LIVE_CONTEXT=$context" >> "$GITHUB_ENV"
+
+      - name: V2 read-only live preflight
+        run: |
+          set -Eeuo pipefail
+          rm -f validation/conversation_live_preflight_v2.json
+          python3 deploy/live_acceptance/runtime_v2.py run \
+            --context "$CONVERSATION_LIVE_CONTEXT" \
+            --env-file /home/github-runner/.config/voip-ai/.env \
+            --workspace "$GITHUB_WORKSPACE" \
+            -- python deploy/live_acceptance/preflight_v2.py \
+                 --profile human-feishu-golden-001 \
+                 --out validation/conversation_live_preflight_v2.json
+
+      - name: Production Conversation semantic contract inside V2 runtime
+        run: |
+          set -Eeuo pipefail
+          python3 deploy/live_acceptance/runtime_v2.py run \
+            --context "$CONVERSATION_LIVE_CONTEXT" \
+            --env-file /home/github-runner/.config/voip-ai/.env \
+            --workspace "$GITHUB_WORKSPACE" \
+            -- python -m pytest -q \
+                 backend/tests/test_feishu_conversation_cycle_decoupling.py \
+                 backend/tests/test_conversation_golden_corpus_v1.py
+          printf 'PRODUCTION_RUNTIME_CONVERSATION_CONTRACT=PASS\n'
+
+      - name: Explicit one-message real Feishu reply
+        run: |
+          set -Eeuo pipefail
+          python3 deploy/live_acceptance/runtime_v2.py run \
+            --context "$CONVERSATION_LIVE_CONTEXT" \
+            --env-file /home/github-runner/.config/voip-ai/.env \
+            --workspace "$GITHUB_WORKSPACE" \
+            -- python tools/conversation_feishu_live_acceptance.py \
+                 --preflight-result validation/conversation_live_preflight_v2.json \
+                 --message-id-file validation/.conversation_live_target \
+                 --confirmation REPLY_TO_DEDICATED_FEISHU_ACCEPTANCE_MESSAGE \
+                 --result validation/conversation_feishu_live_acceptance_v1.json
+
+      - name: Verify sanitized live result
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          p = json.loads(Path('validation/conversation_feishu_live_acceptance_v1.json').read_text(encoding='utf-8'))
+          assert p.get('status') == 'PASS', p
+          assert p.get('contract') == 'conversation-feishu-live-acceptance-v1', p
+          assert p.get('delivery_stage') == 'SENT', p
+          assert int(p.get('attempt_count') or 0) >= 1, p
+          assert p.get('diagnostic_authority_changed') is False, p
+          assert p.get('device_action_executed') is False, p
+          print(json.dumps({
+              'status': p.get('status'),
+              'delivery_stage': p.get('delivery_stage'),
+              'attempt_count': p.get('attempt_count'),
+              'source_message_sha256': p.get('source_message_sha256'),
+              'sent_message_sha256': p.get('sent_message_sha256'),
+              'diagnostic_authority_changed': p.get('diagnostic_authority_changed'),
+              'device_action_executed': p.get('device_action_executed'),
+          }, ensure_ascii=False, indent=2))
+          print('CONVERSATION_FEISHU_LIVE_ACCEPTANCE=PASS')
+          PY
+
+      - name: Remove private target material
+        if: always()
+        run: |
+          rm -f validation/.conversation_live_target "$CONVERSATION_LIVE_CONTEXT"
+
+      - name: Upload sanitized acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: conversation-feishu-live-acceptance-v1
+          path: |
+            validation/conversation_live_preflight_v2.json
+            validation/conversation_feishu_live_acceptance_v1.json
+          if-no-files-found: warn
+          retention-days: 90
