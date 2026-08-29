@@ -74,8 +74,8 @@ jobs:
     timeout-minutes: 50
     env:
       LIVE_CONTEXT: /tmp/voip-conversation-dut-live-context-${{ github.run_id }}-${{ github.run_attempt }}.json
-      LIVE_PREFLIGHT: /tmp/voip-conversation-dut-live-preflight-${{ github.run_id }}-${{ github.run_attempt }}.json
-      LIVE_RESULT: /tmp/voip-conversation-dut-live-result-${{ github.run_id }}-${{ github.run_attempt }}.json
+      LIVE_PREFLIGHT: validation/conversation_dut_live_preflight_v2.json
+      LIVE_RESULT: validation/conversation_dut_live_acceptance_v1.json
     steps:
       - uses: actions/checkout@v4
         timeout-minutes: 5
@@ -115,6 +115,8 @@ jobs:
           test "$(git rev-parse HEAD)" = "$LIVE_EXPECTED_SHA"
           test -r /home/github-runner/.config/voip-ai/.env
           test -r /home/github-runner/.config/voip-ai/feishu_app_secret
+          mkdir -p validation
+          rm -f "$LIVE_PREFLIGHT" "$LIVE_RESULT"
           {
             echo "LIVE_EXPECTED_SHA=$LIVE_EXPECTED_SHA"
             echo "LIVE_CASE_NO=$LIVE_CASE_NO"
@@ -128,7 +130,7 @@ jobs:
       - name: Prepare Acceptance Infrastructure V2 runtime
         run: |
           set -Eeuo pipefail
-          rm -f "$LIVE_CONTEXT" "$LIVE_PREFLIGHT" "$LIVE_RESULT"
+          rm -f "$LIVE_CONTEXT"
           python3 deploy/live_acceptance/runtime_v2.py prepare \
             --context "$LIVE_CONTEXT" \
             --feishu-secret-file /home/github-runner/.config/voip-ai/feishu_app_secret
@@ -201,12 +203,12 @@ jobs:
         with:
           name: conversation-dut-live-acceptance-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
-            ${{ env.LIVE_PREFLIGHT }}
-            ${{ env.LIVE_RESULT }}
+            validation/conversation_dut_live_preflight_v2.json
+            validation/conversation_dut_live_acceptance_v1.json
           if-no-files-found: warn
           retention-days: 90
 
       - name: Remove runtime context
         if: always()
         run: |
-          rm -f "$LIVE_CONTEXT" "$LIVE_ACCEPTANCE_TAG" 2>/dev/null || true
+          rm -f "$LIVE_CONTEXT" /tmp/conversation-dut-trigger.env
