@@ -4,6 +4,8 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
+import stat
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -34,6 +36,8 @@ def load_and_validate_preflight(path: Path, *, expected_revision: str) -> dict[s
     observed_revision = str(payload.get("source_revision") or "")
     if observed_revision != expected_revision:
         raise RuntimeError("CONVERSATION_LIVE_PREFLIGHT_REVISION_MISMATCH")
+    if not str(payload.get("runtime_fingerprint") or "").strip():
+        raise RuntimeError("CONVERSATION_LIVE_PREFLIGHT_RUNTIME_FINGERPRINT_MISSING")
     return payload
 
 
@@ -46,13 +50,30 @@ def validate_live_target(*, message_id: str, confirmation: str) -> str:
     return target
 
 
+def load_private_target(path: Path, *, confirmation: str) -> str:
+    """Read the dedicated Feishu target from a private file, never process argv.
+
+    The dispatch workflow creates this file with ``umask 077``. Requiring no group
+    or other permission prevents accidentally accepting a target copied into a
+    world-readable workspace file.
+    """
+    if not path.is_file():
+        raise RuntimeError("CONVERSATION_LIVE_TARGET_FILE_MISSING")
+    mode = stat.S_IMODE(path.stat().st_mode)
+    if mode & 0o077:
+        raise RuntimeError("CONVERSATION_LIVE_TARGET_FILE_NOT_PRIVATE")
+    return validate_live_target(
+        message_id=path.read_text(encoding="utf-8").strip(),
+        confirmation=confirmation,
+    )
+
+
 def execute_live_reply(*, message_id: str, text: str) -> dict[str, Any]:
     """Execute exactly one production reply and verify its persisted delivery trace.
 
     This helper intentionally calls the production Celery task synchronously via
-    ``Task.apply``.  It therefore exercises the same Feishu transport, retry/trace
-    code and database models without publishing a second asynchronous task that
-    could outlive the acceptance process.
+    ``Task.apply``. It exercises the same Feishu transport/retry/trace code without
+    publishing a second asynchronous task that could outlive the acceptance run.
     """
     from sqlalchemy import select
 
@@ -110,10 +131,16 @@ def execute_live_reply(*, message_id: str, text: str) -> dict[str, Any]:
         db.close()
 
 
-def run(*, preflight_path: Path, message_id: str, confirmation: str, text: str) -> dict[str, Any]:
+def run(
+    *,
+    preflight_path: Path,
+    message_id_file: Path,
+    confirmation: str,
+    text: str,
+) -> dict[str, Any]:
     revision = current_source_revision()
     preflight = load_and_validate_preflight(preflight_path, expected_revision=revision)
-    target = validate_live_target(message_id=message_id, confirmation=confirmation)
+    target = load_private_target(message_id_file, confirmation=confirmation)
     clean_text = str(text or "").strip()
     if not clean_text:
         raise RuntimeError("CONVERSATION_LIVE_REPLY_TEXT_REQUIRED")
@@ -139,7 +166,7 @@ def main() -> int:
         description="Explicit real-tenant Feishu reply acceptance for Conversation Platform V1"
     )
     parser.add_argument("--preflight-result", type=Path, required=True)
-    parser.add_argument("--message-id", required=True)
+    parser.add_argument("--message-id-file", type=Path, required=True)
     parser.add_argument("--confirmation", required=True)
     parser.add_argument(
         "--text",
@@ -153,7 +180,7 @@ def main() -> int:
     try:
         payload = run(
             preflight_path=args.preflight_result,
-            message_id=args.message_id,
+            message_id_file=args.message_id_file,
             confirmation=args.confirmation,
             text=args.text,
         )
