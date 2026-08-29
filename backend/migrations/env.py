@@ -8,6 +8,8 @@ from app.db import evidence_report_models  # noqa: F401
 from app.db import evidence_retention_models  # noqa: F401
 from app.db import feishu_governance_models  # noqa: F401
 from app.db import ai_intelligence_models  # noqa: F401
+from app.db import conversation_models  # noqa: F401
+from app.db import knowledge_models  # noqa: F401
 from app.capture_v2 import db_models as capture_v2_models  # noqa: F401
 
 config = context.config
