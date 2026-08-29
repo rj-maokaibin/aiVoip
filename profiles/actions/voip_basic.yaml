@@ -108,6 +108,19 @@ actions:
     source_refs: ["voip 排障案例_思路整理。(1).md#二-2-a.3"]
     supported_platforms: [RUIJIE_VOIP_AIM_V1]
 
+  - id: TRIGGER_SIP_REGISTER_RC1
+    version: 1.0.0
+    contract_status: VERIFIED
+    risk_level: L1
+    executor: shell
+    command: "aim voip sip regc snd-reg RC1"
+    evidence_type: SIP_REGISTER_TRIGGER
+    timeout: 8
+    description: 主动触发 RC1 SIP REGISTER；仅用于受控诊断/验收窗口，不重启 VOIP 核心进程。
+    success: {type: OUTPUT_OBSERVED}
+    source_refs: ["voip 排障案例_思路整理。(1).md#SIP手动发起注册"]
+    supported_platforms: [RUIJIE_VOIP_AIM_V1]
+
   - id: GET_VOICE_VLAN_REF
     version: 1.0.0
     contract_status: VERIFIED
