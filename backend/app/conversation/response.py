@@ -13,11 +13,12 @@ from app.core.config import settings
 
 
 class GroundedConversationResponder:
-    """Render natural Chinese replies from a deterministic truth catalog.
+    """Render natural Chinese replies from deterministic truth catalogs.
 
-    The optional LLM only selects catalog IDs.  All user-visible technical facts
-    are resolved from the snapshot so a fluent response cannot invent analyzer or
-    product facts.
+    The optional LLM only selects catalog IDs. All user-visible diagnosis facts are
+    resolved from the Case snapshot. Knowledge text comes only from the grounded
+    Knowledge service (ProductFact or reviewer-verified KnowledgeItem), never from
+    free model synthesis.
     """
 
     def __init__(self, gateway: ConversationGatewayClient | None = None):
@@ -32,13 +33,36 @@ class GroundedConversationResponder:
         intent: str,
         interpretation: dict[str, Any] | None = None,
     ) -> str:
+        interpretation = interpretation or {}
         snapshot = self.snapshot_builder.build(db, case_id)
+
+        # Knowledge inside a Case is allowed without changing diagnosis state.
+        if intent in {"KNOWLEDGE_IN_CASE", "HYBRID_KNOWLEDGE_DIAGNOSIS"}:
+            knowledge = self._knowledge_answer(db, interpretation)
+            if intent == "KNOWLEDGE_IN_CASE":
+                return knowledge
+            diagnosis_reply = self._deterministic_render(snapshot, intent, interpretation)
+            if knowledge:
+                return f"{knowledge}\n\n{diagnosis_reply}"
+            return diagnosis_reply
+
         plan = self._plan(snapshot=snapshot, intent=intent)
         if plan is not None:
             rendered = self._render_plan(snapshot, plan)
             if rendered:
                 return rendered
-        return self._deterministic_render(snapshot, intent, interpretation or {})
+        return self._deterministic_render(snapshot, intent, interpretation)
+
+    @staticmethod
+    def _knowledge_answer(db: Session, interpretation: dict[str, Any]) -> str:
+        from app.knowledge.conversation_service import answer_grounded_knowledge
+
+        entities = dict(interpretation.get("entities") or {})
+        query = str(entities.get("knowledge_query") or entities.get("incident_context") or "").strip()
+        if not query:
+            return "当前没有解析出明确的知识查询内容；我不会凭空补一个规格或协议结论。"
+        answer = answer_grounded_knowledge(db, query, entities=entities)
+        return str(answer.get("text") or "").strip()
 
     def _plan(self, *, snapshot: dict[str, Any], intent: str) -> ResponsePlan | None:
         if not settings.grounded_response_enabled or not self.gateway.enabled():
@@ -156,6 +180,12 @@ class GroundedConversationResponder:
                 if running:
                     return "收到，继续按当前证据推进；现在已有后台任务在运行，不需要重复触发。"
                 return "收到，继续按当前证据推进。如果没有新增有效证据，我会明确给出阶段结论和仍未确认的边界。"
+
+        if intent == "HYBRID_KNOWLEDGE_DIAGNOSIS":
+            return (
+                f"另外，你这句话里包含了当前 Case {case_no} 的现场异常信息，我已经把这部分作为新的诊断上下文记录，"
+                "系统会据此重新判断；知识解释本身不会被当成故障证据。"
+            )
 
         if interpretation.get("material_diagnostic_context"):
             return f"收到，这条补充已经作为 Case {case_no} 的新诊断上下文记录，系统会据此重新判断；不会把普通聊天当成诊断循环。"
