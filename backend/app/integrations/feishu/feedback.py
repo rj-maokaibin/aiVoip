@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, object_session
 
 from app.core.config import settings
 from app.db.models import Case, FeishuCaseBinding
@@ -69,6 +69,7 @@ def build_single_user_question(*, decision: dict | None = None,
     """Return one field-facing question with explicit answer paths.
 
     Internal PCM/SLIC/aimd/SIP/RTP questions are intentionally never surfaced.
+    ConversationState performs semantic de-duplication before this text is sent.
     """
     decision = decision or {}
     summary = summary or {}
@@ -97,7 +98,13 @@ def enqueue_reply(message_id: str | None, text: str) -> bool:
 
 def notify_case_once(db: Session, *, case_id: str, feedback_type: str,
                      token: str, text: str) -> dict[str, Any]:
-    """Idempotently enqueue one active Feishu reply for a Case milestone."""
+    """Idempotently enqueue one active Feishu reply for a Case milestone.
+
+    WAITING_USER is semantically de-duplicated using ConversationState rather than
+    cycle number.  If the user already told us the requested slot is unknown or
+    unavailable, the same question is suppressed even when the reasoner asks for
+    it again in a later diagnosis cycle.
+    """
     if not settings.feishu_live_enabled:
         return {'status': 'SKIPPED', 'reason': 'FEISHU_LIVE_DISABLED'}
     binding = db.scalar(select(FeishuCaseBinding).where(
@@ -106,7 +113,24 @@ def notify_case_once(db: Session, *, case_id: str, feedback_type: str,
     ).limit(1))
     if not binding or not binding.source_message_id:
         return {'status': 'SKIPPED', 'reason': 'NO_SOURCE_MESSAGE'}
-    key = f'{case_id}:{feedback_type}:{token}'
+
+    semantic_token = token
+    if feedback_type == 'WAITING_USER' and settings.conversation_cycle_decoupled:
+        from app.conversation.state_service import ConversationStateService, need_from_question_text
+        state_service = ConversationStateService()
+        question_state = state_service.mark_question_asked(
+            db, case_id=case_id, text=text, need=need_from_question_text(text)
+        )
+        if not question_state.get('should_ask'):
+            return {
+                'status': 'SKIPPED',
+                'reason': question_state.get('reason') or 'QUESTION_SEMANTICALLY_SUPPRESSED',
+                'slot_key': question_state.get('slot_key'),
+                'slot_state': question_state.get('slot_state'),
+            }
+        semantic_token = state_service.semantic_feedback_key(db, case_id=case_id, text=text)
+
+    key = f'{case_id}:{feedback_type}:{semantic_token}'
     handle = begin_idempotent(
         db, scope='FEISHU_CASE_FEEDBACK', key=key,
         payload={'case_id': case_id, 'feedback_type': feedback_type,
@@ -123,4 +147,14 @@ def notify_case_once(db: Session, *, case_id: str, feedback_type: str,
 
 
 def status_text(case: Case) -> str:
+    db = object_session(case)
+    if db is not None and settings.conversation_cycle_decoupled:
+        try:
+            from app.conversation.response import GroundedConversationResponder
+            return GroundedConversationResponder().render(
+                db, case_id=case.id, intent='CASE_PROGRESS_QUERY'
+            )
+        except Exception:
+            # Status queries must always have a deterministic fallback.
+            pass
     return f'Case {case.case_no} 当前进度：{human_case_status(case.status)}。'
