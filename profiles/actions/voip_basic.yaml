@@ -112,8 +112,8 @@ actions:
     version: 1.0.0
     contract_status: VERIFIED
     risk_level: L1
-    executor: aim
-    command: "voip sip regc snd-reg RC1"
+    executor: shell
+    command: "aim voip sip regc snd-reg RC1"
     evidence_type: SIP_REGISTER_TRIGGER
     timeout: 8
     description: 主动触发 RC1 SIP REGISTER；仅用于受控诊断/验收窗口，不重启 VOIP 核心进程。
