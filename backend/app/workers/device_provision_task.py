@@ -201,26 +201,64 @@ def provision_from_feishu(self, text: str, chat_id: str | None = None, chat_type
         return {"status": "FAILED", "reason": f"{type(exc).__name__}:{exc}"}
 
 
-@celery_app.task(name='feishu.reply_text', bind=True, autoretry_for=(), max_retries=0)
+@celery_app.task(name='feishu.reply_text', bind=True, autoretry_for=(), max_retries=8)
 def reply_feishu_text(self, message_id: str, text: str):
+    """Reply with bounded retry + persisted delivery trace.
+
+    A failed transport send must not become a silent user-facing gap.  Retry is
+    bounded by configuration and never replays diagnosis/device actions.
+    """
     from app.core.config import settings
+    from app.db.session import SessionLocal
     from app.integrations.feishu.transport import FeishuLiveTransport
+    from app.conversation.delivery import (
+        get_or_create_reply_trace, mark_reply_attempt, mark_reply_failed, mark_reply_sent,
+    )
     if not settings.feishu_live_enabled:
         return {'status': 'SKIPPED', 'reason': 'FEISHU_LIVE_DISABLED'}
+    db = SessionLocal()
+    trace = None
     try:
+        trace = get_or_create_reply_trace(db, message_id=message_id, text=text)
+        if trace.stage == 'SENT':
+            return {'status': 'SENT', 'message_id': trace.sent_message_id, 'duplicate': True}
+        mark_reply_attempt(db, trace)
+        db.commit()
         result = asyncio.run(FeishuLiveTransport().reply_text(message_id=message_id, text=text))
-        return {'status': 'SENT', 'message_id': result.message_id}
+        mark_reply_sent(db, trace, result.message_id)
+        db.commit()
+        return {'status': 'SENT', 'message_id': result.message_id, 'trace_id': trace.id}
     except Exception as exc:
-        log.exception('feishu intake reply failed message=%s', message_id)
+        db.rollback()
+        retryable = bool(settings.feishu_reply_retry_enabled and self.request.retries < int(settings.feishu_reply_max_retries))
+        try:
+            trace = get_or_create_reply_trace(db, message_id=message_id, text=text)
+            mark_reply_failed(db, trace, exc, retryable=retryable)
+            db.commit()
+        except Exception:
+            db.rollback()
+            log.exception('feishu reply trace update failed message=%s', message_id)
+        log.exception('feishu intake reply failed message=%s attempt=%s', message_id, self.request.retries + 1)
+        if retryable:
+            raise self.retry(exc=exc, countdown=min(30, 2 ** min(self.request.retries + 1, 5)))
         return {'status': 'FAILED', 'reason': f'{type(exc).__name__}:{exc}'}
+    finally:
+        db.close()
 
 
 @celery_app.task(name='feishu.ingest_follow_up', bind=True, autoretry_for=(), max_retries=0)
 def ingest_feishu_follow_up(self, case_id: str, text: str, source_context: dict | None = None):
-    """Persist a thread reply as immutable Evidence and resume a waiting diagnosis."""
+    """Interpret a Case reply before deciding whether it is technical Evidence.
+
+    Conversation-only turns (status/completion/knowledge/acknowledgement,
+    unavailable answers) are persisted in ConversationTurn but do NOT create
+    Evidence and do NOT resume Diagnosis.  Only material diagnostic context crosses
+    the explicit Evidence bridge.
+    """
     import hashlib
 
     from app.contracts.enums import EvidenceCompleteness, EvidenceKind, EvidenceLevel, EvidenceScope
+    from app.core.config import settings
     from app.core.ids import new_id
     from app.db.models import Case
     from app.db.session import SessionLocal
@@ -245,6 +283,73 @@ def ingest_feishu_follow_up(self, case_id: str, text: str, source_context: dict 
         if handle.replay is not None:
             return {**handle.replay, 'duplicate': True}
 
+        if settings.conversation_cycle_decoupled:
+            from app.conversation.interpreter import ConversationInterpreter
+            from app.conversation.response import GroundedConversationResponder
+            from app.conversation.state_service import ConversationStateService
+            from app.integrations.feishu.feedback import enqueue_reply
+            from app.integrations.feishu.intake import route_intake
+
+            state_service = ConversationStateService()
+            _conversation, conv_state = state_service.get_or_create(
+                db, case_id=case_id, source_context=source_context
+            )
+            deterministic = route_intake(text=normalized, attachments=[], has_thread_case=True)
+            interpreted = ConversationInterpreter().interpret(
+                text=normalized,
+                attachments=[],
+                deterministic=deterministic,
+                active_question=conv_state.active_question_json,
+                slots=conv_state.slots_json or {},
+                case_context={'case_id': case.id, 'case_no': case.case_no, 'status': case.status},
+            )
+            parsed = dict(interpreted.proposal)
+            parsed['llm_status'] = interpreted.llm_status
+            if interpreted.ai_proposal is not None:
+                parsed['ai_shadow_proposal'] = interpreted.ai_proposal
+            turn = state_service.record_user_turn(
+                db,
+                case_id=case_id,
+                source_context=source_context,
+                text=normalized,
+                interpretation=parsed,
+                model_name=interpreted.model_name,
+                prompt_version=interpreted.prompt_version,
+            )
+
+            if not bool(parsed.get('material_diagnostic_context')):
+                response = {
+                    'status': parsed.get('classification') or 'CHAT_ONLY',
+                    'case_id': case_id,
+                    'conversation_turn_id': turn.id,
+                    'intent': parsed.get('intent'),
+                    'evidence_id': None,
+                    'diagnosis_resumed': False,
+                    'llm_status': interpreted.llm_status,
+                }
+                complete_idempotent(
+                    db, handle, response=response, status_code=200,
+                    resource_type='conversation_turn', resource_id=turn.id,
+                )
+                reply_text = GroundedConversationResponder().render(
+                    db,
+                    case_id=case_id,
+                    intent=str(parsed.get('intent') or 'CASE_CHAT'),
+                    interpretation=parsed,
+                )
+                db.commit()
+                if reply_text:
+                    enqueue_reply(message_id, reply_text)
+                return response
+        else:
+            turn = None
+            parsed = {
+                'intent': 'DIAGNOSTIC_CONTEXT',
+                'classification': 'DIAGNOSTIC_CONTEXT',
+                'route_mode': 'DIAGNOSIS_FOLLOW_UP',
+                'material_diagnostic_context': True,
+            }
+
         data = normalized.encode('utf-8')
         digest = hashlib.sha256(data).hexdigest()
         evidence_id = new_id()
@@ -258,26 +363,55 @@ def ingest_feishu_follow_up(self, case_id: str, text: str, source_context: dict 
             scope=EvidenceScope.CASE, level=EvidenceLevel.L1,
             completeness=EvidenceCompleteness.COMPLETE,
             content_type='text/plain; charset=utf-8', producer_type='FEISHU',
-            producer_id=message_id or None, producer_version='feishu-message-v1',
-            metadata={'text': normalized, 'source_message_id': message_id or None,
-                      'source_root_message_id': source_context.get('root_message_id'),
-                      'sender_open_id': source_context.get('sender_open_id')},
+            producer_id=message_id or None, producer_version='feishu-message-v2',
+            metadata={
+                'text': normalized,
+                'source_message_id': message_id or None,
+                'source_root_message_id': source_context.get('root_message_id'),
+                'sender_open_id': source_context.get('sender_open_id'),
+                'conversation_turn_id': getattr(turn, 'id', None),
+                'conversation_interpretation': parsed,
+            },
             actor='feishu-user',
         )
-        # The deterministic reasoner already consumes Case.summary. Keeping a
-        # bounded copy there makes common field answers useful immediately,
-        # while the immutable Evidence remains the authoritative record.
+        if settings.conversation_cycle_decoupled and turn is not None:
+            from app.conversation.state_service import ConversationStateService
+            ConversationStateService().attach_evidence(db, turn_id=turn.id, evidence_id=evidence.id)
+
+        # Only material diagnostic context is projected into Case.summary.  Generic
+        # chat/status/knowledge turns never reach this branch.
         marker = f'\n[用户补充] {normalized}'
         if marker not in case.summary:
             case.summary = f'{case.summary[:1400]}{marker[:600]}'
-        response = {'status': 'OK', 'case_id': case_id, 'evidence_id': evidence.id}
+        response = {
+            'status': 'OK',
+            'case_id': case_id,
+            'evidence_id': evidence.id,
+            'conversation_turn_id': getattr(turn, 'id', None),
+            'intent': parsed.get('intent'),
+            'diagnosis_resumed': True,
+        }
         complete_idempotent(
             db, handle, response=response, status_code=200,
             resource_type='evidence', resource_id=evidence.id,
         )
+        if settings.conversation_cycle_decoupled:
+            from app.conversation.response import GroundedConversationResponder
+            from app.integrations.feishu.feedback import enqueue_reply
+            reply_text = GroundedConversationResponder().render(
+                db,
+                case_id=case_id,
+                intent=str(parsed.get('intent') or 'DIAGNOSTIC_CONTEXT'),
+                interpretation=parsed,
+            )
+        else:
+            reply_text = ''
         db.commit()
         from app.workers.diagnosis_tasks import notify_case_changed
         notify_case_changed(case_id)
+        if reply_text:
+            from app.integrations.feishu.feedback import enqueue_reply
+            enqueue_reply(message_id, reply_text)
         return response
     except Exception as exc:
         db.rollback()
