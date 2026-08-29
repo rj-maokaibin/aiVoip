@@ -68,9 +68,11 @@ def test_legacy_unavailable_without_active_question_never_becomes_evidence():
 
 
 def test_case_knowledge_question_is_non_material():
+    # Frozen AI1 stays context-agnostic here; the Conversation layer upgrades the
+    # GENERAL_QUESTION into KNOWLEDGE_IN_CASE after Case correlation.
     intake = route_intake(text="RFC2833 是什么？", attachments=[], has_thread_case=True)
-    assert intake.intent == "CASE_FOLLOW_UP"
-    assert intake.reason == "knowledge_in_case"
+    assert intake.intent == "GENERAL_QUESTION"
+    assert intake.reason == "question_language"
     result = _interpret("RFC2833 是什么？", active_question=None, has_case=True)
     assert result["intent"] == "KNOWLEDGE_IN_CASE"
     assert result["classification"] == "KNOWLEDGE"
