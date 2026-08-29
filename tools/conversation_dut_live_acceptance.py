@@ -1,14 +1,11 @@
 #!/usr/bin/env python3
 """Strict read-only acceptance for one real Feishu Conversation -> DUT diagnostic flow.
 
-This gate does not create Cases, ConversationTurns, ReproductionSessions, calls, Evidence,
-or replies. It only observes the normal Production product flow and verifies that one
-explicitly tagged Feishu acceptance incident stayed inside one Case and one real-DUT
-ReproductionSession through capture, deterministic analysis/diagnosis, cleanup and a
+The auditor never creates a Case, turn, reproduction, call, Evidence, device action or
+reply. The normal Production product flow owns all execution. This tool only verifies
+that one explicitly tagged Feishu acceptance incident stayed inside one Case and one
+real-DUT ReproductionSession through capture, deterministic diagnosis, cleanup and a
 post-diagnosis Feishu reply.
-
-The real call must be produced by a real phone/user. No FXS/SIP/RTP lifecycle event is
-simulated by this tool.
 """
 from __future__ import annotations
 
@@ -26,6 +23,7 @@ from sqlalchemy import select
 from app.db.conversation_models import Conversation, ConversationTurn, FeishuReplyDeliveryTrace
 from app.db.models import (
     Case,
+    DiagnosisRun,
     FeishuCaseBinding,
     IdempotencyRecord,
     ReproductionCall,
@@ -49,8 +47,8 @@ TRANSIENT_PHASES = {
 TERMINAL_REPRO_STATES = {"COMPLETED", "PARTIAL_SUCCESS", "CANCELLED", "FAILED"}
 VERIFIED_CLEANUP = {"CLEANUP_VERIFIED", "CLEANUP_VERIFIED_EXTERNAL_WAIT"}
 
-# M7 criteria reused here. AI SHADOW and Golden promotion are deliberately excluded:
-# this Gate validates the product diagnostic chain, not model promotion/maturity.
+# Reuse strict single-session M7 provenance. AI SHADOW and Golden are independent
+# maturity gates and are intentionally not required for this product-flow acceptance.
 REQUIRED_M7_KEYS = (
     "case_exists",
     "dut_bound",
@@ -90,10 +88,7 @@ def validate_acceptance_tag(value: str) -> str:
 
 def _resolve_case(db, value: str) -> Case | None:
     ref = str(value or "").strip()
-    row = db.get(Case, ref)
-    if row is not None:
-        return row
-    return db.scalar(select(Case).where(Case.case_no == ref).limit(1))
+    return db.get(Case, ref) or db.scalar(select(Case).where(Case.case_no == ref).limit(1))
 
 
 def _criterion_map(m7: dict[str, Any]) -> dict[str, bool]:
@@ -109,7 +104,9 @@ def _target_session_from_m7(db, m7: dict[str, Any]) -> ReproductionSession | Non
     return db.get(ReproductionSession, sid) if sid else None
 
 
-def _conversation_rows(db, *, case_id: str, binding: FeishuCaseBinding) -> tuple[list[Conversation], list[ConversationTurn]]:
+def _conversation_rows(
+    db, *, case_id: str, binding: FeishuCaseBinding
+) -> tuple[list[Conversation], list[ConversationTurn]]:
     candidates = list(
         db.scalars(
             select(Conversation)
@@ -124,31 +121,31 @@ def _conversation_rows(db, *, case_id: str, binding: FeishuCaseBinding) -> tuple
     if binding.source_tenant_key:
         candidates = [row for row in candidates if row.tenant_key == binding.source_tenant_key]
     conversations = [row for row in candidates if row.active_case_id == case_id]
-    conversation_ids = [row.id for row in conversations]
-    turns: list[ConversationTurn] = []
-    if conversation_ids:
-        turns = list(
-            db.scalars(
-                select(ConversationTurn)
-                .where(
-                    ConversationTurn.conversation_id.in_(conversation_ids),
-                    ConversationTurn.direction == "USER",
-                )
-                .order_by(ConversationTurn.created_at.asc())
+    ids = [row.id for row in conversations]
+    if not ids:
+        return conversations, []
+    turns = list(
+        db.scalars(
+            select(ConversationTurn)
+            .where(
+                ConversationTurn.conversation_id.in_(ids),
+                ConversationTurn.direction == "USER",
             )
+            .order_by(ConversationTurn.created_at.asc())
         )
+    )
     return conversations, turns
 
 
-def _diagnosis_after_target(db, *, case_id: str, target: ReproductionSession | None):
+def _diagnosis_after_target(db, *, case_id: str, target: ReproductionSession | None) -> DiagnosisRun | None:
     if target is None:
         return None
     anchor = _aware(target.started_at or target.created_at)
     rows = list(
         db.scalars(
-            select(__import__("app.db.models", fromlist=["DiagnosisRun"]).DiagnosisRun)
-            .where(__import__("app.db.models", fromlist=["DiagnosisRun"]).DiagnosisRun.case_id == case_id)
-            .order_by(__import__("app.db.models", fromlist=["DiagnosisRun"]).DiagnosisRun.created_at.desc())
+            select(DiagnosisRun)
+            .where(DiagnosisRun.case_id == case_id)
+            .order_by(DiagnosisRun.created_at.desc())
         )
     )
     for row in rows:
@@ -157,15 +154,14 @@ def _diagnosis_after_target(db, *, case_id: str, target: ReproductionSession | N
     return None
 
 
-def _completion_feedback(db, *, case_id: str, diagnosis_id: str | None):
+def _completion_feedback(db, *, case_id: str, diagnosis_id: str | None) -> IdempotencyRecord | None:
     if not diagnosis_id:
         return None
-    key = f"{case_id}:COMPLETED:{diagnosis_id}"
     return db.scalar(
         select(IdempotencyRecord)
         .where(
             IdempotencyRecord.scope == "FEISHU_CASE_FEEDBACK",
-            IdempotencyRecord.idempotency_key == key,
+            IdempotencyRecord.idempotency_key == f"{case_id}:COMPLETED:{diagnosis_id}",
         )
         .order_by(IdempotencyRecord.created_at.desc())
         .limit(1)
@@ -173,11 +169,7 @@ def _completion_feedback(db, *, case_id: str, diagnosis_id: str | None):
 
 
 def _post_diagnosis_reply(
-    db,
-    *,
-    case_id: str,
-    source_message_id: str,
-    diagnosis_finished_at: Any,
+    db, *, case_id: str, source_message_id: str, diagnosis_finished_at: Any
 ) -> FeishuReplyDeliveryTrace | None:
     query = select(FeishuReplyDeliveryTrace).where(
         FeishuReplyDeliveryTrace.case_id == case_id,
@@ -212,12 +204,14 @@ def _analyzed_calls(db, *, session_id: str | None) -> list[ReproductionCall]:
                 ReproductionCall.session_id == session_id,
                 ReproductionCall.status == "ANALYZED",
             )
-            .order_by(ReproductionCall.created_at.asc())
+            .order_by(ReproductionCall.started_at.asc())
         )
     )
 
 
-def _phase(*, checks: dict[str, bool], target: ReproductionSession | None, analyzed_calls: list[Any]) -> str:
+def _phase(
+    *, checks: dict[str, bool], target: ReproductionSession | None, analyzed_calls: list[Any]
+) -> str:
     hard_ingress = (
         checks.get("feishu_binding")
         and checks.get("dedicated_acceptance_tag")
@@ -232,13 +226,9 @@ def _phase(*, checks: dict[str, bool], target: ReproductionSession | None, analy
     if not checks.get("real_dut_session") or not checks.get("same_case_session"):
         return "BLOCKED"
     if not checks.get("fxs_monitor_ready"):
-        if str(target.state or "").upper() in TERMINAL_REPRO_STATES:
-            return "BLOCKED"
-        return "WAITING_ARM"
+        return "BLOCKED" if str(target.state or "").upper() in TERMINAL_REPRO_STATES else "WAITING_ARM"
     if not analyzed_calls:
-        if str(target.state or "").upper() in TERMINAL_REPRO_STATES:
-            return "BLOCKED"
-        return "WAITING_REAL_CALL"
+        return "BLOCKED" if str(target.state or "").upper() in TERMINAL_REPRO_STATES else "WAITING_REAL_CALL"
     if not checks.get("cleanup_verified"):
         return "WAITING_CLEANUP"
     if not checks.get("capture_analysis_complete") or not checks.get("diagnosis_completed"):
@@ -300,6 +290,11 @@ def collect_once(db, *, case_ref: str, acceptance_tag: str) -> dict[str, Any]:
         if row.case_id == case.id and bool(row.material_diagnostic_context)
     ]
     source_turns = [row for row in turns if row.source_message_id == source_message_id]
+    # The initial Feishu incident is authoritative in FeishuCaseBinding even on
+    # older deployments where the first NEW_DIAGNOSIS was not mirrored into a
+    # ConversationTurn. A later real user turn must still exist in the same bound
+    # Conversation; this Gate never manufactures one.
+    conversation_material = bool(material_turns) or bool(tag in source_text and turns)
     feedback_status = str(((completion.response_json or {}) if completion else {}).get("status") or "")
 
     checks = {
@@ -308,7 +303,7 @@ def collect_once(db, *, case_ref: str, acceptance_tag: str) -> dict[str, Any]:
         "feishu_source_message": source_message_id.startswith("om_") and len(source_message_id) >= 12,
         "conversation_bound": bool(conversations),
         "conversation_user_turn": bool(turns),
-        "conversation_material_context": bool(material_turns or source_turns),
+        "conversation_material_context": conversation_material,
         "real_dut_session": bool(target is not None and is_strict_real_session(target)),
         "same_case_session": bool(target is not None and target.case_id == case.id),
         "fxs_monitor_ready": "FXS_MONITOR_READY" in events,
@@ -327,17 +322,12 @@ def collect_once(db, *, case_ref: str, acceptance_tag: str) -> dict[str, Any]:
         "post_diagnosis_reply_sent": bool(reply is not None and reply.stage == "SENT"),
     }
     phase = _phase(checks=checks, target=target, analyzed_calls=analyzed_calls)
-    blockers = [key for key, passed in checks.items() if not passed]
 
     return {
         "contract": CONTRACT,
         "status": "PASS" if phase == "PASS" else ("WAITING" if phase in TRANSIENT_PHASES else "BLOCKED"),
         "phase": phase,
-        "case": {
-            "id": case.id,
-            "case_no": case.case_no,
-            "status": case.status,
-        },
+        "case": {"id": case.id, "case_no": case.case_no, "status": case.status},
         "ingress": {
             "binding_id": getattr(binding, "id", None),
             "source_message_sha256": _sha256(source_message_id),
@@ -351,6 +341,7 @@ def collect_once(db, *, case_ref: str, acceptance_tag: str) -> dict[str, Any]:
             "user_turn_ids": [row.id for row in turns],
             "material_turn_ids": [row.id for row in material_turns],
             "source_turn_ids": [row.id for row in source_turns],
+            "initial_source_turn_persisted": bool(source_turns),
         },
         "reproduction": None if target is None else {
             "session_id": target.id,
@@ -376,7 +367,7 @@ def collect_once(db, *, case_ref: str, acceptance_tag: str) -> dict[str, Any]:
             "completion_feedback_record_id": getattr(completion, "id", None),
         },
         "checks": checks,
-        "blocker_codes": blockers,
+        "blocker_codes": [key for key, passed in checks.items() if not passed],
         "safety": {
             "auditor_read_only": True,
             "synthetic_feishu_turn_created": False,
@@ -389,15 +380,14 @@ def collect_once(db, *, case_ref: str, acceptance_tag: str) -> dict[str, Any]:
     }
 
 
-def wait_for_result(*, case_ref: str, acceptance_tag: str, wait_seconds: int, poll_seconds: int) -> dict[str, Any]:
+def wait_for_result(
+    *, case_ref: str, acceptance_tag: str, wait_seconds: int, poll_seconds: int
+) -> dict[str, Any]:
     deadline = time.monotonic() + max(0, int(wait_seconds))
-    last: dict[str, Any] | None = None
     while True:
         with SessionLocal() as db:
             last = collect_once(db, case_ref=case_ref, acceptance_tag=acceptance_tag)
-        if last.get("status") == "PASS":
-            return last
-        if last.get("status") == "BLOCKED":
+        if last.get("status") in {"PASS", "BLOCKED"}:
             return last
         if time.monotonic() >= deadline:
             return {
@@ -416,10 +406,12 @@ def main() -> int:
     parser.add_argument("--acceptance-tag", required=True)
     parser.add_argument("--wait-seconds", type=int, default=0)
     parser.add_argument("--poll-seconds", type=int, default=10)
-    parser.add_argument("--out", type=Path, default=Path("validation/conversation_dut_live_acceptance_v1.json"))
+    parser.add_argument(
+        "--out", type=Path,
+        default=Path("validation/conversation_dut_live_acceptance_v1.json"),
+    )
     parser.add_argument("--strict", action="store_true")
     args = parser.parse_args()
-
     try:
         payload = wait_for_result(
             case_ref=args.case,
@@ -435,7 +427,6 @@ def main() -> int:
             "error": type(exc).__name__,
             "error_message": str(exc)[:300],
         }
-
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(payload, ensure_ascii=False, indent=2, default=str) + "\n", encoding="utf-8")
     print(json.dumps({
@@ -447,9 +438,7 @@ def main() -> int:
         "blocker_codes": payload.get("blocker_codes", []),
         "out": str(args.out),
     }, ensure_ascii=False, indent=2))
-    if args.strict and payload.get("status") != "PASS":
-        return 2
-    return 0
+    return 2 if args.strict and payload.get("status") != "PASS" else 0
 
 
 if __name__ == "__main__":
