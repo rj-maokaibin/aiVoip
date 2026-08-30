@@ -19,7 +19,7 @@ _NEW_CASE_PHRASES = (
     "新建 case", "新建case", "创建 case", "创建case", "另开 case", "另开case",
     "开新 case", "开新case", "新 case", "新case", "new case", "another case",
     "新问题", "新的问题", "另一个问题", "另外一个问题", "新故障", "新的故障",
-    "另一个故障", "另外一个故障", "这是另一个", "这是另外一个", "这是新",
+    "另一个故障", "另外一个故障",
 )
 _CONTINUE_CASE_PHRASES = (
     "继续当前 case", "继续当前case", "继续这个 case", "继续这个case",
