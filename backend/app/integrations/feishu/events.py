@@ -19,7 +19,17 @@ from app.db.models import (
     DiagnosticExperiment, ExperimentRun, Hypothesis, ReproductionCall, ReproductionSession,
 )
 from app.experiments.orchestrator import DiagnosticExperimentOrchestrator
-from app.integrations.feishu.case_resolver import is_explicit_new_fault, resolve_case
+from app.integrations.feishu.case_boundary import (
+    arm_current_case_once,
+    attachment_matches_active_question,
+    consume_current_case_once,
+    create_and_activate_new_case,
+    is_explicit_continue_current_case,
+    is_explicit_new_case,
+    is_pure_continue_current_case_command,
+    is_pure_new_case_command,
+)
+from app.integrations.feishu.case_resolver import resolve_case
 from app.integrations.feishu.intake import extract_message_content, route_intake
 from app.integrations.feishu.feedback import accepted_text, enqueue_reply
 from app.services.idempotency import begin_idempotent, complete_idempotent
@@ -129,10 +139,10 @@ def _preview_no_case_knowledge(db: Session, *, text: str, source_context: dict) 
     """Build the immediate deterministic knowledge answer for Feishu callback.
 
     The historical Feishu contract returns ``answered`` and ``citations`` from the
-    callback itself.  Keep that contract without running an LLM in the callback:
+    callback itself. Keep that contract without running an LLM in the callback:
     reuse any already-persisted Conversation entities, resolve only catalog-backed
     product/version/feature context, and answer from ProductFact / verified
-    KnowledgeItem authorities.  The async Conversation worker then persists the
+    KnowledgeItem authorities. The async Conversation worker then persists the
     turn with ``suppress_reply=True`` so the user sees exactly one response.
     """
     from app.conversation.entities import resolve_catalog_entities
@@ -234,28 +244,105 @@ def dispatch_event(db: Session, *, payload: dict, actor: str = "feishu:callback"
 
         intake = route_intake(text=text, attachments=attachments, has_thread_case=case is not None)
 
-        if case and correlation_reason == 'CHAT_ACTIVE_CASE' and intake.intent == 'NEW_DIAGNOSIS':
-            if is_explicit_new_fault(text):
-                result = {
-                    'chat_id': chat_id, 'chat_type': chat_type,
-                    'event_id': event_id or None, 'message_id': message_id or None,
-                    'intent': intake.intent, 'intake': intake.to_dict(),
-                    'case_id': case.id, 'case_no': case.case_no,
-                    'correlation_reason': correlation_reason,
-                    'handled': 'active_case_conflict',
-                    'missing_user_inputs': ['new_group_or_admin_rebind'],
-                }
-                _reply_intake(
-                    message_id,
-                    f'当前群已绑定 Active Case {case.case_no}。如果这是新的独立故障，请新建故障群；'
-                    '如果是当前 Case 的补充，请直接继续提交现象或附件。',
+        if case and correlation_reason == 'CHAT_ACTIVE_CASE':
+            if is_explicit_new_case(text):
+                switched = create_and_activate_new_case(
+                    db,
+                    current_case=case,
+                    current_binding_id=str(resolution.binding_id or ''),
+                    chat_id=chat_id,
+                    chat_type=chat_type,
+                    source_context=source_context,
+                    text=text,
+                    attachments=attachments,
+                    actor=actor,
                 )
-                return _complete_message(db, handle, result, message_id, event_id)
-            intake = replace(
-                intake, intent='CASE_FOLLOW_UP', confidence=max(intake.confidence, 0.95),
-                missing_user_inputs=[], requires_device_access=False,
-                reason='active_chat_case_follow_up',
-            )
+                old_case_no = switched.old_case_no
+                case = switched.new_case
+                correlation_reason = 'CASE_BOUNDARY_NEW_CASE'
+                source_context['correlated_case_id'] = case.id
+                if is_pure_new_case_command(text) and not attachments:
+                    arm_current_case_once(
+                        db, case_id=case.id, source_context=source_context
+                    )
+                    result = {
+                        'chat_id': chat_id, 'chat_type': chat_type,
+                        'event_id': event_id or None, 'message_id': message_id or None,
+                        'intent': 'CASE_BOUNDARY_NEW_CASE',
+                        'intake': intake.to_dict(),
+                        'case_id': case.id, 'case_no': case.case_no,
+                        'previous_case_no': old_case_no,
+                        'correlation_reason': correlation_reason,
+                        'handled': 'new_case_created',
+                    }
+                    _reply_intake(
+                        message_id,
+                        f'已创建并切换到新 Case {case.case_no}。旧 Case {old_case_no} 的历史证据仍保留且状态未改。'
+                        f'请发送新故障现象或附件，下一条诊断输入会归入 {case.case_no}。',
+                    )
+                    return _complete_message(db, handle, result, message_id, event_id)
+                intake = route_intake(text=text, attachments=attachments, has_thread_case=False)
+                if intake.missing_user_inputs:
+                    arm_current_case_once(
+                        db, case_id=case.id, source_context=source_context
+                    )
+            elif is_explicit_continue_current_case(text):
+                if is_pure_continue_current_case_command(text) and not attachments:
+                    arm_current_case_once(
+                        db, case_id=case.id, source_context=source_context
+                    )
+                    result = {
+                        'chat_id': chat_id, 'chat_type': chat_type,
+                        'event_id': event_id or None, 'message_id': message_id or None,
+                        'intent': 'CASE_BOUNDARY_CONTINUE',
+                        'intake': intake.to_dict(),
+                        'case_id': case.id, 'case_no': case.case_no,
+                        'correlation_reason': correlation_reason,
+                        'handled': 'current_case_confirmed',
+                    }
+                    _reply_intake(
+                        message_id,
+                        f'已确认继续当前 Case {case.case_no}。请重新发送刚才的现象或附件；下一条诊断输入会归入当前 Case。',
+                    )
+                    return _complete_message(db, handle, result, message_id, event_id)
+                intake = replace(
+                    intake, intent='CASE_FOLLOW_UP', confidence=max(intake.confidence, 0.98),
+                    missing_user_inputs=[], requires_device_access=False,
+                    reason='explicit_continue_current_case',
+                )
+            elif intake.intent == 'NEW_DIAGNOSIS':
+                allow_current = consume_current_case_once(
+                    db, case_id=case.id, source_context=source_context
+                )
+                expected_attachment = attachment_matches_active_question(
+                    db, case_id=case.id, attachments=attachments
+                )
+                if allow_current or expected_attachment:
+                    intake = replace(
+                        intake, intent='CASE_FOLLOW_UP', confidence=max(intake.confidence, 0.98),
+                        missing_user_inputs=[], requires_device_access=False,
+                        reason=(
+                            'case_boundary_confirmed_current_case'
+                            if allow_current else 'active_question_expected_attachment'
+                        ),
+                    )
+                else:
+                    result = {
+                        'chat_id': chat_id, 'chat_type': chat_type,
+                        'event_id': event_id or None, 'message_id': message_id or None,
+                        'intent': intake.intent, 'intake': intake.to_dict(),
+                        'case_id': case.id, 'case_no': case.case_no,
+                        'correlation_reason': correlation_reason,
+                        'handled': 'needs_case_boundary_confirmation',
+                        'missing_user_inputs': ['continue_current_case_or_new_case'],
+                    }
+                    _reply_intake(
+                        message_id,
+                        f'当前聊天已有 Active Case {case.case_no}。这条内容可能是当前 Case 的补充，也可能属于新的故障。'
+                        '请先回复“继续当前 Case”或“新建 Case”。确认前本条内容/附件不会写入任何 Case；'
+                        '确认后请重新发送本条内容/附件。',
+                    )
+                    return _complete_message(db, handle, result, message_id, event_id)
 
         base = {
             'chat_id': chat_id, 'chat_type': chat_type,
@@ -273,7 +360,7 @@ def dispatch_event(db: Session, *, payload: dict, actor: str = "feishu:callback"
             _reply_intake(message_id, f'找到多个可能的 Case：{" / ".join(case_nos)}。请回复具体 Case 编号。')
             return _complete_message(db, handle, result, message_id, event_id)
 
-        if case and correlation_reason in {'DEVICE_SYMPTOM_TIME_WINDOW', 'CHAT_ACTIVE_CASE'}:
+        if case and correlation_reason in {'DEVICE_SYMPTOM_TIME_WINDOW', 'CHAT_ACTIVE_CASE', 'CASE_BOUNDARY_NEW_CASE'}:
             from app.services.audit import audit
             audit(
                 db, case_id=case.id, actor=actor, event_type='FEISHU_CASE_CORRELATED',
