@@ -67,6 +67,17 @@ def _reply_intake(message_id: str, text: str) -> None:
     enqueue_reply(message_id, text)
 
 
+def _case_boundary_reply(*, case, previous_case_no: str | None, detail: str) -> str:
+    """Merge Case-switch confirmation with the next diagnostic instruction."""
+    if not case or not previous_case_no:
+        return detail
+    return (
+        f'已创建并切换到新 Case {case.case_no}。'
+        f'旧 Case {previous_case_no} 的历史证据仍保留且状态未改。'
+        f'{detail}'
+    )
+
+
 def _card_action_response(result: dict) -> dict:
     handled = result.get("handled")
     if handled == "error":
@@ -243,6 +254,7 @@ def dispatch_event(db: Session, *, payload: dict, actor: str = "feishu:callback"
             return _complete_message(db, handle, result, message_id, event_id)
 
         intake = route_intake(text=text, attachments=attachments, has_thread_case=case is not None)
+        boundary_previous_case_no: str | None = None
 
         if case and correlation_reason == 'CHAT_ACTIVE_CASE':
             if is_explicit_new_case(text):
@@ -257,7 +269,7 @@ def dispatch_event(db: Session, *, payload: dict, actor: str = "feishu:callback"
                     attachments=attachments,
                     actor=actor,
                 )
-                old_case_no = switched.old_case_no
+                boundary_previous_case_no = switched.old_case_no
                 case = switched.new_case
                 correlation_reason = 'CASE_BOUNDARY_NEW_CASE'
                 source_context['correlated_case_id'] = case.id
@@ -271,14 +283,17 @@ def dispatch_event(db: Session, *, payload: dict, actor: str = "feishu:callback"
                         'intent': 'CASE_BOUNDARY_NEW_CASE',
                         'intake': intake.to_dict(),
                         'case_id': case.id, 'case_no': case.case_no,
-                        'previous_case_no': old_case_no,
+                        'previous_case_no': boundary_previous_case_no,
                         'correlation_reason': correlation_reason,
                         'handled': 'new_case_created',
                     }
                     _reply_intake(
                         message_id,
-                        f'已创建并切换到新 Case {case.case_no}。旧 Case {old_case_no} 的历史证据仍保留且状态未改。'
-                        f'请发送新故障现象或附件，下一条诊断输入会归入 {case.case_no}。',
+                        _case_boundary_reply(
+                            case=case,
+                            previous_case_no=boundary_previous_case_no,
+                            detail=f'请发送新故障现象或附件，下一条诊断输入会归入 {case.case_no}。',
+                        ),
                     )
                     return _complete_message(db, handle, result, message_id, event_id)
                 intake = route_intake(text=text, attachments=attachments, has_thread_case=False)
@@ -349,6 +364,8 @@ def dispatch_event(db: Session, *, payload: dict, actor: str = "feishu:callback"
             'event_id': event_id or None, 'message_id': message_id or None,
             'intent': intake.intent, 'intake': intake.to_dict(),
             'case_id': case.id if case else None,
+            'case_no': case.case_no if case else None,
+            'previous_case_no': boundary_previous_case_no,
             'correlation_reason': correlation_reason,
         }
 
@@ -525,9 +542,17 @@ def dispatch_event(db: Session, *, payload: dict, actor: str = "feishu:callback"
             result = {**base, 'handled': 'needs_clarification',
                       'missing_user_inputs': intake.missing_user_inputs}
             if 'symptom_description' in intake.missing_user_inputs:
-                _reply_intake(message_id, '请补充一个用户可感知的现象，例如：单通无声、杂音、按键首位丢失。')
+                detail = '当前还缺故障现象，请补充一个用户可感知的现象，例如：单通无声、杂音、按键首位丢失。'
             else:
-                _reply_intake(message_id, '请提供设备 URL，或 IP+SN；也可以直接上传 PCAP/PCAPNG 附件。')
+                detail = '本条故障描述已归入新 Case；下一步请提供设备 URL，或 IP+SN；也可以直接上传 PCAP/PCAPNG 附件。'
+            _reply_intake(
+                message_id,
+                _case_boundary_reply(
+                    case=case,
+                    previous_case_no=boundary_previous_case_no,
+                    detail=detail,
+                ),
+            )
         elif intake.intent == 'NEW_DIAGNOSIS' and attachments:
             from app.workers.device_provision_task import ingest_feishu_attachments
             ingest_feishu_attachments.apply_async(
@@ -535,14 +560,31 @@ def dispatch_event(db: Session, *, payload: dict, actor: str = "feishu:callback"
             )
             result = {**base, 'handled': 'attachment_precheck_dispatched',
                       'attachment_count': len(attachments)}
-            _reply_intake(message_id, '已收到附件，将优先分析现有证据；暂不启动设备复现。')
+            _reply_intake(
+                message_id,
+                _case_boundary_reply(
+                    case=case,
+                    previous_case_no=boundary_previous_case_no,
+                    detail='附件已归入当前新 Case，正在优先分析现有证据；暂不启动设备复现。',
+                ),
+            )
         elif intake.intent == 'NEW_DIAGNOSIS' and intake.requires_device_access:
             from app.workers.device_provision_task import provision_from_feishu
             provision_from_feishu.apply_async(
                 args=[text, chat_id, chat_type, source_context, True], queue='diagnosis'
             )
             result = {**base, 'handled': 'diagnosis_intake_dispatched', 'text': text[:80]}
-            _reply_intake(message_id, accepted_text())
+            _reply_intake(
+                message_id,
+                _case_boundary_reply(
+                    case=case,
+                    previous_case_no=boundary_previous_case_no,
+                    detail=(
+                        '本条故障描述已归入新 Case；系统正在按新 Case 继续处理。'
+                        if boundary_previous_case_no else accepted_text()
+                    ),
+                ),
+            )
         elif intake.intent == 'CASE_FOLLOW_UP':
             if attachments:
                 from app.workers.device_provision_task import ingest_feishu_attachments
