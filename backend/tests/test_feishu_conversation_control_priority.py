@@ -85,6 +85,24 @@ def test_intake_routes_finish_and_continue_as_current_case_controls():
     assert cont.intent == "CASE_FOLLOW_UP"
     assert cont.reason == "explicit_conversation_control"
 
+    natural = route_intake(
+        text="这个设备又有电流音，帮忙继续分析",
+        has_thread_case=True,
+    )
+    assert natural.intent == "CASE_FOLLOW_UP"
+    assert natural.reason == "explicit_conversation_control"
+
+    # A different-device/new-incident signal must not be silently coerced into
+    # the active Case merely because it also says `继续分析`.
+    different_device = route_intake(
+        text="另一台设备出现单通无声，请继续分析",
+        has_thread_case=True,
+    )
+    assert different_device.intent == "NEW_DIAGNOSIS"
+
+    negated = route_intake(text="先不要继续分析", has_thread_case=True)
+    assert negated.reason != "explicit_conversation_control"
+
     stop_repro = route_intake(text="停止复现", has_thread_case=True)
     assert stop_repro.intent == "STOP_REPRODUCTION"
 
