@@ -25,6 +25,7 @@ _CONTINUE_CASE_PHRASES = (
     "继续当前 case", "继续当前case", "继续这个 case", "继续这个case",
     "继续当前问题", "继续这个问题", "继续当前故障", "继续这个故障",
     "继续当前诊断", "继续这个诊断", "continue current case",
+    "继续分析", "继续排查", "继续诊断", "接着分析", "接着排查", "接着诊断",
 )
 _PURE_NEW_COMMANDS = {
     "新建case", "创建case", "另开case", "开新case", "新case", "newcase", "anothercase",
@@ -32,7 +33,7 @@ _PURE_NEW_COMMANDS = {
 _PURE_CONTINUE_COMMANDS = {
     "继续当前case", "继续这个case", "继续当前问题", "继续这个问题",
     "继续当前故障", "继续这个故障", "继续当前诊断", "继续这个诊断",
-    "continuecurrentcase",
+    "continuecurrentcase", "继续分析", "继续排查", "继续诊断", "接着分析", "接着排查", "接着诊断",
 }
 
 
