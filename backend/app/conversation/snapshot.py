@@ -62,6 +62,17 @@ class ConversationSnapshotBuilder:
         blocking_reason = str(summary.get("blocking_reason") or "") or None
         manual_action = str(summary.get("manual_action") or "") or None
         headline = str(summary.get("headline") or "") or None
+        if (
+            diagnosis is not None
+            and not unknown
+            and not blocking_reason
+            and case.status not in {"ROOT_CAUSE_CONFIRMED", "RESOLVED", "CLOSED"}
+        ):
+            # A candidate/partial diagnosis without an explicit unknown list still
+            # has one important user-facing boundary: the final root cause is not
+            # confirmed yet. Surface that boundary instead of declaring a three-
+            # section response and silently omitting the unresolved section.
+            unknown = ["当前证据仍不足以确认最终根因"]
         active_repro = bool(reproduction and reproduction.state in _ACTIVE_REPRO_STATES)
         has_running_work = bool(
             running_jobs
