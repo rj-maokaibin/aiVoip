@@ -8,6 +8,7 @@ from app.conversation.state_service import ConversationStateService
 from app.db.base import Base
 from app.db import models as _models  # noqa: F401
 from app.db import conversation_models as _conversation_models  # noqa: F401
+from app.db.conversation_models import ConversationTurn
 from app.db.models import Case, Evidence, FeishuCaseBinding
 from app.integrations.feishu.case_boundary import (
     arm_current_case_once,
@@ -153,6 +154,14 @@ def test_same_chat_case_switch_preserves_old_case_and_evidence_and_resets_state(
 
         old_state_view = ConversationStateService().case_state(db, old_case.id)
         assert old_state_view == (None, None)
+
+        turns = list(db.scalars(
+            select(ConversationTurn).order_by(ConversationTurn.created_at.asc())
+        ))
+        assert len(turns) == 2
+        assert {turn.case_id for turn in turns} == {old_case.id, new_case.id}
+        assert turns[0].text == "首位按键丢失，请分析"
+        assert turns[1].text == "这是新的故障，现场出现无声，请分析"
 
 
 def test_continue_confirmation_is_one_shot_and_case_scoped():
