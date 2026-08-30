@@ -303,7 +303,7 @@ class GroundedConversationResponder:
         optional = cls._optional_evidence_actions(snapshot)
 
         sections = [
-            "当前没有必须由你补充的信息。现在可以直接基于现有证据形成阶段结论。"
+            "当前没有必须由你补充的信息。下面按已经确认、尚未确认和后续可选三部分列出；现在可以直接基于现有证据形成阶段结论。"
         ]
         known_section = cls._bullet_section("已确认", known)
         if known_section:
@@ -336,6 +336,7 @@ class GroundedConversationResponder:
             sections.append(f"当前阶段结论：{cls._clean_item(headline)}。")
         else:
             sections.append("当前阶段结论：现有证据不足以形成更强的正式根因结论。")
+        sections.append("下面按已经确认、尚未确认和后续可选三部分列出。")
 
         known_section = cls._bullet_section("已确认", known)
         if known_section:
