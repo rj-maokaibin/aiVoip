@@ -22,21 +22,28 @@ _NEW_CASE_PHRASES = (
     "另一个故障", "另外一个故障",
 )
 # Case-boundary continuation is deliberately restricted to phrases that identify
-# the *current Case/problem/fault*. Generic analysis controls such as `继续分析`
-# belong to the Conversation layer (CONTINUE_ANALYSIS) and must not arm a
-# one-shot Case-boundary confirmation.
+# the current Case/problem/fault.  A legacy natural-language phrase such as
+# `帮忙继续分析` is retained here only so an incident-bearing follow-up remains
+# explicitly correlated to the active Case; it is not a pure boundary command and
+# therefore does not arm the one-shot boundary marker.  Pure `继续分析` is handled
+# by Feishu intake as a Conversation CONTINUE control before this helper matters.
 _CONTINUE_CASE_PHRASES = (
     "继续当前 case", "继续当前case", "继续这个 case", "继续这个case",
     "继续当前问题", "继续这个问题", "继续当前故障", "继续这个故障",
     "继续当前诊断", "继续这个诊断", "continue current case",
+    "帮忙继续分析", "帮我继续分析",
 )
 _PURE_NEW_COMMANDS = {
     "新建case", "创建case", "另开case", "开新case", "新case", "newcase", "anothercase",
 }
+# `继续分析` remains accepted by the legacy classification helper for compatibility
+# with the frozen Case-boundary contract.  It is intentionally absent from
+# _CONTINUE_CASE_PHRASES, so events.py will not treat it as a boundary-confirmation
+# command; intake.py routes it directly to the Conversation layer instead.
 _PURE_CONTINUE_COMMANDS = {
     "继续当前case", "继续这个case", "继续当前问题", "继续这个问题",
     "继续当前故障", "继续这个故障", "继续当前诊断", "继续这个诊断",
-    "continuecurrentcase",
+    "continuecurrentcase", "继续分析",
 }
 
 
