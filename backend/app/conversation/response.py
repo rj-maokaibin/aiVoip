@@ -313,7 +313,7 @@ class GroundedConversationResponder:
         if unresolved_section:
             sections.append(unresolved_section)
         if optional:
-            sections.append(cls._bullet_section("后续可选", optional))
+            sections.append(cls._bullet_section("后续可选（可选的补充证据）", optional))
         else:
             sections.append("后续可选\n• 当前没有可确定推荐的新证据项")
         return "\n\n".join(section for section in sections if section)
