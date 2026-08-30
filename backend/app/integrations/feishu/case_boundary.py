@@ -22,10 +22,10 @@ _NEW_CASE_PHRASES = (
     "另一个故障", "另外一个故障",
 )
 # Case-boundary continuation is deliberately restricted to phrases that identify
-# the current Case/problem/fault.  A legacy natural-language phrase such as
+# the current Case/problem/fault. A legacy natural-language phrase such as
 # `帮忙继续分析` is retained here only so an incident-bearing follow-up remains
 # explicitly correlated to the active Case; it is not a pure boundary command and
-# therefore does not arm the one-shot boundary marker.  Pure `继续分析` is handled
+# therefore does not arm the one-shot boundary marker. Pure `继续分析` is handled
 # by Feishu intake as a Conversation CONTINUE control before this helper matters.
 _CONTINUE_CASE_PHRASES = (
     "继续当前 case", "继续当前case", "继续这个 case", "继续这个case",
@@ -37,7 +37,7 @@ _PURE_NEW_COMMANDS = {
     "新建case", "创建case", "另开case", "开新case", "新case", "newcase", "anothercase",
 }
 # `继续分析` remains accepted by the legacy classification helper for compatibility
-# with the frozen Case-boundary contract.  It is intentionally absent from
+# with the frozen Case-boundary contract. It is intentionally absent from
 # _CONTINUE_CASE_PHRASES, so events.py will not treat it as a boundary-confirmation
 # command; intake.py routes it directly to the Conversation layer instead.
 _PURE_CONTINUE_COMMANDS = {
@@ -45,6 +45,28 @@ _PURE_CONTINUE_COMMANDS = {
     "继续当前故障", "继续这个故障", "继续当前诊断", "继续这个诊断",
     "continuecurrentcase", "继续分析",
 }
+
+# P2 UX: Case governance words must not become the diagnostic symptom. These
+# patterns are intentionally narrow: they only remove explicit Case-boundary
+# commands and leave incident-bearing language such as "另一台设备出现单通无声".
+_SUMMARY_CONTROL_PATTERNS = (
+    re.compile(r"(?:这是|这是一个)?(?:新的|新|另一个|另外一个)(?:故障|问题)\s*[，,。；;：:]?", re.I),
+    re.compile(
+        r"(?:请|麻烦|麻烦你)?(?:不要|别)(?:再)?关联"
+        r"(?:上一个|之前的|之前|旧的|旧)?\s*case\s*[，,。；;：:]?",
+        re.I,
+    ),
+    re.compile(
+        r"(?:请|麻烦|麻烦你)?(?:新建|创建|另开|开新)\s*(?:一个)?\s*case"
+        r"(?:\s*(?:开始|来))?(?:\s*(?:分析|诊断|排查))?\s*[，,。；;：:]?",
+        re.I,
+    ),
+    re.compile(
+        r"(?:请|麻烦|麻烦你)?(?:新建|创建|另开|开新)\s*(?:一个)?\s*(?:故障|问题)"
+        r"(?:\s*(?:开始|来))?(?:\s*(?:分析|诊断|排查))?\s*[，,。；;：:]?",
+        re.I,
+    ),
+)
 
 
 @dataclass(frozen=True)
@@ -79,10 +101,31 @@ def is_pure_continue_current_case_command(text: str) -> bool:
     return _compact_command(text) in _PURE_CONTINUE_COMMANDS
 
 
+def _strip_boundary_controls_from_summary(text: str) -> str:
+    """Remove only explicit Case-governance wording from a new Case summary.
+
+    The function deliberately does not summarize or rewrite the incident. It
+    preserves the user's symptom wording and merely removes commands such as
+    "不要关联上一个 Case" / "请新建一个 Case 开始分析".
+    """
+    value = str(text or "").strip()
+    if not value:
+        return ""
+    for pattern in _SUMMARY_CONTROL_PATTERNS:
+        value = pattern.sub("", value)
+    value = re.sub(r"^[\s，,。；;：:]+", "", value)
+    value = re.sub(r"[\s，,。；;：:]+$", "", value)
+    value = re.sub(r"\s*[。；;]\s*[。；;]+", "。", value)
+    value = re.sub(r"\s*[，,]\s*[，,]+", "，", value)
+    return value.strip()
+
+
 def _new_case_summary(text: str, attachments: list[dict[str, Any]] | None) -> str:
     text = str(text or "").strip()
     if text and not is_pure_new_case_command(text):
-        return text[:1000]
+        cleaned = _strip_boundary_controls_from_summary(text)
+        if cleaned:
+            return cleaned[:1000]
     names = [
         str(item.get("filename") or "").strip()
         for item in (attachments or [])
