@@ -34,8 +34,19 @@ _INCIDENT_WORDS = (
 )
 _CONTROL_PUNCT = re.compile(r'[\s，,。.!！；;：:、]+')
 _CONTINUE_CONTROL_RE = re.compile(
-    r'^(?:继续|继续分析|继续诊断|继续吧|往下分析|好的继续|好继续|恢复分析|恢复诊断)[。.!！ ]*$',
+    r'^(?:继续|继续分析|继续诊断|继续排查|继续吧|往下分析|往下诊断|往下排查|'
+    r'好的继续|好继续|恢复分析|恢复诊断|恢复排查|接着分析|接着诊断|接着排查)[。.!！ ]*$',
     re.I,
+)
+_CONTINUE_NATURAL_RE = re.compile(
+    r'(?:帮忙|帮我|请|麻烦|麻烦你)?(?:继续|接着|往下|恢复)(?:分析|诊断|排查)',
+    re.I,
+)
+_NEW_INCIDENT_HINTS = (
+    '新故障', '新的故障', '另一个故障', '另外一个故障',
+    '新问题', '新的问题', '另一个问题', '另外一个问题',
+    '另一台设备', '另外一台设备', '另一台', '另外一台',
+    '新设备', '新的设备',
 )
 _FINISH_EXACT_RE = re.compile(
     r'^(?:结束吧|结束分析|结束诊断|按现有证据出结论|按现有结果出结论|给阶段结论)[。.!！ ]*$',
@@ -133,7 +144,31 @@ def is_finish_control_text(text: str) -> bool:
 
 
 def is_continue_control_text(text: str) -> bool:
-    return bool(_CONTINUE_CONTROL_RE.fullmatch((text or '').strip()))
+    """Recognize an explicit request to resume analysis in the current Case.
+
+    Natural-language variants may include the current symptom before the control
+    phrase (for example ``这个设备又有电流音，帮忙继续分析``).  They remain
+    Conversation controls as long as the user does not signal a new incident.
+    Questions and negated controls fail closed.
+    """
+    raw = (text or '').strip()
+    if not raw:
+        return False
+    compact = _compact_control_text(raw)
+    if not compact:
+        return False
+    if raw.endswith(('?', '？')):
+        return False
+    if any(token in compact for token in (
+        '不要继续', '别继续', '先不要继续', '暂时不要继续', '不用继续',
+        '停止继续', '暂停分析', '暂停诊断', '暂停排查',
+    )):
+        return False
+    if any(token in compact for token in _NEW_INCIDENT_HINTS):
+        return False
+    if _CONTINUE_CONTROL_RE.fullmatch(raw):
+        return True
+    return bool(_CONTINUE_NATURAL_RE.search(raw))
 
 
 def route_intake(*, text: str, attachments: list[dict] | None = None,
