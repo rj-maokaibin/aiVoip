@@ -208,7 +208,18 @@ def route_intake(*, text: str, attachments: list[dict] | None = None,
     # preliminary pass may not know the active Case yet, so use STATUS_QUERY only
     # as a fail-closed correlation carrier; the second pass with a resolved Case
     # becomes CASE_FOLLOW_UP and reaches the Conversation interpreter.
-    if is_finish_control_text(text) or is_continue_control_text(text):
+    #
+    # A natural-language continue which also carries both a specific symptom and
+    # complete DUT identity is material diagnostic context, not a control-only
+    # turn. Preserve the legacy cross-thread Evidence-First/provision path for
+    # that case; if the same chat already has an Active Case, the Case Boundary
+    # layer still converts it into a safe current-Case follow-up.
+    finish_control = is_finish_control_text(text)
+    continue_control = is_continue_control_text(text)
+    continue_with_material_device_context = bool(
+        continue_control and symptoms and device.has_minimal()
+    )
+    if finish_control or (continue_control and not continue_with_material_device_context):
         if has_thread_case or case_ref:
             return IntakeResult('CASE_FOLLOW_UP', 0.99, case_ref, devices, symptoms,
                                 attachments, [], False, 'explicit_conversation_control')
