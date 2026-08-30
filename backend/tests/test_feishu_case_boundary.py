@@ -67,6 +67,8 @@ def test_case_boundary_phrase_classification_is_explicit_not_incidental():
     assert is_pure_new_case_command(" 新建 Case。 ") is True
     assert is_explicit_continue_current_case("继续当前 Case") is True
     assert is_pure_continue_current_case_command("继续当前 Case。") is True
+    assert is_explicit_continue_current_case("这个设备又有电流音，帮忙继续分析") is True
+    assert is_pure_continue_current_case_command("继续分析。") is True
     assert is_explicit_new_case("继续分析当前故障") is False
     assert is_explicit_continue_current_case("这是新的故障") is False
     assert is_explicit_new_case("这是新的抓包，请继续分析") is False
