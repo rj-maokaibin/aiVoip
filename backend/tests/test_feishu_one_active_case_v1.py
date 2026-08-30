@@ -127,7 +127,7 @@ def _payload(*, tenant: str, chat: str, message_id: str, text_value: str) -> dic
     }
 
 
-def test_active_chat_turns_diagnosis_style_message_into_follow_up(monkeypatch):
+def test_active_chat_turns_explicit_continue_message_into_follow_up(monkeypatch):
     eng = _engine()
     calls = []
     replies = []
@@ -157,14 +157,15 @@ def test_active_chat_turns_diagnosis_style_message_into_follow_up(monkeypatch):
         assert calls
 
 
-def test_explicit_new_fault_in_active_group_fails_closed(monkeypatch):
+def test_explicit_new_fault_rotates_active_case_without_closing_previous_case(monkeypatch):
     eng = _engine()
     replies = []
     monkeypatch.setattr(events, "enqueue_reply", lambda message_id, text: replies.append((message_id, text)))
 
     with Session(eng) as db:
-        case = _case(db, "CASE-A")
-        bind_case_to_chat(db, case_id=case.id, chat_id="oc-1", chat_type="group", source_context=_ctx("tenant-a", "m-root"))
+        old_case = _case(db, "CASE-A")
+        old_case_id = old_case.id
+        bind_case_to_chat(db, case_id=old_case.id, chat_id="oc-1", chat_type="group", source_context=_ctx("tenant-a", "m-root"))
         db.commit()
 
         result = events.dispatch_event(
@@ -176,10 +177,16 @@ def test_explicit_new_fault_in_active_group_fails_closed(monkeypatch):
             actor="feishu:ou-engineer",
         )
 
-        assert result["handled"] == "active_case_conflict"
-        assert result["case_id"] == case.id
-        assert result["missing_user_inputs"] == ["new_group_or_admin_rebind"]
-        assert any("新建故障群" in text for _, text in replies)
+        assert result["handled"] == "needs_clarification"
+        assert result["correlation_reason"] == "CASE_BOUNDARY_NEW_CASE"
+        assert result["case_id"] != old_case_id
+        assert result["missing_user_inputs"] == ["device_url_or_ip_and_sn_or_attachment"]
+        assert db.get(Case, old_case_id).status == "ANALYZING"
+        new_case = db.get(Case, result["case_id"])
+        assert new_case is not None
+        assert new_case.status == "NEW"
+        assert db.scalar(select(func.count()).select_from(Case)) == 2
+        assert any("设备 URL" in text or "IP+SN" in text for _, text in replies)
 
 
 def test_migration_declares_lifecycle_and_partial_unique_index():

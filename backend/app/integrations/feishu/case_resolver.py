@@ -94,6 +94,14 @@ def _raw_active_binding(db: Session, *, tenant_key: str, chat_id: str) -> Active
 
 def close_binding_lifecycle(db: Session, *, binding_id: str, reason: str) -> None:
     if not lifecycle_columns_available(db):
+        # Legacy developer/test schemas do not have the lifecycle columns yet.
+        # Preserve the same business semantics through the existing ORM status
+        # field so rotating a chat binding does not accidentally leave Case A
+        # selectable as the active Case while its Case status remains open.
+        row = db.get(FeishuCaseBinding, binding_id)
+        if row is not None:
+            row.status = "CLOSED"
+            db.flush()
         return
     db.execute(
         text(
@@ -115,6 +123,10 @@ def activate_binding_lifecycle(
 ) -> int:
     """Activate a binding and assign its monotonic generation for this chat."""
     if not lifecycle_columns_available(db):
+        row = db.get(FeishuCaseBinding, binding_id)
+        if row is not None:
+            row.status = "ACTIVE"
+            db.flush()
         return 1
     tenant_key = normalize_tenant_key(tenant_key)
     generation = int(db.execute(
@@ -184,6 +196,7 @@ def active_case_for_chat(db: Session, *, tenant_key: str | None, chat_id: str) -
                 FeishuCaseBinding.receive_id == chat_id,
                 FeishuCaseBinding.receive_id_type == "chat_id",
                 FeishuCaseBinding.source_tenant_key == tenant,
+                FeishuCaseBinding.status == "ACTIVE",
                 Case.status.not_in(sorted(TERMINAL_CASE_STATES)),
             )
             .order_by(Case.created_at.desc())
