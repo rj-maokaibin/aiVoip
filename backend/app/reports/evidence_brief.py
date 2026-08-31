@@ -34,7 +34,8 @@ def build_completeness(*, evidences: list[dict], analyzer_states: dict[str, dict
                 "reason": item.get("error_code") or item.get("error_message") or item.get("degraded_reason")}
     evidence_types = {str(x.get("type") or "").upper() for x in evidences}
     packet = state("packet_intelligence"); pcm_state = state("pcm_intelligence"); media = state("media_intelligence")
-    pcm_result = results.get("pcm_intelligence") or {}
+    media_result = results.get("media_intelligence") or {}
+    pcm_result = results.get("pcm_intelligence") or (media_result.get("pcm") if isinstance(media_result, dict) else None) or {}
     taps = {str((x.get("tap") or {}).get("name") or "").lower() for x in pcm_result.get("streams", []) or []}
     capture = {
         "pcap": any(x in evidence_types for x in {"PCAP", "PCAPNG"}),
@@ -99,7 +100,11 @@ def build_report_payload(*, case: dict, scope_type: str, scope_id: str, session:
                          environment: dict | None, evidences: list[dict], analyzer_states: dict[str, dict],
                          results: dict[str, dict | None], report_version: int, generated_at: str | None = None,
                          analysis_context: dict | None = None, display_call: dict | None = None) -> dict:
-    packet = results.get("packet_intelligence"); pcm = results.get("pcm_intelligence"); media = results.get("media_intelligence")
+    media = results.get("media_intelligence")
+    media_packet = media.get("packet") if isinstance(media, dict) else None
+    media_pcm = media.get("pcm") if isinstance(media, dict) else None
+    packet = results.get("packet_intelligence") or media_packet
+    pcm = results.get("pcm_intelligence") or media_pcm
     source_run_ids = {name: state.get("run_id") for name, state in analyzer_states.items() if state.get("run_id")}
     findings = compose_findings(packet=packet, pcm=pcm, media=media, source_run_ids=source_run_ids)
     completeness = build_completeness(evidences=evidences, analyzer_states=analyzer_states, scope_type=scope_type, results=results)
