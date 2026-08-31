@@ -113,3 +113,34 @@ def test_frontend_dockerfile_uses_npm_ci_and_requires_lockfile():
     assert "package-lock.json" in text
     assert "npm ci" in text
     assert "npm install" not in text
+
+
+def test_production_config_accepts_poseidon_credential_provider(tmp_path, monkeypatch):
+    secret = tmp_path / "secret.yaml"
+    secret.write_text("sso:\n  baichuan:\n    username: alice\n    password: poseidon-bootstrap\n", encoding="utf-8")
+    secret.chmod(0o600)
+    monkeypatch.setattr(settings, "credential_provider", "poseidon")
+    monkeypatch.setenv("LOCAL_SECRET_FILE", str(secret))
+    items = {x["key"]: x for x in production_config_readiness()["items"]}
+    assert items["PRODUCTION_CREDENTIAL_PROVIDER"]["status"] == "PASS"
+
+
+def test_production_config_blocks_poseidon_without_bootstrap_secret(tmp_path, monkeypatch):
+    monkeypatch.setattr(settings, "credential_provider", "poseidon")
+    monkeypatch.setenv("LOCAL_SECRET_FILE", str(tmp_path / "missing.yaml"))
+    items = {x["key"]: x for x in production_config_readiness()["items"]}
+    assert items["PRODUCTION_CREDENTIAL_PROVIDER"]["status"] == "BLOCKED"
+
+
+def test_poseidon_bootstrap_configured_enforces_secure_file(tmp_path, monkeypatch):
+    from app.integrations.poseidon import poseidon_bootstrap_configured
+
+    secret = tmp_path / "secret.yaml"
+    secret.write_text("sso:\n  baichuan:\n    username: alice\n    password: p\n", encoding="utf-8")
+    secret.chmod(0o600)
+    monkeypatch.setenv("LOCAL_SECRET_FILE", str(secret))
+    assert poseidon_bootstrap_configured() is True
+    secret.chmod(0o644)
+    assert poseidon_bootstrap_configured() is False
+    monkeypatch.setenv("LOCAL_SECRET_FILE", str(tmp_path / "missing.yaml"))
+    assert poseidon_bootstrap_configured() is False

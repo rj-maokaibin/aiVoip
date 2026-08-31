@@ -89,6 +89,7 @@ services:
       - ./rules:/app/rules:ro
       - ./knowledge:/app/knowledge:ro
       - ./validation:/app/validation:ro
+      - /home/dev/secret.yaml:/home/dev/secret.yaml:ro
     secrets: *app_secrets
     command: ["python", "-c", "print('release-runner-ready')"]
 

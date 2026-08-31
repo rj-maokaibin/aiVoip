@@ -54,6 +54,19 @@ print(__import__("json").dumps({"viewer":viewer.status_code,"admin":admin.status
     assert data == {"viewer":403,"admin":200,"status":"BLOCKED"}
 
 
+def test_release_readiness_accepts_poseidon_credential_provider(tmp_path, monkeypatch):
+    from app.core.config import settings
+
+    secret = tmp_path / "secret.yaml"
+    secret.write_text("sso:\n  baichuan:\n    username: alice\n    password: poseidon-bootstrap\n", encoding="utf-8")
+    secret.chmod(0o600)
+    monkeypatch.setattr(settings, "credential_provider", "poseidon")
+    monkeypatch.setenv("LOCAL_SECRET_FILE", str(secret))
+    payload = runtime_release_readiness(profile_root=ROOT / "profiles")
+    items = {x["key"]: x for x in payload["items"]}
+    assert items["PRODUCTION_CREDENTIAL_PROVIDER"]["status"] == "PASS"
+
+
 def test_migration_contract_has_single_head():
     cp = subprocess.run(
         [sys.executable, str(ROOT / "tools" / "migration_contract_gate.py")],

@@ -7,6 +7,7 @@ from typing import Any
 from app.core.config import settings
 from app.integrations.secrets import SecretRef, SecretResolver, SecretResolutionError
 from app.integrations.feishu.transport import FeishuLiveTransport
+from app.integrations.poseidon import poseidon_bootstrap_configured
 
 
 @dataclass(frozen=True)
@@ -89,13 +90,22 @@ def runtime_release_readiness(*, profile_root: Path | None = None) -> dict[str, 
         detail=f"Build revision is pinned to {revision}." if revision_ok else "BUILD_REVISION must identify the immutable source/build revision; 'dev' is not release evidence.",
     ))
 
-    credential_ok = str(settings.credential_provider).lower() == "api" and bool(settings.credential_api_url)
+    provider = str(settings.credential_provider or "").lower()
+    if provider == "api":
+        credential_ok = bool(settings.credential_api_url)
+        credential_detail = "API credential provider is configured." if credential_ok else "CREDENTIAL_PROVIDER=api and CREDENTIAL_API_URL are required for production DUT access."
+    elif provider == "poseidon":
+        credential_ok = poseidon_bootstrap_configured()
+        credential_detail = "Poseidon credential provider is configured." if credential_ok else "CREDENTIAL_PROVIDER=poseidon requires the Poseidon bootstrap secret (sso.baichuan in /home/dev/secret.yaml)."
+    else:
+        credential_ok = False
+        credential_detail = "CREDENTIAL_PROVIDER must be api or poseidon for production DUT access."
     items.append(ReadinessItem(
         key="PRODUCTION_CREDENTIAL_PROVIDER",
         status="PASS" if credential_ok else "BLOCKED",
         blocking=True,
         category="SECURITY",
-        detail="API credential provider is configured." if credential_ok else "CREDENTIAL_PROVIDER=api and CREDENTIAL_API_URL are required for production DUT access.",
+        detail=credential_detail,
     ))
 
     storage_ok = str(settings.reproduction_storage_mode).lower() == "minio"

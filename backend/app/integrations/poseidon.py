@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import stat
 from pathlib import Path
 from urllib.parse import quote
 
@@ -48,6 +49,28 @@ def _baichuan_credentials() -> tuple[str, str]:
     if not user or not pwd:
         raise CredentialError("POSEIDON_BAICHUAN_CREDENTIALS_MISSING")
     return user, pwd
+
+
+def poseidon_bootstrap_configured() -> bool:
+    """Return whether a usable Poseidon bootstrap secret is present.
+
+    Mirrors the deployment preflight contract: the bootstrap secret file
+    (/home/dev/secret.yaml by default, LOCAL_SECRET_FILE override) must exist,
+    be a regular non-empty file with no group/world permissions, and carry
+    sso.baichuan credentials. Values are never returned or logged.
+    """
+    try:
+        path = _secret_file()
+        if not path.is_file():
+            return False
+        mode = stat.S_IMODE(path.stat().st_mode)
+        if path.stat().st_size <= 0 or (mode & (stat.S_IRWXG | stat.S_IRWXO)):
+            return False
+        cfg = _load_secrets()
+        bc = (cfg.get("sso") or {}).get("baichuan") or {}
+        return bool(bc.get("username")) and bool(bc.get("password"))
+    except OSError:
+        return False
 
 
 class PoseidonClient:
