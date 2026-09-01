@@ -26,7 +26,7 @@ curl -X POST 'http://localhost:8000/api/v1/rules/bootstrap?actor=admin'
 curl -X POST 'http://localhost:8000/api/v1/knowledge/bootstrap?actor=admin'
 ```
 
-- Web: `http://localhost:8080`
+- Web: `http://localhost:8088`
 - API Docs: `http://localhost:8000/docs`
 - MinIO Console: `http://localhost:9001`
 

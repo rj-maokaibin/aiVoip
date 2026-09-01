@@ -243,7 +243,7 @@ deploy_stack() {
   local timeout backend_port frontend_port
   timeout="$(env_value VOIP_HEALTH_TIMEOUT_SECONDS 2>/dev/null || echo 180)"
   backend_port="$(env_value VOIP_BACKEND_PORT 2>/dev/null || echo 8000)"
-  frontend_port="$(env_value VOIP_FRONTEND_PORT 2>/dev/null || echo 8080)"
+  frontend_port="$(env_value VOIP_FRONTEND_PORT 2>/dev/null || echo 8088)"
   wait_http "http://127.0.0.1:${backend_port}/health/ready" "$timeout"
   wait_http "http://127.0.0.1:${frontend_port}/" "$timeout"
   verify_stack
@@ -341,7 +341,7 @@ status_cmd() {
   compose ps
   local bp fp
   bp="$(env_value VOIP_BACKEND_PORT 2>/dev/null || echo 8000)"
-  fp="$(env_value VOIP_FRONTEND_PORT 2>/dev/null || echo 8080)"
+  fp="$(env_value VOIP_FRONTEND_PORT 2>/dev/null || echo 8088)"
   echo
   curl -fsS "http://127.0.0.1:${bp}/health/ready" || true
   echo
