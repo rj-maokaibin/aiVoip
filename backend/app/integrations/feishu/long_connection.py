@@ -22,12 +22,29 @@ import threading
 from app.core.config import settings
 from app.integrations.feishu.authorized_events import dispatch_authorized_event
 from app.integrations.feishu.events import callback_actor
+from app.integrations.secrets import SecretRef, SecretResolver, SecretResolutionError
 
 log = logging.getLogger(__name__)
 
 
 class FeishuLongConnectionError(RuntimeError):
     """Raised when the long connection cannot be started (config/credential)."""
+
+
+def _app_secret() -> str:
+    """Resolve the Feishu app secret using the same production secret contract as HTTP transport."""
+    try:
+        return SecretResolver.resolve(
+            SecretRef(
+                value=settings.feishu_app_secret,
+                file=settings.feishu_app_secret_file,
+                env=settings.feishu_app_secret_env,
+            ),
+            name="FEISHU_APP_SECRET",
+            required=True,
+        )
+    except SecretResolutionError as exc:
+        raise FeishuLongConnectionError(str(exc)) from exc
 
 
 def _sender_operator(sender_id) -> dict:
@@ -196,14 +213,13 @@ def run_long_connection(*, log_level=None) -> LongConnectionHandle:
         raise FeishuLongConnectionError("FEISHU_LIVE_DISABLED")
     if not settings.feishu_app_id:
         raise FeishuLongConnectionError("FEISHU_APP_ID_NOT_CONFIGURED")
-    if not settings.feishu_app_secret:
-        raise FeishuLongConnectionError("FEISHU_APP_SECRET_NOT_CONFIGURED")
+    app_secret = _app_secret()
 
     import lark_oapi as lark
     event_handler = build_event_handler()
     client = lark.ws.Client(
         settings.feishu_app_id,
-        settings.feishu_app_secret,
+        app_secret,
         event_handler=event_handler,
         log_level=log_level or lark.LogLevel.INFO,
         auto_reconnect=True,

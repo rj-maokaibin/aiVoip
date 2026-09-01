@@ -19,10 +19,10 @@ from app.integrations.feishu.long_connection import (
 )
 
 
-def main() -> None:
+def main() -> int:
     if not settings.feishu_live_enabled:
         print("FEISHU_LIVE_DISABLED: set FEISHU_LIVE_ENABLED=true to start the listener")
-        return
+        return 2
     print("Starting Feishu long-connection listener (Ctrl+C to stop)...")
     try:
         handle = run_long_connection()
@@ -31,12 +31,14 @@ def main() -> None:
             time.sleep(1)
             if not handle.is_alive():
                 print("listener thread exited unexpectedly")
-                break
+                return 1
     except FeishuLongConnectionError as exc:
         print(f"listener failed to start: {exc}")
+        return 1
     except KeyboardInterrupt:
         print("listener stopped by user")
+        return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

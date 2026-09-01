@@ -34,10 +34,10 @@ Commands:
   prepare-host        Create persistent data/backup directories
   build               Build immutable application images
   deploy              Preflight, backup, migrate, start production stack and verify runtime
-  verify              Verify live production stack and write source-bound runtime evidence
+  verify              Verify live production stack, including exactly one Feishu consumer
   release             Deploy + Docker full-stack E2E + strict V1.0 release gate
-  status              Show Compose status and backend/frontend health
-  logs                Follow backend and worker logs
+  status              Show Compose status, application health and Feishu consumer health
+  logs                Follow backend, worker and Feishu long-connection logs
   backup-db           Create a compressed PostgreSQL logical backup
   down                 Stop application containers without deleting volumes/data
   help                 Show this help
@@ -177,6 +177,7 @@ build_images() {
   python3 tools/source_manifest_gate.py
   local services=(
     backend collector-worker packet-worker pcm-worker media-worker diagnosis-worker
+    feishu-long-connection
     reproduction-worker reproduction-control-high-worker reproduction-watch-worker beat
     frontend release-runner
   )
@@ -225,6 +226,99 @@ wait_http() {
   done
 }
 
+wait_feishu_long_connection() {
+  local timeout="${1:-180}" start now cid state
+  start="$(date +%s)"
+  while true; do
+    cid="$(compose ps -q feishu-long-connection 2>/dev/null || true)"
+    if [[ -n "$cid" ]]; then
+      state="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$cid" 2>/dev/null || true)"
+      if [[ "$state" == "healthy" ]]; then
+        return 0
+      fi
+      if [[ "$state" == "exited" || "$state" == "dead" ]]; then
+        echo "ERROR: feishu-long-connection entered terminal state: $state" >&2
+        return 1
+      fi
+    fi
+    now="$(date +%s)"
+    if (( now - start >= timeout )); then
+      echo "ERROR: timeout waiting for feishu-long-connection health (last_state=${state:-missing})" >&2
+      return 1
+    fi
+    sleep 2
+  done
+}
+
+verify_feishu_consumer_host() {
+  local live expected_revision count cid actual_project actual_revision health
+  local -a consumer_ids=()
+  live="$(env_value FEISHU_LIVE_ENABLED 2>/dev/null || echo false)"
+  case "${live,,}" in
+    true|1|yes|on) ;;
+    *) echo "FEISHU_LONG_CONNECTION_HOST_GATE=SKIP reason=FEISHU_LIVE_DISABLED"; return 0 ;;
+  esac
+
+  mapfile -t consumer_ids < <(docker ps \
+    --filter 'label=com.docker.compose.service=feishu-long-connection' \
+    --format '{{.ID}}')
+  count="${#consumer_ids[@]}"
+  if [[ "$count" != "1" ]]; then
+    echo "ERROR: expected exactly one Feishu long-connection consumer; observed=$count" >&2
+    return 1
+  fi
+
+  cid="${consumer_ids[0]}"
+  actual_project="$(docker inspect -f '{{ index .Config.Labels "com.docker.compose.project" }}' "$cid")"
+  if [[ "$actual_project" != "$PROJECT" ]]; then
+    echo "ERROR: Feishu consumer belongs to compose project '$actual_project', expected '$PROJECT'" >&2
+    return 1
+  fi
+
+  expected_revision="$(env_value BUILD_REVISION 2>/dev/null || true)"
+  if [[ -z "$expected_revision" ]]; then
+    echo "ERROR: BUILD_REVISION is not configured" >&2
+    return 1
+  fi
+  actual_revision="$(docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$cid" | awk -F= '$1=="BUILD_REVISION" {print substr($0,index($0,"=")+1); exit}')"
+  if [[ "$actual_revision" != "$expected_revision" ]]; then
+    echo "ERROR: Feishu consumer build revision mismatch actual=$actual_revision expected=$expected_revision" >&2
+    return 1
+  fi
+
+  health="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$cid")"
+  if [[ "$health" != "healthy" ]]; then
+    echo "ERROR: Feishu consumer is not healthy: $health" >&2
+    return 1
+  fi
+
+  mkdir -p validation
+  python3 - "$PROJECT" "$expected_revision" "$cid" "$health" <<'PY'
+import hashlib
+import json
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path.cwd() / 'tools'))
+from release_evidence import evidence_envelope
+project, revision, container_id, health = sys.argv[1:]
+payload = evidence_envelope(
+    evidence_type='FEISHU_LONG_CONNECTION_RUNTIME',
+    payload={
+        'passed': True,
+        'service': 'feishu-long-connection',
+        'compose_project': project,
+        'build_revision': revision,
+        'consumer_count': 1,
+        'container_id_sha256': hashlib.sha256(container_id.encode()).hexdigest(),
+        'health': health,
+    },
+)
+out = Path('validation/feishu_long_connection_runtime.json')
+out.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+PY
+  echo "FEISHU_LONG_CONNECTION_HOST_GATE=PASS project=$PROJECT revision=$expected_revision consumer_count=1 health=$health"
+}
+
 deploy_stack() {
   host_preflight
   prepare_host
@@ -235,9 +329,12 @@ deploy_stack() {
   compose up -d postgres redis minio
   echo "Applying Alembic migration explicitly before application promotion..."
   compose run --rm backend alembic upgrade head
+  # Keep this stable marker because Capture V2's frozen deploy contract parses the
+  # promotion block after it. Feishu is now part of that same managed promotion.
   echo "Starting backend, workers, scheduler and frontend..."
   compose up -d \
     backend collector-worker packet-worker pcm-worker media-worker diagnosis-worker \
+    feishu-long-connection \
     reproduction-worker reproduction-control-high-worker reproduction-watch-worker beat frontend
 
   local timeout backend_port frontend_port
@@ -246,15 +343,21 @@ deploy_stack() {
   frontend_port="$(env_value VOIP_FRONTEND_PORT 2>/dev/null || echo 8088)"
   wait_http "http://127.0.0.1:${backend_port}/health/ready" "$timeout"
   wait_http "http://127.0.0.1:${frontend_port}/" "$timeout"
+  wait_feishu_long_connection "$timeout"
   verify_stack
 }
 
 verify_stack() {
   require_docker
   mkdir -p validation
+  rm -f validation/feishu_long_connection_runtime.json
+  verify_feishu_consumer_host
   compose run --rm -e PRODUCTION_RUNTIME_EVIDENCE=/workspace/validation/production_runtime_result.json release-runner \
     python deploy/production_runtime_verify.py
   echo "Runtime evidence: validation/production_runtime_result.json"
+  if [[ -f validation/feishu_long_connection_runtime.json ]]; then
+    echo "Feishu runtime evidence: validation/feishu_long_connection_runtime.json"
+  fi
 }
 
 frontend_docker_gate() {
@@ -346,6 +449,8 @@ status_cmd() {
   curl -fsS "http://127.0.0.1:${bp}/health/ready" || true
   echo
   curl -fsSI "http://127.0.0.1:${fp}/" | head || true
+  echo
+  verify_feishu_consumer_host
 }
 
 case "$COMMAND" in
@@ -359,6 +464,7 @@ case "$COMMAND" in
   status) status_cmd ;;
   logs) require_docker; compose logs -f \
     backend collector-worker packet-worker pcm-worker media-worker diagnosis-worker \
+    feishu-long-connection \
     reproduction-worker reproduction-control-high-worker reproduction-watch-worker beat ;;
   backup-db) backup_db ;;
   down) require_docker; compose down --remove-orphans ;;

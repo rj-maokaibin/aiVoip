@@ -76,6 +76,22 @@ services:
       - ${VOIP_DATA_ROOT:-/data/voip}/reproduction:/var/lib/voip/reproduction
     secrets: *app_secrets
 
+  feishu-long-connection:
+    restart: unless-stopped
+    secrets:
+      - feishu_app_secret
+      - feishu_verification_token
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "from pathlib import Path; import sys; cmd=Path('/proc/1/cmdline').read_bytes(); sys.exit(0 if b'run_feishu_long_connection.py' in cmd else 1)"
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+
   release-runner:
     build:
       context: ./backend

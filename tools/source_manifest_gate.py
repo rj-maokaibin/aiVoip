@@ -14,6 +14,7 @@ INCLUDE_DIRS = [
 ]
 INCLUDE_FILES = [
     "Makefile", ".env.example", "backend/requirements.txt", "backend/alembic.ini",
+    "backend/run_feishu_long_connection.py",
     "frontend/package.json", "frontend/package-lock.json", "frontend/tsconfig.json", "frontend/vite.config.ts",
     "frontend/Dockerfile", "frontend/nginx.conf", "backend/Dockerfile",
     "docker-compose.yml", "docker-compose.production.yml", "docker-compose.e2e.yml", "release/release_policy.yaml",
