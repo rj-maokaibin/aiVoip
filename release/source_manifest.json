@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "file_count": 658,
-  "aggregate_sha256": "fec987e22451505e9c40b164a1ba68176ae62cfe5ca4a6886848434bc9550fc2",
+  "file_count": 659,
+  "aggregate_sha256": "ef206187c27cd513995f3f837be656461783f20dce77fbb084f2562be93ecd77",
   "files": [
     {
       "path": ".env.example",
@@ -2422,6 +2422,11 @@
       "path": "contracts/openapi_v1.sha256",
       "size": 82,
       "sha256": "527e29f609e4339f3e734c5382fbb64444ac777b6e0b4225030d9f9369a70402"
+    },
+    {
+      "path": "deploy/DEPLOYMENT_GUIDE.md",
+      "size": 5831,
+      "sha256": "38526f65bf4d702ca811128b6ab4a158aea8ba4f9b9387276ebaabc9dc78d017"
     },
     {
       "path": "deploy/README.md",

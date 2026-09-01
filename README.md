@@ -30,6 +30,17 @@ curl -X POST 'http://localhost:8000/api/v1/knowledge/bootstrap?actor=admin'
 - API Docs: `http://localhost:8000/docs`
 - MinIO Console: `http://localhost:9001`
 
+## 生产部署
+
+生产环境部署请使用正式部署脚本 `deploy/voip-ai`，详细流程、本次变更影响面与验收要点见
+**`deploy/DEPLOYMENT_GUIDE.md`**。
+
+```bash
+cd ~/workspace/aiVoip-control
+git fetch origin && git checkout master && git reset --hard origin/master
+sudo ./deploy/voip-ai --env /etc/voip-ai/production.env deploy
+```
+
 ## M4/M5 AI Diagnosis
 
 ```text
