@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "file_count": 659,
-  "aggregate_sha256": "ef206187c27cd513995f3f837be656461783f20dce77fbb084f2562be93ecd77",
+  "file_count": 660,
+  "aggregate_sha256": "a94ade8a4a180ce10a5c75c94b1ad3926c1dffe496dc42ed103f72ed48881053",
   "files": [
     {
       "path": ".env.example",
@@ -1545,8 +1545,8 @@
     },
     {
       "path": "backend/app/integrations/feishu/long_connection.py",
-      "size": 8683,
-      "sha256": "4c125479dd81b2ba7ec0eb9bd248189ef68cace401bad3227b35dfedbd451e1f"
+      "size": 9216,
+      "sha256": "144a8f1e7b50b744f8f185c4acb1871294acd1dce4eb452faf72259420b7d26a"
     },
     {
       "path": "backend/app/integrations/feishu/policy.py",
@@ -2414,6 +2414,11 @@
       "sha256": "37fa44f4e5207a27e045dea10d4b42f34127d123a79673a04ce1782e61bfaf95"
     },
     {
+      "path": "backend/run_feishu_long_connection.py",
+      "size": 1363,
+      "sha256": "14b32b5181b683206a19d7edb8854df6859178f643fb9095db8d783c7f98ff67"
+    },
+    {
       "path": "contracts/openapi_v1.json",
       "size": 153068,
       "sha256": "0107b144257d6499474dd44fd26ab93c11a310d025249ee5a53eaa6f8185fab5"
@@ -2425,8 +2430,8 @@
     },
     {
       "path": "deploy/DEPLOYMENT_GUIDE.md",
-      "size": 5831,
-      "sha256": "38526f65bf4d702ca811128b6ab4a158aea8ba4f9b9387276ebaabc9dc78d017"
+      "size": 5646,
+      "sha256": "7a42c2e06113505a643a0df3effe7807f77094e375914d827acd2c0d1171525c"
     },
     {
       "path": "deploy/README.md",
@@ -2495,8 +2500,8 @@
     },
     {
       "path": "deploy/production.env.example",
-      "size": 3855,
-      "sha256": "f7691c21ca08d8f886d32e8586d7d6eb7029bcc8a6fa8178f59d5e78ac675ec4"
+      "size": 3854,
+      "sha256": "9c0b3a75b7596ee0c0f65f79df605aa245bbb4ba14b7acadde164e1db6e7ef94"
     },
     {
       "path": "deploy/production_runtime_verify.py",
@@ -2505,8 +2510,8 @@
     },
     {
       "path": "deploy/voip-ai",
-      "size": 14263,
-      "sha256": "31e6d5d2927cd91c87edebbe429b37682dfaf4349256ccf1d5fc8952932fcade"
+      "size": 18176,
+      "sha256": "a64b3ac4157fe2f977805e798e3aab9396674aae074a316d860500b57733f942"
     },
     {
       "path": "docker-compose.e2e.yml",
@@ -2515,8 +2520,8 @@
     },
     {
       "path": "docker-compose.production.yml",
-      "size": 3348,
-      "sha256": "284b22fbfee92500b8671360ccccab6fa26b1472e5cc8f45c609e91ef0522f5d"
+      "size": 3782,
+      "sha256": "4a749f45071549b33fb4e9df6f67d69b3051870b47ad9cdd3230dc696c2f8e0a"
     },
     {
       "path": "docker-compose.yml",
@@ -3280,8 +3285,8 @@
     },
     {
       "path": "tools/source_manifest_gate.py",
-      "size": 2867,
-      "sha256": "8b6cdd6f920222d22104f303dc724e03f1259774100c45c580cfc5aac3b3f022"
+      "size": 2912,
+      "sha256": "bddb0799ac7eb47e65801eaa88286d1b9b1e570c4557217aaa8d758a9f44e8e4"
     },
     {
       "path": "tools/ssh_poc.py",
