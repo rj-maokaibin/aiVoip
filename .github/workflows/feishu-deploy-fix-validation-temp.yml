@@ -1,0 +1,54 @@
+name: Feishu deploy fix validation temp
+
+on:
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: feishu-deploy-fix-temp-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - name: Install test dependencies
+        run: pip install -r backend/requirements.txt
+      - name: Refresh source manifest
+        run: python3 tools/source_manifest_gate.py --update
+      - name: Validate deployment compatibility
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n deploy/voip-ai
+          PYTHONPATH=backend pytest -q \
+            backend/tests/test_feishu_long_connection_deployment_v1.py \
+            backend/tests/test_capture_v2_production_deploy_contract.py \
+            backend/tests/test_phase_f3_deployment_runner.py
+          python3 tools/source_manifest_gate.py
+      - name: Commit refreshed manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- release/source_manifest.json; then
+            echo "source manifest already current"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add release/source_manifest.json
+          git commit -m "chore(release): refresh source manifest after Feishu deploy compatibility fix"
+          git push origin "HEAD:${GITHUB_HEAD_REF}"
