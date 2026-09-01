@@ -22,12 +22,19 @@ concurrency:
 jobs:
   refresh-and-validate:
     if: github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: [self-hosted, linux, x64]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.head_ref }}
           fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - name: Install targeted test dependencies
+        run: pip install -r backend/requirements.txt
       - name: Refresh source manifest
         run: python3 tools/source_manifest_gate.py --update
       - name: Validate deployment contracts
