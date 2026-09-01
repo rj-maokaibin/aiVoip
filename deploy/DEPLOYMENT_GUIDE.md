@@ -53,12 +53,14 @@ up postgres/redis/minio → `alembic upgrade head` → up backend/workers/Feishu
 - `docker-compose.production.yml` 为其配置 `restart: unless-stopped`、Feishu Docker secrets 和 healthcheck；
 - listener 通过 `SecretResolver` 从 `/run/secrets/feishu_app_secret` 等生产 secret ref 获取凭据；
 - listener 启动失败或内部监听线程异常退出时以非零状态退出，让 Docker restart policy 接管；
-- `verify` 全局扫描 `com.docker.compose.service=feishu-long-connection`，要求**运行中的 consumer 恰好 1 个**；
+- 生产 `preflight` 强制 `FEISHU_LIVE_ENABLED=true`、Feishu App/目标配置以及 Identity RBAC；
+- 当 Feishu Live 启用时，`verify` 全局扫描 `com.docker.compose.service=feishu-long-connection`，要求**运行中的 consumer 恰好 1 个**；
 - 唯一 consumer 必须属于当前 `aivoip` project、`BUILD_REVISION` 与生产 env 一致且 Docker health=`healthy`；
+- 通用开发/测试环境若明确关闭 Feishu Live，`status` 的 consumer gate 会输出 `SKIP`，而不是把非 Feishu 部署误判为故障；这不影响生产，因为生产 `preflight` 会先 fail-closed；
 - `status` 和 `logs` 均包含 Feishu long-connection；
 - `backend/run_feishu_long_connection.py` 已纳入 `source_manifest`，避免入口脚本脱离 exact-source 发布门禁。
 
-因此，legacy `voip-ai` stack 或任何额外 compose project 若残留第二个 Feishu consumer，`verify` 会 fail-closed，而不是静默双消费。
+因此，实际生产环境中若 legacy `voip-ai` stack 或任何额外 compose project 残留第二个 Feishu consumer，`verify` 会 fail-closed，而不是静默双消费。
 
 ## 4. 验收要点
 
@@ -83,7 +85,7 @@ up postgres/redis/minio → `alembic upgrade head` → up backend/workers/Feishu
 - **禁用 8080**：同机 FusionPBX websockets 占用 `127.0.0.1:8080`；前端固定使用生产 env 配置的 8088。
 - 修改纳入 source manifest 的文件后必须刷新 manifest，否则 build fail-closed。
 - env / secret 为 `root:0600`，查看/修改需 `sudo`，禁止通过 chmod 放宽权限绕过预检。
-- `FEISHU_LIVE_ENABLED=true` 是生产必需项；关闭后 `verify` 会明确失败，不会把“没有 consumer”当作正常状态。
+- `FEISHU_LIVE_ENABLED=true` 是正式生产 deploy 的必需项，由 `deployment_preflight.py` 强制；通用非生产 `status` 场景允许 Feishu disabled 并明确显示 `SKIP`。
 
 ## 6. 常用运维命令
 
