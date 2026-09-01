@@ -7,6 +7,7 @@ from typing import Any
 from app.core.config import settings
 from app.integrations.secrets import SecretRef, SecretResolver, SecretResolutionError
 from app.integrations.feishu.transport import FeishuLiveTransport
+from app.integrations.poseidon import poseidon_bootstrap_configured
 
 
 @dataclass(frozen=True)
@@ -48,8 +49,17 @@ def production_config_readiness() -> dict[str, Any]:
     cors_ok = bool(origins) and "*" not in origins and all(urlparse(x).scheme in {"http", "https"} and urlparse(x).netloc for x in origins)
     items.append(ProductionConfigItem("PRODUCTION_CORS", "PASS" if cors_ok else "BLOCKED", "explicit CORS origins configured" if cors_ok else "CORS origins must be explicit http(s) origins"))
 
-    credential_ok = str(settings.credential_provider).lower() == "api" and bool(settings.credential_api_url)
-    items.append(ProductionConfigItem("PRODUCTION_CREDENTIAL_PROVIDER", "PASS" if credential_ok else "BLOCKED", "API credential provider configured" if credential_ok else "CREDENTIAL_PROVIDER=api and CREDENTIAL_API_URL are required"))
+    provider = str(settings.credential_provider or "").lower()
+    if provider == "api":
+        credential_ok = bool(settings.credential_api_url)
+        credential_detail = "API credential provider configured" if credential_ok else "CREDENTIAL_PROVIDER=api and CREDENTIAL_API_URL are required"
+    elif provider == "poseidon":
+        credential_ok = poseidon_bootstrap_configured()
+        credential_detail = "Poseidon credential provider configured" if credential_ok else "CREDENTIAL_PROVIDER=poseidon requires the Poseidon bootstrap secret (sso.baichuan in /home/dev/secret.yaml)"
+    else:
+        credential_ok = False
+        credential_detail = "CREDENTIAL_PROVIDER must be api or poseidon"
+    items.append(ProductionConfigItem("PRODUCTION_CREDENTIAL_PROVIDER", "PASS" if credential_ok else "BLOCKED", credential_detail))
 
     storage_ok = str(settings.reproduction_storage_mode).lower() == "minio"
     minio_access = _resolved_secret(SecretRef(settings.minio_access_key, settings.minio_access_key_file, settings.minio_access_key_env), name="MINIO_ACCESS_KEY")

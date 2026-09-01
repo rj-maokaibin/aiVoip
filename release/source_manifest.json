@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "file_count": 594,
-  "aggregate_sha256": "eb2fb2b2a36d140c59cf726322c49d026f865b9fc4194e41908c7fac56b5ecd9",
+  "file_count": 658,
+  "aggregate_sha256": "9f1ec55c83389ebf7f3e9db719346d07eebfe9f1345e8a89a31993896aab1b7d",
   "files": [
     {
       "path": ".env.example",
@@ -15,8 +15,8 @@
     },
     {
       "path": "backend/Dockerfile",
-      "size": 404,
-      "sha256": "699cd79aed7392238b61b2a3c4b2fac91ec337d268cf52de0a6d10959f8c48d2"
+      "size": 531,
+      "sha256": "ccef1940b534cf1a2ad02dd4c3e4c4a2938cbbe58fc03263b0d745e65e8dbecc"
     },
     {
       "path": "backend/alembic.ini",
@@ -405,8 +405,8 @@
     },
     {
       "path": "backend/app/capture_v2/bridge.py",
-      "size": 4578,
-      "sha256": "715df7798f2c9616eccc81303be9108e5450ad142431d988b0ff324f7c071e8b"
+      "size": 7108,
+      "sha256": "a17631318caa2ef5dba6d37399e4b82862b740c6f8d19ef4fb6d73e34b7c8e03"
     },
     {
       "path": "backend/app/capture_v2/c_bridge.py",
@@ -465,13 +465,18 @@
     },
     {
       "path": "backend/app/capture_v2/control/policy.py",
+      "size": 3270,
+      "sha256": "fd87210075f4e24eb819d655646386870c8b818636c9c2277a427e6895da1750"
+    },
+    {
+      "path": "backend/app/capture_v2/control/policy_base.py",
       "size": 18206,
       "sha256": "7c0c0deb7dc0ff508a54fa90f3146789178f841d4171d79865f4c631af794f13"
     },
     {
       "path": "backend/app/capture_v2/control/production_cutover_guarded.py",
-      "size": 2568,
-      "sha256": "1f6bfc65dee163bb342eb5242c76b60be2ad661925306d3183d78f0b7ee3730c"
+      "size": 12296,
+      "sha256": "526ed7b310fb3f5c8a42ef00517cf47911a3d76fad10611a39b9236fd31cd1e7"
     },
     {
       "path": "backend/app/capture_v2/control/production_cutover_guarded_base.py",
@@ -482,6 +487,11 @@
       "path": "backend/app/capture_v2/control/production_deployment_preflight_guarded.py",
       "size": 9263,
       "sha256": "10d2a148584cc1cd78463c20e0c54416fba2a7219763142707c3ee9677e3c6f9"
+    },
+    {
+      "path": "backend/app/capture_v2/control/production_feishu_rbac_enable_guarded.py",
+      "size": 8510,
+      "sha256": "9e2f1c0f53fa07946104cb093c0e549e82107ec7c901110a18dd767387429950"
     },
     {
       "path": "backend/app/capture_v2/control/r1_fencing_gate.py",
@@ -510,8 +520,8 @@
     },
     {
       "path": "backend/app/capture_v2/control/schema.py",
-      "size": 8155,
-      "sha256": "c4c5162351344d414da4f046ce4c6db4478cbcf52e7f1cafac4c211c26da8112"
+      "size": 8341,
+      "sha256": "800c92def4b93e232b8e429d1e300673ac45c089fe6807726c95eb35d619fe96"
     },
     {
       "path": "backend/app/capture_v2/control/service_rehearsal_diagnostics.py",
@@ -590,13 +600,13 @@
     },
     {
       "path": "backend/app/capture_v2/factory.py",
-      "size": 5352,
-      "sha256": "002e22054ecd1579ed07170ebe6bd37b16b4c94d17ee9c67101052c0a851dd68"
+      "size": 5678,
+      "sha256": "1eb11b22acbae754a38573f5d3bc74363d24261c00d35c665f67708118c7ddf4"
     },
     {
       "path": "backend/app/capture_v2/finalizer.py",
-      "size": 7611,
-      "sha256": "88792d7cd7fd511c862b896a9ad24e525e9f4453625e0d4e5a0fd47cdd934af7"
+      "size": 8189,
+      "sha256": "ee5506767cf1c09a7a6c55434d15e3bddd56fdddc3a5e241bac6f5bf636665ab"
     },
     {
       "path": "backend/app/capture_v2/fxs/__init__.py",
@@ -625,8 +635,8 @@
     },
     {
       "path": "backend/app/capture_v2/gate/cli.py",
-      "size": 16176,
-      "sha256": "f6a1db0fa86652d64b28686ec2287dc8198f9828141a9e3d4cc3923e8f7185d9"
+      "size": 18575,
+      "sha256": "161412a65bb1625382757c5ebcecc92b35da7f21c9c5df7fe7937ed5724cc149"
     },
     {
       "path": "backend/app/capture_v2/gate/context.py",
@@ -744,6 +754,11 @@
       "sha256": "2a3cf8f80f46ddbde392c03c7a6a9c2a451b6e89b38589d35a1a6d307df5a1e4"
     },
     {
+      "path": "backend/app/capture_v2/gate/sip_registration_aba.py",
+      "size": 23510,
+      "sha256": "af496796e64cd5276ce74f6823006c364b8e44bc0b2da928b66e742bf17a9fa9"
+    },
+    {
       "path": "backend/app/capture_v2/gate_cli.py",
       "size": 7377,
       "sha256": "37c24984f0f48d9fcff604711496e1c5b40a5eec79159b64e0392067ce1248ae"
@@ -780,8 +795,8 @@
     },
     {
       "path": "backend/app/capture_v2/production_platform.py",
-      "size": 17213,
-      "sha256": "81360281865ba7c5f490c59cdf87e68ebd451f9850c61f7b256e05d9111d6e8a"
+      "size": 17264,
+      "sha256": "f281273b48e3dfcf87e56de18d776c6ae36beb1ec3b9b62bbc5fe2ca454eafef"
     },
     {
       "path": "backend/app/capture_v2/production_readiness.py",
@@ -794,9 +809,14 @@
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
     {
+      "path": "backend/app/capture_v2/profiles/fingerprint.py",
+      "size": 4702,
+      "sha256": "d8588c858e5c7291c33b5b17796a493e1d50b302a06fcc45be3ecd4d090ca51c"
+    },
+    {
       "path": "backend/app/capture_v2/profiles/resolver.py",
-      "size": 4982,
-      "sha256": "287f1e7bf831cfa46e00eee00453cc5b038934e4c3c624f3bc9372be172c1b20"
+      "size": 5356,
+      "sha256": "1b877e967ea2b5ca4208aa0c895e225787d531e800a8173e551882246bf10070"
     },
     {
       "path": "backend/app/capture_v2/profiles/schema.py",
@@ -1050,18 +1070,18 @@
     },
     {
       "path": "backend/app/capture_v2/transport/mutator.py",
-      "size": 4704,
-      "sha256": "6aecf5eb7ffed731db0b391325c73fbfe42f42d1dfcb716350325a782ef72ac6"
+      "size": 7950,
+      "sha256": "95faf1dbe83a55e03a448fb74e3338acf98c0aaffd8fa4a531cf3e079eec03c7"
     },
     {
       "path": "backend/app/capture_v2/transport/readonly.py",
-      "size": 3502,
-      "sha256": "ee87773e57928f6daf5ce69ac8ab67a97df01636c8b0f41aecf2bc6e77a57ea1"
+      "size": 3808,
+      "sha256": "2beca7c0c5385527ab14417191a57900cb0b023baef06fae7c1aa170ed2ae780"
     },
     {
       "path": "backend/app/capture_v2/transport/shell_scripts.py",
-      "size": 3136,
-      "sha256": "6666f198516a443b06c2a6f47cb336e9c88f739f10543f15a9db4828a5b706cc"
+      "size": 4324,
+      "sha256": "6a832009421aaa309805737581759587744c41d30b454fa594e8b4c909aa5664"
     },
     {
       "path": "backend/app/capture_v2/voice_context.py",
@@ -1119,6 +1139,66 @@
       "sha256": "5cb5ee111787a5662df883619dbe03ec108b2dc8d41353abfa9aff36d9a92800"
     },
     {
+      "path": "backend/app/conversation/__init__.py",
+      "size": 189,
+      "sha256": "31593876d35df4f8e098e163dba32d55f5030824f3be4fc95a5265306b4b6044"
+    },
+    {
+      "path": "backend/app/conversation/contracts.py",
+      "size": 4235,
+      "sha256": "0aff74c19eb24c311351539c31b625d87d4ed423ad148eacece40035be4e4a9e"
+    },
+    {
+      "path": "backend/app/conversation/delivery.py",
+      "size": 2062,
+      "sha256": "422c5193c3b297365420fb99a7b4a705a87b949ac372ded0b09894b4fbd36a79"
+    },
+    {
+      "path": "backend/app/conversation/entities.py",
+      "size": 1766,
+      "sha256": "c7e1aab0b4fc0e76d3c437137ed5607ea1f2ba00816d13726b4aeff6f9816b3f"
+    },
+    {
+      "path": "backend/app/conversation/gateway.py",
+      "size": 5707,
+      "sha256": "3bbb6b09f1c083bca760d9240f0113ed6ce3e8a5839cac84d3c8c23e68be3f62"
+    },
+    {
+      "path": "backend/app/conversation/interpreter.py",
+      "size": 18657,
+      "sha256": "06c69ae4197df8212f00364015719c29ceea5f209ad7d2c08b6eedf8cffd3923"
+    },
+    {
+      "path": "backend/app/conversation/orchestrator.py",
+      "size": 4263,
+      "sha256": "aa6cdbb66be1d94bf5537d2ee9f20e7e8393f304d2c0285b96a9891eae73e972"
+    },
+    {
+      "path": "backend/app/conversation/planner.py",
+      "size": 6826,
+      "sha256": "667a3f3d6a6210994d46deecfeba015d1088e0d5f6b5c709f516cf120b257375"
+    },
+    {
+      "path": "backend/app/conversation/progress.py",
+      "size": 3669,
+      "sha256": "207af4969b83910b883150f37256c4ce9238f24cc566ab4c5544e825ff565a6c"
+    },
+    {
+      "path": "backend/app/conversation/response.py",
+      "size": 20689,
+      "sha256": "8dbbfac3c4ee8866e67a9ca42fb82abb0259526b5b5055b02bf81cddfa3095ec"
+    },
+    {
+      "path": "backend/app/conversation/snapshot.py",
+      "size": 10095,
+      "sha256": "b327a3a282772350c65865f294784594cf90d1444702e48f44a2c063f4074039"
+    },
+    {
+      "path": "backend/app/conversation/state_service.py",
+      "size": 13348,
+      "sha256": "4a0615ece3c6811a1793d774615e1d831e46c9baf9fe1c699aaa25b14aced470"
+    },
+    {
       "path": "backend/app/copilot/__init__.py",
       "size": 69,
       "sha256": "da9abd76c4270801b481127909b13aaf2f92a8e66006f40a715aaec8a8d6c0a4"
@@ -1140,8 +1220,8 @@
     },
     {
       "path": "backend/app/core/config.py",
-      "size": 8450,
-      "sha256": "52d78a516c9f5bcf0956fdc38d9147255d624acd54caa658608671010072ee34"
+      "size": 11596,
+      "sha256": "f5898a718333d86e958023099356563673f4a5aab7fce9c015c5c4ee6875a236"
     },
     {
       "path": "backend/app/core/errors.py",
@@ -1184,6 +1264,11 @@
       "sha256": "0e852cca7b807334900d52f4590f727ad3816f306e80fe18c03acddcb8ce082f"
     },
     {
+      "path": "backend/app/db/conversation_models.py",
+      "size": 6613,
+      "sha256": "18495a79220d447fd795360acb4a4fc7f88dec922dc32db0fb823882bd33da26"
+    },
+    {
       "path": "backend/app/db/evidence_report_models.py",
       "size": 8045,
       "sha256": "1f6e3e7a01c557e15d2c84a544bdf20a504a138f27f4aabfc0f922e01fc1ec9d"
@@ -1202,6 +1287,11 @@
       "path": "backend/app/db/golden_models.py",
       "size": 2978,
       "sha256": "5c08c12f7c986a1fc9d5a355b763c4b8f9d5fbda0ef9cd647dc666241eef2df7"
+    },
+    {
+      "path": "backend/app/db/knowledge_models.py",
+      "size": 2851,
+      "sha256": "d829a5590838f46e16a24152cbead83834da82b08331089790bd0626be554cc4"
     },
     {
       "path": "backend/app/db/models.py",
@@ -1230,8 +1320,8 @@
     },
     {
       "path": "backend/app/diagnosis/ai_proposal.py",
-      "size": 10200,
-      "sha256": "58e108e06bd0dae986748cdd242e82d7e1453c8d8170146690ef54128a3872ba"
+      "size": 12255,
+      "sha256": "58172c23af0219170341953e782bb46c26053a26f3b3059df020ea20f2ce7ff9"
     },
     {
       "path": "backend/app/diagnosis/ai_runtime.py",
@@ -1275,8 +1365,8 @@
     },
     {
       "path": "backend/app/diagnosis/gateway.py",
-      "size": 9761,
-      "sha256": "7ad124c61a40a7860f2e5339758dc2f89db06da9c96a16a29a9bd38ce6aa9f3a"
+      "size": 15574,
+      "sha256": "dad8d9262531f50660b976c02c245eddb6580b8250f95ce21cbe019d1a53780f"
     },
     {
       "path": "backend/app/diagnosis/hybrid.py",
@@ -1395,13 +1485,18 @@
     },
     {
       "path": "backend/app/integrations/feishu/cards.py",
-      "size": 12884,
-      "sha256": "d40544ca4b214e69dd0ae62f8356d71ef553eead9be92ab1fa86b01e23ad49c7"
+      "size": 14847,
+      "sha256": "2ec3bd20844aa8a678893d6185e0dfebee537daa398517df6895b6a3f8f42d01"
+    },
+    {
+      "path": "backend/app/integrations/feishu/case_boundary.py",
+      "size": 11439,
+      "sha256": "9c710f7489a95912b3df436d60dba3c7a8dc4cbe8952b0bdfd346247650529a7"
     },
     {
       "path": "backend/app/integrations/feishu/case_resolver.py",
-      "size": 12203,
-      "sha256": "9a1577cf160e689cfc121c75db49031fa2850eb846b0aa95da539749a9a4f2a2"
+      "size": 12843,
+      "sha256": "3a24521e3eb914e5986eda11d39448767632d9f755900ccbdd1ea3e394002b60"
     },
     {
       "path": "backend/app/integrations/feishu/device_provision.py",
@@ -1420,8 +1515,8 @@
     },
     {
       "path": "backend/app/integrations/feishu/events.py",
-      "size": 27636,
-      "sha256": "a49354dffb92bcbd7a4a75f0d9f3000be110639c8f861193037837a741ba194c"
+      "size": 37010,
+      "sha256": "81790de77ec53390213a350284e736bfcdc6a14fe6702a8ce44ed4c54f9ede35"
     },
     {
       "path": "backend/app/integrations/feishu/evidence_document.py",
@@ -1429,9 +1524,14 @@
       "sha256": "46224e1dda4a5b6397866e81408c1ca496c6a35e42dadb3b51e9c9cb73ea5d19"
     },
     {
+      "path": "backend/app/integrations/feishu/evidence_document_human_v2.py",
+      "size": 3657,
+      "sha256": "97cf78d1f7dfc9cde0ea62d3b2477a4f0ab89fd1260f127cfd121ab220c7c69b"
+    },
+    {
       "path": "backend/app/integrations/feishu/feedback.py",
-      "size": 5825,
-      "sha256": "62decb93e0dec176f8c8cb29a774694fdb0c4cd7882794fe4e6b161a5881e799"
+      "size": 8068,
+      "sha256": "f47baacd4fd9c4d64aeb1bf96ea7d820a327e19fca37c6d43704398105debc72"
     },
     {
       "path": "backend/app/integrations/feishu/identity.py",
@@ -1440,8 +1540,8 @@
     },
     {
       "path": "backend/app/integrations/feishu/intake.py",
-      "size": 7616,
-      "sha256": "1053157f0684b1433a97303c81f99f4653301fa40924638e079eb312e765275d"
+      "size": 14751,
+      "sha256": "286ff59f6f73aeccff59d5f9f434f80de4b20c4797612314a4e64a9ae41b97f9"
     },
     {
       "path": "backend/app/integrations/feishu/long_connection.py",
@@ -1465,8 +1565,8 @@
     },
     {
       "path": "backend/app/integrations/feishu/service.py",
-      "size": 9949,
-      "sha256": "1894c2e54e2bb97319884eacef700a48cda5d8da7258e9b5800257b12ada690c"
+      "size": 12055,
+      "sha256": "e226b8017225a942b805d22555315175c434a9ab74baea21f96fd3a4353397be"
     },
     {
       "path": "backend/app/integrations/feishu/transport.py",
@@ -1475,8 +1575,8 @@
     },
     {
       "path": "backend/app/integrations/poseidon.py",
-      "size": 6071,
-      "sha256": "4f81b5eb5bbe31e98026f45613c66a20da61468c347fd5f98d84552122660ed5"
+      "size": 6948,
+      "sha256": "03d4b2f22bfdddf51b9e29bc8f17dedd75ea0707902181c3572ba5d4f15fd944"
     },
     {
       "path": "backend/app/integrations/secrets.py",
@@ -1500,8 +1600,28 @@
     },
     {
       "path": "backend/app/knowledge/answering.py",
-      "size": 1439,
-      "sha256": "8025e07983e78b9e65ad0649f7a5e146308588bec3d02c8f3b144f8cd7d4e66f"
+      "size": 2017,
+      "sha256": "d5797ad45ed3f075c9f483a7f3268a973a067caf03d4c94d3858a96f894e86c0"
+    },
+    {
+      "path": "backend/app/knowledge/conversation_service.py",
+      "size": 3704,
+      "sha256": "d14fcbd29a5631ddde8c1529c98becf45b7d2aaa40f968de6637b92ae72d323b"
+    },
+    {
+      "path": "backend/app/knowledge/importer.py",
+      "size": 9071,
+      "sha256": "641e0a1e238f45675a64377a603d8324d4aace95ee5b20356a507165fe10b099"
+    },
+    {
+      "path": "backend/app/knowledge/product_facts.py",
+      "size": 3750,
+      "sha256": "4b79008b6c649d582d37ee6d0517c77364a2adcee058eaf7994d08a94937f45d"
+    },
+    {
+      "path": "backend/app/knowledge/retrieval.py",
+      "size": 5855,
+      "sha256": "1f8e6f1b9c9658a173d897ff38104e66412decd27b75eaf39d15f9e754353bf8"
     },
     {
       "path": "backend/app/knowledge/service.py",
@@ -1540,13 +1660,13 @@
     },
     {
       "path": "backend/app/production_config.py",
-      "size": 4579,
-      "sha256": "528b029e09ab25be7cd90a183e67093fbe18b1ad91f501471ce490d6bf5d3a58"
+      "size": 5136,
+      "sha256": "03f59ed4be40cc33a6ee6ac02dc998b966e30eebf6650ee34073ca9053cb6b3a"
     },
     {
       "path": "backend/app/release_readiness.py",
-      "size": 8709,
-      "sha256": "3a5ba5cd94d8b8817221879fa650829ef86d8f06f8691b622efd842ec92c01b7"
+      "size": 9298,
+      "sha256": "0d8e0c2b9f6fa557dfd82415a36bfb2c27a30419eda0bbeea1f0e1e8b229e1c2"
     },
     {
       "path": "backend/app/reports/__init__.py",
@@ -1575,8 +1695,8 @@
     },
     {
       "path": "backend/app/reports/evidence_brief.py",
-      "size": 32008,
-      "sha256": "ba0ea3ae0e115a4c39ac2d2c5285c3aa620da41aa72bf50e46400a0fa96e61ea"
+      "size": 32321,
+      "sha256": "5c4cb754affb372d87c3d24474642c5a42ca51caf7a6100f2189d9feb8e2d4b5"
     },
     {
       "path": "backend/app/reports/evidence_card.py",
@@ -1592,6 +1712,71 @@
       "path": "backend/app/reports/finding_composer.py",
       "size": 20500,
       "sha256": "11a488dbd284e37ff8bda113b207773d883af84f1f58930e6435804971d4f032"
+    },
+    {
+      "path": "backend/app/reports/human_visuals/__init__.py",
+      "size": 1790,
+      "sha256": "b061cdb93b8e6dfde4245fcd0ef2c2b2dad0a90011fd875539ae7f40253751d9"
+    },
+    {
+      "path": "backend/app/reports/human_visuals/cross_layer.py",
+      "size": 4021,
+      "sha256": "d7d66f08efe91aeab6fb945f7d97f7ce77dad5d03636024e53c5856ef0ce79fa"
+    },
+    {
+      "path": "backend/app/reports/human_visuals/dtmf_inspector.py",
+      "size": 10859,
+      "sha256": "73a2acd77ddeadeec1eba44e9ff4c08e9492fb18d75ffb2e692bace5079f8be9"
+    },
+    {
+      "path": "backend/app/reports/human_visuals/explanations.py",
+      "size": 9847,
+      "sha256": "3f1935d1f36c835d136bbdd9663391519dfb307227dd5738de845a728f8a7062"
+    },
+    {
+      "path": "backend/app/reports/human_visuals/localized_renderers.py",
+      "size": 18535,
+      "sha256": "6f89a8452e76e654b77491d80f0f565da800e70c568d3051f6031399ec946c23"
+    },
+    {
+      "path": "backend/app/reports/human_visuals/multitrack.py",
+      "size": 5154,
+      "sha256": "d8502e6fb006dbd741bbf3ef6281bc234784c3616bf7948e82078ebd31a528aa"
+    },
+    {
+      "path": "backend/app/reports/human_visuals/periodic_measurements.py",
+      "size": 2899,
+      "sha256": "4deb97c16202fc6375884f113a86f797732477754045669adb505cacc0a81bcb"
+    },
+    {
+      "path": "backend/app/reports/human_visuals/renderers.py",
+      "size": 14073,
+      "sha256": "0e648b69071f6d458519ce33cfea7fa5013f4558e741d0fd21602452423a366a"
+    },
+    {
+      "path": "backend/app/reports/human_visuals/rtp_timeline.py",
+      "size": 5302,
+      "sha256": "d6ad155fde6940149cca12b5d58ae415c775cb11067fdd074b7fa38c04a7eb1a"
+    },
+    {
+      "path": "backend/app/reports/human_visuals/theme.py",
+      "size": 1363,
+      "sha256": "f8aaaabaf434158ef6984a3441d4989948aa297f6641af5aeb6084e7637a858e"
+    },
+    {
+      "path": "backend/app/reports/human_visuals/typography.py",
+      "size": 4766,
+      "sha256": "30656d67ff083ef8d3e47cbd32edc98e706b8b0ad854470e58bccb989bed4f80"
+    },
+    {
+      "path": "backend/app/reports/human_visuals/wav_spectrogram.py",
+      "size": 5718,
+      "sha256": "135aaa31a417143e2627eddd6a6cafa5378d25b37646c0b7eca2e6287cfab6a1"
+    },
+    {
+      "path": "backend/app/reports/human_visuals/wav_window.py",
+      "size": 1675,
+      "sha256": "2f7836d5042a58144b93e4f1f23a85b49c0ccac588e880b46f5f8786f32c78af"
     },
     {
       "path": "backend/app/reports/prd_spec_v1_alignment.py",
@@ -1639,6 +1824,11 @@
       "sha256": "84a20795b2d73281f0ebf3980851677e510bb01fa7da51922c06941a4e3a6250"
     },
     {
+      "path": "backend/app/reproduction/fail_closed.py",
+      "size": 3359,
+      "sha256": "58eb5299ffdd6a70b0905d0c0313abeef127cd79756f97eb2c7b4025f5d309c3"
+    },
+    {
       "path": "backend/app/reproduction/fxs_event_monitor.py",
       "size": 5554,
       "sha256": "26f9404e46df7843c9b4eb19a2142715801874d9ccfc3c977bab6bd6b3b4c37f"
@@ -1655,8 +1845,8 @@
     },
     {
       "path": "backend/app/reproduction/locks.py",
-      "size": 6297,
-      "sha256": "732962be697d4343ea747691e2684fe9c62319df99bdbdbacade45f74fc30159"
+      "size": 7257,
+      "sha256": "b951ac68d335accf2f0bf360d410931ed23b0831766f816e1354cab3df9ee65b"
     },
     {
       "path": "backend/app/reproduction/mock_platform.py",
@@ -1670,8 +1860,8 @@
     },
     {
       "path": "backend/app/reproduction/orchestrator.py",
-      "size": 57929,
-      "sha256": "dda9cf1de9cda36500291b41d3cca1ca1e2be789bcb3475424a6fcfeafaa2d07"
+      "size": 60047,
+      "sha256": "45f2422ffe526323d5a05c1b54d234f055e30a518ae8110754e97ae6e6f0ae30"
     },
     {
       "path": "backend/app/reproduction/pcap_codec.py",
@@ -1855,8 +2045,8 @@
     },
     {
       "path": "backend/app/services/case_transitions.py",
-      "size": 5470,
-      "sha256": "3a574364c38d2f1296cf7592ef0452ab4be8a939177a4717709dafe0eb5803bf"
+      "size": 7862,
+      "sha256": "7ccc6456662170830a824d83e71d71c6d4cb320d7a055d0c5b24ceb78c40a655"
     },
     {
       "path": "backend/app/services/cases.py",
@@ -1895,13 +2085,13 @@
     },
     {
       "path": "backend/app/services/evidence_report_analysis_artifacts.py",
-      "size": 1734,
-      "sha256": "c6822365a791007a2a4c515b64a8252dca0cabb0cf1676e4e7c0be7ade8ceccc"
+      "size": 2899,
+      "sha256": "172199bfc8cd2d976a8665367d6124ca8aff5fe29529edbc3575465921147332"
     },
     {
       "path": "backend/app/services/evidence_report_artifacts.py",
-      "size": 20350,
-      "sha256": "678cadb3bf65905d48ef40bde125157accd365adec768b95a70a09ee267a465a"
+      "size": 35455,
+      "sha256": "507864a9230e66c3a5a353d7ef6d9e0ade352fd380acf18d3115c1981872a7be"
     },
     {
       "path": "backend/app/services/evidence_report_context.py",
@@ -1920,8 +2110,8 @@
     },
     {
       "path": "backend/app/services/evidence_report_source_artifacts.py",
-      "size": 6634,
-      "sha256": "d5b0849fc7a4c9e93802097c190a6cfa9e44867004cf16b939dc1b3766d9ae3e"
+      "size": 10163,
+      "sha256": "e7e16aed7a639bd2331fcd37a0f8d7ded6ed42c9ff06e97f8b181cd5c2d35885"
     },
     {
       "path": "backend/app/services/evidence_report_subject_call.py",
@@ -1932,6 +2122,11 @@
       "path": "backend/app/services/evidence_retention.py",
       "size": 10184,
       "sha256": "3a95cc8ba9d36cc9c06cfe99ecde126224d75eb2cffbd73bab7cbf397b417de6"
+    },
+    {
+      "path": "backend/app/services/human_evidence_extended_artifacts.py",
+      "size": 27902,
+      "sha256": "5f97e962bea0c9daa8d444739927d89657694978ef2acb8ed5fef328f2c12230"
     },
     {
       "path": "backend/app/services/idempotency.py",
@@ -1970,8 +2165,8 @@
     },
     {
       "path": "backend/app/workers/celery_app.py",
-      "size": 1474,
-      "sha256": "ed93edfb7d2cdab0c5897efbfff9673c07b87b58a075c54e3d0aa93e9efabe01"
+      "size": 1507,
+      "sha256": "5973074b60423a5c51c58db45f4fbb6bd061c523f360042504978b834f326358"
     },
     {
       "path": "backend/app/workers/collector_tasks.py",
@@ -1979,9 +2174,14 @@
       "sha256": "2cd6d8c25eb601a925931b6d8375c5341f20e1e5c2ba8b8d346bf979652f1dfe"
     },
     {
+      "path": "backend/app/workers/conversation_tasks.py",
+      "size": 2492,
+      "sha256": "180eae2350ea1ca6355ecca65c652da97af1c698f24541e3668242a842909c46"
+    },
+    {
       "path": "backend/app/workers/device_provision_task.py",
-      "size": 24861,
-      "sha256": "1344aa7855ccdc25768a8520403594bee2de4c8e86de2363a1c057a038591582"
+      "size": 30882,
+      "sha256": "89bace0f333892eae881ad0adeee392f2f4e16f0e273459b72c1f9c170cf234e"
     },
     {
       "path": "backend/app/workers/diagnosis_tasks.py",
@@ -2005,8 +2205,8 @@
     },
     {
       "path": "backend/app/workers/feishu_evidence_report_task.py",
-      "size": 4383,
-      "sha256": "cc9245b624fc847debb0e7136c39e51916086ee158a12bc0810233fd0004cdd5"
+      "size": 4402,
+      "sha256": "85a21a1e6b26120ea522c6494503344dfb1b4b6c4ca16aa46821e1123402e8bc"
     },
     {
       "path": "backend/app/workers/feishu_long_connection_task.py",
@@ -2015,8 +2215,8 @@
     },
     {
       "path": "backend/app/workers/media_tasks.py",
-      "size": 8276,
-      "sha256": "f3b90a5967fde7dc6925fb7879464be18f5bcb1ff7e7295608c8f8bde8c8177b"
+      "size": 8335,
+      "sha256": "95767e767a667097715e8cf3124255ddd30128b6bec14bc7ffe80e36d5a09a56"
     },
     {
       "path": "backend/app/workers/packet_tasks.py",
@@ -2025,23 +2225,23 @@
     },
     {
       "path": "backend/app/workers/pcm_tasks.py",
-      "size": 4926,
-      "sha256": "04a27c30a6490bb7cf1400e7dc34f86645cd666639cf60ac1fd6b35454520152"
+      "size": 4985,
+      "sha256": "6e243fb5fd15eb59d2db9601e09b799762bdbe3aa1d11d7b5c400862475a2a3a"
     },
     {
       "path": "backend/app/workers/reproduction_event_tasks.py",
-      "size": 52560,
-      "sha256": "c4c0c6cc477fab3c14bfc8400553e3c0dcb3ad5ebb7a2fb43d88d3deaf90b161"
+      "size": 52818,
+      "sha256": "61d605b0f46abab209ea5703672d3d296c2fe5947392e36482272dcfa30aaee4"
     },
     {
       "path": "backend/app/workers/reproduction_tasks.py",
-      "size": 24824,
-      "sha256": "f9318eb5a7541fafed4faea6b18db8a6ac9b375e35dc98390792cc621e84dbf1"
+      "size": 28691,
+      "sha256": "6c364020e6e1358a2f1612e85520d36a134429b447788735244051cbe2e227e0"
     },
     {
       "path": "backend/migrations/env.py",
-      "size": 1416,
-      "sha256": "733e07db77f3dc3fac047e3a44b7d537b7a7ff45c43708540152031e409a0267"
+      "size": 1519,
+      "sha256": "89e87144d4a99c00f98efbc93fae36d0c42e8ab24668e3361d88622a65976589"
     },
     {
       "path": "backend/migrations/script.py.mako",
@@ -2184,6 +2384,11 @@
       "sha256": "11411684fa457759afb09e7773ef8f18e08254e91764f02547b1aa718a00468a"
     },
     {
+      "path": "backend/migrations/versions/0027_conversation_knowledge_v1.py",
+      "size": 10456,
+      "sha256": "85ce4ea19373a0b3f1de68b37583ec90d45928a69ca22b14063a3e76364f65fa"
+    },
+    {
       "path": "backend/migrations/versions/0028_capture_v2_reliable_segments.py",
       "size": 4130,
       "sha256": "900b5d8a2b6b450378b9cf87042eefc50a2d44c7de506865ab0d9359f5833658"
@@ -2205,8 +2410,8 @@
     },
     {
       "path": "backend/requirements.txt",
-      "size": 322,
-      "sha256": "909cb78eb287fbcf91e89498d2f4af713ecf0de3ad9c0770a8219abb57f69837"
+      "size": 341,
+      "sha256": "37fa44f4e5207a27e045dea10d4b42f34127d123a79673a04ce1782e61bfaf95"
     },
     {
       "path": "contracts/openapi_v1.json",
@@ -2230,8 +2435,48 @@
     },
     {
       "path": "deploy/deployment_preflight.py",
-      "size": 10801,
-      "sha256": "98de88acfa7a9267d8f7711f05513187aaf8128c8e432a873b914f397b871c1a"
+      "size": 13665,
+      "sha256": "62e8a18b504fdc7904cb00a45ba7f2b6747369afefb87d46055805e3762ed165"
+    },
+    {
+      "path": "deploy/live_acceptance/Dockerfile",
+      "size": 573,
+      "sha256": "7c1615e1577551c10cef1de378b90365e07f8c0bcc42a040c8f313a6eae328f2"
+    },
+    {
+      "path": "deploy/live_acceptance/acceptance_infrastructure_v2_gate.py",
+      "size": 3333,
+      "sha256": "f56f65b3296cad3d48a1568eb6f5f580d71bdf29f12b46237ceb331cb216eea4"
+    },
+    {
+      "path": "deploy/live_acceptance/preflight.py",
+      "size": 14965,
+      "sha256": "d0b69078ebde0cdbff7f7e3307e752526b9cbfe8df3199a8c7f7fa538015072c"
+    },
+    {
+      "path": "deploy/live_acceptance/preflight_v2.py",
+      "size": 2554,
+      "sha256": "37e1e731ca91aad6409e8828c9b1b78ccae90dfa6e929f221825b69eb3c67226"
+    },
+    {
+      "path": "deploy/live_acceptance/runtime.py",
+      "size": 23401,
+      "sha256": "850bb1a799d9d009025062f8072eb6fb5a670c96d71ab8102fb7d00c134822e6"
+    },
+    {
+      "path": "deploy/live_acceptance/runtime_contract.json",
+      "size": 1284,
+      "sha256": "c769477ebef434f7951beca8c7fd64c0d29d278367709533375fd6dcc881a6f5"
+    },
+    {
+      "path": "deploy/live_acceptance/runtime_contract_v2.json",
+      "size": 2485,
+      "sha256": "f4dd324067b17d2a7928cb2bfcd8a7bbea430d2508cd13b2fd3179664b0b0b6b"
+    },
+    {
+      "path": "deploy/live_acceptance/runtime_v2.py",
+      "size": 10856,
+      "sha256": "7704a6678954439c035bfb06b1c64d628c875fe3fbb35e834f3aac43410d0bad"
     },
     {
       "path": "deploy/local_backup.sh",
@@ -2245,8 +2490,8 @@
     },
     {
       "path": "deploy/production.env.example",
-      "size": 3245,
-      "sha256": "ca57df818f1968263bb4461144d8c9bf4083d34a8b7dee8319d9b1d55c0d127d"
+      "size": 3855,
+      "sha256": "b22b5b6629512f6c9cdc0d9ee473ab465f487e799f4f50a2237b0d287b2bfda8"
     },
     {
       "path": "deploy/production_runtime_verify.py",
@@ -2265,8 +2510,8 @@
     },
     {
       "path": "docker-compose.production.yml",
-      "size": 3293,
-      "sha256": "379eec62e46325ff8baf5dc522f50d4ffdb9b3cb7c929d55b03fd89db80ecb76"
+      "size": 3348,
+      "sha256": "284b22fbfee92500b8671360ccccab6fa26b1472e5cc8f45c609e91ef0522f5d"
     },
     {
       "path": "docker-compose.yml",
@@ -2350,8 +2595,8 @@
     },
     {
       "path": "profiles/actions/voip_basic.yaml",
-      "size": 6860,
-      "sha256": "8be089d96d11909b85c841caa4f242b949cf7296ba537d8454b01a7f6c9db7e6"
+      "size": 7365,
+      "sha256": "088d7944c92e6438ebeb324f3210d2e43a75cba5af138b0f6e457500775b81c1"
     },
     {
       "path": "profiles/analyzers/voip_v1.yaml",
@@ -2370,8 +2615,8 @@
     },
     {
       "path": "profiles/experiments/voip_v1.yaml",
-      "size": 4777,
-      "sha256": "f95611d34a0eeedbe4da30d98db1bf2ad6ca9ffca78f296de9e576d52e42f3ea"
+      "size": 5648,
+      "sha256": "3511d2b0fe4dde3e26c3d856058699b6dcfaa5ccba63636ead870636707f5556"
     },
     {
       "path": "profiles/pcm/ruijie_aim_diag_v1.yaml",
@@ -2474,6 +2719,11 @@
       "sha256": "ad3f0d32828a9fda968864b7b6855d842959ee3184fb1656052a0391e454518a"
     },
     {
+      "path": "tools/admin_close_case.py",
+      "size": 7167,
+      "sha256": "9a5089689385ca5b86fa8ea4e11ca42fbe7d561286da91aaf63fa920ca611c0d"
+    },
+    {
       "path": "tools/ai1_semantic_eval.py",
       "size": 4105,
       "sha256": "c24094b28ab9e1db281e41821a1cf7288c67f7522c85b3b4a5863c22d7a465cc"
@@ -2517,6 +2767,21 @@
       "path": "tools/compose_contract_gate.py",
       "size": 3648,
       "sha256": "47a7f2849142aa8c2b81988f2810ff608b56c92ea834c97a492e1c0b1f75e80e"
+    },
+    {
+      "path": "tools/conversation_dut_live_acceptance.py",
+      "size": 17375,
+      "sha256": "44043ec29e57c1b8b85676c7b046de51fc5d1bb721fade7bdb3654772f5c1227"
+    },
+    {
+      "path": "tools/conversation_feishu_live_acceptance.py",
+      "size": 7984,
+      "sha256": "0f33202c9287898254c51bdad28d75c227b48b26c42b38227b3985e0d7725f73"
+    },
+    {
+      "path": "tools/conversation_p0_p1_gate.sh",
+      "size": 2530,
+      "sha256": "c5ee1b46994dc551a9d8f19bab6a8bd7a9f7d04270a1eb5436fc3da46fa98a6f"
     },
     {
       "path": "tools/deployment_contract_gate.py",
@@ -2824,6 +3089,11 @@
       "sha256": "a97742cc793671de88e836273e728586ed48de76bef4406e144947aee59fbc95"
     },
     {
+      "path": "tools/github_actions_context_gate.py",
+      "size": 2881,
+      "sha256": "1cd8867fda3120a2025e29260ad4c8a9190d8f3f401d5820fb86d311f029b756"
+    },
+    {
       "path": "tools/golden_audio_replay.py",
       "size": 5774,
       "sha256": "3f2ca14d51b493c7f6a4d64b57e696c0e710f7f620ef9443dd29bb7c02f3f1d3"
@@ -2834,9 +3104,34 @@
       "sha256": "6a5e49f961e95ed314345cf2d6d034f6899d0c9f1d38bf4e8cf3fb9c0da2f047"
     },
     {
+      "path": "tools/human_evidence_feishu_live_acceptance.py",
+      "size": 23353,
+      "sha256": "a3e6de7516b2aef5883494cf32bf4a9dfb58c63a25fff4957a106918a9fac909"
+    },
+    {
+      "path": "tools/human_evidence_feishu_live_acceptance_v2.py",
+      "size": 2228,
+      "sha256": "2859d23f0d23380fb9bb1d0a8e2b98f3c73ccb6e06615e33bbd6f85593c696b9"
+    },
+    {
+      "path": "tools/human_evidence_real_golden_gate.py",
+      "size": 9005,
+      "sha256": "09f13e63781decf0415cbf5adae89fa11dcf464893305d1039338c16fb320ef8"
+    },
+    {
+      "path": "tools/import_product_facts.py",
+      "size": 1677,
+      "sha256": "fbd953547454ef72ee015b1a816f77ca28a4ea66e3279fa96aded1351492369a"
+    },
+    {
       "path": "tools/m7_acceptance_gate.py",
-      "size": 20028,
-      "sha256": "0cc40d462b581a2dbdbb2badce5e29663c950f2de038cefac1a40b755a01f56b"
+      "size": 22418,
+      "sha256": "bd31508cd1be24d59bec69685b201b83c6fbbdb2b56bb42eb28f5e07f6d1c0fb"
+    },
+    {
+      "path": "tools/m7_acceptance_strict_audit.py",
+      "size": 19207,
+      "sha256": "3d45d6ce6399f9b4b644514a28806c1b2b2fb98aab0b1d748f7f2dc331344569"
     },
     {
       "path": "tools/media_analyze.py",
@@ -2914,6 +3209,16 @@
       "sha256": "4f57522577e1ab2bdb1b6411937cfeed0536e556bf9e6639940d60586a642785"
     },
     {
+      "path": "tools/promote_real_sip_aba_golden.py",
+      "size": 17821,
+      "sha256": "99ce1a351675e70f1684f7bad18f885525f7af064f887a442f29d47aee129307"
+    },
+    {
+      "path": "tools/publish_markdown_to_feishu.py",
+      "size": 8910,
+      "sha256": "64f30ac09cfd71594ea3740e0448e1a4d263ed9b57d4ed80949634de75403adb"
+    },
+    {
       "path": "tools/release_evidence.py",
       "size": 2485,
       "sha256": "318669e768a229152c5cb804dc7285cc5125ae022515620d6d2ca0bcc6c346e8"
@@ -2942,6 +3247,21 @@
       "path": "tools/reproduction_profile_gate.py",
       "size": 823,
       "sha256": "d33f51ce0dd3fee1fa8c4ab2493e2b403f5c8565d2c589c472aa5fa4641ac179"
+    },
+    {
+      "path": "tools/resolve_real_sip_aba_context.py",
+      "size": 11296,
+      "sha256": "e04afdd289685279fbaca1b55e7c2ccc1fecc87461d5c02f4632a12cef6bb033"
+    },
+    {
+      "path": "tools/resolve_real_sip_aba_credential_env.py",
+      "size": 5987,
+      "sha256": "5b771547ca3162741e427e2335df59363b51f0137c07ab5b34027bc9410b03f2"
+    },
+    {
+      "path": "tools/resolve_real_sip_aba_database_env.py",
+      "size": 3007,
+      "sha256": "1e7b565155872237460f1ee69363182777e1a050621b81ec620f854a2e3b255a"
     },
     {
       "path": "tools/rule_validate.py",
