@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "file_count": 658,
-  "aggregate_sha256": "9f1ec55c83389ebf7f3e9db719346d07eebfe9f1345e8a89a31993896aab1b7d",
+  "aggregate_sha256": "bd642cf106d1d8f6c68559d12f324790ca5b2c3f0d7f305bd4a494a4de0e242d",
   "files": [
     {
       "path": ".env.example",
@@ -2500,8 +2500,8 @@
     },
     {
       "path": "deploy/voip-ai",
-      "size": 12675,
-      "sha256": "a48ab156a6899229108a2711907b8e55b8d7fc0d18265640a51ee7755f54c6a6"
+      "size": 13573,
+      "sha256": "94bf7db26b4ea41c105f0406424cb357c6ec61321cf3e655d98f607c6760041a"
     },
     {
       "path": "docker-compose.e2e.yml",
