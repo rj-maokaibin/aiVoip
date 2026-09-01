@@ -88,9 +88,29 @@ PY
 }
 
 require_docker() {
-  command -v docker >/dev/null 2>&1 || { echo "ERROR: docker CLI is required" >&2; exit 127; }
+  local err rc
+  command -v docker >/dev/null 2>&1 || { echo "ERROR: docker CLI is required (not found in PATH)" >&2; exit 127; }
   docker compose version >/dev/null 2>&1 || { echo "ERROR: docker compose plugin is required" >&2; exit 127; }
-  docker info >/dev/null 2>&1 || { echo "ERROR: Docker daemon is not reachable" >&2; exit 126; }
+  err="$(docker info 2>&1 >/dev/null)" || rc=$?
+  if [[ "${rc:-0}" == "0" ]]; then
+    return 0
+  fi
+  case "$err" in
+    *"permission denied"*)
+      echo "ERROR: Docker permission denied (the docker socket is not accessible to this user)" >&2
+      echo "  hint: add the user to the docker group and refresh the session, e.g." >&2
+      echo "  sudo usermod -aG docker \"\$USER\" && newgrp docker   (or: sg docker -c '<command>')" >&2
+      exit 126 ;;
+    *"Cannot connect to the Docker daemon"*|*"Is the docker daemon running"*|*"no such file or directory"*|*"connection refused"*)
+      echo "ERROR: Docker daemon is not reachable (is dockerd running?)" >&2
+      exit 126 ;;
+    *"current context"*|*"context"*)
+      echo "ERROR: Docker context is invalid: '$(docker context show 2>/dev/null || echo unknown)'" >&2
+      exit 126 ;;
+    *)
+      echo "ERROR: Docker daemon is not reachable: $(printf '%s' "$err" | head -1)" >&2
+      exit 126 ;;
+  esac
 }
 
 host_preflight() {

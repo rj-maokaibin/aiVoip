@@ -95,3 +95,76 @@ def test_runtime_verifier_is_source_bound_and_checks_all_service_layers():
         assert token in text
     assert '"text/html" not in content_type' in text
     assert "'<html'" not in text
+
+
+def _run_preflight_with_fake_docker(tmp_path: Path, info_stderr: str = "", info_rc: int = 0) -> subprocess.CompletedProcess:
+    """Run deploy/voip-ai preflight with a fake docker in PATH.
+
+    The fake docker passes `compose version` (so the compose plugin gate is
+    satisfied) and then reports the given `docker info` failure, letting the
+    test assert that require_docker classifies the real cause instead of
+    collapsing every failure into "Docker daemon is not reachable".
+    """
+    fake = tmp_path / "docker"
+    fake.write_text(
+        "#!/usr/bin/env bash\n"
+        "if [[ \"$1\" == \"compose\" ]]; then exit 0; fi\n"
+        "if [[ -n \"$FAKE_INFO_STDERR\" ]]; then printf '%s\\n' \"$FAKE_INFO_STDERR\" >&2; fi\n"
+        "exit \"$FAKE_INFO_RC\"\n",
+        encoding="utf-8",
+    )
+    fake.chmod(0o755)
+    env = dict(os.environ)
+    env["PATH"] = f"{tmp_path}:{env['PATH']}"
+    env["FAKE_INFO_STDERR"] = info_stderr
+    env["FAKE_INFO_RC"] = str(info_rc)
+    return subprocess.run(
+        ["bash", str(ROOT / "deploy/voip-ai"), "--env", str(tmp_path / "missing.env"), "preflight"],
+        cwd=ROOT, text=True, capture_output=True, env=env,
+    )
+
+
+def test_preflight_classifies_docker_permission_denied(tmp_path):
+    cp = _run_preflight_with_fake_docker(
+        tmp_path,
+        info_stderr=(
+            "permission denied while trying to connect to the docker daemon socket "
+            "at unix:///var/run/docker.sock: dial unix /var/run/docker.sock: "
+            "connect: permission denied"
+        ),
+        info_rc=1,
+    )
+    assert cp.returncode == 126
+    assert "Docker permission denied" in cp.stderr
+    assert "Docker daemon is not reachable" not in cp.stderr
+
+
+def test_preflight_classifies_docker_daemon_down(tmp_path):
+    cp = _run_preflight_with_fake_docker(
+        tmp_path,
+        info_stderr=(
+            "Cannot connect to the Docker daemon at unix:///var/run/docker.sock. "
+            "Is the docker daemon running?"
+        ),
+        info_rc=1,
+    )
+    assert cp.returncode == 126
+    assert "Docker daemon is not reachable" in cp.stderr
+    assert "Docker permission denied" not in cp.stderr
+
+
+def test_preflight_classifies_docker_context_invalid(tmp_path):
+    cp = _run_preflight_with_fake_docker(
+        tmp_path,
+        info_stderr='docker: error during connect: current context is not defined: "bogus"',
+        info_rc=1,
+    )
+    assert cp.returncode == 126
+    assert "Docker context is invalid" in cp.stderr
+
+
+def test_preflight_docker_ok_proceeds_to_env_check(tmp_path):
+    cp = _run_preflight_with_fake_docker(tmp_path, info_stderr="", info_rc=0)
+    assert cp.returncode == 2
+    assert "production env file missing" in cp.stderr
+    assert "Docker daemon is not reachable" not in cp.stderr
