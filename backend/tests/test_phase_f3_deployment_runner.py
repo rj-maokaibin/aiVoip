@@ -168,3 +168,52 @@ def test_preflight_docker_ok_proceeds_to_env_check(tmp_path):
     assert cp.returncode == 2
     assert "production env file missing" in cp.stderr
     assert "Docker daemon is not reachable" not in cp.stderr
+
+
+def _fake_docker_echoing_project(tmp_path: Path) -> Path:
+    """Fake docker that echoes the compose --project-name argument."""
+    fake = tmp_path / "docker"
+    fake.write_text(
+        "#!/usr/bin/env bash\n"
+        "if [[ \"$1\" == \"compose\" ]]; then\n"
+        "  prev=\"\"\n"
+        "  for a in \"$@\"; do\n"
+        "    if [[ \"$prev\" == \"--project-name\" ]]; then echo \"SEEN_PROJECT=$a\"; fi\n"
+        "    prev=\"$a\"\n"
+        "  done\n"
+        "fi\n"
+        "exit 0\n",
+        encoding="utf-8",
+    )
+    fake.chmod(0o755)
+    return fake
+
+
+def _run_status_with_fake_docker(tmp_path: Path, env_text: str, extra_args: tuple[str, ...] = ()) -> subprocess.CompletedProcess:
+    fake = _fake_docker_echoing_project(tmp_path)
+    env_file = tmp_path / "production.env"
+    env_file.write_text(env_text, encoding="utf-8")
+    env = dict(os.environ)
+    env["PATH"] = f"{tmp_path}:{env['PATH']}"
+    return subprocess.run(
+        ["bash", str(ROOT / "deploy/voip-ai"), "--env", str(env_file), *extra_args, "status"],
+        cwd=ROOT, text=True, capture_output=True, env=env,
+    )
+
+
+def test_deploy_cli_resolves_project_name_from_env_file(tmp_path):
+    cp = _run_status_with_fake_docker(tmp_path, "VOIP_PROJECT_NAME=proj-check\n")
+    assert cp.returncode == 0
+    assert "SEEN_PROJECT=proj-check" in cp.stdout
+
+
+def test_deploy_cli_defaults_project_to_production_stack(tmp_path):
+    cp = _run_status_with_fake_docker(tmp_path, "")
+    assert cp.returncode == 0
+    assert "SEEN_PROJECT=aivoip" in cp.stdout
+
+
+def test_deploy_cli_project_flag_overrides_env_file(tmp_path):
+    cp = _run_status_with_fake_docker(tmp_path, "VOIP_PROJECT_NAME=proj-check\n", extra_args=("--project", "cli-proj"))
+    assert cp.returncode == 0
+    assert "SEEN_PROJECT=cli-proj" in cp.stdout

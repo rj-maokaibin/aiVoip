@@ -4,7 +4,13 @@ set -Eeuo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DEFAULT_ENV="${VOIP_ENV_FILE:-/etc/voip-ai/production.env}"
 ENV_FILE="$DEFAULT_ENV"
-PROJECT="${VOIP_PROJECT_NAME:-voip-ai}"
+# Compose project name. Last-resort default is the production stack name
+# (aivoip); the authoritative value is resolved from the production env file
+# (VOIP_PROJECT_NAME) after --env is parsed, unless --project is given on the
+# CLI. This prevents an accidental plain invocation from creating a second,
+# unrelated stack.
+PROJECT="aivoip"
+PROJECT_FROM_CLI=0
 FIELD_PCAP=""
 KEEP_STACK=0
 SKIP_BACKUP=0
@@ -18,7 +24,7 @@ Usage:
 
 Global options:
   --env FILE          Production env file (default: /etc/voip-ai/production.env)
-  --project NAME      Docker Compose project name (default: voip-ai)
+  --project NAME      Docker Compose project name (default: aivoip; env VOIP_PROJECT_NAME wins)
   --field-pcap FILE   Field PCAP used by release verification
   --keep-stack        Keep E2E stack on failure
   --skip-backup       Skip automatic PostgreSQL backup before deploy/upgrade
@@ -44,7 +50,7 @@ USAGE
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --env) ENV_FILE="$2"; shift 2 ;;
-    --project) PROJECT="$2"; shift 2 ;;
+    --project) PROJECT="$2"; PROJECT_FROM_CLI=1; shift 2 ;;
     --field-pcap) FIELD_PCAP="$2"; shift 2 ;;
     --keep-stack) KEEP_STACK=1; shift ;;
     --skip-backup) SKIP_BACKUP=1; shift ;;
@@ -86,6 +92,13 @@ for raw in path.read_text(encoding='utf-8').splitlines():
 raise SystemExit(1)
 PY
 }
+
+# Resolve the compose project name: CLI --project wins, otherwise the value in
+# the production env file (VOIP_PROJECT_NAME) is authoritative, falling back to
+# the production stack name (aivoip).
+if [[ "$PROJECT_FROM_CLI" != "1" ]]; then
+  PROJECT="$(env_value VOIP_PROJECT_NAME 2>/dev/null || printf '%s' "$PROJECT")"
+fi
 
 require_docker() {
   local err rc
