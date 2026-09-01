@@ -5,14 +5,14 @@ on:
     branches:
       - fix/production-feishu-long-connection-governance
     paths:
-      - 'deploy/**'
-      - 'docker-compose.yml'
-      - 'docker-compose.production.yml'
-      - 'tools/source_manifest_gate.py'
-      - 'backend/run_feishu_long_connection.py'
+      - '.github/refresh-feishu-deploy-source-manifest.trigger'
 
 permissions:
   contents: write
+
+concurrency:
+  group: refresh-feishu-deploy-source-manifest
+  cancel-in-progress: true
 
 jobs:
   refresh-source-manifest:
