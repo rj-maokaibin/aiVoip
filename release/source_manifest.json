@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "file_count": 660,
-  "aggregate_sha256": "59d7a6284f4c9f816ac8326984ce981fdd749ab9cad3968bbfce72fa7b6d9b10",
+  "aggregate_sha256": "337c4e5af0294578029f87ce0e7bfb71e31fed31c49b66df86b774a1fa451f92",
   "files": [
     {
       "path": ".env.example",
@@ -1510,8 +1510,8 @@
     },
     {
       "path": "backend/app/integrations/feishu/document_acl.py",
-      "size": 13029,
-      "sha256": "59f47368fdd170e1976002945020dedb9b0f35652d5a2cfcc5a7acdf32544718"
+      "size": 19420,
+      "sha256": "6c52f2adf50d5372220302d249b887a9f899e8626b67e2539962808aff822189"
     },
     {
       "path": "backend/app/integrations/feishu/events.py",

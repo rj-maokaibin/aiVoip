@@ -140,7 +140,7 @@ def test_member_mirror_revokes_user_who_left_group(monkeypatch):
         assert not any(item.member_id == "ou-left" for item in adapter.collaborators)
 
 
-def test_permission_change_bumps_revision_and_updates_collaborator(monkeypatch):
+def test_legacy_permission_setting_cannot_elevate_normal_collaborator(monkeypatch):
     _set(monkeypatch, "CHAT_SCOPE", "view")
     adapter = FakeAdapter(collaborators=[Collaborator("openchat", "oc-case", "view")])
     with _db() as db:
@@ -148,11 +148,16 @@ def test_permission_change_bumps_revision_and_updates_collaborator(monkeypatch):
         service = FeishuDocumentAclService(adapter=adapter)
         first = asyncio.run(service.reconcile(db, case_id=case.id, document_id="doc-4"))
         assert first.applied_revision == 1
+
+        # The V2 business policy is fixed: Case initiator/source-chat members stay
+        # read-only even if a stale deployment still carries the legacy setting.
         monkeypatch.setattr(settings, "feishu_document_acl_permission", "edit")
         second = asyncio.run(service.reconcile(db, case_id=case.id, document_id="doc-4"))
-        assert second.desired_revision == 2
-        assert second.applied_revision == 2
-        assert ("update", "openchat", "oc-case", "edit") in adapter.calls
+        assert second.desired_revision == 1
+        assert second.applied_revision == 1
+        assert second.desired_permission == "view"
+        assert ("update", "openchat", "oc-case", "edit") not in adapter.calls
+        assert next(c for c in adapter.collaborators if c.member_id == "oc-case").perm == "view"
 
 
 def test_failure_is_persisted_as_failed_but_canonical_case_remains(monkeypatch):
