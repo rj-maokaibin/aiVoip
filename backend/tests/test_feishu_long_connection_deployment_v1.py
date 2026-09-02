@@ -35,6 +35,17 @@ def test_feishu_listener_entrypoint_is_source_manifest_bound():
     assert '"backend/run_feishu_long_connection.py"' in gate
 
 
+def test_celery_cannot_register_legacy_feishu_long_connection_consumer():
+    celery_app = _text("backend/app/workers/celery_app.py")
+    assert "feishu_long_connection_task" not in celery_app
+    assert "feishu.long_connection" not in celery_app
+    assert not (ROOT / "backend/app/workers/feishu_long_connection_task.py").exists()
+
+    compose = yaml.safe_load(_text("docker-compose.yml"))
+    service = compose["services"]["feishu-long-connection"]
+    assert service["command"] == "python run_feishu_long_connection.py"
+
+
 def test_long_connection_resolves_app_secret_from_mounted_file(tmp_path, monkeypatch):
     from app.integrations.feishu import long_connection
 
