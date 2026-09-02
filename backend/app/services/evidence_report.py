@@ -52,6 +52,26 @@ def _analysis_context_source_analyzer(results: dict[str,dict|None]) -> str | Non
     return None
 
 
+def _visual_source_results(results: dict[str,dict|None]) -> dict[str,dict|None]:
+    """Use the same packet/PCM fallback contract as the canonical report builder.
+
+    Media intelligence can be the only persisted report analyzer while still
+    carrying authoritative ``packet`` and ``pcm`` projections. Findings already
+    consume those projections through ``build_report_payload``; visual generation
+    must therefore see the exact same sources or RG-011 can incorrectly block a
+    publishable report because its Finding-scoped primary visual was never built.
+    Standalone packet/PCM analyzers, when present, remain authoritative.
+    """
+    resolved=dict(results)
+    media=results.get("media_intelligence") or {}
+    if isinstance(media,dict):
+        if resolved.get("packet_intelligence") is None:
+            resolved["packet_intelligence"]=media.get("packet")
+        if resolved.get("pcm_intelligence") is None:
+            resolved["pcm_intelligence"]=media.get("pcm")
+    return resolved
+
+
 def _analysis_context_evidences(evidence_items: list[dict], runs: dict, results: dict[str,dict|None]) -> tuple[list[dict], list[str], str | None]:
     """Limit Call-context binding to the AnalyzerRun that supplied packet facts.
 
@@ -258,7 +278,7 @@ def generate_evidence_report(db: Session, *, scope_type, scope_id: str, actor: s
     finding_rows=_persist_findings(db,report=report,payload=payload)
     source_artifacts=link_source_artifacts(db,report=report,runs=runs)
     analysis_artifacts=materialize_analyzer_json_artifacts(db,storage,report=report,runs=runs)
-    visuals=generate_visual_artifacts(db,storage,report=report,results=results,runs=runs)
+    visuals=generate_visual_artifacts(db,storage,report=report,results=_visual_source_results(results),runs=runs)
     report_artifacts=source_artifacts+analysis_artifacts+visuals
     payload["artifacts"]=[{
         "artifact_id":a.id,"type":a.type,"filename":a.filename,"content_type":a.content_type,"sha256":a.sha256,
