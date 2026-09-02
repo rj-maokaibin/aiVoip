@@ -29,6 +29,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          cd "$RUNNER_TEMP"
           parent="$(dirname "$CANONICAL_WORKSPACE")"
           mkdir -p "$parent"
           if [ -e "$CANONICAL_WORKSPACE" ]; then
