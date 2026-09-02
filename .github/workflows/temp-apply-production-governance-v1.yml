@@ -1,4 +1,4 @@
-name: TEMP Probe Runner Workspaces
+name: TEMP Apply Production Governance V1
 
 on:
   push:
@@ -6,38 +6,56 @@ on:
       - release/production-governance-v1
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: temp-production-governance-v1
   cancel-in-progress: true
 
 jobs:
-  probe:
+  apply:
+    if: github.event.head_commit.message != 'production-governance-patches'
     runs-on:
       - self-hosted
       - linux
       - x64
       - voip-controlled-linux
-    timeout-minutes: 3
+    timeout-minutes: 20
     steps:
-      - name: Inspect reusable local repositories
+      - name: Checkout branch in isolated path
+        uses: actions/checkout@v4
+        timeout-minutes: 10
+        with:
+          ref: release/production-governance-v1
+          fetch-depth: 2
+          clean: true
+          path: __governance_src
+
+      - name: Apply fail-closed production governance patches
         shell: bash
         run: |
           set -euo pipefail
-          cd "$RUNNER_TEMP"
-          base=/home/github-runner/actions-runner/_work/aiVoip
-          echo "BASE=$base"
-          find "$base" -maxdepth 1 -mindepth 1 -type d -printf '%f\n' | sort || true
-          for d in "$base"/aiVoip*; do
-            [ -d "$d" ] || continue
-            echo "===== $d ====="
-            test -d "$d/.git" && echo GIT=YES || echo GIT=NO
-            if [ -d "$d/.git" ]; then
-              git -C "$d" rev-parse HEAD 2>/dev/null || true
-              git -C "$d" status --short --untracked-files=no 2>/dev/null | head -20 || true
-              test -f "$d/deploy/voip-ai" && echo DEPLOY_FILE=YES || echo DEPLOY_FILE=NO
-              test -f "$d/tools/source_manifest_gate.py" && echo MANIFEST_TOOL=YES || echo MANIFEST_TOOL=NO
-              find "$d" -maxdepth 2 -type f 2>/dev/null | wc -l || true
-            fi
-          done
+          cd "$GITHUB_WORKSPACE/__governance_src"
+          test -z "$(git status --porcelain --untracked-files=no)"
+          python3 .github/temp/apply_production_governance_v1.py
+          bash -n deploy/voip-ai
+          PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile deploy/exact_source_binding_gate.py tools/source_manifest_gate.py
+          PYTHONDONTWRITEBYTECODE=1 python3 -m pytest -q \
+            backend/tests/test_exact_source_binding_gate_v1.py \
+            backend/tests/test_source_manifest_release_governance_v1.py
+          PYTHONDONTWRITEBYTECODE=1 python3 tools/source_manifest_gate.py --update
+          PYTHONDONTWRITEBYTECODE=1 python3 tools/source_manifest_gate.py
+          git diff --check
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add \
+            backend/Dockerfile \
+            frontend/Dockerfile \
+            docker-compose.yml \
+            docker-compose.production.yml \
+            tools/source_manifest_gate.py \
+            deploy/voip-ai \
+            release/source_manifest.json
+          git commit -m 'production-governance-patches'
+          git push origin HEAD:release/production-governance-v1
