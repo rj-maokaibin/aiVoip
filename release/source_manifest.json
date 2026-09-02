@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "file_count": 659,
-  "aggregate_sha256": "1100951d751e12c394e61cc43e929edafc5e73ab4e87366e75a3584eae0a7926",
+  "file_count": 660,
+  "aggregate_sha256": "c397bbcba5e170692bf099d903d30c40ad84c3eb10e1446640348be70805d7f8",
   "files": [
     {
       "path": ".env.example",
@@ -2207,6 +2207,11 @@
       "path": "backend/app/workers/feishu_evidence_report_task.py",
       "size": 4402,
       "sha256": "85a21a1e6b26120ea522c6494503344dfb1b4b6c4ca16aa46821e1123402e8bc"
+    },
+    {
+      "path": "backend/app/workers/feishu_long_connection_task.py",
+      "size": 1373,
+      "sha256": "100a850cf12350865744c8f207a3e1c9bdc21d16c92661d6330435d011c37c7d"
     },
     {
       "path": "backend/app/workers/media_tasks.py",
