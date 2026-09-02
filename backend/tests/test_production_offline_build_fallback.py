@@ -54,8 +54,17 @@ def test_audit_fails_closed_when_one_required_image_is_missing():
 
 def test_production_cli_prefers_pull_and_uses_guarded_fallback():
     text = (Path(__file__).resolve().parents[2] / "deploy/voip-ai").read_text(encoding="utf-8")
-    online = text.index('compose build --pull "${services[@]}"')
+    online_command = (
+        'compose build --pull --build-arg '
+        '"BUILD_REVISION=$(env_value BUILD_REVISION)" "${services[@]}"'
+    )
+    offline_command = (
+        'compose build --pull=false --build-arg '
+        '"BUILD_REVISION=$(env_value BUILD_REVISION)" "${services[@]}"'
+    )
+    online = text.index(online_command)
     guard = text.index("offline_build_fallback.py")
-    offline = text.index('compose build --pull=false "${services[@]}"')
+    offline = text.index(offline_command)
     assert online < guard < offline
     assert "VOIP_OFFLINE_BUILD_AUDIT" in text
+    assert text.count('BUILD_REVISION=$(env_value BUILD_REVISION)') >= 2
