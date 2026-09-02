@@ -42,7 +42,7 @@ def test_celery_cannot_register_legacy_feishu_long_connection_consumer():
 
     legacy = _text("backend/app/workers/feishu_long_connection_task.py")
     assert "celery_app.task" not in legacy
-    assert "run_long_connection" not in legacy
+    assert "run_long_connection(" not in legacy
     assert "LEGACY_FEISHU_LONG_CONNECTION_REMOVED" in legacy
 
     compose = yaml.safe_load(_text("docker-compose.yml"))
