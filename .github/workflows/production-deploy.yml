@@ -1,0 +1,151 @@
+name: Production Deploy
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - 'backend/**'
+      - 'frontend/**'
+      - 'profiles/**'
+      - 'rules/**'
+      - 'knowledge/**'
+      - 'tools/**'
+      - 'contracts/**'
+      - 'deploy/**'
+      - 'Makefile'
+      - '.env.example'
+      - 'docker-compose.yml'
+      - 'docker-compose.production.yml'
+      - 'docker-compose.e2e.yml'
+      - 'release/release_policy.yaml'
+      - 'release/source_manifest.json'
+      - '.github/workflows/production-deploy.yml'
+      - '.github/workflows/source-manifest-gate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: voip-production-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy-and-verify:
+    if: github.ref == 'refs/heads/master'
+    runs-on:
+      - self-hosted
+      - linux
+      - x64
+      - voip-controlled-linux
+    timeout-minutes: 90
+    steps:
+      - name: Checkout exact master
+        uses: actions/checkout@v4
+        timeout-minutes: 10
+        with:
+          ref: master
+          fetch-depth: 2
+          clean: true
+
+      - name: Resolve immutable deployment target
+        shell: bash
+        run: |
+          set -euo pipefail
+          target="$(git rev-parse HEAD)"
+          origin_master="$(git rev-parse origin/master)"
+          test "$target" = "$origin_master"
+          if [ "${{ github.event_name }}" = "push" ]; then
+            test "$target" = "${{ github.sha }}"
+          fi
+          printf 'TARGET_SHA=%s\n' "$target" >> "$GITHUB_ENV"
+          printf 'TARGET_SHA=%s\n' "$target"
+          printf 'ORIGIN_MASTER=%s\n' "$origin_master"
+          echo "PRODUCTION_TARGET_RESOLUTION=PASS"
+
+      - name: Source manifest release gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/source_manifest_gate.py
+          echo "SOURCE_MANIFEST_RELEASE_GATE=PASS"
+
+      - name: Formal production deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo -n /usr/local/sbin/voip-ai-production-deploy "$TARGET_SHA"
+          echo "FORMAL_PRODUCTION_DEPLOY=PASS"
+
+      - name: Verify exact source binding evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - "$TARGET_SHA" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          target = sys.argv[1]
+          exact = json.loads(Path('validation/exact_source_binding_result.json').read_text(encoding='utf-8'))
+          runtime = json.loads(Path('validation/production_runtime_result.json').read_text(encoding='utf-8'))
+          feishu = json.loads(Path('validation/feishu_long_connection_runtime.json').read_text(encoding='utf-8'))
+
+          assert exact.get('passed') is True, exact
+          assert exact.get('expected_revision') == target, exact
+          assert runtime.get('passed') is True, runtime
+          assert runtime.get('build_revision') == target, runtime
+          assert feishu.get('passed') is True, feishu
+          assert feishu.get('build_revision') == target, feishu
+          print('EXACT_SOURCE_BINDING_EVIDENCE=PASS')
+          PY
+
+      - name: Verify live containers and image revision labels
+        shell: bash
+        run: |
+          set -euo pipefail
+          services=(
+            backend collector-worker packet-worker pcm-worker media-worker diagnosis-worker
+            feishu-long-connection reproduction-worker reproduction-control-high-worker
+            reproduction-watch-worker beat frontend
+          )
+          for svc in "${services[@]}"; do
+            mapfile -t ids < <(docker ps -q \
+              --filter 'label=com.docker.compose.project=aivoip' \
+              --filter "label=com.docker.compose.service=$svc")
+            test "${#ids[@]}" -eq 1
+            cid="${ids[0]}"
+            container_rev="$(docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$cid" \
+              | awk -F= '$1=="BUILD_REVISION" {print substr($0,index($0,"=")+1); exit}')"
+            image_id="$(docker inspect -f '{{.Image}}' "$cid")"
+            image_rev="$(docker image inspect -f '{{ index .Config.Labels "org.opencontainers.image.revision" }}' "$image_id")"
+            echo "$svc container_revision=$container_rev image_revision=$image_rev"
+            test "$container_rev" = "$TARGET_SHA"
+            test "$image_rev" = "$TARGET_SHA"
+          done
+          ready="$(curl -fsS http://127.0.0.1:18001/health/ready)"
+          health_rev="$(printf '%s' "$ready" | python3 -c 'import json,sys; print(json.load(sys.stdin)["build_revision"])')"
+          test "$health_rev" = "$TARGET_SHA"
+          echo "LIVE_EXACT_SOURCE_BINDING=PASS"
+
+      - name: Deployment summary
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "PRODUCTION_DEPLOYMENT=PASS"
+          echo "PRODUCTION_REVISION=$TARGET_SHA"
+          echo "PRODUCTION_RUNTIME_VERIFY=PASS"
+          echo "EXACT_SOURCE_BINDING=PASS"
+
+      - name: Upload production release evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-release-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            validation/phase_f3_deployment_preflight.json
+            validation/production_runtime_result.json
+            validation/feishu_long_connection_runtime.json
+            validation/exact_source_binding_result.json
+          if-no-files-found: warn
