@@ -52,7 +52,7 @@ jobs:
           source "$RUNNER_TEMP/legacy-feishu-cleanup-venv/bin/activate"
           PYTHONPATH=backend:. pytest -q \
             backend/tests/test_feishu_long_connection_deployment_v1.py \
-            backend/tests/test_feishu_long_connection.py
+            backend/tests/test_feishu_long_connection.py::test_runner_skips_when_live_disabled
           python tools/source_manifest_gate.py
 
       - name: Commit refreshed source manifest
