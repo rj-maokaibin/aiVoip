@@ -1,3 +1,4 @@
+# Temporary manifest refresh helper. Remove before merge.
 name: Refresh legacy Feishu consumer manifest temp
 
 on:
