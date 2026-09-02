@@ -126,9 +126,37 @@ require_docker() {
   esac
 }
 
+source_binding_preflight() {
+  local expected head dirty
+  expected="$(env_value BUILD_REVISION 2>/dev/null || true)"
+  head="$(git rev-parse HEAD 2>/dev/null || true)"
+  dirty="$(git status --porcelain --untracked-files=no 2>/dev/null || true)"
+  if [[ ! "$expected" =~ ^[0-9a-f]{40}$ ]]; then
+    echo "ERROR: BUILD_REVISION must be an immutable 40-char git SHA; observed=${expected:-missing}" >&2
+    return 1
+  fi
+  if [[ "$head" != "$expected" ]]; then
+    echo "ERROR: exact source binding failed before deploy: git_head=$head BUILD_REVISION=$expected" >&2
+    return 1
+  fi
+  if [[ -n "$dirty" ]]; then
+    echo "ERROR: tracked production source is dirty; refusing deployment" >&2
+    printf '%s\n' "$dirty" >&2
+    return 1
+  fi
+  mkdir -p validation
+  python3 tools/source_manifest_gate.py
+  python3 deploy/exact_source_binding_gate.py \
+    --env-file "$ENV_FILE" \
+    --phase source \
+    --out validation/exact_source_binding_source_result.json
+  echo "EXACT_SOURCE_PREDEPLOY_GATE=PASS revision=$expected"
+}
+
 host_preflight() {
   require_docker
   [[ -f "$ENV_FILE" ]] || { echo "ERROR: production env file missing: $ENV_FILE" >&2; exit 2; }
+  source_binding_preflight
   mkdir -p validation
   python3 deploy/deployment_preflight.py --env-file "$ENV_FILE" --mode deploy --out validation/phase_f3_deployment_preflight.json
   compose config >/dev/null
@@ -191,7 +219,7 @@ build_images() {
   # Online pull is always preferred. Offline fallback is allowed only for a
   # proven registry transport failure with a complete local image inventory.
   set +e
-  compose build --pull "${services[@]}" 2>&1 | tee "$build_log"
+  compose build --pull --build-arg "BUILD_REVISION=$(env_value BUILD_REVISION)" "${services[@]}" 2>&1 | tee "$build_log"
   rc="${PIPESTATUS[0]}"
   set -e
   if [[ "$rc" == "0" ]]; then
@@ -209,7 +237,7 @@ build_images() {
   fi
 
   echo "OFFLINE_IMAGE_FALLBACK=AUTHORIZED audit=$audit_file"
-  compose build --pull=false "${services[@]}"
+  compose build --pull=false --build-arg "BUILD_REVISION=$(env_value BUILD_REVISION)" "${services[@]}"
   echo "PRODUCTION_IMAGE_BUILD=PASS mode=OFFLINE_LOCAL_INVENTORY audit=$audit_file"
 }
 
@@ -354,7 +382,18 @@ verify_stack() {
   verify_feishu_consumer_host
   compose run --rm -e PRODUCTION_RUNTIME_EVIDENCE=/workspace/validation/production_runtime_result.json release-runner \
     python deploy/production_runtime_verify.py
+  local backend_port
+  backend_port="$(env_value VOIP_BACKEND_PORT 2>/dev/null || echo 8000)"
+  python3 deploy/exact_source_binding_gate.py \
+    --env-file "$ENV_FILE" \
+    --phase runtime \
+    --project "$PROJECT" \
+    --backend-url "http://127.0.0.1:${backend_port}/health/ready" \
+    --runtime-evidence validation/production_runtime_result.json \
+    --feishu-evidence validation/feishu_long_connection_runtime.json \
+    --out validation/exact_source_binding_result.json
   echo "Runtime evidence: validation/production_runtime_result.json"
+  echo "Exact source binding evidence: validation/exact_source_binding_result.json"
   if [[ -f validation/feishu_long_connection_runtime.json ]]; then
     echo "Feishu runtime evidence: validation/feishu_long_connection_runtime.json"
   fi

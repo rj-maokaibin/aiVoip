@@ -111,6 +111,8 @@ services:
 
   frontend:
     restart: unless-stopped
+    environment:
+      BUILD_REVISION: ${BUILD_REVISION:?BUILD_REVISION is required}
 
 secrets:
   auth_gateway_hmac:

@@ -1,0 +1,54 @@
+name: Source Manifest Gate
+
+on:
+  pull_request:
+    paths:
+      - 'backend/**'
+      - 'frontend/**'
+      - 'profiles/**'
+      - 'rules/**'
+      - 'knowledge/**'
+      - 'tools/**'
+      - 'contracts/**'
+      - 'deploy/**'
+      - 'Makefile'
+      - '.env.example'
+      - 'docker-compose.yml'
+      - 'docker-compose.production.yml'
+      - 'docker-compose.e2e.yml'
+      - 'release/release_policy.yaml'
+      - 'release/source_manifest.json'
+      - '.github/workflows/source-manifest-gate.yml'
+      - '.github/workflows/production-deploy.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: source-manifest-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  source-manifest:
+    runs-on:
+      - self-hosted
+      - linux
+      - x64
+      - voip-controlled-linux
+    timeout-minutes: 10
+    steps:
+      - name: Checkout exact PR head
+        uses: actions/checkout@v4
+        timeout-minutes: 5
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 1
+
+      - name: Verify source manifest is exact
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "SOURCE_MANIFEST_HEAD=$(git rev-parse HEAD)"
+          python3 tools/source_manifest_gate.py
+          echo "SOURCE_MANIFEST_PR_GATE=PASS"
