@@ -1,4 +1,4 @@
-name: TEMP Apply Production Governance V1
+name: TEMP Probe Runner Workspaces
 
 on:
   push:
@@ -6,80 +6,38 @@ on:
       - release/production-governance-v1
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: temp-production-governance-v1
   cancel-in-progress: true
 
 jobs:
-  apply:
-    if: github.event.head_commit.message != 'production-governance-patches'
+  probe:
     runs-on:
       - self-hosted
       - linux
       - x64
       - voip-controlled-linux
-    timeout-minutes: 15
-    env:
-      GH_TOKEN: ${{ github.token }}
-      CANONICAL_WORKSPACE: /home/github-runner/actions-runner/_work/aiVoip/aiVoip
+    timeout-minutes: 3
     steps:
-      - name: Rebuild clean runner workspace
+      - name: Inspect reusable local repositories
         shell: bash
         run: |
           set -euo pipefail
           cd "$RUNNER_TEMP"
-          parent="$(dirname "$CANONICAL_WORKSPACE")"
-          mkdir -p "$parent"
-          if [ -e "$CANONICAL_WORKSPACE" ]; then
-            stale="${CANONICAL_WORKSPACE}.stale-${GITHUB_RUN_ID}"
-            if ! rm -rf "$CANONICAL_WORKSPACE" 2>/dev/null; then
-              mv "$CANONICAL_WORKSPACE" "$stale"
-              echo "STALE_WORKSPACE=$stale"
+          base=/home/github-runner/actions-runner/_work/aiVoip
+          echo "BASE=$base"
+          find "$base" -maxdepth 1 -mindepth 1 -type d -printf '%f\n' | sort || true
+          for d in "$base"/aiVoip*; do
+            [ -d "$d" ] || continue
+            echo "===== $d ====="
+            test -d "$d/.git" && echo GIT=YES || echo GIT=NO
+            if [ -d "$d/.git" ]; then
+              git -C "$d" rev-parse HEAD 2>/dev/null || true
+              git -C "$d" status --short --untracked-files=no 2>/dev/null | head -20 || true
+              test -f "$d/deploy/voip-ai" && echo DEPLOY_FILE=YES || echo DEPLOY_FILE=NO
+              test -f "$d/tools/source_manifest_gate.py" && echo MANIFEST_TOOL=YES || echo MANIFEST_TOOL=NO
+              find "$d" -maxdepth 2 -type f 2>/dev/null | wc -l || true
             fi
-          fi
-          ok=0
-          for attempt in 1 2 3; do
-            rm -rf "$CANONICAL_WORKSPACE" 2>/dev/null || true
-            echo "CLONE_ATTEMPT=$attempt"
-            if timeout 90 git clone --depth 2 --branch release/production-governance-v1 \
-              "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
-              "$CANONICAL_WORKSPACE"; then
-              ok=1
-              break
-            fi
-            sleep 5
           done
-          test "$ok" -eq 1
-          cd "$CANONICAL_WORKSPACE"
-          test -z "$(git status --porcelain --untracked-files=no)"
-          echo "WORKSPACE_REBUILD=PASS head=$(git rev-parse HEAD)"
-
-      - name: Apply fail-closed production governance patches
-        shell: bash
-        run: |
-          set -euo pipefail
-          cd "$CANONICAL_WORKSPACE"
-          python3 .github/temp/apply_production_governance_v1.py
-          bash -n deploy/voip-ai
-          PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile deploy/exact_source_binding_gate.py tools/source_manifest_gate.py
-          PYTHONDONTWRITEBYTECODE=1 python3 -m pytest -q \
-            backend/tests/test_exact_source_binding_gate_v1.py \
-            backend/tests/test_source_manifest_release_governance_v1.py
-          PYTHONDONTWRITEBYTECODE=1 python3 tools/source_manifest_gate.py --update
-          PYTHONDONTWRITEBYTECODE=1 python3 tools/source_manifest_gate.py
-          git diff --check
-
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add \
-            backend/Dockerfile \
-            frontend/Dockerfile \
-            docker-compose.yml \
-            docker-compose.production.yml \
-            tools/source_manifest_gate.py \
-            deploy/voip-ai \
-            release/source_manifest.json
-          git commit -m 'production-governance-patches'
-          git push origin HEAD:release/production-governance-v1
