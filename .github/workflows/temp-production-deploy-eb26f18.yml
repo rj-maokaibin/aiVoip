@@ -1,4 +1,4 @@
-name: TEMP Production Permission Probe
+name: TEMP Production ACL Tool Probe
 
 on:
   push:
@@ -11,40 +11,18 @@ permissions:
 jobs:
   probe:
     runs-on: [self-hosted, linux]
-    timeout-minutes: 3
-    env:
-      TARGET_SHA: eb26f18f1774764d24690c34e4ec3a6b5e7101f8
-      PROD_ENV: /etc/voip-ai/production.env
-      CANONICAL_REPO: /home/dev/workspace/aiVoip-control
+    timeout-minutes: 2
     steps:
-      - name: Read-only host permission matrix
+      - name: Probe ACL tooling
         shell: bash
         run: |
           set +e
-          echo "TARGET_SHA=$TARGET_SHA"
-          id
-          echo "GROUPS=$(id -nG)"
-
-          test -d "$CANONICAL_REPO/.git"; echo "CANONICAL_REPO_VISIBLE_RC=$?"
-          git -C "$CANONICAL_REPO" rev-parse HEAD 2>/dev/null; echo "CANONICAL_REPO_GIT_RC=$?"
-          git -C "$CANONICAL_REPO" status --short 2>/dev/null; echo "CANONICAL_REPO_STATUS_RC=$?"
-          test -x "$CANONICAL_REPO/deploy/voip-ai"; echo "CANONICAL_DEPLOY_VISIBLE_RC=$?"
-
-          test -r "$PROD_ENV"; echo "DIRECT_PROD_ENV_READ_RC=$?"
-          test -w "$PROD_ENV"; echo "DIRECT_PROD_ENV_WRITE_RC=$?"
-          docker ps >/dev/null 2>&1; echo "DIRECT_DOCKER_PS_RC=$?"
-          docker compose version >/dev/null 2>&1; echo "DIRECT_DOCKER_COMPOSE_RC=$?"
-          test -w /data/voip; echo "DIRECT_DATA_ROOT_WRITE_RC=$?"
-          test -w /data/voip/release; echo "DIRECT_RELEASE_ROOT_WRITE_RC=$?"
-
-          echo "===== SUDO LIST ====="
-          sudo -n -l 2>&1
-          echo "SUDO_LIST_RC=$?"
-          sudo -n docker ps >/dev/null 2>&1; echo "SUDO_DOCKER_PS_RC=$?"
-          sudo -n /usr/bin/docker ps >/dev/null 2>&1; echo "SUDO_ABS_DOCKER_PS_RC=$?"
-          sudo -n test -r "$PROD_ENV" >/dev/null 2>&1; echo "SUDO_TEST_ENV_RC=$?"
-          sudo -n /usr/bin/test -r "$PROD_ENV" >/dev/null 2>&1; echo "SUDO_ABS_TEST_ENV_RC=$?"
-          sudo -n "$CANONICAL_REPO/deploy/voip-ai" help >/dev/null 2>&1; echo "SUDO_CANONICAL_DEPLOY_HELP_RC=$?"
-
-          echo "PERMISSION_PROBE_DONE=1"
+          echo "RUNNER=$(id -un)"
+          command -v setfacl; echo "SETFACL_RC=$?"
+          command -v getfacl; echo "GETFACL_RC=$?"
+          test -r /etc/voip-ai/production.env; echo "PROD_ENV_READ_RC=$?"
+          test -w /etc/voip-ai/production.env; echo "PROD_ENV_WRITE_RC=$?"
+          test -w /data/voip/release; echo "RELEASE_WRITE_RC=$?"
+          test -w /data/voip/backups; echo "BACKUP_WRITE_RC=$?"
+          docker ps >/dev/null 2>&1; echo "DOCKER_RC=$?"
           exit 0
