@@ -8,6 +8,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: temp-production-governance-v1
+  cancel-in-progress: true
+
 jobs:
   apply:
     if: github.event.head_commit.message != 'production-governance-patches'
@@ -29,12 +33,24 @@ jobs:
           mkdir -p "$parent"
           if [ -e "$CANONICAL_WORKSPACE" ]; then
             stale="${CANONICAL_WORKSPACE}.stale-${GITHUB_RUN_ID}"
-            mv "$CANONICAL_WORKSPACE" "$stale"
-            echo "STALE_WORKSPACE=$stale"
+            if ! rm -rf "$CANONICAL_WORKSPACE" 2>/dev/null; then
+              mv "$CANONICAL_WORKSPACE" "$stale"
+              echo "STALE_WORKSPACE=$stale"
+            fi
           fi
-          git clone --depth 2 --branch release/production-governance-v1 \
-            "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
-            "$CANONICAL_WORKSPACE"
+          ok=0
+          for attempt in 1 2 3; do
+            rm -rf "$CANONICAL_WORKSPACE" 2>/dev/null || true
+            echo "CLONE_ATTEMPT=$attempt"
+            if timeout 90 git clone --depth 2 --branch release/production-governance-v1 \
+              "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
+              "$CANONICAL_WORKSPACE"; then
+              ok=1
+              break
+            fi
+            sleep 5
+          done
+          test "$ok" -eq 1
           cd "$CANONICAL_WORKSPACE"
           test -z "$(git status --porcelain --untracked-files=no)"
           echo "WORKSPACE_REBUILD=PASS head=$(git rev-parse HEAD)"
