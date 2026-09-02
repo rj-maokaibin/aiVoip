@@ -17,18 +17,33 @@ jobs:
       - x64
       - voip-controlled-linux
     timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ github.token }}
+      CANONICAL_WORKSPACE: /home/github-runner/actions-runner/_work/aiVoip/aiVoip
     steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: release/production-governance-v1
-          fetch-depth: 2
-          clean: false
+      - name: Rebuild clean runner workspace
+        shell: bash
+        run: |
+          set -euo pipefail
+          parent="$(dirname "$CANONICAL_WORKSPACE")"
+          mkdir -p "$parent"
+          if [ -e "$CANONICAL_WORKSPACE" ]; then
+            stale="${CANONICAL_WORKSPACE}.stale-${GITHUB_RUN_ID}"
+            mv "$CANONICAL_WORKSPACE" "$stale"
+            echo "STALE_WORKSPACE=$stale"
+          fi
+          git clone --depth 2 --branch release/production-governance-v1 \
+            "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
+            "$CANONICAL_WORKSPACE"
+          cd "$CANONICAL_WORKSPACE"
+          test -z "$(git status --porcelain --untracked-files=no)"
+          echo "WORKSPACE_REBUILD=PASS head=$(git rev-parse HEAD)"
 
       - name: Apply fail-closed production governance patches
         shell: bash
         run: |
           set -euo pipefail
-          test -z "$(git status --porcelain --untracked-files=no)"
+          cd "$CANONICAL_WORKSPACE"
           python3 .github/temp/apply_production_governance_v1.py
           bash -n deploy/voip-ai
           PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile deploy/exact_source_binding_gate.py tools/source_manifest_gate.py
