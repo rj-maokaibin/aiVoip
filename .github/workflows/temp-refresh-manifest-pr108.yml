@@ -1,0 +1,50 @@
+name: TEMP Refresh Source Manifest PR108
+
+on:
+  push:
+    branches:
+      - release/production-governance-v1
+
+permissions:
+  contents: write
+
+concurrency:
+  group: temp-refresh-manifest-pr108
+  cancel-in-progress: true
+
+jobs:
+  refresh:
+    if: github.event.head_commit.message != 'chore(release): refresh manifest after offline fallback test fix'
+    runs-on:
+      - self-hosted
+      - linux
+      - x64
+      - voip-controlled-linux
+    timeout-minutes: 15
+    steps:
+      - name: Checkout exact branch in isolated path
+        uses: actions/checkout@v4
+        timeout-minutes: 10
+        with:
+          ref: release/production-governance-v1
+          fetch-depth: 2
+          clean: true
+          path: __manifest_pr108
+
+      - name: Refresh and verify manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE/__manifest_pr108"
+          PYTHONDONTWRITEBYTECODE=1 python3 tools/source_manifest_gate.py --update
+          PYTHONDONTWRITEBYTECODE=1 python3 tools/source_manifest_gate.py
+          git diff --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add release/source_manifest.json
+          if git diff --cached --quiet; then
+            echo 'SOURCE_MANIFEST_ALREADY_CURRENT=PASS'
+            exit 0
+          fi
+          git commit -m 'chore(release): refresh manifest after offline fallback test fix'
+          git push origin HEAD:release/production-governance-v1
