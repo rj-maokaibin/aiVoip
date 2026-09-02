@@ -1,0 +1,34 @@
+name: TEMP Refresh Source Manifest PR107
+
+on:
+  push:
+    branches:
+      - fix/feishu-document-acl-policy
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: [self-hosted, linux]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+          fetch-depth: 0
+      - name: Refresh manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/source_manifest_gate.py --update
+          python3 tools/source_manifest_gate.py
+          if git diff --quiet -- release/source_manifest.json; then
+            echo 'SOURCE_MANIFEST_ALREADY_CURRENT=1'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add release/source_manifest.json
+          git commit -m 'chore(release): refresh source manifest for Feishu ACL follow-up'
+          git push origin HEAD:${{ github.ref_name }}
