@@ -52,3 +52,9 @@ jobs:
           echo "SOURCE_MANIFEST_HEAD=$(git rev-parse HEAD)"
           python3 tools/source_manifest_gate.py
           echo "SOURCE_MANIFEST_PR_GATE=PASS"
+
+      - name: Verify production Compose configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash tools/production_compose_config_gate.sh
