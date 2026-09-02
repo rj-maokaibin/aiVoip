@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "file_count": 660,
-  "aggregate_sha256": "f3359904b6a47504468df7455ce8588d70e34eaf62b9f0e8c217227d289084f8",
+  "file_count": 659,
+  "aggregate_sha256": "1100951d751e12c394e61cc43e929edafc5e73ab4e87366e75a3584eae0a7926",
   "files": [
     {
       "path": ".env.example",
@@ -2165,8 +2165,8 @@
     },
     {
       "path": "backend/app/workers/celery_app.py",
-      "size": 1507,
-      "sha256": "5973074b60423a5c51c58db45f4fbb6bd061c523f360042504978b834f326358"
+      "size": 1648,
+      "sha256": "b5e91e77bfb9f8996a33403386b61731e4d0482afd7db4c1804beb30e2ea2109"
     },
     {
       "path": "backend/app/workers/collector_tasks.py",
@@ -2207,11 +2207,6 @@
       "path": "backend/app/workers/feishu_evidence_report_task.py",
       "size": 4402,
       "sha256": "85a21a1e6b26120ea522c6494503344dfb1b4b6c4ca16aa46821e1123402e8bc"
-    },
-    {
-      "path": "backend/app/workers/feishu_long_connection_task.py",
-      "size": 1831,
-      "sha256": "31c22bbae14cfbbbcfcf201c7ee572e8820215e7eaa0196bb228709a4f5b49fd"
     },
     {
       "path": "backend/app/workers/media_tasks.py",
