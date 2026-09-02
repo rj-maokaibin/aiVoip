@@ -38,6 +38,8 @@ services:
   backend:
     build:
       context: ./backend
+      args:
+        BUILD_REVISION: ${BUILD_REVISION:?BUILD_REVISION is required}
     env_file: ${VOIP_APP_ENV_FILE:-.env}
     command: >-
       sh -c "ln -sfn /app/profiles /profiles &&
@@ -64,6 +66,8 @@ services:
   collector-worker:
     build:
       context: ./backend
+      args:
+        BUILD_REVISION: ${BUILD_REVISION:?BUILD_REVISION is required}
     env_file: ${VOIP_APP_ENV_FILE:-.env}
     command: celery -A app.workers.celery_app:celery_app worker -Q collector --loglevel=INFO --concurrency=4
     volumes:
@@ -82,6 +86,8 @@ services:
   packet-worker:
     build:
       context: ./backend
+      args:
+        BUILD_REVISION: ${BUILD_REVISION:?BUILD_REVISION is required}
     env_file: ${VOIP_APP_ENV_FILE:-.env}
     command: celery -A app.workers.celery_app:celery_app worker -Q packet --loglevel=INFO --concurrency=2
     volumes:
@@ -101,6 +107,8 @@ services:
   pcm-worker:
     build:
       context: ./backend
+      args:
+        BUILD_REVISION: ${BUILD_REVISION:?BUILD_REVISION is required}
     env_file: ${VOIP_APP_ENV_FILE:-.env}
     command: celery -A app.workers.celery_app:celery_app worker -Q pcm --loglevel=INFO --concurrency=2
     volumes:
@@ -120,6 +128,8 @@ services:
   media-worker:
     build:
       context: ./backend
+      args:
+        BUILD_REVISION: ${BUILD_REVISION:?BUILD_REVISION is required}
     env_file: ${VOIP_APP_ENV_FILE:-.env}
     command: celery -A app.workers.celery_app:celery_app worker -Q media --loglevel=INFO --concurrency=2
     volumes:
@@ -139,6 +149,8 @@ services:
   diagnosis-worker:
     build:
       context: ./backend
+      args:
+        BUILD_REVISION: ${BUILD_REVISION:?BUILD_REVISION is required}
     env_file: ${VOIP_APP_ENV_FILE:-.env}
     command: >-
       sh -c "ln -sfn /app/profiles /profiles &&
@@ -161,6 +173,8 @@ services:
   feishu-long-connection:
     build:
       context: ./backend
+      args:
+        BUILD_REVISION: ${BUILD_REVISION:?BUILD_REVISION is required}
     env_file: ${VOIP_APP_ENV_FILE:-.env}
     command: python run_feishu_long_connection.py
     volumes:
@@ -178,6 +192,8 @@ services:
   reproduction-worker:
     build:
       context: ./backend
+      args:
+        BUILD_REVISION: ${BUILD_REVISION:?BUILD_REVISION is required}
     env_file: ${VOIP_APP_ENV_FILE:-.env}
     command: >-
       sh -c "ln -sfn /app/profiles /profiles &&
@@ -201,6 +217,8 @@ services:
   reproduction-control-high-worker:
     build:
       context: ./backend
+      args:
+        BUILD_REVISION: ${BUILD_REVISION:?BUILD_REVISION is required}
     env_file: ${VOIP_APP_ENV_FILE:-.env}
     command: >-
       sh -c "ln -sfn /app/profiles /profiles &&
@@ -224,6 +242,8 @@ services:
   reproduction-watch-worker:
     build:
       context: ./backend
+      args:
+        BUILD_REVISION: ${BUILD_REVISION:?BUILD_REVISION is required}
     env_file: ${VOIP_APP_ENV_FILE:-.env}
     command: >-
       sh -c "ln -sfn /app/profiles /profiles &&
@@ -247,6 +267,8 @@ services:
   beat:
     build:
       context: ./backend
+      args:
+        BUILD_REVISION: ${BUILD_REVISION:?BUILD_REVISION is required}
     env_file: ${VOIP_APP_ENV_FILE:-.env}
     command: celery -A app.workers.celery_app:celery_app beat --loglevel=INFO
     volumes:
@@ -268,6 +290,8 @@ services:
   frontend:
     build:
       context: ./frontend
+      args:
+        BUILD_REVISION: ${BUILD_REVISION:?BUILD_REVISION is required}
       args:
         VITE_API_BASE_URL: ${VITE_API_BASE_URL:-/api/v1}
     ports:

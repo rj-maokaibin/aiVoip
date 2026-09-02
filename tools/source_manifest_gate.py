@@ -18,6 +18,7 @@ INCLUDE_FILES = [
     "frontend/package.json", "frontend/package-lock.json", "frontend/tsconfig.json", "frontend/vite.config.ts",
     "frontend/Dockerfile", "frontend/nginx.conf", "backend/Dockerfile",
     "docker-compose.yml", "docker-compose.production.yml", "docker-compose.e2e.yml", "release/release_policy.yaml",
+    ".github/workflows/production-deploy.yml", ".github/workflows/source-manifest-gate.yml",
 ]
 EXCLUDE_NAMES = {"__pycache__", ".pytest_cache", ".DS_Store"}
 EXCLUDE_FILES = {"release/source_manifest.json"}

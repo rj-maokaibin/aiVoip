@@ -1,12 +1,22 @@
 {
   "schema_version": 1,
-  "file_count": 660,
-  "aggregate_sha256": "337c4e5af0294578029f87ce0e7bfb71e31fed31c49b66df86b774a1fa451f92",
+  "file_count": 663,
+  "aggregate_sha256": "d67c18d6e06d6f079227af23eb70d28342578d6a6b3f98867d56d86501f6a997",
   "files": [
     {
       "path": ".env.example",
       "size": 1520,
       "sha256": "a83862a9db77aeb35ecb8d8e8e3935041e669965808c356f5dfdf8ac1148ad36"
+    },
+    {
+      "path": ".github/workflows/production-deploy.yml",
+      "size": 5425,
+      "sha256": "cff8189e0257e4310d46482b46db973ff33f43b52b3891f0e83bdcdaf5c54ef7"
+    },
+    {
+      "path": ".github/workflows/source-manifest-gate.yml",
+      "size": 1346,
+      "sha256": "ab9427959f48b7a010cff5fd41b4c2b2dcb0d0e702a5f50043f429eb469578b7"
     },
     {
       "path": "Makefile",
@@ -15,8 +25,8 @@
     },
     {
       "path": "backend/Dockerfile",
-      "size": 531,
-      "sha256": "ccef1940b534cf1a2ad02dd4c3e4c4a2938cbbe58fc03263b0d745e65e8dbecc"
+      "size": 614,
+      "sha256": "2f5e1c03dc2d72de282c9c1c8c38927b21309a2f12739d754df9cbb4d4a419c7"
     },
     {
       "path": "backend/alembic.ini",
@@ -2449,6 +2459,11 @@
       "sha256": "62e8a18b504fdc7904cb00a45ba7f2b6747369afefb87d46055805e3762ed165"
     },
     {
+      "path": "deploy/exact_source_binding_gate.py",
+      "size": 9761,
+      "sha256": "169b218c1c625010f010ae9e40dcf53843b339588af023570dcfddeb533cbac4"
+    },
+    {
       "path": "deploy/live_acceptance/Dockerfile",
       "size": 573,
       "sha256": "7c1615e1577551c10cef1de378b90365e07f8c0bcc42a040c8f313a6eae328f2"
@@ -2510,8 +2525,8 @@
     },
     {
       "path": "deploy/voip-ai",
-      "size": 18405,
-      "sha256": "f549cdcdf208987fafe5bf52e77d5389e848d3f098d053cf18511237c4fa34d8"
+      "size": 20132,
+      "sha256": "98e62cef494dc854fd714dfb64df983837172074ba1159008222e3e8c043d56d"
     },
     {
       "path": "docker-compose.e2e.yml",
@@ -2520,18 +2535,18 @@
     },
     {
       "path": "docker-compose.production.yml",
-      "size": 3782,
-      "sha256": "4a749f45071549b33fb4e9df6f67d69b3051870b47ad9cdd3230dc696c2f8e0a"
+      "size": 3867,
+      "sha256": "74f4b495eb1e1b910fa29b29bcfa92fb35a931a805cd93dfecd56c3235151cb0"
     },
     {
       "path": "docker-compose.yml",
-      "size": 9214,
-      "sha256": "795a901a15c3693b76e7143b099b8e78146de549816b7d8dd8088701ff1c0f60"
+      "size": 10198,
+      "sha256": "7dbda031098b174f95e58c3bdb78d69f6f32ff37248325403837e64f352bc4b9"
     },
     {
       "path": "frontend/Dockerfile",
-      "size": 398,
-      "sha256": "25bf9aed34c61d1804a0030ff68c9e5ef2202bec99f7744c99f5bdbd24be66c7"
+      "size": 500,
+      "sha256": "6b17250639234acfac23f2df71ee09e8fca0dd8c281a6b2078bcea174e29524c"
     },
     {
       "path": "frontend/nginx.conf",
@@ -3285,8 +3300,8 @@
     },
     {
       "path": "tools/source_manifest_gate.py",
-      "size": 2912,
-      "sha256": "bddb0799ac7eb47e65801eaa88286d1b9b1e570c4557217aaa8d758a9f44e8e4"
+      "size": 3005,
+      "sha256": "468c47d3b84c60f65f4cfa6c674f9fcc72956ef68851811bb293d9ab9891fff1"
     },
     {
       "path": "tools/ssh_poc.py",
