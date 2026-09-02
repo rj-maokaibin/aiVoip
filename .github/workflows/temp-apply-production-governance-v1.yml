@@ -21,20 +21,22 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: release/production-governance-v1
-          fetch-depth: 0
+          fetch-depth: 2
+          clean: false
 
       - name: Apply fail-closed production governance patches
         shell: bash
         run: |
           set -euo pipefail
+          test -z "$(git status --porcelain --untracked-files=no)"
           python3 .github/temp/apply_production_governance_v1.py
           bash -n deploy/voip-ai
-          python3 -m py_compile deploy/exact_source_binding_gate.py tools/source_manifest_gate.py
-          python3 -m pytest -q \
+          PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile deploy/exact_source_binding_gate.py tools/source_manifest_gate.py
+          PYTHONDONTWRITEBYTECODE=1 python3 -m pytest -q \
             backend/tests/test_exact_source_binding_gate_v1.py \
             backend/tests/test_source_manifest_release_governance_v1.py
-          python3 tools/source_manifest_gate.py --update
-          python3 tools/source_manifest_gate.py
+          PYTHONDONTWRITEBYTECODE=1 python3 tools/source_manifest_gate.py --update
+          PYTHONDONTWRITEBYTECODE=1 python3 tools/source_manifest_gate.py
           git diff --check
 
           git config user.name 'github-actions[bot]'
