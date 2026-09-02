@@ -110,7 +110,7 @@ class FeishuDocumentAclService:
 
     Policy precedence is intentionally simple and fail-closed:
       * Case initiator: ``view``
-      * source chat/group: ``view``
+      * source chat/group members: ``view``
       * ``FEISHU_DOCUMENT_ACL_ADMIN_OPEN_IDS``: ``full_access``
 
     If a user belongs to more than one category, the strongest configured role
@@ -163,7 +163,8 @@ class FeishuDocumentAclService:
             FeishuDocumentAclBinding.document_id == document_id,
         ).limit(1))
         desired_mode = settings.feishu_document_acl_mode
-        # V2 policy is intentionally fixed: only configured admins may exceed view.
+        # V2 policy is fixed: stale legacy permission settings cannot elevate
+        # ordinary Case initiators or source-chat members above read-only.
         desired_permission = _NORMAL_PERMISSION
         desired_fingerprint = cls._desired_acl_fingerprint(source, desired_mode)
         desired_metadata = {
@@ -180,7 +181,10 @@ class FeishuDocumentAclService:
                 desired_revision=1, applied_revision=0, status="PENDING",
                 metadata_json=desired_metadata,
             )
-            db.add(row); db.flush(); return row
+            db.add(row)
+            db.flush()
+            return row
+
         metadata = dict(row.metadata_json or {})
         changed = (
             row.tenant_key != str(source.source_tenant_key or "")
@@ -198,7 +202,8 @@ class FeishuDocumentAclService:
         if changed:
             row.desired_revision += 1
             row.status = "PENDING"
-        db.flush(); return row
+        db.flush()
+        return row
 
     @staticmethod
     def _desired_direct_permissions(
@@ -239,6 +244,7 @@ class FeishuDocumentAclService:
                 changed.append(f"UPDATE:{open_id[:12]}:{perm}")
                 if perm == _ADMIN_PERMISSION:
                     admin_change_count += 1
+
         for open_id in sorted(stale_managed - set(desired)):
             if open_id not in current:
                 continue
@@ -257,6 +263,7 @@ class FeishuDocumentAclService:
     ) -> dict:
         if not await self.adapter.bot_in_chat(row.chat_id):
             raise FeishuTransportError("FEISHU_BOT_NOT_IN_SOURCE_CHAT")
+
         admins = self._admin_open_ids() if admin_open_ids is None else sorted(set(admin_open_ids))
         collaborators = await self.adapter.list_collaborators(row.document_id)
         current_chat = next((item for item in collaborators
@@ -312,17 +319,14 @@ class FeishuDocumentAclService:
             open_id: (_ADMIN_PERMISSION if open_id in admin_set else _NORMAL_PERMISSION)
             for open_id in desired_ids
         }
+
         collaborators = await self.adapter.list_collaborators(row.document_id)
         current = {item.member_id: item for item in collaborators if item.member_type == "openid"}
-        metadata = dict(row.metadata_json or {})
-        previous_managed = set(metadata.get("managed_open_ids") or [])
-        # Legacy MEMBER_MIRROR owned the complete openid collaborator set. On the
-        # first V2 reconciliation preserve that exact cleanup contract, then track
-        # only principals managed by this policy on subsequent revisions.
-        if not previous_managed and row.effective_mode == "MEMBER_MIRROR":
-            previous_managed = set(current)
+        # MEMBER_MIRROR is intentionally an exact mirror of current source-group
+        # membership plus Case initiator and configured admins. Therefore any
+        # direct openid collaborator no longer in that desired set is revoked.
         changed, admin_change_count = await self._sync_openid_permissions(
-            row, current=current, desired=desired, stale_managed=previous_managed,
+            row, current=current, desired=desired, stale_managed=set(current),
         )
         return {
             "mode": "MEMBER_MIRROR",
@@ -352,13 +356,17 @@ class FeishuDocumentAclService:
         row = self.ensure_binding(db, case_id=case_id, document_id=document_id)
         if row.status == "SYNCED" and row.applied_revision == row.desired_revision:
             return row
+
         source = self._source_binding(db, case_id)
         if source is None:
             raise ValueError("FEISHU_SOURCE_CHAT_BINDING_REQUIRED")
         initiator_open_id = self._initiator_open_id(source)
         admin_open_ids = self._admin_open_ids()
-        row.status = "SYNCING"; row.last_error = None; db.flush()
+        row.status = "SYNCING"
+        row.last_error = None
+        db.flush()
         requested = row.sync_mode
+
         try:
             if requested == "MEMBER_MIRROR":
                 result = await self._member_mirror(
@@ -376,6 +384,7 @@ class FeishuDocumentAclService:
                         row, initiator_open_id=initiator_open_id, admin_open_ids=admin_open_ids,
                     )
                     result["fallback_from"] = "CHAT_SCOPE"
+
             row.effective_mode = result["mode"]
             row.applied_revision = row.desired_revision
             row.status = "SYNCED"
@@ -394,25 +403,44 @@ class FeishuDocumentAclService:
                 "managed_open_ids": result.get("managed_open_ids") or [],
             })
             row.metadata_json = metadata
-            audit(db, case_id=case_id, actor=actor,
-                  event_type="FEISHU_DOCUMENT_ACL_SYNCED",
-                  target_type="feishu_document_acl", target_id=row.id,
-                  detail={"document_id": document_id, "requested_mode": requested,
-                          "effective_mode": row.effective_mode,
-                          "permission": _NORMAL_PERMISSION,
-                          "admin_permission": _ADMIN_PERMISSION,
-                          "desired_revision": row.desired_revision,
-                          "change_count": len(result.get("changed") or []),
-                          "admin_change_count": int(result.get("admin_change_count") or 0)})
+            audit(
+                db,
+                case_id=case_id,
+                actor=actor,
+                event_type="FEISHU_DOCUMENT_ACL_SYNCED",
+                target_type="feishu_document_acl",
+                target_id=row.id,
+                detail={
+                    "document_id": document_id,
+                    "requested_mode": requested,
+                    "effective_mode": row.effective_mode,
+                    "permission": _NORMAL_PERMISSION,
+                    "admin_permission": _ADMIN_PERMISSION,
+                    "desired_revision": row.desired_revision,
+                    "change_count": len(result.get("changed") or []),
+                    "admin_change_count": int(result.get("admin_change_count") or 0),
+                },
+            )
         except Exception as exc:
             row.retry_count += 1
             row.status = "FAILED"
             row.last_error = f"{type(exc).__name__}:{exc}"[:1000]
-            audit(db, case_id=case_id, actor=actor,
-                  event_type="FEISHU_DOCUMENT_ACL_FAILED",
-                  target_type="feishu_document_acl", target_id=row.id,
-                  detail={"document_id": document_id, "requested_mode": requested,
-                          "retry_count": row.retry_count,
-                          "error_code": type(exc).__name__, "error_message": str(exc)[:500]})
+            audit(
+                db,
+                case_id=case_id,
+                actor=actor,
+                event_type="FEISHU_DOCUMENT_ACL_FAILED",
+                target_type="feishu_document_acl",
+                target_id=row.id,
+                detail={
+                    "document_id": document_id,
+                    "requested_mode": requested,
+                    "retry_count": row.retry_count,
+                    "error_code": type(exc).__name__,
+                    "error_message": str(exc)[:500],
+                },
+            )
             raise
-        db.flush(); return row
+
+        db.flush()
+        return row
