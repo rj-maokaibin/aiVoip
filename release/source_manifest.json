@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "file_count": 663,
-  "aggregate_sha256": "d67c18d6e06d6f079227af23eb70d28342578d6a6b3f98867d56d86501f6a997",
+  "file_count": 664,
+  "aggregate_sha256": "b0b3c1100036566b0a14319e699396834334cd72168a0238d6789ba34fb90307",
   "files": [
     {
       "path": ".env.example",
@@ -2540,8 +2540,8 @@
     },
     {
       "path": "docker-compose.yml",
-      "size": 10198,
-      "sha256": "7dbda031098b174f95e58c3bdb78d69f6f32ff37248325403837e64f352bc4b9"
+      "size": 10186,
+      "sha256": "839abfd4a29a36dcec3465a37530ece43f9571a617fd7f295d54abb87ea02521"
     },
     {
       "path": "frontend/Dockerfile",
@@ -3222,6 +3222,11 @@
       "path": "tools/preliminary_evidence_v1_gate.sh",
       "size": 1497,
       "sha256": "53b65b1ff004e1c3d2bede404149e5bdfbccddf350517133b17f309dcb4cea2a"
+    },
+    {
+      "path": "tools/production_compose_config_gate.sh",
+      "size": 1558,
+      "sha256": "627378e7e67f30e8abfc6bf42d4d0bf2c71c11754ecdd1f38f2b14478b7e710b"
     },
     {
       "path": "tools/production_config_gate.py",

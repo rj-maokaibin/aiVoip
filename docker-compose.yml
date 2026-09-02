@@ -292,7 +292,6 @@ services:
       context: ./frontend
       args:
         BUILD_REVISION: ${BUILD_REVISION:?BUILD_REVISION is required}
-      args:
         VITE_API_BASE_URL: ${VITE_API_BASE_URL:-/api/v1}
     ports:
       - "${VOIP_FRONTEND_BIND:-0.0.0.0}:${VOIP_FRONTEND_PORT:-8088}:80"
