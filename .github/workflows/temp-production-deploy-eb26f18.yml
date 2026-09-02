@@ -1,4 +1,4 @@
-name: TEMP Production Runtime Readonly Verify
+name: TEMP Production Deploy eb26f18
 
 on:
   push:
@@ -8,16 +8,55 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: voip-production-deploy
+  cancel-in-progress: false
+
 jobs:
-  verify:
+  deploy-and-accept:
     runs-on: [self-hosted, linux]
-    timeout-minutes: 2
+    timeout-minutes: 70
+    env:
+      TARGET_SHA: eb26f18f1774764d24690c34e4ec3a6b5e7101f8
+      CASE_NO: VOIP-20260902-4461C5
     steps:
-      - name: Inspect live runtime revisions
+      - name: Checkout exact released master
+        uses: actions/checkout@v4
+        with:
+          ref: eb26f18f1774764d24690c34e4ec3a6b5e7101f8
+          fetch-depth: 0
+          clean: true
+
+      - name: Exact source gate
         shell: bash
         run: |
           set -euo pipefail
-          echo "BACKEND_READY=$(curl -fsS http://127.0.0.1:18001/health/ready)"
+          ACTUAL="$(git rev-parse HEAD)"
+          MASTER="$(git rev-parse origin/master)"
+          echo "TARGET_SHA=$TARGET_SHA"
+          echo "CHECKOUT_SHA=$ACTUAL"
+          echo "ORIGIN_MASTER=$MASTER"
+          test "$ACTUAL" = "$TARGET_SHA"
+          test "$MASTER" = "$TARGET_SHA"
+          python3 tools/source_manifest_gate.py
+          sudo -n /usr/local/sbin/voip-ai-production-deploy --help >/dev/null 2>&1 || true
+          echo "EXACT_SOURCE_GATE=PASS"
+
+      - name: Formal production deploy through controlled wrapper
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo -n /usr/local/sbin/voip-ai-production-deploy "$TARGET_SHA"
+
+      - name: Exact runtime verification
+        shell: bash
+        run: |
+          set -euo pipefail
+          READY="$(curl -fsS http://127.0.0.1:18001/health/ready)"
+          echo "BACKEND_READY=$READY"
+          HEALTH_REV="$(printf '%s' "$READY" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("build_revision") or "")')"
+          test "$HEALTH_REV" = "$TARGET_SHA"
+
           for svc in backend diagnosis-worker media-worker packet-worker pcm-worker feishu-long-connection; do
             cid="$(docker ps -q \
               --filter 'label=com.docker.compose.project=aivoip' \
@@ -27,5 +66,121 @@ jobs:
               | awk -F= '$1=="BUILD_REVISION"{print substr($0,index($0,"=")+1);exit}')"
             health="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$cid")"
             echo "$svc revision=$rev health=$health"
+            test "$rev" = "$TARGET_SHA"
           done
-          echo "RUNTIME_READONLY_VERIFY_DONE=1"
+          echo "EXACT_RUNTIME_REVISION_GATE=PASS"
+
+      - name: Reconcile and verify existing Feishu document ACL
+        shell: bash
+        run: |
+          set -euo pipefail
+          BACKEND_CID="$(docker ps -q \
+            --filter 'label=com.docker.compose.project=aivoip' \
+            --filter 'label=com.docker.compose.service=backend' | head -n1)"
+          test -n "$BACKEND_CID"
+
+          docker exec -i -e CASE_NO="$CASE_NO" "$BACKEND_CID" python - <<'PY'
+          import asyncio
+          import os
+          from sqlalchemy import select
+
+          from app.core.config import settings
+          from app.db.session import SessionLocal
+          from app.db.models import Case, FeishuCaseBinding
+          from app.db.evidence_report_models import FeishuEvidenceDocumentBinding
+          from app.db.feishu_governance_models import FeishuDocumentAclBinding
+          from app.integrations.feishu.document_acl import FeishuDocumentAclService
+
+          case_no = os.environ["CASE_NO"]
+          db = SessionLocal()
+          try:
+              case = db.scalar(select(Case).where(Case.case_no == case_no).limit(1))
+              assert case is not None, "CASE_NOT_FOUND"
+
+              source = db.scalar(
+                  select(FeishuCaseBinding)
+                  .where(
+                      FeishuCaseBinding.case_id == case.id,
+                      FeishuCaseBinding.receive_id_type == "chat_id",
+                  )
+                  .order_by(FeishuCaseBinding.created_at.desc())
+                  .limit(1)
+              )
+              assert source is not None and source.receive_id, "SOURCE_CHAT_BINDING_NOT_FOUND"
+
+              document = db.scalar(
+                  select(FeishuEvidenceDocumentBinding)
+                  .where(FeishuEvidenceDocumentBinding.case_id == case.id)
+                  .limit(1)
+              )
+              assert document is not None and document.document_id, "DOCUMENT_BINDING_NOT_FOUND"
+
+              enabled = bool(getattr(settings, "feishu_document_acl_enabled", False))
+              admins = sorted({
+                  x.strip()
+                  for x in str(getattr(settings, "feishu_document_acl_admin_open_ids", "") or "").split(",")
+                  if x.strip()
+              })
+              initiator = str(getattr(source, "source_sender_open_id", "") or "").strip()
+
+              assert enabled, "FEISHU_DOCUMENT_ACL_DISABLED"
+              assert admins, "FEISHU_DOCUMENT_ACL_ADMIN_OPEN_IDS_EMPTY"
+              assert initiator, "CASE_INITIATOR_OPEN_ID_MISSING"
+
+              service = FeishuDocumentAclService()
+              row = asyncio.run(service.reconcile(
+                  db,
+                  case_id=case.id,
+                  document_id=document.document_id,
+                  actor="production-acl-acceptance",
+              ))
+              db.commit()
+
+              collaborators = asyncio.run(service.adapter.list_collaborators(document.document_id))
+              cmap = {(c.member_type, c.member_id): c.perm for c in collaborators}
+              admin_set = set(admins)
+
+              for admin in admins:
+                  actual = cmap.get(("openid", admin))
+                  assert actual == "full_access", f"ADMIN_PERMISSION_MISMATCH:{admin[:8]}:{actual}"
+
+              expected_initiator = "full_access" if initiator in admin_set else "view"
+              actual_initiator = cmap.get(("openid", initiator))
+              assert actual_initiator == expected_initiator, (
+                  f"INITIATOR_PERMISSION_MISMATCH:{actual_initiator}:{expected_initiator}"
+              )
+
+              if row.effective_mode == "CHAT_SCOPE":
+                  actual_chat = cmap.get(("openchat", source.receive_id))
+                  assert actual_chat == "view", f"SOURCE_CHAT_PERMISSION_MISMATCH:{actual_chat}"
+              elif row.effective_mode == "MEMBER_MIRROR":
+                  members = set(asyncio.run(service.adapter.list_chat_members(source.receive_id)))
+                  for member in members:
+                      expected = "full_access" if member in admin_set else "view"
+                      actual = cmap.get(("openid", member))
+                      assert actual == expected, f"GROUP_MEMBER_PERMISSION_MISMATCH:{member[:8]}:{actual}:{expected}"
+              else:
+                  raise AssertionError(f"UNEXPECTED_EFFECTIVE_MODE:{row.effective_mode}")
+
+              persisted = db.scalar(
+                  select(FeishuDocumentAclBinding)
+                  .where(
+                      FeishuDocumentAclBinding.case_id == case.id,
+                      FeishuDocumentAclBinding.document_id == document.document_id,
+                  )
+                  .limit(1)
+              )
+
+              print("CASE_NO=", case_no)
+              print("DOCUMENT_ID_PRESENT=YES")
+              print("ACL_STATUS=", persisted.status if persisted else None)
+              print("ACL_EFFECTIVE_MODE=", persisted.effective_mode if persisted else None)
+              print("ACL_DESIRED_REVISION=", persisted.desired_revision if persisted else None)
+              print("ACL_APPLIED_REVISION=", persisted.applied_revision if persisted else None)
+              print("ACL_LAST_ERROR=", persisted.last_error if persisted else None)
+              print("ADMIN_COUNT=", len(admins))
+              print("INITIATOR_ROLE=", "admin" if initiator in admin_set else "reader")
+              print("ACL_POLICY_ACCEPTANCE=PASS")
+          finally:
+              db.close()
+          PY
