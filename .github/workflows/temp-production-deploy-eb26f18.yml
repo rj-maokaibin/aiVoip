@@ -1,4 +1,4 @@
-name: TEMP Production ACL Tool Probe
+name: TEMP Production Runtime Readonly Verify
 
 on:
   push:
@@ -9,20 +9,23 @@ permissions:
   contents: read
 
 jobs:
-  probe:
+  verify:
     runs-on: [self-hosted, linux]
     timeout-minutes: 2
     steps:
-      - name: Probe ACL tooling
+      - name: Inspect live runtime revisions
         shell: bash
         run: |
-          set +e
-          echo "RUNNER=$(id -un)"
-          command -v setfacl; echo "SETFACL_RC=$?"
-          command -v getfacl; echo "GETFACL_RC=$?"
-          test -r /etc/voip-ai/production.env; echo "PROD_ENV_READ_RC=$?"
-          test -w /etc/voip-ai/production.env; echo "PROD_ENV_WRITE_RC=$?"
-          test -w /data/voip/release; echo "RELEASE_WRITE_RC=$?"
-          test -w /data/voip/backups; echo "BACKUP_WRITE_RC=$?"
-          docker ps >/dev/null 2>&1; echo "DOCKER_RC=$?"
-          exit 0
+          set -euo pipefail
+          echo "BACKEND_READY=$(curl -fsS http://127.0.0.1:18001/health/ready)"
+          for svc in backend diagnosis-worker media-worker packet-worker pcm-worker feishu-long-connection; do
+            cid="$(docker ps -q \
+              --filter 'label=com.docker.compose.project=aivoip' \
+              --filter "label=com.docker.compose.service=$svc" | head -n1)"
+            test -n "$cid"
+            rev="$(docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$cid" \
+              | awk -F= '$1=="BUILD_REVISION"{print substr($0,index($0,"=")+1);exit}')"
+            health="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$cid")"
+            echo "$svc revision=$rev health=$health"
+          done
+          echo "RUNTIME_READONLY_VERIFY_DONE=1"
