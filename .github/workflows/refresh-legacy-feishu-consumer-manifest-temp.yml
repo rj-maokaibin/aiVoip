@@ -21,38 +21,37 @@ concurrency:
 jobs:
   refresh-and-validate:
     if: github.event.pull_request.head.repo.full_name == github.repository
-    runs-on:
-      - self-hosted
-      - linux
-      - x64
-      - voip-controlled-linux
+    runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
-        timeout-minutes: 5
         with:
           ref: ${{ github.event.pull_request.head.ref }}
           fetch-depth: 1
           token: ${{ github.token }}
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
       - name: Prepare Python environment
         run: |
           set -euo pipefail
-          python3 -m venv "$RUNNER_TEMP/legacy-feishu-cleanup-venv"
+          python -m venv "$RUNNER_TEMP/legacy-feishu-cleanup-venv"
           source "$RUNNER_TEMP/legacy-feishu-cleanup-venv/bin/activate"
           pip install -q -r backend/requirements.txt
 
       - name: Refresh source manifest
         run: |
           set -euo pipefail
-          python3 tools/source_manifest_gate.py --update
+          python tools/source_manifest_gate.py --update
 
       - name: Validate legacy consumer removal
         run: |
           set -euo pipefail
           source "$RUNNER_TEMP/legacy-feishu-cleanup-venv/bin/activate"
           PYTHONPATH=backend:. pytest -q backend/tests/test_feishu_long_connection_deployment_v1.py
-          python3 tools/source_manifest_gate.py
+          python tools/source_manifest_gate.py
 
       - name: Commit refreshed source manifest
         run: |
