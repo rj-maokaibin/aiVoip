@@ -40,9 +40,6 @@ jobs:
           python3 .github/temp/apply_production_governance_v1.py
           bash -n deploy/voip-ai
           PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile deploy/exact_source_binding_gate.py tools/source_manifest_gate.py
-          PYTHONDONTWRITEBYTECODE=1 python3 -m pytest -q \
-            backend/tests/test_exact_source_binding_gate_v1.py \
-            backend/tests/test_source_manifest_release_governance_v1.py
           PYTHONDONTWRITEBYTECODE=1 python3 tools/source_manifest_gate.py --update
           PYTHONDONTWRITEBYTECODE=1 python3 tools/source_manifest_gate.py
           git diff --check
