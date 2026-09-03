@@ -1,12 +1,17 @@
 {
   "schema_version": 1,
-  "file_count": 689,
-  "aggregate_sha256": "92b234545f3a9197e7a0303086672ff46d4e2b007e2be748270ef54bf7a6852e",
+  "file_count": 691,
+  "aggregate_sha256": "9e3b4fc75ba524c87aef338ef1e90cc39a5b74fde70088fbac515e7c2f9bee50",
   "files": [
     {
       "path": ".env.example",
       "size": 1520,
       "sha256": "a83862a9db77aeb35ecb8d8e8e3935041e669965808c356f5dfdf8ac1148ad36"
+    },
+    {
+      "path": ".github/workflows/evidence-v2-production-golden-bootstrap.yml",
+      "size": 7473,
+      "sha256": "1a7f57d7f9f64c6c7cf53e8c6f41973bcedbccf74d5de6a9335485925e6607c5"
     },
     {
       "path": ".github/workflows/production-deploy.yml",
@@ -3209,6 +3214,11 @@
       "sha256": "7b3f0741b69180592b03ffa593d62f400f68c2e13c45e5f020b7b46cca10253f"
     },
     {
+      "path": "tools/evidence_v2_production_golden_bootstrap.py",
+      "size": 14699,
+      "sha256": "df28d2cb0c98f0c05b5287446f89102f82b38baf07b9500986c617b23162d887"
+    },
+    {
       "path": "tools/export_ai_eval_dataset.py",
       "size": 8616,
       "sha256": "eb1bebecae037f390f5f50553fa854f995838a9225e7af894dd944db8783752e"
@@ -3430,8 +3440,8 @@
     },
     {
       "path": "tools/source_manifest_gate.py",
-      "size": 3005,
-      "sha256": "468c47d3b84c60f65f4cfa6c674f9fcc72956ef68851811bb293d9ab9891fff1"
+      "size": 3074,
+      "sha256": "d750120d4fbd2235231e58321deca2cfbeee8e36706157c010167d763e6a48a5"
     },
     {
       "path": "tools/ssh_poc.py",

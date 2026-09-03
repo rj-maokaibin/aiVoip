@@ -19,6 +19,7 @@ INCLUDE_FILES = [
     "frontend/Dockerfile", "frontend/nginx.conf", "backend/Dockerfile",
     "docker-compose.yml", "docker-compose.production.yml", "docker-compose.e2e.yml", "release/release_policy.yaml",
     ".github/workflows/production-deploy.yml", ".github/workflows/source-manifest-gate.yml",
+    ".github/workflows/evidence-v2-production-golden-bootstrap.yml",
 ]
 EXCLUDE_NAMES = {"__pycache__", ".pytest_cache", ".DS_Store"}
 EXCLUDE_FILES = {"release/source_manifest.json"}
