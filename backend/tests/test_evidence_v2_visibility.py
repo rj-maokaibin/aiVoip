@@ -20,6 +20,7 @@ def test_partial_callee_media_does_not_become_end_to_end_complete():
     assert visibility["media"]["callee_leg"] == "ONE_WAY"
     assert visibility["media"]["callee_leg_directions"] == ["DOWNSTREAM"]
     assert visibility["media"]["end_to_end"] == "PARTIAL"
+    assert visibility["end_to_end_media"] == "PARTIAL"
     assert visibility["termination"] == "NOT_OBSERVED"
     assert visibility["root_cause_readiness"] == "INSUFFICIENT"
 
@@ -37,6 +38,7 @@ def test_end_to_end_complete_requires_both_media_legs_bidirectional():
     assert visibility["media"]["caller_leg"] == "BIDIRECTIONAL"
     assert visibility["media"]["callee_leg"] == "BIDIRECTIONAL"
     assert visibility["media"]["end_to_end"] == "COMPLETE"
+    assert visibility["end_to_end_media"] == "COMPLETE"
     assert visibility["termination"] == "OBSERVED"
     assert visibility["root_cause_readiness"] == "SUFFICIENT"
 
@@ -47,3 +49,4 @@ def test_no_media_is_missing_and_end_to_end_unknown():
     assert visibility["media"]["caller_leg"] == "MISSING"
     assert visibility["media"]["callee_leg"] == "MISSING"
     assert visibility["media"]["end_to_end"] == "UNKNOWN"
+    assert visibility["end_to_end_media"] == "UNKNOWN"
