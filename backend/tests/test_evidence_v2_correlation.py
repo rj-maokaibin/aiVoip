@@ -52,6 +52,21 @@ def test_different_call_or_outside_window_does_not_cluster():
     assert correlate_media_events(events, threshold_ms=50.0) == []
 
 
+def test_correlation_window_is_inclusive_at_profile_boundary():
+    events = [
+        _event("a", "PCM_RX", 1.0),
+        _event("b", "RTP_UPSTREAM", 1.05),
+    ]
+
+    clusters = correlate_media_events(events, threshold_ms=50.0)
+
+    assert len(clusters) == 1
+    assert clusters[0]["member_events"] == [
+        {"layer": "PCM_RX", "event_ref": "a"},
+        {"layer": "RTP_UPSTREAM", "event_ref": "b"},
+    ]
+
+
 def test_incompatible_explicit_media_paths_do_not_cluster():
     events = [
         _event("a", "PCM_RX", 100.0, media_path="caller-leg"),
