@@ -1,0 +1,94 @@
+name: CI/CD V2.1 Diagnostics
+
+on:
+  push:
+    branches:
+      - ops/cicd-v2-1-diagnostics
+    paths:
+      - '.github/workflows/cicd-v2-1-diagnostics.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  registry-and-workspace:
+    runs-on:
+      - self-hosted
+      - linux
+      - x64
+      - voip-controlled-linux
+    timeout-minutes: 10
+    steps:
+      - name: Probe current production host
+        shell: bash
+        run: |
+          set -u
+          mkdir -p "$GITHUB_WORKSPACE/validation"
+          out="$GITHUB_WORKSPACE/validation/cicd_v2_1_diagnostics.txt"
+          json="$GITHUB_WORKSPACE/validation/cicd_v2_1_diagnostics.json"
+          : > "$out"
+          {
+            echo '=== DATE ==='
+            date -u +%FT%TZ
+            echo '=== ROUTE ==='
+            ip -4 route get 172.18.34.132 || true
+            echo '=== ROUTES ==='
+            ip -4 route show table main || true
+            echo '=== DOCKER NETWORKS ==='
+            docker network ls --format '{{.Name}}' | while read -r n; do
+              docker network inspect "$n" --format '{{.Name}}|{{range .IPAM.Config}}{{.Subnet}}|{{.Gateway}}{{end}}' || true
+            done
+            echo '=== DAEMON JSON ==='
+            cat /etc/docker/daemon.json 2>/dev/null || true
+            echo '=== CURL V2 HEADERS ==='
+            curl -sv --max-time 15 http://mirror.ruijie.com.cn:8090/v2/ -o /dev/null 2>&1 || true
+          } | tee -a "$out"
+
+          pull_log="$GITHUB_WORKSPACE/validation/cicd_v2_1_docker_pull.log"
+          start_ms="$(date +%s%3N)"
+          timeout 60s docker pull python:3.12-slim >"$pull_log" 2>&1
+          pull_rc="$?"
+          end_ms="$(date +%s%3N)"
+          duration_ms="$((end_ms-start_ms))"
+          cat "$pull_log" | tee -a "$out"
+
+          echo '=== DOCKER JOURNAL RECENT ===' | tee -a "$out"
+          journalctl -u docker --since '3 minutes ago' --no-pager 2>&1 | tail -200 | tee -a "$out" || true
+
+          python3 - "$json" "$pull_rc" "$duration_ms" <<'PY'
+          import json, pathlib, sys, subprocess
+          path=pathlib.Path(sys.argv[1])
+          pull_rc=int(sys.argv[2]); duration_ms=int(sys.argv[3])
+          route=subprocess.run(['ip','-4','route','get','172.18.34.132'],text=True,capture_output=True).stdout.strip()
+          nets=[]
+          for name in subprocess.run(['docker','network','ls','--format','{{.Name}}'],text=True,capture_output=True).stdout.splitlines():
+              raw=subprocess.run(['docker','network','inspect',name],text=True,capture_output=True)
+              if raw.returncode: continue
+              item=json.loads(raw.stdout)[0]
+              for cfg in (item.get('IPAM') or {}).get('Config') or []:
+                  if cfg.get('Subnet'):
+                      nets.append({'name':name,'subnet':cfg.get('Subnet'),'gateway':cfg.get('Gateway')})
+          payload={
+              'schema_version':'cicd-v2.1-diagnostics',
+              'docker_pull_rc':pull_rc,
+              'docker_pull_duration_ms':duration_ms,
+              'docker_pull_pass':pull_rc==0,
+              'mirror_route':route,
+              'docker_networks':nets,
+              'workspace_git_index_exists':pathlib.Path('.git/index').exists(),
+          }
+          path.write_text(json.dumps(payload,indent=2)+'\n')
+          print(json.dumps(payload,indent=2))
+          PY
+
+      - name: Upload diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cicd-v2-1-diagnostics-${{ github.run_id }}
+          path: |
+            validation/cicd_v2_1_diagnostics.json
+            validation/cicd_v2_1_diagnostics.txt
+            validation/cicd_v2_1_docker_pull.log
+          if-no-files-found: warn
