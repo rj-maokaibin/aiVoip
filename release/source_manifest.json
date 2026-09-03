@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "file_count": 669,
-  "aggregate_sha256": "70a5a2262d4bec8654134f98601ea71cf072d8a3a757a486d3e356f40fea06c1",
+  "aggregate_sha256": "513b13308059ca1ff5cb393de549c40b4a58040d1a9b60c4b83c7be87b7612db",
   "files": [
     {
       "path": ".env.example",
@@ -10,13 +10,13 @@
     },
     {
       "path": ".github/workflows/production-deploy.yml",
-      "size": 9582,
-      "sha256": "0951a609b98a723ed17ab48090683b8b71b8497c2b4c6c287532e909a7bc7b0d"
+      "size": 11529,
+      "sha256": "9aac280b9be72aa7a8f28857029c9ef4214ff6acb04921649b43dad5c78cc3e4"
     },
     {
       "path": ".github/workflows/source-manifest-gate.yml",
-      "size": 4080,
-      "sha256": "e6bb20524b1e8c6ef2abea2e50a372a3ca289755081059da390cd37a07115750"
+      "size": 3729,
+      "sha256": "54426c273e43b543cbbf85c499c4e6235ec96c43bd426be7131e54b15d56a888"
     },
     {
       "path": "Makefile",
@@ -2525,8 +2525,8 @@
     },
     {
       "path": "deploy/production_deploy_wrapper.sh",
-      "size": 1349,
-      "sha256": "25b0aac88c7c4f09edda07e2e802e295fbb1a9d1e84639a1b7e4467f604355c0"
+      "size": 1322,
+      "sha256": "ed785b9a6c9b019afcd9d02fb2bd9240cb39130b6d49776e76b37f59dcbdd41f"
     },
     {
       "path": "deploy/production_runtime_verify.py",
