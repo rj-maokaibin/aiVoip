@@ -86,3 +86,30 @@ def test_production_network_is_named_narrow_guarded_and_idempotent():
     assert "PRODUCTION_NETWORK_NOT_MATERIALIZED_AS_EXPECTED" in guard
     assert "n['name'] == network_name and subnet == desired" in guard
     assert "created_by_guard" in guard
+
+
+def test_v2_1_registry_probe_is_transport_only_and_not_full_pull():
+    deploy = (ROOT / "deploy/voip-ai").read_text(encoding="utf-8")
+    probe = (ROOT / "deploy/registry_connectivity_probe.py").read_text(encoding="utf-8")
+    assert "registry_connectivity_probe.py" in deploy
+    assert 'REGISTRY_PREFLIGHT=PASS mode=HTTP_CONNECTIVITY' in deploy
+    assert 'docker pull "$probe_image"' not in deploy
+    assert "HTTPError" in probe
+    assert "REGISTRY_CONNECTIVITY=PASS" in probe
+
+
+def test_v2_1_backend_runtime_services_share_one_built_image():
+    compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
+    prod = (ROOT / "docker-compose.production.yml").read_text(encoding="utf-8")
+    deploy = (ROOT / "deploy/voip-ai").read_text(encoding="utf-8")
+    shared = 'image: aivoip-backend:${BUILD_REVISION:?BUILD_REVISION is required}'
+    assert compose.count(shared) >= 11
+    assert shared in prod
+    assert "local services=(backend frontend)" in deploy
+
+
+def test_v2_1_production_workflow_restores_workspace_ownership():
+    text = (ROOT / ".github/workflows/production-deploy.yml").read_text(encoding="utf-8")
+    assert "Restore runner workspace ownership" in text
+    assert "PRODUCTION_RUNNER_WORKSPACE_RESTORE=PASS" in text
+    assert "validation/registry_connectivity_v2_1.json" in text

@@ -272,12 +272,7 @@ build_images() {
   fi
   echo "Building production images for source manifest:"
   python3 tools/source_manifest_gate.py
-  local services=(
-    backend collector-worker packet-worker pcm-worker media-worker diagnosis-worker
-    feishu-long-connection
-    reproduction-worker reproduction-control-high-worker reproduction-watch-worker beat
-    frontend release-runner
-  )
+  local services=(backend frontend)
   local data_root release_root build_log audit_file rc
   data_root="$(env_value VOIP_DATA_ROOT 2>/dev/null || echo /data/voip)"
   release_root="$data_root/release"
@@ -285,27 +280,22 @@ build_images() {
   audit_file="${VOIP_OFFLINE_BUILD_AUDIT:-$release_root/offline-build-fallback.json}"
   mkdir -p "$release_root"
 
-  # Fast registry/mirror probe. Offline mode is allowed only by the audited
-  # local-image inventory guard; auth/config/semantic failures remain BLOCKED.
-  local probe_log probe_image probe_timeout probe_rc
+  # V2.1: prove registry DNS/TCP/HTTP transport quickly. A full docker pull is
+  # intentionally not used as a preflight because the corporate Nexus mirror can
+  # legitimately take tens of seconds before layer transfer begins. The actual
+  # online freshness check remains compose build --pull below.
+  local probe_log probe_json probe_timeout probe_rc
   probe_log="$release_root/registry-probe.log"
-  probe_image="${VOIP_REGISTRY_PROBE_IMAGE:-python:3.12-slim}"
-  probe_timeout="${VOIP_REGISTRY_PROBE_TIMEOUT_SECONDS:-12}"
+  probe_json="${VOIP_REGISTRY_PROBE_EVIDENCE:-validation/registry_connectivity_v2_1.json}"
+  probe_timeout="${VOIP_REGISTRY_PROBE_TIMEOUT_SECONDS:-3}"
   set +e
-  timeout "${probe_timeout}s" docker pull "$probe_image" 2>&1 | tee "$probe_log"
-  probe_rc="${PIPESTATUS[0]}"
+  python3 deploy/registry_connectivity_probe.py     --timeout-seconds "$probe_timeout"     --out "$probe_json" >"$probe_log" 2>&1
+  probe_rc="$?"
   set -e
+  cat "$probe_log"
   if [[ "$probe_rc" != "0" ]]; then
-    if [[ "$probe_rc" == "124" ]]; then
-      echo "registry probe timeout image=$probe_image timeout_seconds=$probe_timeout" | tee -a "$probe_log"
-    else
-      echo "registry probe failed image=$probe_image exit_code=$probe_rc" | tee -a "$probe_log"
-    fi
     echo "REGISTRY_PREFLIGHT=FAIL; evaluating audited offline fallback immediately..."
-    if python3 deploy/offline_build_fallback.py \
-        --build-log "$probe_log" \
-        --online-exit-code "$probe_rc" \
-        --audit "$audit_file"; then
+    if python3 deploy/offline_build_fallback.py         --build-log "$probe_log"         --online-exit-code "$probe_rc"         --audit "$audit_file"; then
       echo "OFFLINE_IMAGE_FALLBACK=AUTHORIZED source=REGISTRY_PREFLIGHT audit=$audit_file"
       local offline_rc
       set +e
@@ -322,7 +312,7 @@ build_images() {
     echo "PRODUCTION_IMAGE_BUILD=BLOCKED reason=REGISTRY_PREFLIGHT online_exit_code=$probe_rc audit=$audit_file" >&2
     return "$probe_rc"
   fi
-  echo "REGISTRY_PREFLIGHT=PASS mode=ONLINE_PULL probe_image=$probe_image"
+  echo "REGISTRY_PREFLIGHT=PASS mode=HTTP_CONNECTIVITY evidence=$probe_json"
 
   # Online pull is always preferred. Offline fallback is allowed only for a
   # proven registry transport failure with a complete local image inventory.

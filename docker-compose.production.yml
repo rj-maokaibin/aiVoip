@@ -93,8 +93,7 @@ services:
       start_period: 10s
 
   release-runner:
-    build:
-      context: ./backend
+    image: aivoip-backend:${BUILD_REVISION:?BUILD_REVISION is required}
     env_file: ${VOIP_APP_ENV_FILE:-.env}
     working_dir: /workspace
     environment:

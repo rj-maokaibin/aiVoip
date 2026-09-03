@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "file_count": 665,
-  "aggregate_sha256": "af4d159eceed2cb1076f4616ba1412b4a5d03259a9f0ef32dca527ff16bc2453",
+  "file_count": 666,
+  "aggregate_sha256": "eccd4a6a93de213432b077d971f59f98c6cb248fe586e6634abf642cd67ae47a",
   "files": [
     {
       "path": ".env.example",
@@ -10,8 +10,8 @@
     },
     {
       "path": ".github/workflows/production-deploy.yml",
-      "size": 6000,
-      "sha256": "4fa674f5f3f4fb55969d069c67052e268db5f1dd6a3ffaf016f57a13f5ed2c17"
+      "size": 6813,
+      "sha256": "f5bd792013e5214e041117c0e53f7fe3e45dabdf6889df5b4e2490dff783d6a4"
     },
     {
       "path": ".github/workflows/source-manifest-gate.yml",
@@ -2529,9 +2529,14 @@
       "sha256": "d4cc78e2d748a3383dda91033c61feba6f14fe545eefa02414a76688ec9ea109"
     },
     {
+      "path": "deploy/registry_connectivity_probe.py",
+      "size": 3799,
+      "sha256": "d492b874372e53e3368302c5857283c5a75ce97b4d0fac6136d63f60aa40ac18"
+    },
+    {
       "path": "deploy/voip-ai",
-      "size": 25381,
-      "sha256": "6f1da7a62d11d1a51a9f7397260fb5eee82702961f0f97244ad88838141ba257"
+      "size": 25130,
+      "sha256": "36ee61d0312beaff12397d844e3a29c254fa323208bdab0284ce1fb7ceea0f11"
     },
     {
       "path": "docker-compose.e2e.yml",
@@ -2540,13 +2545,13 @@
     },
     {
       "path": "docker-compose.production.yml",
-      "size": 4195,
-      "sha256": "ce86281a8ebff16ebb8e530898dc49930fdb78d83130f5290cf51eb93e281a72"
+      "size": 4231,
+      "sha256": "47bafb37918f662f05845efd497ba4158712f4a3690ffb0502961eb2dc2d6b86"
     },
     {
       "path": "docker-compose.yml",
-      "size": 10186,
-      "sha256": "839abfd4a29a36dcec3465a37530ece43f9571a617fd7f295d54abb87ea02521"
+      "size": 9798,
+      "sha256": "241e6d52d78fa573aaf8d079874c64acbd7994c3ce0aae8446c828f6ee4c60b0"
     },
     {
       "path": "frontend/Dockerfile",
