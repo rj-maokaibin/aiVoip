@@ -59,12 +59,13 @@ jobs:
       - name: Upload immutable production source
         uses: actions/upload-artifact@v4
         with:
-          name: production-exact-source-${{ github.run_id }}-${{ github.run_attempt }}
+          name: production-exact-source-${{ github.run_id }}
           path: |
             ${{ runner.temp }}/source.bundle
             ${{ runner.temp }}/source.sha
           if-no-files-found: error
           retention-days: 1
+          overwrite: true
 
   deploy-and-verify:
     needs: immutable-source-bundle
@@ -92,7 +93,7 @@ jobs:
       - name: Download immutable production source
         uses: actions/download-artifact@v4
         with:
-          name: production-exact-source-${{ github.run_id }}-${{ github.run_attempt }}
+          name: production-exact-source-${{ github.run_id }}
           path: ${{ runner.temp }}/production-exact-source
 
       - name: Materialize exact master offline
