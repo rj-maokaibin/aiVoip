@@ -24,6 +24,10 @@ def correlate_media_events(
     path and temporal proximity. ``media_path`` may be absent while upstream
     mapping is incomplete; when both events declare a path, those paths must
     match. A cluster records co-occurrence only and never asserts causality.
+
+    Cross-layer means different media families (for example PCM + RTP), not just
+    two taps inside one family. PCM_RX + PCM_TX alone therefore remains local
+    evidence and is not promoted into a cross-layer media cluster.
     """
 
     threshold_seconds = float(threshold_ms) / 1000.0
@@ -76,7 +80,8 @@ def correlate_media_events(
             members.append(candidate)
 
         layers = {str(member.get("layer") or "").upper() for member in members}
-        if len(layers) < 2:
+        layer_families = {_media_layer_family(layer) for layer in layers}
+        if len(layer_families) < 2:
             continue
 
         members.sort(key=lambda event: (float(event["timestamp"]), str(event.get("event_id") or "")))
@@ -110,6 +115,7 @@ def correlate_media_events(
                     }
                     for member in members
                 ],
+                "member_layer_families": sorted(layer_families),
                 "packet_loss_observed": anchor_family == "LOSS",
                 "interpretation_boundary": interpretation_boundary,
                 "time_span": {
@@ -131,6 +137,15 @@ def _compatible_media_path(a: Mapping[str, Any], b: Mapping[str, Any]) -> bool:
     if a_path and b_path:
         return str(a_path) == str(b_path)
     return True
+
+
+def _media_layer_family(layer: str) -> str:
+    value = str(layer or "").upper()
+    if value.startswith("PCM_"):
+        return "PCM"
+    if value.startswith("RTP"):
+        return "RTP"
+    return value
 
 
 def _within_temporal_window(a: float, b: float, *, threshold_seconds: float) -> bool:
