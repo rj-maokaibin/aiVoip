@@ -21,6 +21,9 @@ def calculate_visibility(
     The output follows SPEC §10. Direction detail remains explicit so a user
     facing renderer can say, for example, "主叫侧媒体双向可见" instead of
     over-claiming complete end-to-end media.
+
+    ``end_to_end_media`` is the canonical report-level field. The nested
+    ``media.end_to_end`` field is retained for early-V2 compatibility only.
     """
 
     acquisition_state = str(acquisition).upper()
@@ -56,6 +59,7 @@ def calculate_visibility(
             "caller_leg_directions": media_directions["caller_leg"],
             "callee_leg_directions": media_directions["callee_leg"],
         },
+        "end_to_end_media": end_to_end,
         "termination": "OBSERVED" if termination_observed else "NOT_OBSERVED",
         "root_cause_readiness": root_cause_readiness,
     }
