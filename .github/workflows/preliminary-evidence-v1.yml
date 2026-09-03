@@ -8,220 +8,124 @@ on:
       - 'tools/**'
       - 'golden_cases/**'
       - 'profiles/**'
+      - 'deploy/**'
       - 'deploy/live_acceptance/**'
       - 'docs/LIVE_ACCEPTANCE_RUNTIME_V1.md'
       - 'docs/02_Core_Documents/Preliminary_Evidence_Report_V1.0/**'
+      - '.github/workflows/source-manifest-gate.yml'
+      - '.github/workflows/prd-spec-v1-release.yml'
       - '.github/workflows/preliminary-evidence-v1.yml'
+      - '.github/workflows/production-deploy.yml'
   workflow_dispatch:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: preliminary-evidence-v1-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
-  exact-source-bundle:
+  verify-full-acceptance-evidence:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - name: Checkout exact PR head on GitHub-hosted transport
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
-          fetch-depth: 0
-
-      - name: Build immutable Git bundle
-        shell: bash
-        env:
-          EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-        run: |
-          set -euo pipefail
-          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
-          git branch -f bundle-head "$EXPECTED_SHA"
-          git bundle create "$RUNNER_TEMP/source.bundle" refs/heads/bundle-head
-          printf '%s\n' "$EXPECTED_SHA" > "$RUNNER_TEMP/source.sha"
-          git bundle verify "$RUNNER_TEMP/source.bundle"
-          echo "EXACT_SOURCE_BUNDLE=PASS revision=$EXPECTED_SHA"
-
-      - name: Upload immutable source bundle
-        uses: actions/upload-artifact@v4
-        with:
-          name: exact-source-${{ github.run_id }}-${{ github.run_attempt }}
-          path: |
-            ${{ runner.temp }}/source.bundle
-            ${{ runner.temp }}/source.sha
-          if-no-files-found: error
-          retention-days: 1
-
-  full-software-acceptance:
-    needs: exact-source-bundle
-    runs-on:
-      - self-hosted
-      - linux
-      - x64
-      - voip-controlled-linux
-    timeout-minutes: 60
+    timeout-minutes: 20
     env:
       EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-      OFFLINE_GOLDEN_PCAP: /tmp/tcpdump-2026-08-14.pcap
-      OFFLINE_GOLDEN_SHA256: b038aa7c9a0644581f2815f654fcdee4620860796382265b178823fccba2e3f0
     steps:
-      - name: Reset self-hosted workspace
-        shell: bash
-        run: |
-          set -euo pipefail
-          docker info >/dev/null
-          docker image inspect python:3.12-slim >/dev/null
-          docker run --rm -v "$GITHUB_WORKSPACE:/workspace" python:3.12-slim \
-            sh -lc 'find /workspace -mindepth 1 -maxdepth 1 -exec rm -rf {} +'
+      - name: Resolve exact-SHA Full Acceptance run
+        id: resolve
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const sha = process.env.EXPECTED_SHA;
+            const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+            for (let i = 0; i < 180; i++) {
+              const response = await github.rest.actions.listWorkflowRuns({
+                owner,
+                repo,
+                workflow_id: 'prd-spec-v1-release.yml',
+                head_sha: sha,
+                per_page: 20,
+              });
+              const runs = response.data.workflow_runs
+                .filter((run) => run.head_sha === sha)
+                .sort((a, b) => b.id - a.id);
+              if (runs.length > 0) {
+                const run = runs[0];
+                core.info(`Full Acceptance run ${run.id}: ${run.status}/${run.conclusion || 'pending'}`);
+                if (run.status === 'completed') {
+                  if (run.conclusion !== 'success') {
+                    core.setFailed(`Full Acceptance failed for ${sha}: ${run.conclusion}`);
+                    return;
+                  }
+                  core.setOutput('run_id', String(run.id));
+                  return;
+                }
+              }
+              await sleep(5000);
+            }
+            core.setFailed(`Timed out waiting for Full Acceptance for ${sha}`);
 
-      - name: Download immutable source bundle
+      - name: Download exact-SHA Full Acceptance evidence
         uses: actions/download-artifact@v4
         with:
-          name: exact-source-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/exact-source
+          name: full-acceptance-${{ env.EXPECTED_SHA }}
+          path: ${{ runner.temp }}/full-acceptance
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ steps.resolve.outputs.run_id }}
 
-      - name: Materialize exact PR source offline
+      - name: Verify reusable Full Acceptance evidence
         shell: bash
         run: |
           set -euo pipefail
-          bundle="$RUNNER_TEMP/exact-source/source.bundle"
-          sha_file="$RUNNER_TEMP/exact-source/source.sha"
-          test -s "$bundle"
-          test "$(cat "$sha_file")" = "$EXPECTED_SHA"
-          git clone -q -b bundle-head "$bundle" "$GITHUB_WORKSPACE"
-          git -C "$GITHUB_WORKSPACE" checkout -q --detach "$EXPECTED_SHA"
-          test "$(git -C "$GITHUB_WORKSPACE" rev-parse HEAD)" = "$EXPECTED_SHA"
-          test -z "$(git -C "$GITHUB_WORKSPACE" status --porcelain --untracked-files=no)"
-          echo "EXACT_SOURCE_MATERIALIZATION=PASS revision=$EXPECTED_SHA"
-
-      - name: Environment and prepared-PCAP identity
-        run: |
-          set -euo pipefail
-          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
-          printf 'ACCEPTANCE_HEAD=%s\n' "$(git rev-parse HEAD)"
-          printf 'PYTHON=%s\n' "$(python3 --version 2>&1)"
-          printf 'NODE=%s\n' "$(node --version 2>&1)"
-          printf 'NPM=%s\n' "$(npm --version 2>&1)"
-          docker info >/dev/null
-
-          fixture="$OFFLINE_GOLDEN_PCAP"
-          if [ ! -r "$fixture" ]; then
-            staged="$RUNNER_TEMP/offline-e2e-prepared.pcap"
-            rm -f "$staged"
-            docker run --rm \
-              -v /tmp:/source:ro \
-              -v "$RUNNER_TEMP":/output \
-              --entrypoint sh postgres:16 \
-              -c "cp /source/tcpdump-2026-08-14.pcap /output/offline-e2e-prepared.pcap && chmod 0644 /output/offline-e2e-prepared.pcap"
-            fixture="$staged"
-          fi
-          test -r "$fixture"
-          actual_sha="$(sha256sum "$fixture" | awk '{print $1}')"
-          test "$actual_sha" = "$OFFLINE_GOLDEN_SHA256"
-          echo "OFFLINE_GOLDEN_PCAP=$fixture" >> "$GITHUB_ENV"
-          echo "VOIP_AI_GATE_VENV=$RUNNER_TEMP/voip-ai-release-gate" >> "$GITHUB_ENV"
-          printf 'PREPARED_PCAP=%s\n' "$fixture"
-          printf 'PREPARED_PCAP_SHA256=%s\n' "$actual_sha"
-
-      - name: Frozen PRD/SPEC software contract gate
-        run: bash tools/preliminary_evidence_v1_gate.sh
-
-      - name: Prepare exact userspace TShark 4.2.2 runtime
-        run: |
-          set -euo pipefail
-          tshark_bin=""
-          if command -v tshark >/dev/null 2>&1; then
-            candidate="$(command -v tshark)"
-            candidate_version="$($candidate -v | head -n1)"
-            if [[ "$candidate_version" == *"4.2.2"* ]]; then
-              tshark_bin="$candidate"
-            fi
-          fi
-          if [ -z "$tshark_bin" ]; then
-            root="$RUNNER_TEMP/tshark-root"
-            debs="$RUNNER_TEMP/tshark-debs"
-            rm -rf "$root" "$debs"
-            mkdir -p "$root" "$debs"
-            cd "$debs"
-            mapfile -t pkgs < <(apt-cache depends --recurse --no-recommends --no-suggests --no-conflicts --no-breaks --no-replaces --no-enhances tshark | awk '/^[^ <][^:]*$/ {print $1}' | sort -u)
-            miss=()
-            for p in "${pkgs[@]}"; do
-              dpkg-query -W -f='${Status}' "$p" 2>/dev/null | grep -q 'install ok installed' || miss+=("$p")
-            done
-            [ ${#miss[@]} -eq 0 ] || apt-get download "${miss[@]}"
-            shopt -s nullglob
-            for d in ./*.deb; do dpkg-deb -x "$d" "$root"; done
-            tshark_bin="$RUNNER_TEMP/tshark-userspace"
-            printf '#!/bin/bash\nexport LD_LIBRARY_PATH="%s/usr/lib/x86_64-linux-gnu:%s/lib/x86_64-linux-gnu:${LD_LIBRARY_PATH:-}"\nexport WIRESHARK_DATA_DIR="%s/usr/share/wireshark"\nexec "%s/usr/bin/tshark" "$@"\n' "$root" "$root" "$root" "$root" > "$tshark_bin"
-            chmod +x "$tshark_bin"
-          fi
-          tshark_version="$($tshark_bin -v | head -n1)"
-          printf 'TSHARK=%s\n' "$tshark_version"
-          [[ "$tshark_version" == *"4.2.2"* ]]
-          echo "TSHARK_BINARY=$tshark_bin" >> "$GITHUB_ENV"
-
-      - name: Full VOIP AI software release gate
-        run: bash tools/voip_ai_release_gate.sh
-
-      - name: Prepared-PCAP Real Offline Golden 001
-        run: |
-          set -euo pipefail
-          source "$VOIP_AI_GATE_VENV/bin/activate"
-          rm -rf offline-golden-artifacts offline-golden-result.json
-          TSHARK_BINARY="$TSHARK_BINARY" python tools/offline_analysis_golden_replay.py \
-            --pcap "$OFFLINE_GOLDEN_PCAP" \
-            --require-fixture \
-            --artifacts offline-golden-artifacts \
-            --result offline-golden-result.json
-          python - <<'PY'
+          root="$RUNNER_TEMP/full-acceptance"
+          test -s "$root/full-acceptance-result.json"
+          test -s "$root/offline-golden-result.json"
+          test -s "$root/offline-golden-human-artifacts/human-golden-result.json"
+          test -s "$root/offline-golden-human-artifacts/pcm_rx_periodic_spectrum_human_v2.png"
+          test -s "$root/offline-golden-human-artifacts/pcm_rx_periodic_spectrogram_human_v2.png"
+          test -s "$root/offline-golden-human-artifacts/pcm_rx_dtmf_first_digit_inspector_human_v2.png"
+          python3 - "$EXPECTED_SHA" "$root" <<'PY'
           import json
+          import sys
           from pathlib import Path
-          p = json.loads(Path('offline-golden-result.json').read_text(encoding='utf-8'))
-          assert p['status'] == 'PASS', p
-          assert p['passed'] is True, p
-          assert p['checks_passed'] == 142, p
-          assert p['checks_total'] == 142, p
-          print('REAL_OFFLINE_GOLDEN_001=PASS 142/142')
+
+          revision = sys.argv[1]
+          root = Path(sys.argv[2])
+          evidence = json.loads((root / "full-acceptance-result.json").read_text(encoding="utf-8"))
+          golden = json.loads((root / "offline-golden-result.json").read_text(encoding="utf-8"))
+          human = json.loads((root / "offline-golden-human-artifacts/human-golden-result.json").read_text(encoding="utf-8"))
+
+          assert evidence.get("schema_version") == "full-software-acceptance-v2", evidence
+          assert evidence.get("revision") == revision, evidence
+          assert evidence.get("passed") is True, evidence
+          assert evidence.get("frozen_contracts", {}).get("passed") is True, evidence
+          assert evidence.get("full_release_gate", {}).get("passed") is True, evidence
+          assert evidence.get("golden_001") == {
+              "passed": True,
+              "checks_passed": 142,
+              "checks_total": 142,
+          }, evidence
+          assert evidence.get("human_evidence", {}).get("passed") is True, evidence
+          assert golden.get("passed") is True, golden
+          assert golden.get("checks_passed") == 142, golden
+          assert golden.get("checks_total") == 142, golden
+          assert human.get("status") == "PASS", human
+
+          print("PRELIMINARY_REUSED_FULL_ACCEPTANCE=PASS")
+          print(f"ACCEPTANCE_COMMIT={revision}")
           PY
 
-      - name: Real Offline Golden 001 Human Evidence Gate
-        run: |
-          set -euo pipefail
-          source "$VOIP_AI_GATE_VENV/bin/activate"
-          rm -rf offline-golden-human-artifacts
-          python tools/human_evidence_real_golden_gate.py \
-            --artifacts offline-golden-artifacts \
-            --output offline-golden-human-artifacts
-          test -s offline-golden-human-artifacts/pcm_rx_periodic_spectrum_human_v2.png
-          test -s offline-golden-human-artifacts/pcm_rx_periodic_spectrogram_human_v2.png
-          test -s offline-golden-human-artifacts/pcm_rx_dtmf_first_digit_inspector_human_v2.png
-          test -s offline-golden-human-artifacts/human-golden-result.json
-          echo 'HUMAN_REAL_OFFLINE_GOLDEN_001=PASS'
-
       - name: Acceptance summary
+        shell: bash
         run: |
           set -euo pipefail
-          printf 'PRD_SPEC_V1_FROZEN_CONTRACTS=PASS\n'
-          printf 'VOIP_AI_SOFTWARE_RELEASE_GATE=PASS\n'
-          printf 'REAL_OFFLINE_GOLDEN_001=PASS 142/142\n'
-          printf 'HUMAN_REAL_OFFLINE_GOLDEN_001=PASS\n'
-          printf 'ACCEPTANCE_COMMIT=%s\n' "$(git rev-parse HEAD)"
-
-      - name: Upload Golden evidence
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: prd-spec-v1-golden-001
-          path: |
-            offline-golden-result.json
-            offline-golden-artifacts
-            offline-golden-human-artifacts
-          if-no-files-found: ignore
-
-  # Human Feishu live mutation was intentionally removed after the captured
-  # PR #45 live acceptance PASS. Reusable runtime/preflight and the explicit
-  # fail-closed manual acceptance helper remain in the repository; normal PR CI
-  # must not mutate a real Feishu document.
+          echo "PRD_SPEC_V1_FROZEN_CONTRACTS=PASS source=REUSED_FULL_ACCEPTANCE"
+          echo "VOIP_AI_SOFTWARE_RELEASE_GATE=PASS source=REUSED_FULL_ACCEPTANCE"
+          echo "REAL_OFFLINE_GOLDEN_001=PASS 142/142 source=REUSED_FULL_ACCEPTANCE"
+          echo "HUMAN_REAL_OFFLINE_GOLDEN_001=PASS source=REUSED_FULL_ACCEPTANCE"
+          echo "PRELIMINARY_EVIDENCE_ACCEPTANCE=PASS"
