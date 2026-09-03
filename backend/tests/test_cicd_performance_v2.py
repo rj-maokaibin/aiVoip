@@ -41,7 +41,9 @@ def test_self_hosted_pr_gates_use_immutable_source_bundle():
     ):
         text = (ROOT / rel).read_text(encoding="utf-8")
         assert "exact-source-bundle:" in text
+        assert "runs-on: ubuntu-latest" in text
         assert "git bundle create" in text
         assert "actions/download-artifact@v4" in text
         assert "EXACT_SOURCE_MATERIALIZATION=PASS" in text
         assert "EXPECTED_SHA" in text
+        assert "voip-controlled-linux" in text
