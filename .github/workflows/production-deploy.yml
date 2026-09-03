@@ -82,15 +82,61 @@ jobs:
           python3 tools/source_manifest_gate.py
           echo "SOURCE_MANIFEST_RELEASE_GATE=PASS"
 
+      - name: Fingerprint persistent production env
+        shell: bash
+        run: |
+          set -euo pipefail
+          env_sha_before="$(docker run --rm \
+            -v /etc/voip-ai/production.env:/input:ro \
+            python:3.12-slim sha256sum /input | awk '{print $1}')"
+          [[ "$env_sha_before" =~ ^[0-9a-f]{64}$ ]]
+          printf 'PRODUCTION_ENV_SHA256_BEFORE=%s\n' "$env_sha_before" >> "$GITHUB_ENV"
+          echo "PRODUCTION_ENV_FINGERPRINT_BEFORE=PASS sha256=$env_sha_before"
+
       - name: Formal production deployment
         shell: bash
         run: |
           set -euo pipefail
-          sudo -n ./deploy/voip-ai \
-            --env /etc/voip-ai/production.env \
-            --revision "$TARGET_SHA" \
-            deploy
-          echo "FORMAL_PRODUCTION_DEPLOY=PASS entrypoint=SOURCE_CONTROLLED revision=$TARGET_SHA"
+          deploy_log="$(mktemp)"
+          trap 'rm -f "$deploy_log"' EXIT
+          sudo -n /usr/local/sbin/voip-ai-production-deploy "$TARGET_SHA" | tee "$deploy_log"
+          expected="BUILD_REVISION_SOURCE=RUNTIME revision=$TARGET_SHA base_env=/etc/voip-ai/production.env persistent_env_mutated=false"
+          grep -Fqx "$expected" "$deploy_log"
+          echo "RUNTIME_BUILD_REVISION_INJECTION=PASS revision=$TARGET_SHA persistent_env_mutated=false"
+          echo "FORMAL_PRODUCTION_DEPLOY=PASS privilege_boundary=HOST_WRAPPER revision=$TARGET_SHA"
+
+      - name: Verify persistent production env unchanged
+        shell: bash
+        run: |
+          set -euo pipefail
+          env_sha_after="$(docker run --rm \
+            -v /etc/voip-ai/production.env:/input:ro \
+            python:3.12-slim sha256sum /input | awk '{print $1}')"
+          [[ "$env_sha_after" =~ ^[0-9a-f]{64}$ ]]
+          test "$env_sha_after" = "$PRODUCTION_ENV_SHA256_BEFORE"
+          mkdir -p validation
+          python3 - "$TARGET_SHA" "$env_sha_after" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          target, env_sha = sys.argv[1:]
+          evidence = {
+              "schema_version": "production-runtime-revision-injection-v1",
+              "passed": True,
+              "build_revision": target,
+              "base_env": "/etc/voip-ai/production.env",
+              "persistent_env_mutated": False,
+              "persistent_env_sha256": env_sha,
+              "privilege_boundary": "/usr/local/sbin/voip-ai-production-deploy",
+              "source_controlled_runtime_revision": True,
+          }
+          Path("validation/runtime_revision_injection.json").write_text(
+              json.dumps(evidence, ensure_ascii=False, indent=2) + "\n",
+              encoding="utf-8",
+          )
+          print("PRODUCTION_PERSISTENT_ENV_UNCHANGED=PASS")
+          PY
 
       - name: Verify exact source binding evidence
         shell: bash
@@ -105,6 +151,7 @@ jobs:
           exact = json.loads(Path('validation/exact_source_binding_result.json').read_text(encoding='utf-8'))
           runtime = json.loads(Path('validation/production_runtime_result.json').read_text(encoding='utf-8'))
           feishu = json.loads(Path('validation/feishu_long_connection_runtime.json').read_text(encoding='utf-8'))
+          revision = json.loads(Path('validation/runtime_revision_injection.json').read_text(encoding='utf-8'))
 
           assert exact.get('passed') is True, exact
           assert exact.get('expected_revision') == target, exact
@@ -112,6 +159,9 @@ jobs:
           assert runtime.get('build_revision') == target, runtime
           assert feishu.get('passed') is True, feishu
           assert feishu.get('build_revision') == target, feishu
+          assert revision.get('passed') is True, revision
+          assert revision.get('build_revision') == target, revision
+          assert revision.get('persistent_env_mutated') is False, revision
           print('EXACT_SOURCE_BINDING_EVIDENCE=PASS')
           PY
 
@@ -150,6 +200,8 @@ jobs:
           echo "PRODUCTION_DEPLOYMENT=PASS"
           echo "PRODUCTION_REVISION=$TARGET_SHA"
           echo "PRODUCTION_RUNTIME_VERIFY=PASS"
+          echo "PRODUCTION_PERSISTENT_ENV_UNCHANGED=PASS"
+          echo "RUNTIME_BUILD_REVISION_INJECTION=PASS"
           echo "EXACT_SOURCE_BINDING=PASS"
 
       - name: Upload production release evidence
@@ -162,6 +214,7 @@ jobs:
             validation/production_runtime_result.json
             validation/feishu_long_connection_runtime.json
             validation/exact_source_binding_result.json
+            validation/runtime_revision_injection.json
             validation/cicd_performance_v2.json
             validation/registry_connectivity_v2_1.json
             validation/docker_network_guard.json
