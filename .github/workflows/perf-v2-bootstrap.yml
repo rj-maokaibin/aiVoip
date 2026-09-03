@@ -10,6 +10,7 @@ on:
 
 permissions:
   contents: write
+  actions: read
 
 concurrency:
   group: cicd-performance-v2-bootstrap
@@ -31,6 +32,18 @@ jobs:
           fetch-depth: 2
           clean: true
 
+      - name: Collect real Production Deploy baseline
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python3 tools/perf_v2_baseline_collector.py
+
+      - name: Upload baseline performance evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: cicd-performance-v2-baseline-${{ github.run_id }}-${{ github.run_attempt }}
+          path: validation/cicd_performance_baseline.json
+          if-no-files-found: error
+
       - name: Apply V2 patch
         run: |
           set -euo pipefail
@@ -46,7 +59,7 @@ jobs:
       - name: Self-remove bootstrap helpers and commit
         run: |
           set -euo pipefail
-          git rm .github/workflows/perf-v2-bootstrap.yml tools/perf_v2_patcher.py tools/perf_v2_test_patcher.py
+          git rm .github/workflows/perf-v2-bootstrap.yml tools/perf_v2_patcher.py tools/perf_v2_test_patcher.py tools/perf_v2_baseline_collector.py
           python3 tools/source_manifest_gate.py --update
           python3 tools/source_manifest_gate.py
           git config user.name 'github-actions[bot]'
