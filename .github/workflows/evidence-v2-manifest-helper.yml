@@ -1,0 +1,30 @@
+name: Evidence V2 Manifest Helper
+
+on:
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: evidence-v2-manifest-helper-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  render-manifest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout exact PR head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 1
+      - name: Render canonical manifest for handoff
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/source_manifest_gate.py --update
+          echo "MANIFEST_RENDER_HEAD=$(git rev-parse HEAD)"
+          echo "MANIFEST_GZ_B64=$(gzip -c release/source_manifest.json | base64 -w 0)"
