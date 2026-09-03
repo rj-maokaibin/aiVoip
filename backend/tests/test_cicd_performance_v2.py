@@ -31,3 +31,17 @@ def test_registry_probe_fails_closed_or_uses_audited_fallback():
     offline = text.index("compose build --pull=false", guard)
     assert probe < guard < offline
     assert "VOIP_REGISTRY_PROBE_TIMEOUT_SECONDS" in text
+
+
+def test_self_hosted_pr_gates_use_immutable_source_bundle():
+    for rel in (
+        ".github/workflows/source-manifest-gate.yml",
+        ".github/workflows/prd-spec-v1-release.yml",
+        ".github/workflows/preliminary-evidence-v1.yml",
+    ):
+        text = (ROOT / rel).read_text(encoding="utf-8")
+        assert "exact-source-bundle:" in text
+        assert "git bundle create" in text
+        assert "actions/download-artifact@v4" in text
+        assert "EXACT_SOURCE_MATERIALIZATION=PASS" in text
+        assert "EXPECTED_SHA" in text
