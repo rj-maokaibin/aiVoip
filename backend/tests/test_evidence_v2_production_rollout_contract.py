@@ -31,6 +31,14 @@ def test_rollout_switches_do_not_invalidate_expensive_dependency_layers():
     assert "PIP_PRIMARY_INDEX=FAIL fallback=OFFICIAL" in dockerfile
 
 
+def test_domestic_apt_mirror_does_not_replace_official_security_source():
+    dockerfile = (ROOT / "backend/Dockerfile").read_text(encoding="utf-8")
+    assert 'replace("URIs: http://deb.debian.org/debian\\n", f"URIs: {mirror}\\n")' in dockerfile
+    assert 'replace("URIs: https://deb.debian.org/debian\\n", f"URIs: {mirror}\\n")' in dockerfile
+    assert 'assert "deb.debian.org/debian-security" in s' in dockerfile
+    assert "security=OFFICIAL" in dockerfile
+
+
 def test_rollout_contract_modes_for_production_stages():
     shadow = rollout_from_env({
         "PRELIMINARY_EVIDENCE_V2_COMPOSE": "true",
