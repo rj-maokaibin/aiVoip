@@ -26,18 +26,25 @@ jobs:
       - voip-controlled-linux
     timeout-minutes: 15
     steps:
+      - name: Pre-checkout runner workspace repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo -n find "$GITHUB_WORKSPACE" -type d \( -name __pycache__ -o -name .pytest_cache \) -prune -exec rm -rf {} + 2>/dev/null || true
+          sudo -n find "$GITHUB_WORKSPACE" -type f -name '*.pyc' -delete 2>/dev/null || true
+          sudo -n chown -R "$(id -u):$(id -g)" "$GITHUB_WORKSPACE" 2>/dev/null || true
+          echo "PRECHECKOUT_RUNNER_WORKSPACE_REPAIR=PASS"
+
       - uses: actions/checkout@v4
         with:
           ref: perf/cicd-performance-v2
           fetch-depth: 2
-          clean: false
+          clean: true
 
-      - name: Repair runner workspace hygiene
+      - name: Verify runner workspace hygiene
         shell: bash
         run: |
           set -euo pipefail
-          sudo -n find "$GITHUB_WORKSPACE" -type d \( -name __pycache__ -o -name .pytest_cache \) -prune -exec rm -rf {} + || true
-          sudo -n find "$GITHUB_WORKSPACE" -type f -name '*.pyc' -delete || true
           test -z "$(find "$GITHUB_WORKSPACE" -type d -name __pycache__ -print -quit 2>/dev/null)"
           echo "RUNNER_WORKSPACE_HYGIENE=PASS"
 
