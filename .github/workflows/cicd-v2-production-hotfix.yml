@@ -1,3 +1,4 @@
+# retrigger: production fail-closed patch v2
 name: CI/CD V2 Production Fail-Closed Hotfix
 
 on:
@@ -36,8 +37,6 @@ jobs:
                   raise SystemExit(f'missing patch anchor: {label}')
               return text.replace(old, new, 1)
 
-          # Use the BuildKit-bundled Dockerfile frontend so audited offline mode
-          # does not require a seventh network-resolved docker/dockerfile image.
           for rel in ('backend/Dockerfile', 'frontend/Dockerfile'):
               p = Path(rel)
               text = p.read_text(encoding='utf-8')
@@ -46,12 +45,7 @@ jobs:
 
           p = Path('deploy/voip-ai')
           text = p.read_text(encoding='utf-8')
-          text = replace_once(
-              text,
-              '#!/usr/bin/env bash\nset -Eeuo pipefail\n',
-              '#!/usr/bin/env bash\nset -Eeuo pipefail\n# Production deploy runs under sudo; prevent read-only Git checks from refreshing\n# the index as root and polluting the self-hosted runner workspace.\nexport GIT_OPTIONAL_LOCKS=0\n',
-              'git-optional-locks',
-          )
+          text = replace_once(text, '#!/usr/bin/env bash\nset -Eeuo pipefail\n', '#!/usr/bin/env bash\nset -Eeuo pipefail\n# Production deploy runs under sudo; prevent read-only Git checks from refreshing\n# the index as root and polluting the self-hosted runner workspace.\nexport GIT_OPTIONAL_LOCKS=0\n', 'git-optional-locks')
           old = '''      echo "OFFLINE_IMAGE_FALLBACK=AUTHORIZED source=REGISTRY_PREFLIGHT audit=$audit_file"\n      BUILDKIT_PROGRESS="${BUILDKIT_PROGRESS:-plain}" compose build --pull=false --build-arg "BUILD_REVISION=$(env_value BUILD_REVISION)" "${services[@]}"\n      echo "PRODUCTION_IMAGE_BUILD=PASS mode=OFFLINE_LOCAL_INVENTORY audit=$audit_file"\n      return 0\n'''
           new = '''      echo "OFFLINE_IMAGE_FALLBACK=AUTHORIZED source=REGISTRY_PREFLIGHT audit=$audit_file"\n      local offline_rc\n      set +e\n      BUILDKIT_PROGRESS="${BUILDKIT_PROGRESS:-plain}" compose build --pull=false --build-arg "BUILD_REVISION=$(env_value BUILD_REVISION)" "${services[@]}"\n      offline_rc="$?"\n      set -e\n      if [[ "$offline_rc" != "0" ]]; then\n        echo "PRODUCTION_IMAGE_BUILD=FAIL mode=OFFLINE_LOCAL_INVENTORY source=REGISTRY_PREFLIGHT exit_code=$offline_rc audit=$audit_file" >&2\n        return "$offline_rc"\n      fi\n      echo "PRODUCTION_IMAGE_BUILD=PASS mode=OFFLINE_LOCAL_INVENTORY audit=$audit_file"\n      return 0\n'''
           text = replace_once(text, old, new, 'preflight-offline-failclosed')
@@ -59,18 +53,8 @@ jobs:
           new = '''  echo "OFFLINE_IMAGE_FALLBACK=AUTHORIZED audit=$audit_file"\n  local offline_rc\n  set +e\n  BUILDKIT_PROGRESS="${BUILDKIT_PROGRESS:-plain}" compose build --pull=false --build-arg "BUILD_REVISION=$(env_value BUILD_REVISION)" "${services[@]}"\n  offline_rc="$?"\n  set -e\n  if [[ "$offline_rc" != "0" ]]; then\n    echo "PRODUCTION_IMAGE_BUILD=FAIL mode=OFFLINE_LOCAL_INVENTORY source=POSTBUILD_FALLBACK exit_code=$offline_rc audit=$audit_file" >&2\n    return "$offline_rc"\n  fi\n  echo "PRODUCTION_IMAGE_BUILD=PASS mode=OFFLINE_LOCAL_INVENTORY audit=$audit_file"\n  return 0\n}\n'''
           text = replace_once(text, old, new, 'postbuild-offline-failclosed')
           text = replace_once(text, '  verify_feishu_consumer_host\n', '  verify_feishu_consumer_host || return $?\n', 'verify-feishu-propagate')
-          text = replace_once(
-              text,
-              '''  compose run --rm -e PRODUCTION_RUNTIME_EVIDENCE=/workspace/validation/production_runtime_result.json release-runner \\\n    python deploy/production_runtime_verify.py\n''',
-              '''  compose run --rm -e PRODUCTION_RUNTIME_EVIDENCE=/workspace/validation/production_runtime_result.json release-runner \\\n    python deploy/production_runtime_verify.py || return $?\n''',
-              'runtime-verify-propagate',
-          )
-          text = replace_once(
-              text,
-              '''    --feishu-evidence validation/feishu_long_connection_runtime.json \\\n    --out validation/exact_source_binding_result.json\n''',
-              '''    --feishu-evidence validation/feishu_long_connection_runtime.json \\\n    --out validation/exact_source_binding_result.json || return $?\n''',
-              'exact-binding-propagate',
-          )
+          text = replace_once(text, '''  compose run --rm -e PRODUCTION_RUNTIME_EVIDENCE=/workspace/validation/production_runtime_result.json release-runner \\\n    python deploy/production_runtime_verify.py\n''', '''  compose run --rm -e PRODUCTION_RUNTIME_EVIDENCE=/workspace/validation/production_runtime_result.json release-runner \\\n    python deploy/production_runtime_verify.py || return $?\n''', 'runtime-verify-propagate')
+          text = replace_once(text, '''    --feishu-evidence validation/feishu_long_connection_runtime.json \\\n    --out validation/exact_source_binding_result.json\n''', '''    --feishu-evidence validation/feishu_long_connection_runtime.json \\\n    --out validation/exact_source_binding_result.json || return $?\n''', 'exact-binding-propagate')
           p.write_text(text, encoding='utf-8')
 
           p = Path('.github/workflows/production-deploy.yml')
@@ -86,7 +70,6 @@ jobs:
               text += '''\n\ndef test_production_offline_build_is_explicitly_fail_closed():\n    deploy = (ROOT / "deploy/voip-ai").read_text(encoding="utf-8")\n    assert deploy.count('offline_rc="$?"') == 2\n    assert "PRODUCTION_IMAGE_BUILD=FAIL mode=OFFLINE_LOCAL_INVENTORY source=REGISTRY_PREFLIGHT" in deploy\n    assert "PRODUCTION_IMAGE_BUILD=FAIL mode=OFFLINE_LOCAL_INVENTORY source=POSTBUILD_FALLBACK" in deploy\n    assert "verify_feishu_consumer_host || return $?" in deploy\n    assert "--out validation/exact_source_binding_result.json || return $?" in deploy\n\n\ndef test_offline_build_has_no_external_dockerfile_frontend_dependency():\n    for rel in ("backend/Dockerfile", "frontend/Dockerfile"):\n        text = (ROOT / rel).read_text(encoding="utf-8")\n        assert not text.startswith("# syntax=docker/dockerfile:")\n        assert "RUN --mount=type=cache" in text\n\n\ndef test_production_workflow_repairs_workspace_before_checkout():\n    text = (ROOT / ".github/workflows/production-deploy.yml").read_text(encoding="utf-8")\n    repair = text.index("Repair self-hosted workspace before checkout")\n    checkout = text.index("Checkout exact master")\n    assert repair < checkout\n    assert "PRODUCTION_RUNNER_WORKSPACE_REPAIR=PASS" in text\n'''
               p.write_text(text, encoding='utf-8')
           PY
-
           bash -n deploy/voip-ai
           python3 -m pytest -q backend/tests/test_cicd_performance_v2.py backend/tests/test_production_offline_build_fallback.py
 
