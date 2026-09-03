@@ -28,9 +28,15 @@ def test_same_call_timing_events_across_layers_form_one_candidate_cluster():
 
     assert len(clusters) == 1
     cluster = clusters[0]
-    assert cluster["finding_type"] == "CROSS_LAYER_MEDIA_TIMING_SPIKE"
-    assert cluster["member_event_refs"] == ["pcm-rx", "rtp-up", "pcm-tx"]
-    assert cluster["member_layers"] == ["PCM_RX", "PCM_TX", "RTP_UPSTREAM"]
+    assert cluster["cluster_id"] == "CC-001"
+    assert cluster["type"] == "CROSS_LAYER_MEDIA_TIMING_SPIKE"
+    assert cluster["member_events"] == [
+        {"layer": "PCM_RX", "event_ref": "pcm-rx"},
+        {"layer": "RTP_UPSTREAM", "event_ref": "rtp-up"},
+        {"layer": "PCM_TX", "event_ref": "pcm-tx"},
+    ]
+    assert cluster["packet_loss_observed"] is False
+    assert cluster["interpretation_boundary"] == "TIMING_CORRELATION_ONLY"
     assert cluster["causality_confirmed"] is False
     assert cluster["root_cause_confirmed"] is False
 
@@ -65,5 +71,5 @@ def test_member_findings_are_absorbed_and_problem_count_becomes_one_cluster():
     clusters = correlate_media_events([rx, tx])
 
     absorbed = absorb_member_findings(findings, clusters)
-    assert {item["absorbed_by_cluster"] for item in absorbed} == {"XLY-001"}
+    assert {item["absorbed_by_cluster"] for item in absorbed} == {"CC-001"}
     assert correlation_problem_count(findings, clusters) == 1
