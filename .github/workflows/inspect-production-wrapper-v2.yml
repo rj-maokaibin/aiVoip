@@ -23,8 +23,8 @@ jobs:
           echo '--- wrapper metadata ---'
           ls -l /usr/local/sbin/voip-ai-production-deploy
           sha256sum /usr/local/sbin/voip-ai-production-deploy
-          echo '--- wrapper content ---'
-          sed -n '1,240p' /usr/local/sbin/voip-ai-production-deploy
           echo '--- persistent BUILD_REVISION only ---'
           docker run --rm -v /etc/voip-ai/production.env:/input:ro python:3.12-slim \
             sh -lc "grep -n '^BUILD_REVISION=' /input || true"
+          echo '--- sudo allowlist ---'
+          sudo -n -l || true
