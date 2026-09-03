@@ -24,23 +24,26 @@ jobs:
           ref: fix/cicd-v2-production-failclosed
           fetch-depth: 2
 
-      - name: Apply hotfix
+      - name: Apply non-workflow hotfix
         shell: bash
         run: |
           set -euo pipefail
           python3 tools/cicd_v2_hotfix_apply.py
+          # GitHub App token cannot update workflow files. Keep that user-authored change separate.
+          git checkout -- .github/workflows/production-deploy.yml
           bash -n deploy/voip-ai
           python3 -m py_compile deploy/docker_network_guard.py deploy/offline_build_fallback.py backend/tests/test_cicd_performance_v2.py
 
-      - name: Refresh source manifest and commit patch
+      - name: Refresh source manifest and commit non-workflow patch
         shell: bash
         run: |
           set -euo pipefail
-          git rm .github/workflows/cicd-v2-production-hotfix.yml tools/cicd_v2_hotfix_apply.py
+          git rm tools/cicd_v2_hotfix_apply.py
           python3 tools/source_manifest_gate.py --update
           python3 tools/source_manifest_gate.py
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -A
+          git reset .github/workflows/cicd-v2-production-hotfix.yml
           git commit -m 'fix(ci): fail closed and prevent docker registry route conflicts'
           git push origin HEAD:fix/cicd-v2-production-failclosed
