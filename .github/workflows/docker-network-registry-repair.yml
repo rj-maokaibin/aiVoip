@@ -1,0 +1,74 @@
+name: Docker Registry Route Repair
+
+on:
+  push:
+    branches:
+      - ops/cicd-v2-production-probe
+    paths:
+      - '.github/workflows/docker-network-registry-repair.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on:
+      - self-hosted
+      - linux
+      - x64
+      - voip-controlled-linux
+    timeout-minutes: 10
+    steps:
+      - name: Repair registry route without stopping containers
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mirror_host=mirror.ruijie.com.cn
+          mirror_ip="$(getent ahostsv4 "$mirror_host" | awk 'NR==1{print $1}')"
+          default_line="$(ip -4 route show default | head -1)"
+          default_gw="$(awk '{for(i=1;i<=NF;i++) if($i=="via") print $(i+1)}' <<<"$default_line")"
+          default_dev="$(awk '{for(i=1;i<=NF;i++) if($i=="dev") print $(i+1)}' <<<"$default_line")"
+          before="$(ip route get "$mirror_ip" | head -1)"
+
+          if [[ -z "$mirror_ip" || -z "$default_gw" || -z "$default_dev" ]]; then
+            echo "REGISTRY_ROUTE_REPAIR=FAIL reason=UNRESOLVED_ROUTE_DATA" >&2
+            exit 1
+          fi
+
+          if grep -Eq 'dev (br-|docker0)' <<<"$before"; then
+            sudo ip route replace "$mirror_ip/32" via "$default_gw" dev "$default_dev"
+          fi
+
+          after="$(ip route get "$mirror_ip" | head -1)"
+          if ! grep -q "dev $default_dev" <<<"$after"; then
+            echo "REGISTRY_ROUTE_REPAIR=FAIL reason=ROUTE_STILL_HIJACKED before=$before after=$after" >&2
+            exit 1
+          fi
+
+          curl -fsS --connect-timeout 3 --max-time 8 "http://$mirror_host:8090/v2/" -o /dev/null
+
+          python3 - "$mirror_ip" "$default_gw" "$default_dev" "$before" "$after" > /tmp/registry-route-repair.json <<'PY'
+          import json,sys
+          ip,gw,dev,before,after=sys.argv[1:]
+          print(json.dumps({
+            'status':'PASS','mirror_host':'mirror.ruijie.com.cn','mirror_ip':ip,
+            'default_gateway':gw,'default_device':dev,'route_before':before,'route_after':after,
+            'registry_v2_reachable':True
+          },ensure_ascii=False,indent=2))
+          PY
+          cat /tmp/registry-route-repair.json
+
+          python3 - /tmp/registry-route-repair.json > /tmp/payload.json <<'PY'
+          import base64,json,sys
+          content=base64.b64encode(open(sys.argv[1],'rb').read()).decode()
+          print(json.dumps({'message':'ops: record registry route repair','content':content,'branch':'ops/cicd-v2-production-probe'}))
+          PY
+          curl -fsS -X PUT \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H 'Accept: application/vnd.github+json' \
+            -H 'X-GitHub-Api-Version: 2022-11-28' \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/contents/validation/docker_registry_route_repair.json" \
+            --data-binary @/tmp/payload.json >/dev/null
+          echo "REGISTRY_ROUTE_REPAIR=PASS mirror=$mirror_ip route=$after"
