@@ -1,6 +1,6 @@
 import pytest
 
-from app.services.evidence_report_v2 import compose_v2_runtime_payload
+from app.services.evidence_report_v2 import _pcm_source_run, compose_v2_runtime_payload, visual_source_results
 
 
 def _call(call_id="leg-a"):
@@ -51,3 +51,28 @@ def test_production_v2_fails_closed_when_selected_call_is_absent():
             results=_results(),
             analysis_context={"selected_sip_call_id": "missing"},
         )
+
+
+def test_pcm_artifact_owner_follows_standalone_first_source_contract():
+    standalone_pcm = {"streams": []}
+    nested_pcm = {"streams": [{"tap": {"name": "pcm_rx"}}]}
+    results = {
+        "pcm_intelligence": standalone_pcm,
+        "media_intelligence": {"pcm": nested_pcm},
+    }
+    runs = {"pcm_intelligence": "standalone-run", "media_intelligence": "media-run"}
+
+    assert visual_source_results(results)["pcm_intelligence"] is standalone_pcm
+    assert _pcm_source_run(results, runs) == "standalone-run"
+
+
+def test_pcm_artifact_owner_falls_back_to_media_when_standalone_absent():
+    nested_pcm = {"streams": [{"tap": {"name": "pcm_tx"}}]}
+    results = {
+        "pcm_intelligence": None,
+        "media_intelligence": {"pcm": nested_pcm},
+    }
+    runs = {"pcm_intelligence": "stale-standalone-run", "media_intelligence": "media-run"}
+
+    assert visual_source_results(results)["pcm_intelligence"] is nested_pcm
+    assert _pcm_source_run(results, runs) == "media-run"
