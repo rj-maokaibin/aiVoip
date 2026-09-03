@@ -164,7 +164,12 @@ def absorb_member_findings(
     findings: Iterable[Mapping[str, Any]],
     clusters: Iterable[Mapping[str, Any]],
 ) -> list[dict[str, Any]]:
-    """Mark lower-level findings represented by a cross-layer primary unit."""
+    """Mark a lower-level finding absorbed only when every event is represented.
+
+    A finding containing both clustered and unclustered discrete events must stay
+    independently visible; otherwise an unrelated event can disappear merely
+    because one sibling event participates in a cross-layer cluster.
+    """
 
     event_to_cluster: dict[str, str] = {}
     for cluster in clusters:
@@ -176,13 +181,14 @@ def absorb_member_findings(
     out: list[dict[str, Any]] = []
     for finding in findings:
         item = dict(finding)
-        cluster_ids = {
-            event_to_cluster[str(ref)]
-            for ref in item.get("event_refs") or []
-            if str(ref) in event_to_cluster
-        }
-        if len(cluster_ids) == 1:
-            item["absorbed_by_cluster"] = next(iter(cluster_ids))
+        event_refs = [str(ref) for ref in item.get("event_refs") or []]
+        mapped = [event_to_cluster[ref] for ref in event_refs if ref in event_to_cluster]
+        item["clustered_event_refs"] = [ref for ref in event_refs if ref in event_to_cluster]
+        item["unclustered_event_refs"] = [ref for ref in event_refs if ref not in event_to_cluster]
+        if event_refs and len(mapped) == len(event_refs) and len(set(mapped)) == 1:
+            item["absorbed_by_cluster"] = mapped[0]
+        else:
+            item["absorbed_by_cluster"] = None
         out.append(item)
     return out
 
