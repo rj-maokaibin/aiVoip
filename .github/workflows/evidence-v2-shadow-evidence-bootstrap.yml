@@ -1,0 +1,38 @@
+name: Evidence V2 Shadow Evidence Bootstrap
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - 'tools/evidence_v2_production_acceptance.py'
+      - 'backend/tests/test_evidence_v2_acceptance_evidence_contract.py'
+      - '.github/workflows/production-deploy.yml'
+      - '.github/workflows/evidence-v2-shadow-evidence-bootstrap.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  bootstrap:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+      - name: Regenerate source manifest
+        run: |
+          set -euo pipefail
+          python3 tools/source_manifest_gate.py --update
+          python3 tools/source_manifest_gate.py
+      - name: Commit generated source manifest
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add release/source_manifest.json
+          git diff --cached --check
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'chore: regenerate source manifest for Evidence V2 shadow evidence'
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
