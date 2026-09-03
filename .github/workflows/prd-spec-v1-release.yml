@@ -260,7 +260,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python - "$EXPECTED_SHA" <<'PY'
+          python3 - "$EXPECTED_SHA" <<'PY'
           import json
           import sys
           from pathlib import Path
