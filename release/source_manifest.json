@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "file_count": 664,
-  "aggregate_sha256": "6ea4f324f1aa29e8f441ee89bdc95366ac8d26a88abf4ae7d4870575069c1945",
+  "aggregate_sha256": "262e799d93b56ce6f08f552bd5ff6ffd7faf07908d1831aa71a6ba779d95100c",
   "files": [
     {
       "path": ".env.example",
@@ -16,7 +16,7 @@
     {
       "path": ".github/workflows/source-manifest-gate.yml",
       "size": 4080,
-      "sha256": "f625f64b6c154afe734b22603e6d6e1eb3874d12754ac8dc77681a6b57844e64"
+      "sha256": "e6bb20524b1e8c6ef2abea2e50a372a3ca289755081059da390cd37a07115750"
     },
     {
       "path": "Makefile",
