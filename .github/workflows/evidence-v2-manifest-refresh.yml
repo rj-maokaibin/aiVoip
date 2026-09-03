@@ -11,6 +11,9 @@ concurrency:
   group: evidence-v2-manifest-refresh-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
+# This workflow is intentionally excluded from the production source manifest.
+# It only keeps feature-branch manifest content exact; release gates still verify
+# the immutable exact PR head and remain the publication authority.
 jobs:
   refresh:
     if: github.event.pull_request.head.repo.full_name == github.repository && startsWith(github.head_ref, 'feat/evidence-v2-')
