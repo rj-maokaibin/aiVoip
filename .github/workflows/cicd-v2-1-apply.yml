@@ -1,0 +1,57 @@
+name: CI/CD V2.1 Apply Patch
+
+on:
+  push:
+    branches:
+      - perf/cicd-v2-1-production-hygiene-cache
+    paths:
+      - '.github/scripts/apply_cicd_v2_1_patch.py'
+      - '.github/workflows/cicd-v2-1-apply.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: perf/cicd-v2-1-production-hygiene-cache
+          fetch-depth: 2
+
+      - name: Apply patch and static regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/apply_cicd_v2_1_patch.py
+          bash -n deploy/voip-ai
+          python3 -m py_compile deploy/registry_connectivity_probe.py .github/scripts/apply_cicd_v2_1_patch.py
+          python3 - <<'PY'
+          import importlib.util
+          from pathlib import Path
+          p=Path('backend/tests/test_cicd_performance_v2.py')
+          spec=importlib.util.spec_from_file_location('cicd_v2_tests', p)
+          m=importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
+          for name in sorted(x for x in dir(m) if x.startswith('test_')):
+              getattr(m, name)()
+              print(f'{name}=PASS')
+          PY
+          python3 tools/source_manifest_gate.py --update
+          python3 tools/source_manifest_gate.py
+
+      - name: Commit V2.1 implementation
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docker-compose.yml docker-compose.production.yml deploy/voip-ai deploy/registry_connectivity_probe.py backend/tests/test_cicd_performance_v2.py release/source_manifest.json
+          if git diff --cached --quiet; then
+            echo 'CICD_V2_1_COMMIT=NO_CHANGE'
+            exit 0
+          fi
+          git commit -m 'perf(ci): share backend image and use fast registry probe'
+          git push origin HEAD:perf/cicd-v2-1-production-hygiene-cache
