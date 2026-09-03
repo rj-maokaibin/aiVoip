@@ -1,0 +1,11 @@
+{
+  "status": "PASS",
+  "mirror_host": "mirror.ruijie.com.cn",
+  "mirror_ip": "172.18.34.132",
+  "default_gateway": "10.51.230.1",
+  "default_device": "ens18",
+  "route_before": "172.18.34.132 via 10.51.230.1 dev ens18 src 10.51.230.212 uid 2101 ",
+  "route_after": "172.18.34.132 via 10.51.230.1 dev ens18 src 10.51.230.212 uid 2101 ",
+  "registry_v2_reachable": true,
+  "registry_http_code": 401
+}
