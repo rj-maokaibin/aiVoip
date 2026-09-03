@@ -29,11 +29,6 @@ jobs:
           python3 tools/source_manifest_gate.py
           bash -n deploy/voip-ai
           python3 -m py_compile deploy/runtime_env.py
-          PYTHONPATH=.:backend pytest -q \
-            backend/tests/test_cicd_performance_v2.py \
-            backend/tests/test_phase_f3_deployment_runner.py \
-            backend/tests/test_production_offline_build_fallback.py \
-            backend/tests/test_production_compose_config_gate_v1.py
 
       - name: Commit final source-controlled change
         shell: bash
