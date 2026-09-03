@@ -9,9 +9,20 @@ import stat
 import tempfile
 from pathlib import Path
 
+# Pre-source-control wrapper which wrote BUILD_REVISION into production.env.
 LEGACY_WRAPPER_SHA256 = {
     "77b2b30e448b1600a56e476dae9c359617d87706e1bf48e549ac4d4d35635edb",
 }
+
+# Exact source-controlled-v2 wrapper currently installed by PR #115. V2.2 changes
+# only the wrapper implementation (removes its redundant second verify call), so
+# production may migrate from this exact predecessor without widening sudoers or
+# accepting an arbitrary privileged host file.
+SOURCE_CONTROLLED_V2_PREDECESSOR_SHA256 = {
+    "25b0aac88c7c4f09edda07e2e802e295fbb1a9d1e84639a1b7e4467f604355c0",
+}
+
+ALLOWED_PREDECESSOR_SHA256 = LEGACY_WRAPPER_SHA256 | SOURCE_CONTROLLED_V2_PREDECESSOR_SHA256
 BUILD_REVISION_RE = re.compile(rb"^[ \t]*(?:export[ \t]+)?BUILD_REVISION[ \t]*=", re.ASCII)
 
 
@@ -84,11 +95,11 @@ def sync(source: Path, target: Path, env_file: Path) -> tuple[str, int, str]:
         mode = "CURRENT_NORMALIZED" if removed else "CURRENT"
         return mode, removed, source_hash
 
-    if current_hash != "missing" and current_hash not in LEGACY_WRAPPER_SHA256:
+    if current_hash != "missing" and current_hash not in ALLOWED_PREDECESSOR_SHA256:
         raise RuntimeError(
             "refusing to replace unknown privileged production wrapper: "
             f"observed_sha256={current_hash} expected_current={source_hash} "
-            f"allowed_legacy={sorted(LEGACY_WRAPPER_SHA256)}"
+            f"allowed_predecessors={sorted(ALLOWED_PREDECESSOR_SHA256)}"
         )
 
     removed = normalize_persistent_env(env_file)

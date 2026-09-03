@@ -8,33 +8,84 @@ on:
       - 'tools/**'
       - 'golden_cases/**'
       - 'profiles/**'
+      - 'deploy/**'
       - 'docs/02_Core_Documents/Preliminary_Evidence_Report_V1.0/**'
+      - '.github/workflows/source-manifest-gate.yml'
       - '.github/workflows/preliminary-evidence-v1.yml'
       - '.github/workflows/prd-spec-v1-release.yml'
+      - '.github/workflows/production-deploy.yml'
   workflow_dispatch:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: prd-spec-v1-release-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
-  exact-source-bundle:
+  resolve-shared-source:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    outputs:
+      run_id: ${{ steps.resolve.outputs.run_id }}
+    steps:
+      - name: Wait for Source Manifest Gate exact-SHA bundle
+        id: resolve
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const sha = process.env.EXPECTED_SHA;
+            const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+            for (let i = 0; i < 120; i++) {
+              const response = await github.rest.actions.listWorkflowRuns({
+                owner,
+                repo,
+                workflow_id: 'source-manifest-gate.yml',
+                event: 'pull_request',
+                head_sha: sha,
+                per_page: 20,
+              });
+              const runs = response.data.workflow_runs
+                .filter((run) => run.head_sha === sha)
+                .sort((a, b) => b.id - a.id);
+              if (runs.length > 0) {
+                const run = runs[0];
+                core.info(`Source Manifest run ${run.id}: ${run.status}/${run.conclusion || 'pending'}`);
+                if (run.status === 'completed') {
+                  if (run.conclusion !== 'success') {
+                    core.setFailed(`Source Manifest Gate failed for ${sha}: ${run.conclusion}`);
+                    return;
+                  }
+                  core.setOutput('run_id', String(run.id));
+                  return;
+                }
+              }
+              await sleep(5000);
+            }
+            core.setFailed(`Timed out waiting for Source Manifest Gate for ${sha}`);
+
+  manual-source-bundle:
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    env:
+      EXPECTED_SHA: ${{ github.sha }}
     steps:
-      - name: Checkout exact PR head on GitHub-hosted transport
+      - name: Checkout exact source on GitHub-hosted transport
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ env.EXPECTED_SHA }}
           fetch-depth: 0
 
-      - name: Build immutable Git bundle
+      - name: Build immutable Git bundle for manual acceptance
         shell: bash
-        env:
-          EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
@@ -42,12 +93,11 @@ jobs:
           git bundle create "$RUNNER_TEMP/source.bundle" refs/heads/bundle-head
           printf '%s\n' "$EXPECTED_SHA" > "$RUNNER_TEMP/source.sha"
           git bundle verify "$RUNNER_TEMP/source.bundle"
-          echo "EXACT_SOURCE_BUNDLE=PASS revision=$EXPECTED_SHA"
 
       - name: Upload immutable source bundle
         uses: actions/upload-artifact@v4
         with:
-          name: exact-source-${{ github.run_id }}-${{ github.run_attempt }}
+          name: exact-source-${{ env.EXPECTED_SHA }}
           path: |
             ${{ runner.temp }}/source.bundle
             ${{ runner.temp }}/source.sha
@@ -55,7 +105,10 @@ jobs:
           retention-days: 1
 
   full-software-acceptance:
-    needs: exact-source-bundle
+    needs:
+      - resolve-shared-source
+      - manual-source-bundle
+    if: always() && (needs.resolve-shared-source.result == 'success' || needs.manual-source-bundle.result == 'success')
     runs-on:
       - self-hosted
       - linux
@@ -78,13 +131,24 @@ jobs:
           docker run --rm -v "$GITHUB_WORKSPACE:/workspace" python:3.12-slim \
             sh -lc 'find /workspace -mindepth 1 -maxdepth 1 -exec rm -rf {} +'
 
-      - name: Download immutable source bundle
+      - name: Download shared immutable source bundle
+        if: github.event_name == 'pull_request'
         uses: actions/download-artifact@v4
         with:
-          name: exact-source-${{ github.run_id }}-${{ github.run_attempt }}
+          name: exact-source-${{ env.EXPECTED_SHA }}
+          path: ${{ runner.temp }}/exact-source
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ needs.resolve-shared-source.outputs.run_id }}
+
+      - name: Download manual immutable source bundle
+        if: github.event_name != 'pull_request'
+        uses: actions/download-artifact@v4
+        with:
+          name: exact-source-${{ env.EXPECTED_SHA }}
           path: ${{ runner.temp }}/exact-source
 
-      - name: Materialize exact PR source offline
+      - name: Materialize exact source offline
         shell: bash
         run: |
           set -euo pipefail
@@ -178,20 +242,78 @@ jobs:
           print('REAL_OFFLINE_GOLDEN_001=PASS 142/142')
           PY
 
+      - name: Real Offline Golden 001 Human Evidence Gate
+        run: |
+          set -euo pipefail
+          source "$VOIP_AI_GATE_VENV/bin/activate"
+          rm -rf offline-golden-human-artifacts
+          python tools/human_evidence_real_golden_gate.py \
+            --artifacts offline-golden-artifacts \
+            --output offline-golden-human-artifacts
+          test -s offline-golden-human-artifacts/pcm_rx_periodic_spectrum_human_v2.png
+          test -s offline-golden-human-artifacts/pcm_rx_periodic_spectrogram_human_v2.png
+          test -s offline-golden-human-artifacts/pcm_rx_dtmf_first_digit_inspector_human_v2.png
+          test -s offline-golden-human-artifacts/human-golden-result.json
+          echo 'HUMAN_REAL_OFFLINE_GOLDEN_001=PASS'
+
+      - name: Build machine-readable Full Acceptance evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - "$EXPECTED_SHA" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+          revision = sys.argv[1]
+          golden = json.loads(Path("offline-golden-result.json").read_text(encoding="utf-8"))
+          human = json.loads(Path("offline-golden-human-artifacts/human-golden-result.json").read_text(encoding="utf-8"))
+          evidence = {
+              "schema_version": "full-software-acceptance-v2",
+              "revision": revision,
+              "passed": True,
+              "frozen_contracts": {"passed": True},
+              "full_release_gate": {"passed": True},
+              "golden_001": {
+                  "passed": golden.get("passed") is True,
+                  "checks_passed": golden.get("checks_passed"),
+                  "checks_total": golden.get("checks_total"),
+              },
+              "human_evidence": {
+                  "passed": human.get("status") == "PASS",
+                  "schema_version": human.get("schema_version"),
+              },
+          }
+          assert evidence["golden_001"] == {
+              "passed": True,
+              "checks_passed": 142,
+              "checks_total": 142,
+          }, evidence
+          assert evidence["human_evidence"]["passed"] is True, evidence
+          Path("full-acceptance-result.json").write_text(
+              json.dumps(evidence, ensure_ascii=False, indent=2) + "\n",
+              encoding="utf-8",
+          )
+          print("FULL_ACCEPTANCE_EVIDENCE=PASS")
+          PY
+
       - name: Acceptance summary
         run: |
           set -euo pipefail
           printf 'PRD_SPEC_V1_FROZEN_CONTRACTS=PASS\n'
           printf 'VOIP_AI_SOFTWARE_RELEASE_GATE=PASS\n'
           printf 'REAL_OFFLINE_GOLDEN_001=PASS 142/142\n'
+          printf 'HUMAN_REAL_OFFLINE_GOLDEN_001=PASS\n'
           printf 'ACCEPTANCE_COMMIT=%s\n' "$(git rev-parse HEAD)"
 
-      - name: Upload Golden evidence
+      - name: Upload Full Acceptance evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: prd-spec-v1-golden-001
+          name: full-acceptance-${{ env.EXPECTED_SHA }}
           path: |
+            full-acceptance-result.json
             offline-golden-result.json
             offline-golden-artifacts
+            offline-golden-human-artifacts
           if-no-files-found: ignore
+          retention-days: 1

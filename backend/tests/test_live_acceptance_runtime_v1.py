@@ -138,17 +138,29 @@ def test_golden_identity_uses_bound_case_exact_evidence_sha_and_successful_analy
     assert '"rebuilt_golden_identity_verified": True' in live
 
 
-def test_preliminary_workflow_is_non_mutating_after_captured_live_acceptance():
-    workflow = (ROOT / ".github/workflows/preliminary-evidence-v1.yml").read_text(encoding="utf-8")
+def test_preliminary_workflow_is_non_mutating_and_reuses_authoritative_acceptance():
+    preliminary = (ROOT / ".github/workflows/preliminary-evidence-v1.yml").read_text(encoding="utf-8")
+    full = (ROOT / ".github/workflows/prd-spec-v1-release.yml").read_text(encoding="utf-8")
     helper = (ROOT / "tools/human_evidence_feishu_live_acceptance.py").read_text(encoding="utf-8")
-    assert "live-feishu-acceptance:" not in workflow
-    assert "tools/human_evidence_feishu_live_acceptance.py" not in workflow
-    assert "CONTROLLED_ENV_FILE" not in workflow
-    assert "FEISHU_SECRET_FILE" not in workflow
-    assert "deploy/live_acceptance/**" in workflow
-    assert "docs/LIVE_ACCEPTANCE_RUNTIME_V1.md" in workflow
-    assert "Full VOIP AI software release gate" in workflow
-    assert "Prepared-PCAP Real Offline Golden 001" in workflow
-    assert "Real Offline Golden 001 Human Evidence Gate" in workflow
+
+    assert "live-feishu-acceptance:" not in preliminary
+    assert "tools/human_evidence_feishu_live_acceptance.py" not in preliminary
+    assert "CONTROLLED_ENV_FILE" not in preliminary
+    assert "FEISHU_SECRET_FILE" not in preliminary
+    assert "deploy/live_acceptance/**" in preliminary
+    assert "docs/LIVE_ACCEPTANCE_RUNTIME_V1.md" in preliminary
+
+    assert "verify-full-acceptance-evidence:" in preliminary
+    assert "PRELIMINARY_REUSED_FULL_ACCEPTANCE=PASS" in preliminary
+    assert "source=REUSED_FULL_ACCEPTANCE" in preliminary
+    assert "bash tools/voip_ai_release_gate.sh" not in preliminary
+    assert "offline_analysis_golden_replay.py" not in preliminary
+    assert "human_evidence_real_golden_gate.py" not in preliminary
+
+    assert "Full VOIP AI software release gate" in full
+    assert "Prepared-PCAP Real Offline Golden 001" in full
+    assert "Real Offline Golden 001 Human Evidence Gate" in full
+    assert "full-acceptance-result.json" in full
+
     assert "--preflight-result" in helper
     assert "mutation_allowed" in helper
