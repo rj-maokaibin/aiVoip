@@ -33,21 +33,36 @@ def test_registry_probe_fails_closed_or_uses_audited_fallback():
     assert "VOIP_REGISTRY_PROBE_TIMEOUT_SECONDS" in text
 
 
-def test_self_hosted_pr_gates_use_immutable_source_bundle():
-    for rel in (
-        ".github/workflows/source-manifest-gate.yml",
-        ".github/workflows/prd-spec-v1-release.yml",
-        ".github/workflows/preliminary-evidence-v1.yml",
-    ):
-        text = (ROOT / rel).read_text(encoding="utf-8")
-        assert "exact-source-bundle:" in text
-        assert "runs-on: ubuntu-latest" in text
-        assert "fetch-depth: 0" in text
-        assert "git bundle create" in text
-        assert "actions/download-artifact@v4" in text
-        assert "EXACT_SOURCE_MATERIALIZATION=PASS" in text
-        assert "EXPECTED_SHA" in text
-        assert "voip-controlled-linux" in text
+def test_v2_2_pr_gates_share_exact_source_and_only_authoritative_acceptance_uses_self_hosted():
+    manifest = (ROOT / ".github/workflows/source-manifest-gate.yml").read_text(encoding="utf-8")
+    full = (ROOT / ".github/workflows/prd-spec-v1-release.yml").read_text(encoding="utf-8")
+    preliminary = (ROOT / ".github/workflows/preliminary-evidence-v1.yml").read_text(encoding="utf-8")
+
+    assert "exact-source-bundle:" in manifest
+    assert "Upload shared immutable source bundle" in manifest
+    assert "exact-source-${{ env.EXPECTED_SHA }}" in manifest
+    assert manifest.count("runs-on: ubuntu-latest") >= 2
+    assert "voip-controlled-linux" not in manifest
+    assert "EXACT_SOURCE_MATERIALIZATION=PASS" in manifest
+
+    assert "resolve-shared-source:" in full
+    assert "Wait for Source Manifest Gate exact-SHA bundle" in full
+    assert "Download shared immutable source bundle" in full
+    assert "run-id: ${{ needs.resolve-shared-source.outputs.run_id }}" in full
+    assert "EXACT_SOURCE_MATERIALIZATION=PASS" in full
+    assert "voip-controlled-linux" in full
+    assert "Full VOIP AI software release gate" in full
+    assert "Prepared-PCAP Real Offline Golden 001" in full
+    assert "Real Offline Golden 001 Human Evidence Gate" in full
+    assert "full-acceptance-${{ env.EXPECTED_SHA }}" in full
+
+    assert "verify-full-acceptance-evidence:" in preliminary
+    assert "runs-on: ubuntu-latest" in preliminary
+    assert "voip-controlled-linux" not in preliminary
+    assert "PRELIMINARY_REUSED_FULL_ACCEPTANCE=PASS" in preliminary
+    assert "full-acceptance-${{ env.EXPECTED_SHA }}" in preliminary
+    assert "bash tools/voip_ai_release_gate.sh" not in preliminary
+    assert "offline_analysis_golden_replay.py" not in preliminary
 
 
 def test_production_offline_build_is_explicitly_fail_closed():
@@ -66,9 +81,18 @@ def test_offline_build_has_no_external_dockerfile_frontend_dependency():
         assert "RUN --mount=type=cache" in text
 
 
-def test_production_workflow_repairs_workspace_before_checkout():
+def test_v2_2_production_repairs_workspace_then_materializes_immutable_source_offline():
     text = (ROOT / ".github/workflows/production-deploy.yml").read_text(encoding="utf-8")
-    assert text.index("Repair self-hosted workspace before checkout") < text.index("Checkout exact master")
+    repair = text.index("Repair self-hosted workspace before materialization")
+    download = text.index("Download immutable production source")
+    materialize = text.index("Materialize exact master offline")
+    assert repair < download < materialize
+    assert "immutable-source-bundle:" in text
+    assert "Checkout exact deployment source on GitHub-hosted transport" in text
+    assert "Checkout exact master" not in text
+    assert "git -C \"$GITHUB_WORKSPACE\" update-ref refs/remotes/origin/master \"$EXPECTED_SHA\"" in text
+    assert "PRODUCTION_TARGET_RESOLUTION=PASS source=IMMUTABLE_BUNDLE" in text
+    assert "PRODUCTION_SOURCE_TRANSPORT=IMMUTABLE_BUNDLE" in text
     assert "PRODUCTION_RUNNER_WORKSPACE_REPAIR=PASS" in text
 
 
