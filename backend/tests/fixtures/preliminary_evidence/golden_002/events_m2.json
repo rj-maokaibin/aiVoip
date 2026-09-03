@@ -1,0 +1,74 @@
+{
+  "call_id": "00e399308eb3cef5@192.168.3.200",
+  "events": [
+    {
+      "event_id": "G002-PCM-RX-002",
+      "observation_type": "PCM_PACKET_INTERVAL_SPIKE",
+      "timestamp": 1786967020.50384,
+      "layer": "PCM_RX",
+      "source_ref": "pcm-rx:udp-40000",
+      "direction": "PCM_RX",
+      "metrics": {
+        "interval_ms": 31.86,
+        "baseline_interval_ms": 10.0,
+        "catch_up_observed": true
+      },
+      "evidence_refs": ["pcap-frame-4872"]
+    },
+    {
+      "event_id": "G002-RTP-UP-002",
+      "observation_type": "RTP_HIGH_DELTA",
+      "timestamp": 1786967020.50494,
+      "layer": "RTP_UPSTREAM",
+      "source_ref": "rtp:192.168.150.10:10000->192.168.3.200:13294",
+      "direction": "UPSTREAM",
+      "metrics": {
+        "interval_ms": 42.10,
+        "baseline_interval_ms": 20.0,
+        "sequence": 50466,
+        "sequence_continuous": true,
+        "lost_packets": 0,
+        "catch_up_next_interval_ms": 3.36
+      },
+      "evidence_refs": ["pcap-frame-4873"]
+    },
+    {
+      "event_id": "G002-PCM-TX-002",
+      "observation_type": "PCM_PACKET_INTERVAL_SPIKE",
+      "timestamp": 1786967020.50588,
+      "layer": "PCM_TX",
+      "source_ref": "pcm-tx:udp-50000",
+      "direction": "PCM_TX",
+      "metrics": {
+        "interval_ms": 32.54,
+        "baseline_interval_ms": 10.0,
+        "catch_up_observed": true
+      },
+      "evidence_refs": ["pcap-frame-4875"]
+    }
+  ],
+  "normal_evidence": [
+    {
+      "finding_id": "G002-NORMAL-DTMF-001",
+      "class": "NORMAL",
+      "severity": "INFO",
+      "type": "DTMF_SIP_DIAL_MATCH",
+      "pcm_digits": "101",
+      "sip_target": "101"
+    }
+  ],
+  "expected": {
+    "cluster_count": 1,
+    "cluster_id": "CC-001",
+    "cluster_type": "CROSS_LAYER_MEDIA_TIMING_SPIKE",
+    "packet_loss_observed": false,
+    "interpretation_boundary": "TIMING_CORRELATION_ONLY",
+    "member_event_refs": [
+      "G002-PCM-RX-002",
+      "G002-RTP-UP-002",
+      "G002-PCM-TX-002"
+    ],
+    "problem_count": 1,
+    "end_to_end_media": "PARTIAL"
+  }
+}
