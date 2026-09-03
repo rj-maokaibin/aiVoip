@@ -1,0 +1,111 @@
+{
+  "fixture_id": "preliminary-evidence-golden-002",
+  "source": {
+    "filename": "tcpdump-2026-08-29.pcap",
+    "sha256": "5d82ba014674797e8e9f8d3b86135064c5c84370dd322e7f1bceaf89214f5dfc",
+    "size_bytes": 1537456,
+    "note": "Real PCAP identity is frozen here; raw binary is not committed in this foundation PR."
+  },
+  "sip_call": {
+    "call_id": "00e399308eb3cef5@192.168.3.200",
+    "caller": "601",
+    "callee": "101",
+    "state": "ESTABLISHED",
+    "start_time": 1786967011.99584,
+    "end_time": 1786967013.668796,
+    "media_start_time": 1786967013.668796,
+    "media_end_time": 1786967013.668796,
+    "capture_completeness": {
+      "has_invite_request": true,
+      "has_invite_final_response": true,
+      "has_ack_for_success": true,
+      "is_partial": false
+    },
+    "ladder": [
+      {
+        "frame_number": 2137,
+        "timestamp": 1786967011.99584,
+        "method": "INVITE",
+        "status_code": null,
+        "cseq_method": "INVITE"
+      },
+      {
+        "frame_number": 2142,
+        "timestamp": 1786967012.01636,
+        "method": null,
+        "status_code": 100,
+        "cseq_method": "INVITE"
+      },
+      {
+        "frame_number": 2164,
+        "timestamp": 1786967012.11348,
+        "method": null,
+        "status_code": 180,
+        "cseq_method": "INVITE"
+      },
+      {
+        "frame_number": 2478,
+        "timestamp": 1786967013.665956,
+        "method": null,
+        "status_code": 200,
+        "cseq_method": "INVITE"
+      },
+      {
+        "frame_number": 2479,
+        "timestamp": 1786967013.668796,
+        "method": "ACK",
+        "status_code": null,
+        "cseq_method": "ACK"
+      }
+    ]
+  },
+  "rtp_streams": [
+    {
+      "stream_id": "pbx-to-caller",
+      "src_ip": "192.168.3.200",
+      "src_port": 13294,
+      "dst_ip": "192.168.150.10",
+      "dst_port": 10000,
+      "packet_count": 635,
+      "start_time": 1786967013.680036,
+      "end_time": 1786967026.360686,
+      "lost_packets": 0
+    },
+    {
+      "stream_id": "caller-to-pbx",
+      "src_ip": "192.168.150.10",
+      "src_port": 10000,
+      "dst_ip": "192.168.3.200",
+      "dst_port": 13294,
+      "packet_count": 634,
+      "start_time": 1786967013.682536,
+      "end_time": 1786967026.342626,
+      "lost_packets": 0
+    },
+    {
+      "stream_id": "pbx-to-callee",
+      "src_ip": "192.168.3.200",
+      "src_port": 13300,
+      "dst_ip": "192.168.150.12",
+      "dst_port": 10000,
+      "packet_count": 634,
+      "start_time": 1786967013.683536,
+      "end_time": 1786967026.344166,
+      "lost_packets": 0
+    }
+  ],
+  "capture_window": {
+    "start": 1786967001.392105,
+    "end": 1786967026.360686
+  },
+  "pcm_observation_windows": {
+    "pcm_rx": {
+      "start": 1786967001.400995,
+      "end": 1786967026.360836
+    },
+    "pcm_tx": {
+      "start": 1786967001.399875,
+      "end": 1786967026.360796
+    }
+  }
+}
