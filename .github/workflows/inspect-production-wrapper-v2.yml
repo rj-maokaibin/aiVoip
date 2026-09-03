@@ -1,0 +1,30 @@
+name: Inspect Production Wrapper V2
+
+on:
+  push:
+    branches:
+      - ops/inspect-production-wrapper-v2
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on:
+      - self-hosted
+      - linux
+      - x64
+      - voip-controlled-linux
+    steps:
+      - name: Inspect wrapper and revision-only state
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo '--- wrapper metadata ---'
+          ls -l /usr/local/sbin/voip-ai-production-deploy
+          sha256sum /usr/local/sbin/voip-ai-production-deploy
+          echo '--- wrapper content ---'
+          sed -n '1,240p' /usr/local/sbin/voip-ai-production-deploy
+          echo '--- persistent BUILD_REVISION only ---'
+          docker run --rm -v /etc/voip-ai/production.env:/input:ro python:3.12-slim \
+            sh -lc "grep -n '^BUILD_REVISION=' /input || true"
