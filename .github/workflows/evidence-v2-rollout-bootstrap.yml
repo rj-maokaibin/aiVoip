@@ -1,0 +1,313 @@
+name: Evidence V2 Rollout Bootstrap
+
+on:
+  push:
+    branches:
+      - feat/evidence-v2-production-rollout
+    paths:
+      - '.github/workflows/evidence-v2-rollout-bootstrap.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  bootstrap:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Materialize governed Shadow rollout and production acceptance
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          python3 - <<'PY'
+          from pathlib import Path
+
+          dockerfile = Path('backend/Dockerfile')
+          text = dockerfile.read_text(encoding='utf-8')
+          needle = 'ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 MPLCONFIGDIR=/tmp/voip-ai-matplotlib\n'
+          replacement = needle + 'ENV PRELIMINARY_EVIDENCE_V2_COMPOSE=true PRELIMINARY_EVIDENCE_V2_PROJECT=false PRELIMINARY_EVIDENCE_V2_STRICT_VALIDATOR=true\n'
+          if 'ENV PRELIMINARY_EVIDENCE_V2_COMPOSE=' not in text:
+              if needle not in text:
+                  raise SystemExit('backend Dockerfile env anchor missing')
+              text = text.replace(needle, replacement, 1)
+          dockerfile.write_text(text, encoding='utf-8')
+          PY
+
+          cat > deploy/evidence_v2_rollout.json <<'EOF'
+          {
+            "schema_version": "evidence-v2-production-rollout-v1",
+            "stage": "SHADOW",
+            "canary_selector": "BOUND_REAL_GOLDEN_001",
+            "strict_validator": true,
+            "default_projection": "V1",
+            "description": "Production composes Canonical V2 in shadow while user-visible projection remains V1. Canary/default transitions are exact-source commits."
+          }
+          EOF
+
+          cat > tools/evidence_v2_production_acceptance.py <<'PY'
+          from __future__ import annotations
+
+          import argparse
+          import asyncio
+          import json
+          import os
+          from pathlib import Path
+
+          from app.db.session import SessionLocal
+          from app.integrations.feishu.evidence_document import FeishuEvidenceDocumentService
+          from app.reports.v2.migration import rollout_from_env
+          from app.services.evidence_report import generate_evidence_report
+          from human_evidence_feishu_live_acceptance import (
+              REAL_GOLDEN_001_SHA256,
+              _block_text,
+              _list_document_blocks,
+              _refresh_stale_golden_dtmf,
+              _select_bound_golden,
+          )
+
+          STAGES = {"SHADOW", "CANARY", "DEFAULT"}
+          V2_SCHEMA = "preliminary-evidence-report-v2"
+
+
+          def _validate_v2(v2: dict) -> None:
+              if v2.get("schema") != V2_SCHEMA:
+                  raise RuntimeError("EVIDENCE_V2_SCHEMA_MISMATCH")
+              semantic = v2.get("semantic_validation") or {}
+              if semantic.get("status") != "PASS":
+                  raise RuntimeError("EVIDENCE_V2_SEMANTIC_NOT_PASS")
+              if v2.get("publishable") is not True:
+                  raise RuntimeError("EVIDENCE_V2_NOT_PUBLISHABLE")
+              p0 = [
+                  item for item in (semantic.get("violations") or [])
+                  if str((item or {}).get("severity") or "").upper() == "P0"
+              ]
+              if p0:
+                  raise RuntimeError("EVIDENCE_V2_P0_SEMANTIC_DIVERGENCE")
+
+
+          async def run(*, stage: str, expected_revision: str) -> dict:
+              stage = stage.upper()
+              if stage not in STAGES:
+                  raise RuntimeError(f"INVALID_EVIDENCE_V2_ROLLOUT_STAGE:{stage}")
+              observed_revision = str(os.getenv("BUILD_REVISION") or "").strip()
+              if observed_revision != expected_revision:
+                  raise RuntimeError(
+                      f"EVIDENCE_V2_ACCEPTANCE_REVISION_MISMATCH:{observed_revision}:{expected_revision}"
+                  )
+
+              rollout = rollout_from_env()
+              expected_mode = "SHADOW" if stage == "SHADOW" else "V2"
+              if rollout.mode != expected_mode or rollout.strict_validator is not True:
+                  raise RuntimeError(
+                      f"EVIDENCE_V2_RUNTIME_MODE_MISMATCH:stage={stage}:mode={rollout.mode}:strict={rollout.strict_validator}"
+                  )
+
+              db = SessionLocal()
+              try:
+                  binding, previous_report = _select_bound_golden(db)
+                  original_document_id = str(binding.document_id)
+                  original_projection_version = int(binding.projection_version or 0)
+                  refresh = _refresh_stale_golden_dtmf(db, case_id=str(binding.case_id))
+
+                  report, payload, reused = generate_evidence_report(
+                      db,
+                      scope_type=previous_report.scope_type,
+                      scope_id=previous_report.scope_id,
+                      actor=f"evidence-v2-production-{stage.lower()}",
+                      force=True,
+                  )
+                  rollout_meta = payload.get("evidence_v2_rollout") or {}
+                  if rollout_meta.get("mode") != expected_mode:
+                      raise RuntimeError("EVIDENCE_V2_PAYLOAD_ROLLOUT_MODE_MISMATCH")
+
+                  if stage == "SHADOW":
+                      if payload.get("active_projection") != "V1":
+                          raise RuntimeError("EVIDENCE_V2_SHADOW_CHANGED_ACTIVE_PROJECTION")
+                      v2 = payload.get("v2_shadow")
+                      if not isinstance(v2, dict):
+                          raise RuntimeError("EVIDENCE_V2_SHADOW_CANONICAL_MISSING")
+                      _validate_v2(v2)
+                      db.commit()
+                      return {
+                          "status": "PASS",
+                          "contract": "evidence-v2-production-rollout-acceptance-v1",
+                          "stage": stage,
+                          "source_revision": observed_revision,
+                          "rollout_mode": rollout.mode,
+                          "strict_validator": rollout.strict_validator,
+                          "golden_identity": "BOUND_REAL_GOLDEN_001",
+                          "golden_sha256": REAL_GOLDEN_001_SHA256,
+                          "report_id": report.id,
+                          "report_version": report.version,
+                          "report_reused": reused,
+                          "active_projection": payload.get("active_projection"),
+                          "v2_semantic_status": (v2.get("semantic_validation") or {}).get("status"),
+                          "v2_publishable": v2.get("publishable"),
+                          "feishu_projection_attempted": False,
+                          "canonical_readback": "NOT_REQUIRED_IN_SHADOW",
+                          "analyzer_refresh_performed": refresh.get("performed"),
+                          "analyzer_refresh_components": refresh.get("components"),
+                      }
+
+                  if payload.get("active_projection") != "V2":
+                      raise RuntimeError("EVIDENCE_V2_ACTIVE_PROJECTION_NOT_V2")
+                  v2 = payload.get("v2_canonical")
+                  if not isinstance(v2, dict):
+                      raise RuntimeError("EVIDENCE_V2_CANONICAL_MISSING")
+                  _validate_v2(v2)
+
+                  service = FeishuEvidenceDocumentService()
+                  projected = await service.project(db, case_id=report.case_id, report_id=report.id)
+                  if str(projected.document_id) != original_document_id:
+                      raise RuntimeError("EVIDENCE_V2_FEISHU_DOCUMENT_ID_CHANGED")
+                  if str(projected.projected_report_id) != str(report.id):
+                      raise RuntimeError("EVIDENCE_V2_FEISHU_REPORT_BINDING_MISMATCH")
+                  if int(projected.projection_version or 0) <= original_projection_version:
+                      raise RuntimeError("EVIDENCE_V2_FEISHU_PROJECTION_VERSION_NOT_ADVANCED")
+                  db.commit()
+
+                  blocks = await _list_document_blocks(service, original_document_id)
+                  remote_text = "\n".join(_block_text(block) for block in blocks)
+                  required = [
+                      "Evidence Report V2",
+                      f"Report {report.id}",
+                      "Semantic Validator：PASS",
+                      "Active Projection：V2",
+                      "飞书仅投影 Canonical V2",
+                  ]
+                  missing = [marker for marker in required if marker not in remote_text]
+                  if missing:
+                      raise RuntimeError("EVIDENCE_V2_FEISHU_CANONICAL_READBACK_MISSING:" + ",".join(missing))
+
+                  return {
+                      "status": "PASS",
+                      "contract": "evidence-v2-production-rollout-acceptance-v1",
+                      "stage": stage,
+                      "source_revision": observed_revision,
+                      "rollout_mode": rollout.mode,
+                      "strict_validator": rollout.strict_validator,
+                      "golden_identity": "BOUND_REAL_GOLDEN_001",
+                      "golden_sha256": REAL_GOLDEN_001_SHA256,
+                      "report_id": report.id,
+                      "report_version": report.version,
+                      "report_reused": reused,
+                      "active_projection": payload.get("active_projection"),
+                      "v2_semantic_status": (v2.get("semantic_validation") or {}).get("status"),
+                      "v2_publishable": v2.get("publishable"),
+                      "feishu_projection_attempted": True,
+                      "document_reused": True,
+                      "projection_version": projected.projection_version,
+                      "remote_block_count": len(blocks),
+                      "canonical_readback": "PASS",
+                      "canonical_readback_markers": required,
+                      "analyzer_refresh_performed": refresh.get("performed"),
+                      "analyzer_refresh_components": refresh.get("components"),
+                  }
+              finally:
+                  db.close()
+
+
+          def main() -> int:
+              parser = argparse.ArgumentParser()
+              parser.add_argument("--stage", required=True, choices=sorted(STAGES))
+              parser.add_argument("--expected-revision", required=True)
+              parser.add_argument("--result", required=True, type=Path)
+              args = parser.parse_args()
+              try:
+                  payload = asyncio.run(run(stage=args.stage, expected_revision=args.expected_revision))
+              except Exception as exc:
+                  payload = {
+                      "status": "FAIL",
+                      "contract": "evidence-v2-production-rollout-acceptance-v1",
+                      "stage": args.stage,
+                      "source_revision": str(os.getenv("BUILD_REVISION") or ""),
+                      "error_code": type(exc).__name__,
+                      "error_message": str(exc)[:500],
+                  }
+              args.result.parent.mkdir(parents=True, exist_ok=True)
+              args.result.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+              print(json.dumps(payload, ensure_ascii=False))
+              return 0 if payload.get("status") == "PASS" else 2
+
+
+          if __name__ == "__main__":
+              raise SystemExit(main())
+          PY
+
+          cat > backend/tests/test_evidence_v2_production_rollout_contract.py <<'PY'
+          import json
+          from pathlib import Path
+
+          from app.reports.v2.migration import rollout_from_env
+
+
+          ROOT = Path(__file__).resolve().parents[2]
+
+
+          def test_source_controlled_rollout_stage_matches_backend_image_defaults():
+              policy = json.loads((ROOT / "deploy/evidence_v2_rollout.json").read_text(encoding="utf-8"))
+              dockerfile = (ROOT / "backend/Dockerfile").read_text(encoding="utf-8")
+              stage = policy["stage"]
+              assert policy["strict_validator"] is True
+              assert stage in {"SHADOW", "CANARY", "DEFAULT"}
+              assert "PRELIMINARY_EVIDENCE_V2_COMPOSE=true" in dockerfile
+              assert "PRELIMINARY_EVIDENCE_V2_STRICT_VALIDATOR=true" in dockerfile
+              expected_project = "true" if stage == "DEFAULT" else "false"
+              assert f"PRELIMINARY_EVIDENCE_V2_PROJECT={expected_project}" in dockerfile
+
+
+          def test_rollout_contract_modes_for_production_stages():
+              shadow = rollout_from_env({
+                  "PRELIMINARY_EVIDENCE_V2_COMPOSE": "true",
+                  "PRELIMINARY_EVIDENCE_V2_PROJECT": "false",
+                  "PRELIMINARY_EVIDENCE_V2_STRICT_VALIDATOR": "true",
+              })
+              assert shadow.mode == "SHADOW"
+              canary_or_default = rollout_from_env({
+                  "PRELIMINARY_EVIDENCE_V2_COMPOSE": "true",
+                  "PRELIMINARY_EVIDENCE_V2_PROJECT": "true",
+                  "PRELIMINARY_EVIDENCE_V2_STRICT_VALIDATOR": "true",
+              })
+              assert canary_or_default.mode == "V2"
+              assert canary_or_default.strict_validator is True
+          PY
+
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('.github/workflows/production-deploy.yml')
+          text = path.read_text(encoding='utf-8')
+          anchor = '''      - name: Deployment summary\n        shell: bash\n        run: |\n'''
+          if anchor not in text:
+              raise SystemExit('production deploy summary anchor missing')
+          block = '''      - name: Evidence V2 production rollout acceptance\n        shell: bash\n        run: |\n          set -euo pipefail\n          stage="$(python3 - <<'PY'\n          import json\n          from pathlib import Path\n          payload=json.loads(Path('deploy/evidence_v2_rollout.json').read_text(encoding='utf-8'))\n          stage=str(payload.get('stage') or '').upper()\n          if stage not in {'SHADOW','CANARY','DEFAULT'}:\n              raise SystemExit('invalid Evidence V2 production rollout stage')\n          print(stage)\n          PY\n          )"\n          mapfile -t backend_ids < <(docker ps -q \\\n            --filter 'label=com.docker.compose.project=aivoip' \\\n            --filter 'label=com.docker.compose.service=backend')\n          test "${#backend_ids[@]}" -eq 1\n          backend_id="${backend_ids[0]}"\n          backend_rev="$(docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$backend_id" \\\n            | awk -F= '$1=="BUILD_REVISION" {print substr($0,index($0,"=")+1); exit}')"\n          test "$backend_rev" = "$TARGET_SHA"\n          result_in_container=/tmp/evidence-v2-production-acceptance.json\n          rm -f validation/evidence_v2_production_acceptance.json\n          if [ "$stage" = CANARY ]; then\n            docker exec \\\n              -e PRELIMINARY_EVIDENCE_V2_COMPOSE=true \\\n              -e PRELIMINARY_EVIDENCE_V2_PROJECT=true \\\n              -e PRELIMINARY_EVIDENCE_V2_STRICT_VALIDATOR=true \\\n              "$backend_id" python /tools/evidence_v2_production_acceptance.py \\\n              --stage "$stage" --expected-revision "$TARGET_SHA" --result "$result_in_container"\n          else\n            docker exec "$backend_id" python /tools/evidence_v2_production_acceptance.py \\\n              --stage "$stage" --expected-revision "$TARGET_SHA" --result "$result_in_container"\n          fi\n          docker cp "$backend_id:$result_in_container" validation/evidence_v2_production_acceptance.json >/dev/null\n          python3 - "$stage" "$TARGET_SHA" <<'PY'\n          import json, sys\n          from pathlib import Path\n          stage, target = sys.argv[1:]\n          result=json.loads(Path('validation/evidence_v2_production_acceptance.json').read_text(encoding='utf-8'))\n          assert result.get('status') == 'PASS', result\n          assert result.get('stage') == stage, result\n          assert result.get('source_revision') == target, result\n          assert result.get('v2_semantic_status') == 'PASS', result\n          assert result.get('v2_publishable') is True, result\n          if stage == 'SHADOW':\n              assert result.get('active_projection') == 'V1', result\n              assert result.get('feishu_projection_attempted') is False, result\n          else:\n              assert result.get('active_projection') == 'V2', result\n              assert result.get('canonical_readback') == 'PASS', result\n              assert result.get('document_reused') is True, result\n          print(f'EVIDENCE_V2_PRODUCTION_{stage}=PASS revision={target}')\n          PY\n\n'''
+          if 'Evidence V2 production rollout acceptance' not in text:
+              text = text.replace(anchor, block + anchor, 1)
+          upload_anchor = '''            validation/docker_network_guard.json\n'''
+          if 'validation/evidence_v2_production_acceptance.json' not in text:
+              if upload_anchor not in text:
+                  raise SystemExit('production evidence upload anchor missing')
+              text = text.replace(upload_anchor, upload_anchor + '            validation/evidence_v2_production_acceptance.json\n', 1)
+          path.write_text(text, encoding='utf-8')
+          PY
+
+          rm -f .github/workflows/evidence-v2-rollout-bootstrap.yml
+          python3 -m py_compile tools/evidence_v2_production_acceptance.py backend/tests/test_evidence_v2_production_rollout_contract.py
+          python3 tools/source_manifest_gate.py --update
+          python3 tools/source_manifest_gate.py
+
+      - name: Commit generated rollout baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git diff --cached --check
+          git commit -m 'feat: govern Evidence V2 production shadow rollout'
+          git push origin HEAD:feat/evidence-v2-production-rollout
