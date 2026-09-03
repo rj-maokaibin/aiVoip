@@ -140,7 +140,9 @@ def validate_m2_semantics(
 
         if finding_type == "RTP_SEQUENCE_LOSS":
             metrics = finding.get("metrics") or {}
-            if metrics.get("sequence_continuous") is True or int(metrics.get("lost_packets") or 0) == 0:
+            if metrics.get("sequence_continuous") is True or (
+                "lost_packets" in metrics and int(metrics.get("lost_packets") or 0) == 0
+            ):
                 violations.append(
                     SemanticViolation(
                         rule="R014",
