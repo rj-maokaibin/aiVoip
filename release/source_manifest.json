@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "file_count": 673,
-  "aggregate_sha256": "5de4af33142c3b53ffedfabd1f65597a4437f088b419959c3ed13fa3e6bd37c2",
+  "file_count": 676,
+  "aggregate_sha256": "9b9cc575f6077461854b057af8a69b5ef2b3b41dc38d4aeb4907f60fd2d797e6",
   "files": [
     {
       "path": ".env.example",
@@ -1819,14 +1819,29 @@
       "sha256": "f49992c1f843a5ed1e3f1bfe660e27267a8742d28344bd6e4fe1b2dd41104dc8"
     },
     {
+      "path": "backend/app/reports/v2/correlation.py",
+      "size": 5885,
+      "sha256": "73ce33a0cd3d652eaa4283e67e09ba1f932de2b398da20f85e2ebf3c26ffdaee"
+    },
+    {
+      "path": "backend/app/reports/v2/finding_events.py",
+      "size": 5115,
+      "sha256": "769f1c1ed0d9208ab6e74d6823517e850e26b62b813b0386ce78e053b7f5d722"
+    },
+    {
       "path": "backend/app/reports/v2/semantic_validator.py",
-      "size": 2614,
-      "sha256": "b1808799dbcbb356a7154760103ce49906a0adeac3f348a7a3b2035bfcf0c2d3"
+      "size": 7874,
+      "sha256": "d4f0d97e0b6d9c2b1572423a5669ad00ba29ace1518d3519f3111746f86dc766"
     },
     {
       "path": "backend/app/reports/v2/timeline.py",
       "size": 4115,
       "sha256": "0303e07e265913fcc7cd18de4adb9fe0c8f2eddfe1a36937ad8aa886a0a2f3c5"
+    },
+    {
+      "path": "backend/app/reports/v2/visibility.py",
+      "size": 4287,
+      "sha256": "dfebd06e37b3557d3ff1e0f5d4c822df5e99a76518266e00fe4c3d524fc45808"
     },
     {
       "path": "backend/app/reproduction/__init__.py",
