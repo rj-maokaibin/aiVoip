@@ -4,8 +4,8 @@ from collections import defaultdict
 from typing import Any, Iterable, Mapping
 
 
-ABNORMAL_KINDS = {"ABNORMAL"}
-NON_PROBLEM_KINDS = {"NORMAL", "EXCLUSION", "INFO"}
+ABNORMAL_CLASSES = {"ABNORMAL"}
+NON_PROBLEM_CLASSES = {"NORMAL", "EXCLUSION", "UNCERTAIN", "EVIDENCE_QUALITY"}
 TIMING_OBSERVATIONS = {
     "PACKET_INTERVAL_SPIKE",
     "BURST_AFTER_DELAY",
@@ -73,7 +73,7 @@ def aggregate_events(
     finding_id: str,
     finding_type: str,
     severity: str,
-    kind: str = "ABNORMAL",
+    finding_class: str = "ABNORMAL",
     title: str | None = None,
 ) -> dict[str, Any]:
     """Aggregate discrete events while preserving each event timestamp.
@@ -97,7 +97,7 @@ def aggregate_events(
     return {
         "finding_id": finding_id,
         "type": str(finding_type).upper(),
-        "kind": str(kind).upper(),
+        "class": str(finding_class).upper(),
         "severity": str(severity).upper(),
         "title": title or str(finding_type).replace("_", " ").title(),
         "event_refs": event_refs,
@@ -114,15 +114,17 @@ def aggregate_events(
 
 
 def problem_count(findings: Iterable[Mapping[str, Any]]) -> int:
-    """Count primary abnormal findings only.
+    """Count primary ABNORMAL findings only.
 
-    NORMAL/EXCLUSION/INFO entries and findings absorbed into a cross-layer
-    primary cluster are not user-visible problem units.
+    NORMAL/EXCLUSION/UNCERTAIN/EVIDENCE_QUALITY findings and findings absorbed
+    into a cross-layer primary cluster are not user-visible problem units.
+    Severity remains independent from ``class`` as required by the V2 SPEC.
     """
 
     count = 0
     for finding in findings:
-        if str(finding.get("kind") or "ABNORMAL").upper() not in ABNORMAL_KINDS:
+        finding_class = str(finding.get("class") or finding.get("kind") or "ABNORMAL").upper()
+        if finding_class not in ABNORMAL_CLASSES:
             continue
         if finding.get("absorbed_by_cluster"):
             continue
