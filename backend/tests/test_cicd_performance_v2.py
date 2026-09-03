@@ -113,3 +113,90 @@ def test_v2_1_production_workflow_restores_workspace_ownership():
     assert "Restore runner workspace ownership" in text
     assert "PRODUCTION_RUNNER_WORKSPACE_RESTORE=PASS" in text
     assert "validation/registry_connectivity_v2_1.json" in text
+
+
+def test_v2_2_runtime_build_revision_does_not_mutate_persistent_env(tmp_path):
+    import stat
+    import subprocess
+    import sys
+
+    base = tmp_path / "production.env"
+    base.write_text(
+        "APP_ENV=production\n"
+        "BUILD_REVISION=1111111111111111111111111111111111111111\n"
+        "VOIP_PROJECT_NAME=aivoip\n",
+        encoding="utf-8",
+    )
+    base.chmod(0o600)
+    before = base.read_bytes()
+    out = tmp_path / "runtime.env"
+    revision = "a" * 40
+    cp = subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "deploy/runtime_env.py"),
+            "--base-env",
+            str(base),
+            "--revision",
+            revision,
+            "--out",
+            str(out),
+        ],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+    )
+    assert cp.returncode == 0, cp.stdout + cp.stderr
+    assert base.read_bytes() == before
+    runtime = out.read_text(encoding="utf-8")
+    assert runtime.count("BUILD_REVISION=") == 1
+    assert f"BUILD_REVISION={revision}" in runtime
+    assert "1111111111111111111111111111111111111111" not in runtime
+    assert stat.S_IMODE(out.stat().st_mode) == 0o600
+    assert "persistent_env_mutated=false" in cp.stdout
+
+
+def test_v2_2_runtime_env_rejects_insecure_base_env(tmp_path):
+    import subprocess
+    import sys
+
+    base = tmp_path / "production.env"
+    base.write_text("APP_ENV=production\n", encoding="utf-8")
+    base.chmod(0o644)
+    out = tmp_path / "runtime.env"
+    cp = subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "deploy/runtime_env.py"),
+            "--base-env",
+            str(base),
+            "--revision",
+            "b" * 40,
+            "--out",
+            str(out),
+        ],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+    )
+    assert cp.returncode == 2
+    assert "group/world accessible" in cp.stderr
+    assert not out.exists()
+
+
+def test_v2_2_cli_and_formal_workflow_use_source_controlled_runtime_revision():
+    deploy = (ROOT / "deploy/voip-ai").read_text(encoding="utf-8")
+    workflow = (ROOT / ".github/workflows/production-deploy.yml").read_text(encoding="utf-8")
+    template = (ROOT / "deploy/production.env.example").read_text(encoding="utf-8")
+
+    assert "--revision SHA" in deploy
+    assert "materialize_runtime_env" in deploy
+    assert "python3 deploy/runtime_env.py" in deploy
+    assert "persistent_env_mutated=false" in deploy
+    assert "requested revision does not match checked-out source" in deploy
+    assert "/usr/local/sbin/voip-ai-production-deploy" not in workflow
+    assert "sudo -n ./deploy/voip-ai" in workflow
+    assert '--revision "$TARGET_SHA"' in workflow
+    assert "entrypoint=SOURCE_CONTROLLED" in workflow
+    assert "BUILD_REVISION=<immutable-git-sha-or-build-id>" not in template
+    assert "do not maintain BUILD_REVISION here" in template
