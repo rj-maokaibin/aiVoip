@@ -1,0 +1,45 @@
+name: CI/CD V2 Hotfix Probe
+
+on:
+  push:
+    branches:
+      - ops/cicd-v2-production-probe
+    paths:
+      - '.github/workflows/hotfix-probe.yml'
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ops/cicd-v2-production-probe
+          fetch-depth: 2
+      - name: Probe hotfix workflow
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os, urllib.request
+          from pathlib import Path
+          repo=os.environ['GITHUB_REPOSITORY']; token=os.environ['GITHUB_TOKEN']; api=os.environ.get('GITHUB_API_URL','https://api.github.com')
+          h={'Authorization':f'Bearer {token}','Accept':'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28','User-Agent':'aivoip-hotfix-probe'}
+          req=urllib.request.Request(f'{api}/repos/{repo}/actions/runs?branch=fix%2Fcicd-v2-production-failclosed&per_page=20',headers=h)
+          with urllib.request.urlopen(req,timeout=30) as r:data=json.load(r)
+          rows=[{k:x.get(k) for k in ('id','name','head_sha','status','conclusion','event','run_number','created_at','updated_at')} for x in data.get('workflow_runs',[])]
+          p=Path('validation/cicd_v2_hotfix_probe.json');p.parent.mkdir(parents=True,exist_ok=True);p.write_text(json.dumps(rows,indent=2)+'\n');print(json.dumps(rows,indent=2))
+          PY
+      - name: Commit result
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add validation/cicd_v2_hotfix_probe.json
+          git commit -m 'chore: capture CI/CD V2 hotfix workflow probe'
+          git push origin HEAD:ops/cicd-v2-production-probe
