@@ -15,6 +15,9 @@
   - frontend：`0.0.0.0:8088`（**8080 被同机 FusionPBX websockets 占用，禁止使用 8080**）
   - backend：生产环境按 `/etc/voip-ai/production.env` 的 `VOIP_BACKEND_PORT` 暴露（当前站点为 `127.0.0.1:18001`，容器内 8000）
   - MinIO console：按生产 env 绑定
+- **BUILD_REVISION 无需人工维护**：`deploy/voip-ai` 默认使用当前 checkout 的 40 位 Git SHA，
+  生成 `0600` 临时 effective env 后注入 `BUILD_REVISION`；`/etc/voip-ai/production.env` 不会被修改。
+  CI/CD 可显式传 `--revision <SHA>`，但该 SHA 必须与 Git HEAD 精确一致，否则 fail-closed。
 - **source manifest 一致性**：`build` 前 `tools/source_manifest_gate.py` 强制 manifest 与当前代码一致。
   `deploy/`、`backend/app`、`backend/run_feishu_long_connection.py`、`frontend/src`、`tools`、compose 等生产源码均受约束。
 - **本机 docker 组**：普通 `dev` 会话可能未加载 docker 组，直接敲 `docker` 会 permission denied；
@@ -34,6 +37,9 @@ sudo ./deploy/voip-ai --env /etc/voip-ai/production.env deploy
 sudo ./deploy/voip-ai --env /etc/voip-ai/production.env status
 sudo ./deploy/voip-ai --env /etc/voip-ai/production.env verify
 ```
+
+`deploy` 前不需要、也不应该手工修改 `production.env` 中的 `BUILD_REVISION`。历史文件中即使残留该字段也会被忽略，
+真正的 revision 由当前 checkout（或显式 `--revision`）注入临时 env，部署结束后删除。
 
 `deploy` 是全流程：preflight → prepare-host → 自动 `pg_dump` 备份 → source-bound build →
 up postgres/redis/minio → `alembic upgrade head` → up backend/workers/Feishu long-connection/beat/frontend →
@@ -55,7 +61,7 @@ up postgres/redis/minio → `alembic upgrade head` → up backend/workers/Feishu
 - listener 启动失败或内部监听线程异常退出时以非零状态退出，让 Docker restart policy 接管；
 - 生产 `preflight` 强制 `FEISHU_LIVE_ENABLED=true`、Feishu App/目标配置以及 Identity RBAC；
 - 当 Feishu Live 启用时，`verify` 全局扫描 `com.docker.compose.service=feishu-long-connection`，要求**运行中的 consumer 恰好 1 个**；
-- 唯一 consumer 必须属于当前 `aivoip` project、`BUILD_REVISION` 与生产 env 一致且 Docker health=`healthy`；
+- 唯一 consumer 必须属于当前 `aivoip` project、`BUILD_REVISION` 与本次 immutable deployment revision 一致且 Docker health=`healthy`；
 - 通用开发/测试环境若明确关闭 Feishu Live，`status` 的 consumer gate 会输出 `SKIP`，而不是把非 Feishu 部署误判为故障；这不影响生产，因为生产 `preflight` 会先 fail-closed；
 - `status` 和 `logs` 均包含 Feishu long-connection；
 - `backend/run_feishu_long_connection.py` 已纳入 `source_manifest`，避免入口脚本脱离 exact-source 发布门禁。
@@ -83,6 +89,7 @@ up postgres/redis/minio → `alembic upgrade head` → up backend/workers/Feishu
 ## 5. 注意事项
 
 - **禁用 8080**：同机 FusionPBX websockets 占用 `127.0.0.1:8080`；前端固定使用生产 env 配置的 8088。
+- 禁止手工同步 `BUILD_REVISION` 到 `/etc/voip-ai/production.env`；该值由部署入口运行时注入。
 - 修改纳入 source manifest 的文件后必须刷新 manifest，否则 build fail-closed。
 - env / secret 为 `root:0600`，查看/修改需 `sudo`，禁止通过 chmod 放宽权限绕过预检。
 - `FEISHU_LIVE_ENABLED=true` 是正式生产 deploy 的必需项，由 `deployment_preflight.py` 强制；通用非生产 `status` 场景允许 Feishu disabled 并明确显示 `SKIP`。

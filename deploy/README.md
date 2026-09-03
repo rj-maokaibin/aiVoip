@@ -9,8 +9,9 @@ sudo chmod 600 /etc/voip-ai/production.env
 sudo chmod 600 /etc/voip-ai/secrets/*
 ```
 
-Replace every `<...>` placeholder. EC-02 intentionally remains a release blocker until the real
-DUT Platform Contract is approved.
+Replace every `<...>` placeholder. `BUILD_REVISION` is intentionally not a persistent setting: the deployment CLI
+injects the checked-out immutable Git SHA into a private temporary runtime env and never rewrites
+`/etc/voip-ai/production.env`. EC-02 intentionally remains a release blocker until the real DUT Platform Contract is approved.
 
 ## 2. Preflight
 
@@ -25,7 +26,7 @@ sudo ./deploy/voip-ai --env /etc/voip-ai/production.env prepare-host
 ./deploy/voip-ai --env /etc/voip-ai/production.env deploy
 ```
 
-`deploy` performs preflight, a PostgreSQL backup when an existing DB is running, Docker image
+`deploy` derives `BUILD_REVISION` from the checked-out Git HEAD by default (or accepts `--revision <SHA>` only when it exactly matches HEAD), then performs preflight, a PostgreSQL backup when an existing DB is running, Docker image
 build, infrastructure startup, explicit Alembic migration, application promotion, and live runtime
 verification.
 

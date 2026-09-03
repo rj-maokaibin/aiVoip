@@ -7,6 +7,10 @@ export GIT_OPTIONAL_LOCKS=0
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DEFAULT_ENV="${VOIP_ENV_FILE:-/etc/voip-ai/production.env}"
 ENV_FILE="$DEFAULT_ENV"
+BASE_ENV_FILE="$DEFAULT_ENV"
+RUNTIME_ENV_FILE=""
+RUNTIME_ENV_READY=0
+TARGET_REVISION=""
 # Compose project name. Last-resort default is the production stack name
 # (aivoip); the authoritative value is resolved from the production env file
 # (VOIP_PROJECT_NAME) after --env is parsed, unless --project is given on the
@@ -26,7 +30,8 @@ Usage:
   deploy/voip-ai [global options] <command>
 
 Global options:
-  --env FILE          Production env file (default: /etc/voip-ai/production.env)
+  --env FILE          Persistent production env file (default: /etc/voip-ai/production.env)
+  --revision SHA      Immutable deployment revision (default: current Git HEAD; must equal HEAD)
   --project NAME      Docker Compose project name (default: aivoip; env VOIP_PROJECT_NAME wins)
   --field-pcap FILE   Field PCAP used by release verification
   --keep-stack        Keep E2E stack on failure
@@ -52,7 +57,8 @@ USAGE
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --env) ENV_FILE="$2"; shift 2 ;;
+    --env) ENV_FILE="$2"; BASE_ENV_FILE="$2"; shift 2 ;;
+    --revision) TARGET_REVISION="$2"; shift 2 ;;
     --project) PROJECT="$2"; PROJECT_FROM_CLI=1; shift 2 ;;
     --field-pcap) FIELD_PCAP="$2"; shift 2 ;;
     --keep-stack) KEEP_STACK=1; shift ;;
@@ -64,14 +70,65 @@ done
 COMMAND="${COMMAND:-help}"
 
 cd "$ROOT"
-ENV_FILE="$(python3 - "$ENV_FILE" <<'PY'
+BASE_ENV_FILE="$(python3 - "$BASE_ENV_FILE" <<'PY'
 from pathlib import Path
 import sys
 print(Path(sys.argv[1]).expanduser().resolve())
 PY
 )"
+ENV_FILE="$BASE_ENV_FILE"
+
+cleanup_runtime_env() {
+  if [[ -n "$RUNTIME_ENV_FILE" ]]; then
+    rm -f "$RUNTIME_ENV_FILE"
+  fi
+}
+trap cleanup_runtime_env EXIT
+
+materialize_runtime_env() {
+  local security_mode="${1:-strict}"
+  if [[ "$RUNTIME_ENV_READY" == "1" ]]; then
+    return 0
+  fi
+
+  local head revision
+  head="$(git rev-parse HEAD 2>/dev/null || true)"
+  if [[ ! "$head" =~ ^[0-9a-f]{40}$ ]]; then
+    echo "ERROR: unable to resolve immutable Git HEAD for runtime BUILD_REVISION" >&2
+    return 2
+  fi
+  revision="${TARGET_REVISION:-$head}"
+  if [[ ! "$revision" =~ ^[0-9a-f]{40}$ ]]; then
+    echo "ERROR: --revision must be an immutable 40-char lowercase git SHA; observed=${revision:-missing}" >&2
+    return 2
+  fi
+  if [[ "$revision" != "$head" ]]; then
+    echo "ERROR: requested revision does not match checked-out source: requested=$revision git_head=$head" >&2
+    return 2
+  fi
+
+  RUNTIME_ENV_FILE="$(mktemp "${TMPDIR:-/tmp}/voip-ai-runtime-env.XXXXXX")"
+  local -a runtime_env_args=(
+    --base-env "$BASE_ENV_FILE"
+    --revision "$revision"
+    --out "$RUNTIME_ENV_FILE"
+  )
+  if [[ "$security_mode" == "relaxed" ]]; then
+    runtime_env_args+=(--allow-insecure-base)
+  fi
+  if ! python3 deploy/runtime_env.py "${runtime_env_args[@]}"; then
+    rm -f "$RUNTIME_ENV_FILE"
+    RUNTIME_ENV_FILE=""
+    return 2
+  fi
+  ENV_FILE="$RUNTIME_ENV_FILE"
+  TARGET_REVISION="$revision"
+  RUNTIME_ENV_READY=1
+  echo "BUILD_REVISION_SOURCE=RUNTIME revision=$revision base_env=$BASE_ENV_FILE persistent_env_mutated=false"
+}
 
 compose() {
+  materialize_runtime_env relaxed
   DOCKER_BUILDKIT="${DOCKER_BUILDKIT:-1}" COMPOSE_DOCKER_CLI_BUILD="${COMPOSE_DOCKER_CLI_BUILD:-1}" \
     VOIP_APP_ENV_FILE="$ENV_FILE" docker compose \
     --project-name "$PROJECT" \
@@ -101,6 +158,7 @@ PY
 # the production env file (VOIP_PROJECT_NAME) is authoritative, falling back to
 # the production stack name (aivoip).
 if [[ "$PROJECT_FROM_CLI" != "1" ]]; then
+  ENV_FILE="$BASE_ENV_FILE"
   PROJECT="$(env_value VOIP_PROJECT_NAME 2>/dev/null || printf '%s' "$PROJECT")"
 fi
 
@@ -192,6 +250,7 @@ require_docker() {
 }
 
 source_binding_preflight() {
+  materialize_runtime_env || return $?
   local expected head dirty
   expected="$(env_value BUILD_REVISION 2>/dev/null || true)"
   head="$(git rev-parse HEAD 2>/dev/null || true)"
@@ -220,7 +279,8 @@ source_binding_preflight() {
 
 host_preflight() {
   require_docker
-  [[ -f "$ENV_FILE" ]] || { echo "ERROR: production env file missing: $ENV_FILE" >&2; exit 2; }
+  materialize_runtime_env || return $?
+  [[ -f "$ENV_FILE" ]] || { echo "ERROR: effective production env file missing: $ENV_FILE" >&2; exit 2; }
   source_binding_preflight
   mkdir -p validation
   python3 deploy/deployment_preflight.py --env-file "$ENV_FILE" --mode deploy --out validation/phase_f3_deployment_preflight.json
@@ -231,6 +291,7 @@ host_preflight() {
 }
 
 prepare_host() {
+  materialize_runtime_env relaxed || return $?
   local root min_gb
   root="$(env_value VOIP_DATA_ROOT 2>/dev/null || echo /data/voip)"
   min_gb="$(env_value VOIP_MIN_FREE_GB 2>/dev/null || echo 20)"
@@ -251,6 +312,7 @@ prepare_host() {
 
 backup_db() {
   require_docker
+  materialize_runtime_env relaxed || return $?
   local data_root ts out
   data_root="$(env_value VOIP_DATA_ROOT 2>/dev/null || echo /data/voip)"
   mkdir -p "$data_root/backups"
@@ -487,6 +549,7 @@ deploy_stack() {
 
 verify_stack() {
   require_docker
+  materialize_runtime_env relaxed || return $?
   mkdir -p validation
   rm -f validation/feishu_long_connection_runtime.json
   verify_feishu_consumer_host || return $?
@@ -590,6 +653,7 @@ PYFIELD
 
 status_cmd() {
   require_docker
+  materialize_runtime_env relaxed || return $?
   compose ps
   local bp fp
   bp="$(env_value VOIP_BACKEND_PORT 2>/dev/null || echo 8000)"

@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "file_count": 666,
-  "aggregate_sha256": "eccd4a6a93de213432b077d971f59f98c6cb248fe586e6634abf642cd67ae47a",
+  "file_count": 667,
+  "aggregate_sha256": "940b44dbf3c54733de2a581d7b9ae7080c193d92f6481d5530d90515926fde44",
   "files": [
     {
       "path": ".env.example",
@@ -10,8 +10,8 @@
     },
     {
       "path": ".github/workflows/production-deploy.yml",
-      "size": 6813,
-      "sha256": "f5bd792013e5214e041117c0e53f7fe3e45dabdf6889df5b4e2490dff783d6a4"
+      "size": 6932,
+      "sha256": "e8ed6ac95ab23a32b59729fdf1e60b242c6705ebe636a754ed70355b0f1b62e6"
     },
     {
       "path": ".github/workflows/source-manifest-gate.yml",
@@ -2440,13 +2440,13 @@
     },
     {
       "path": "deploy/DEPLOYMENT_GUIDE.md",
-      "size": 6064,
-      "sha256": "09de6f5fc87c46502996f7b5cd82b2481f35cbcfeb8c8ef44546ad6a45dfe32d"
+      "size": 6794,
+      "sha256": "61df5eebf2c0379244685b628cbb44530918aff2380a3a2b2063317fb99bc2f7"
     },
     {
       "path": "deploy/README.md",
-      "size": 2061,
-      "sha256": "8598e9f161a287e94e6c9384130340ee1ccfb080557a980e1851a0091fca2f3b"
+      "size": 2407,
+      "sha256": "0e08ebbc3504e4e4cbc0bed276432973019fe9785469ebb6c937529999839f84"
     },
     {
       "path": "deploy/SECRETS.md",
@@ -2520,8 +2520,8 @@
     },
     {
       "path": "deploy/production.env.example",
-      "size": 3854,
-      "sha256": "9c0b3a75b7596ee0c0f65f79df605aa245bbb4ba14b7acadde164e1db6e7ef94"
+      "size": 3979,
+      "sha256": "46db8e4bc64988a552958d6bad200585e66564fddc8c565913f62268e8dd79e1"
     },
     {
       "path": "deploy/production_runtime_verify.py",
@@ -2534,9 +2534,14 @@
       "sha256": "d492b874372e53e3368302c5857283c5a75ce97b4d0fac6136d63f60aa40ac18"
     },
     {
+      "path": "deploy/runtime_env.py",
+      "size": 2959,
+      "sha256": "cce27463de3deeae9062450e236a07061f4e345b68c129b0ca518d43cfc5e608"
+    },
+    {
       "path": "deploy/voip-ai",
-      "size": 25130,
-      "sha256": "36ee61d0312beaff12397d844e3a29c254fa323208bdab0284ce1fb7ceea0f11"
+      "size": 27273,
+      "sha256": "7c1be7d0c71c0445d508ab80c8d9aaabbe54b7f6fe2722f721199a0885d5a8a0"
     },
     {
       "path": "docker-compose.e2e.yml",
