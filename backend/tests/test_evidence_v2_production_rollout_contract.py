@@ -19,6 +19,18 @@ def test_source_controlled_rollout_stage_matches_backend_image_defaults():
     assert f"PRELIMINARY_EVIDENCE_V2_PROJECT={expected_project}" in dockerfile
 
 
+def test_rollout_switches_do_not_invalidate_expensive_dependency_layers():
+    dockerfile = (ROOT / "backend/Dockerfile").read_text(encoding="utf-8")
+    pip_layer = dockerfile.index("pip install")
+    rollout_layer = dockerfile.index("ENV PRELIMINARY_EVIDENCE_V2_COMPOSE=true")
+    assert rollout_layer > pip_layer
+    assert "DEBIAN_PRIMARY_MIRROR=https://mirrors.tuna.tsinghua.edu.cn/debian" in dockerfile
+    assert "PIP_PRIMARY_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple" in dockerfile
+    assert "PIP_FALLBACK_INDEX_URL=https://pypi.org/simple" in dockerfile
+    assert "APT_PRIMARY_MIRROR=UNREACHABLE fallback=OFFICIAL" in dockerfile
+    assert "PIP_PRIMARY_INDEX=FAIL fallback=OFFICIAL" in dockerfile
+
+
 def test_rollout_contract_modes_for_production_stages():
     shadow = rollout_from_env({
         "PRELIMINARY_EVIDENCE_V2_COMPOSE": "true",
