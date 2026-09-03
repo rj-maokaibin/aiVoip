@@ -5,26 +5,36 @@ on:
     branches: [master]
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: evidence-v2-manifest-helper-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 jobs:
-  render-manifest:
+  refresh-manifest:
+    if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Checkout exact PR head
+      - name: Checkout PR branch
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ github.head_ref }}
           fetch-depth: 1
-      - name: Render canonical manifest for handoff
+      - name: Refresh canonical source manifest
         shell: bash
         run: |
           set -euo pipefail
           python3 tools/source_manifest_gate.py --update
-          echo "MANIFEST_RENDER_HEAD=$(git rev-parse HEAD)"
-          echo "MANIFEST_GZ_B64=$(gzip -c release/source_manifest.json | base64 -w 0)"
+          python3 tools/source_manifest_gate.py
+          if git diff --quiet -- release/source_manifest.json; then
+            echo "SOURCE_MANIFEST_REFRESH=NO_CHANGE"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add release/source_manifest.json
+          git commit -m "chore: refresh Evidence V2 source manifest"
+          git push origin "HEAD:${{ github.head_ref }}"
+          echo "SOURCE_MANIFEST_REFRESH=PASS"
