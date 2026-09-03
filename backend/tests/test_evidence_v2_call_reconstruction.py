@@ -71,3 +71,32 @@ def test_final_failure_terminates_unestablished_invite():
     assert result["termination"]["kind"] == "FINAL_RESPONSE"
     assert result["termination"]["status_code"] == 486
     assert result["call_end_time"] == 1.5
+
+
+def test_cancel_terminates_only_early_invite_attempt():
+    call = _base_call([
+        {"frame_number": 1, "timestamp": 1.0, "method": "INVITE", "status_code": None, "cseq_method": "INVITE"},
+        {"frame_number": 2, "timestamp": 1.2, "method": None, "status_code": 180, "cseq_method": "INVITE"},
+        {"frame_number": 3, "timestamp": 1.5, "method": "CANCEL", "status_code": None, "cseq_method": "CANCEL"},
+        {"frame_number": 4, "timestamp": 1.6, "method": None, "status_code": 487, "cseq_method": "INVITE"},
+    ])
+
+    result = reconstruct_call_v2(call)
+
+    assert result["state"] == "CANCELLED"
+    assert result["termination"]["kind"] == "CANCEL"
+    assert result["call_end_time"] == 1.5
+
+
+def test_cancel_after_success_response_is_not_a_call_termination():
+    call = _base_call([
+        {"frame_number": 1, "timestamp": 1.0, "method": "INVITE", "status_code": None, "cseq_method": "INVITE"},
+        {"frame_number": 2, "timestamp": 2.0, "method": None, "status_code": 200, "cseq_method": "INVITE"},
+        {"frame_number": 3, "timestamp": 2.1, "method": "CANCEL", "status_code": None, "cseq_method": "CANCEL"},
+    ])
+
+    result = reconstruct_call_v2(call)
+
+    assert result["state"] == "ANSWERED"
+    assert result["termination"]["observed"] is False
+    assert result["call_end_time"] is None
