@@ -1,0 +1,37 @@
+name: Evidence V2 Manifest Refresh
+
+on:
+  push:
+    branches:
+      - feat/evidence-v2-completion-clean
+
+permissions:
+  contents: write
+
+jobs:
+  refresh-source-manifest:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact branch head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+          fetch-depth: 0
+
+      - name: Regenerate exact source manifest
+        run: |
+          python3 tools/source_manifest_gate.py --update
+          python3 tools/source_manifest_gate.py
+
+      - name: Commit refreshed manifest when needed
+        run: |
+          if git diff --quiet -- release/source_manifest.json; then
+            echo "Source manifest already exact."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add release/source_manifest.json
+          git commit -m "chore(evidence-v2): refresh exact source manifest"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
