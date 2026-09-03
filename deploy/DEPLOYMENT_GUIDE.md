@@ -90,6 +90,7 @@ up postgres/redis/minio → `alembic upgrade head` → up backend/workers/Feishu
 
 - **禁用 8080**：同机 FusionPBX websockets 占用 `127.0.0.1:8080`；前端固定使用生产 env 配置的 8088。
 - 禁止手工同步 `BUILD_REVISION` 到 `/etc/voip-ai/production.env`；该值由部署入口运行时注入。
+- `/usr/local/sbin/voip-ai-production-deploy` 由 `deploy/production_deploy_wrapper.sh` 管控；已知 legacy wrapper 会在首次 exact-master 部署时自动迁移，并一次性删除持久 env 中遗留的 `BUILD_REVISION`。未知 wrapper 哈希一律 fail-closed。
 - 修改纳入 source manifest 的文件后必须刷新 manifest，否则 build fail-closed。
 - env / secret 为 `root:0600`，查看/修改需 `sudo`，禁止通过 chmod 放宽权限绕过预检。
 - `FEISHU_LIVE_ENABLED=true` 是正式生产 deploy 的必需项，由 `deployment_preflight.py` 强制；通用非生产 `status` 场景允许 Feishu disabled 并明确显示 `SKIP`。

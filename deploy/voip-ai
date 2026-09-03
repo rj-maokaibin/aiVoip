@@ -517,6 +517,12 @@ PY
 }
 
 deploy_stack() {
+  if [[ "$(id -u)" == "0" && "$BASE_ENV_FILE" == "/etc/voip-ai/production.env" ]]; then
+    python3 deploy/production_wrapper_migration.py \
+      --source deploy/production_deploy_wrapper.sh \
+      --target /usr/local/sbin/voip-ai-production-deploy \
+      --env-file "$BASE_ENV_FILE"
+  fi
   perf_reset
   perf_phase preflight host_preflight
   perf_phase prepare_host prepare_host
