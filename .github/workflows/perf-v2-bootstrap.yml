@@ -30,9 +30,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          sudo -n find "$GITHUB_WORKSPACE" -type d \( -name __pycache__ -o -name .pytest_cache \) -prune -exec rm -rf {} + 2>/dev/null || true
-          sudo -n find "$GITHUB_WORKSPACE" -type f -name '*.pyc' -delete 2>/dev/null || true
-          sudo -n chown -R "$(id -u):$(id -g)" "$GITHUB_WORKSPACE" 2>/dev/null || true
+          docker info >/dev/null
+          docker image inspect python:3.12-slim >/dev/null
+          docker run --rm \
+            -v "$GITHUB_WORKSPACE:/workspace" \
+            python:3.12-slim \
+            sh -lc 'find /workspace -mindepth 1 -maxdepth 1 -exec rm -rf {} +'
+          test -z "$(find "$GITHUB_WORKSPACE" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null)"
           echo "PRECHECKOUT_RUNNER_WORKSPACE_REPAIR=PASS"
 
       - uses: actions/checkout@v4
