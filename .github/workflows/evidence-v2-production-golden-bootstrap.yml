@@ -6,6 +6,8 @@ on:
       - master
     paths:
       - 'tools/evidence_v2_production_golden_bootstrap.py'
+      - 'tools/source_manifest_gate.py'
+      - 'release/source_manifest.json'
       - '.github/workflows/evidence-v2-production-golden-bootstrap.yml'
   workflow_dispatch:
 
@@ -40,6 +42,8 @@ jobs:
           ]
           missing=[item for item in required if item not in text]
           assert not missing, missing
+          manifest_gate=Path('tools/source_manifest_gate.py').read_text(encoding='utf-8')
+          assert '.github/workflows/evidence-v2-production-golden-bootstrap.yml' in manifest_gate
           print('EVIDENCE_V2_GOLDEN_BOOTSTRAP_CONTRACT=PASS')
           PY
 
@@ -120,6 +124,7 @@ jobs:
       - name: Bootstrap dedicated production baseline
         run: |
           set -euo pipefail
+          mkdir -p validation
           result="$RUNNER_TEMP/evidence-v2-production-golden-bootstrap.json"
           in_pcap=/tmp/evidence-v2-production-real-golden-001.pcap
           in_script=/tmp/evidence-v2-production-golden-bootstrap.py
