@@ -12,8 +12,9 @@ RUN set -eux; \
     . /etc/os-release; \
     if python -c 'import sys, urllib.request; urllib.request.urlopen(sys.argv[1].rstrip("/") + "/dists/" + sys.argv[2] + "/InRelease", timeout=4).read(1)' "$DEBIAN_PRIMARY_MIRROR" "$VERSION_CODENAME"; then \
       mirror="${DEBIAN_PRIMARY_MIRROR%/}"; \
-      sed -i "s#http://deb.debian.org/debian#${mirror}#g; s#https://deb.debian.org/debian#${mirror}#g" "$sources"; \
-      echo "APT_PRIMARY_MIRROR=DOMESTIC url=$mirror"; \
+      python -c 'from pathlib import Path; import sys; p=Path(sys.argv[1]); mirror=sys.argv[2]; s=p.read_text(); s=s.replace("URIs: http://deb.debian.org/debian\n", f"URIs: {mirror}\n").replace("URIs: https://deb.debian.org/debian\n", f"URIs: {mirror}\n"); p.write_text(s)' "$sources" "$mirror"; \
+      python -c 'from pathlib import Path; import sys; s=Path(sys.argv[1]).read_text(); assert "deb.debian.org/debian-security" in s, "Debian security source must remain official"' "$sources"; \
+      echo "APT_PRIMARY_MIRROR=DOMESTIC url=$mirror security=OFFICIAL"; \
     else \
       echo "APT_PRIMARY_MIRROR=UNREACHABLE fallback=OFFICIAL"; \
     fi; \
