@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "file_count": 665,
-  "aggregate_sha256": "8159cca52922e05cad44afaec2418ea3cb76e9d29dd7d17582b1069ae3bb623e",
+  "aggregate_sha256": "af4d159eceed2cb1076f4616ba1412b4a5d03259a9f0ef32dca527ff16bc2453",
   "files": [
     {
       "path": ".env.example",
@@ -2460,8 +2460,8 @@
     },
     {
       "path": "deploy/docker_network_guard.py",
-      "size": 8539,
-      "sha256": "8c591684ea1e2d16faebe88d36cf51de6df6c76fb4a4a0fc722c2c4240bf6772"
+      "size": 11247,
+      "sha256": "106d6f7a17eb91aa12b490b6d2504b8034b7a162d1d670c2036822ca713a7f2f"
     },
     {
       "path": "deploy/exact_source_binding_gate.py",
