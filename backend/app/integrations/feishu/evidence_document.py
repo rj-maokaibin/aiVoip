@@ -181,6 +181,68 @@ class FeishuEvidenceDocumentService:
             used += 1
         return used
 
+    def _v2_core_blocks(self, report: PreliminaryEvidenceReport, wrapper: dict, v2: dict) -> tuple[list[dict], int, list[dict]]:
+        first=v2.get("first_page") or {}
+        validation=v2.get("semantic_validation") or {}
+        blocks=[
+            self._text(f"Evidence Report V2｜Report {report.id}｜{v2.get('pipeline_status') or 'UNKNOWN'}",3),
+            self._text("0. 当前结论 / 30 秒决策摘要",4),
+            self._text(first.get("conclusion") or "当前无可发布结论。"),
+            self._text(f"用户问题复现：{first.get('symptom_reproduction') or '无法确认'}｜{first.get('symptom_detail') or ''}"),
+            self._text(f"Semantic Validator：{validation.get('status') or 'UNKNOWN'}｜Problem Count：{v2.get('problem_count')}",12),
+            self._text("1. 主要异常",4),
+        ]
+        for item in (first.get("top_abnormal") or [])[:12]:
+            if isinstance(item,dict):
+                blocks.append(self._text(f"{item.get('id')}｜{item.get('type')}｜time={item.get('time')}｜severity={item.get('severity')}",12))
+        if not first.get("top_abnormal"):
+            blocks.append(self._text("当前无主要异常单元。",12))
+        blocks.append(self._text("2. 正常 / 排除性证据",4))
+        for item in (first.get("normal_and_exclusion") or [])[:20]:
+            if isinstance(item,dict):
+                blocks.append(self._text(f"✅ {item.get('type')}｜{item}",12))
+        if not first.get("normal_and_exclusion"):
+            blocks.append(self._text("当前无结构化正常/排除性证据。",12))
+        blocks.append(self._text("3. 证据边界",4))
+        for item in first.get("evidence_boundaries") or []:
+            blocks.append(self._text(str(item),12))
+        blocks.append(self._text("4. 下一步验证",4))
+        for i,item in enumerate(first.get("next_steps") or [],1):
+            blocks.append(self._text(f"{i}. {item}",12))
+        if not first.get("next_steps"):
+            blocks.append(self._text("当前无额外建议。",12))
+        blocks.append(self._text("5. Finding / Correlation",4))
+        for cluster in (v2.get("correlation_clusters") or [])[:12]:
+            if isinstance(cluster,dict):
+                blocks.append(self._text(f"{cluster.get('cluster_id')}｜{cluster.get('type')}｜{cluster.get('representative_time')}｜{cluster.get('interpretation_boundary')}｜Root Cause confirmed={cluster.get('root_cause_confirmed')}",12))
+        for finding in (v2.get("findings") or [])[:20]:
+            if isinstance(finding,dict) and not finding.get("absorbed_by_cluster"):
+                blocks.append(self._text(f"{finding.get('finding_id')}｜{finding.get('class')}｜{finding.get('type')}｜events={finding.get('event_count')}｜evidence={finding.get('evidence_refs')}",12))
+        blocks.append(self._text("6. 技术边界 / 可见性",4))
+        call=v2.get("call_reconstruction") or {}; timeline=v2.get("timeline") or {}; visibility=v2.get("visibility") or {}
+        blocks.append(self._text(f"Call state={call.get('state')}｜termination={(call.get('termination') or {}).get('observed')}｜call_end={call.get('call_end_time')}",12))
+        media=timeline.get("media_observation_window") or {}
+        blocks.append(self._text(f"Media Observation={media.get('start')} ～ {media.get('end')}｜source={media.get('source')}｜End-to-End={visibility.get('end_to_end_media')}｜Root Cause readiness={visibility.get('root_cause_readiness')}",12))
+        if validation.get("status") != "PASS":
+            blocks.append(self._text("⚠️ Semantic Validator FAIL：该 V2 报告禁止作为 COMPLETE 权威结论。",12))
+            for item in (validation.get("violations") or [])[:20]:
+                if isinstance(item,dict): blocks.append(self._text(f"{item.get('rule')}｜{item.get('detail')}",12))
+        blocks.append(self._text("7. V2 证据附件",4))
+        inline_plan=[]
+        for artifact in (v2.get("artifacts") or []):
+            if not isinstance(artifact,dict) or str(artifact.get("type") or "").upper()!="ANOMALY_AUDIO_CLIP" or not artifact.get("artifact_id"):
+                continue
+            blocks.append(self._text(f"异常音频：{artifact.get('filename') or artifact.get('artifact_id')}｜time={artifact.get('time_range')}｜sha256={artifact.get('sha256')}",12))
+            idx=len(blocks); blocks.append(self._media_placeholder(image=False)); inline_plan.append({"block_index":idx,"artifact_id":artifact.get("artifact_id"),"is_image":False,"finding_id":(artifact.get("finding_refs") or [None])[0]})
+            if len(inline_plan)>=3: break
+        attachment_index=len(blocks)
+        blocks.extend([
+            self._text("8. 报告版本与审计",4),
+            self._text(f"Schema：{v2.get('schema')}｜Active Projection：V2｜V1 compatibility snapshot retained：是｜Report ID：{report.id}"),
+            self._text("飞书仅投影 Canonical V2；LLM 不拥有 SIP/RTP/PCM/DTMF 确定性事实或 Root Cause 确认权。"),
+        ])
+        return blocks,attachment_index,inline_plan
+
     def _core_blocks(
         self,
         report: PreliminaryEvidenceReport,
@@ -188,6 +250,8 @@ class FeishuEvidenceDocumentService:
         *,
         history_blocks: list[dict] | None = None,
     ) -> tuple[list[dict], int, list[dict]]:
+        if payload.get("active_projection")=="V2" and isinstance(payload.get("v2_canonical"),dict):
+            return self._v2_core_blocks(report,payload,payload["v2_canonical"])
         # Projection is rebuilt from one finalized Canonical Report; no prepend
         # revision/legacy override layer is allowed in V2.
         finalize_report_contract(report, payload)
@@ -474,12 +538,12 @@ class FeishuEvidenceDocumentService:
             is_image = artifact.content_type == "image/png" and artifact.type in {
                 "WAVEFORM_PNG", "SPECTRUM_PNG", "SPECTROGRAM_PNG", "RTP_TIMELINE_PNG", "SIP_CALL_FLOW_PNG"
             }
-            is_clip = artifact.type in {"AUDIO_CLIP", "PERIODIC_AUDIO_CLIP"}
+            is_clip = artifact.type in {"AUDIO_CLIP", "PERIODIC_AUDIO_CLIP", "ANOMALY_AUDIO_CLIP"}
             is_bundle = artifact.type == "EVIDENCE_BUNDLE"
             if (is_image or is_clip or is_bundle) and artifact.size_bytes <= 20 * 1024 * 1024:
                 candidates.append((artifact, is_image))
         candidates.sort(key=lambda pair: (
-            0 if pair[1] else 1 if pair[0].type in {"AUDIO_CLIP", "PERIODIC_AUDIO_CLIP"} else 2,
+            0 if pair[1] else 1 if pair[0].type in {"AUDIO_CLIP", "PERIODIC_AUDIO_CLIP", "ANOMALY_AUDIO_CLIP"} else 2,
             pair[0].created_at,
         ))
         candidates = candidates[:8]

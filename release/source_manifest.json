@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "file_count": 676,
-  "aggregate_sha256": "95ff9570cba9f28d91ae37deb0450d2976f612f54296f77a2624f2961ed73a79",
+  "file_count": 687,
+  "aggregate_sha256": "4aa878d8c6540ec69477e8d59f087a833329b9c24ef7fafa685ad2a989c97cd7",
   "files": [
     {
       "path": ".env.example",
@@ -315,8 +315,8 @@
     },
     {
       "path": "backend/app/api/v1/evidence_reports.py",
-      "size": 12044,
-      "sha256": "9bfd2a33c47370be5902a28557a06758ceb488e0ba61787428df1af919a524c1"
+      "size": 12066,
+      "sha256": "82853ca26ea8adf8cdd31328b527f1da6fcc1920abdbff117f373e76058a8eb6"
     },
     {
       "path": "backend/app/api/v1/evidence_retention.py",
@@ -1530,8 +1530,8 @@
     },
     {
       "path": "backend/app/integrations/feishu/evidence_document.py",
-      "size": 31710,
-      "sha256": "46224e1dda4a5b6397866e81408c1ca496c6a35e42dadb3b51e9c9cb73ea5d19"
+      "size": 37009,
+      "sha256": "ca5323aaee3a4781b0ec3e197b43372df425720bc3497fc091ea3db574d9df3f"
     },
     {
       "path": "backend/app/integrations/feishu/evidence_document_human_v2.py",
@@ -1795,8 +1795,8 @@
     },
     {
       "path": "backend/app/reports/report_grounding.py",
-      "size": 21315,
-      "sha256": "0665da0a3dc55475edae620c7753fcac0b46114f8500b224bf3443ad911a0f95"
+      "size": 21337,
+      "sha256": "49d2dd40c0f1288457852d520882f79867cf33ca6d85df8840a5ac7fb3730fae"
     },
     {
       "path": "backend/app/reports/rtp_high_delta.py",
@@ -1814,9 +1814,29 @@
       "sha256": "f663ffc604bc52ca159bfb5b5265fc0e5639bb1a34c666f362ce2ddab7783b92"
     },
     {
+      "path": "backend/app/reports/v2/adapter.py",
+      "size": 23401,
+      "sha256": "8972bfe02c2ca2673821b6b04933581f4db501c363ed6ede5e8dbfed72cfd145"
+    },
+    {
+      "path": "backend/app/reports/v2/ai_authority.py",
+      "size": 3183,
+      "sha256": "324ebd2b2b9cee6adaeb5924b48f18028e7d7879df852486b1ad5f12e5664145"
+    },
+    {
+      "path": "backend/app/reports/v2/artifact_binding.py",
+      "size": 4869,
+      "sha256": "d8b79d708e8fc7dd3da65121ce4b13bfcb9009c0cfab07256d53c850ff9bc046"
+    },
+    {
       "path": "backend/app/reports/v2/call_reconstruction.py",
       "size": 7124,
       "sha256": "3ec377cbd3b9f084d8ee86caff0fe0f7a0b8ae4ac51a279976766a9f9b4d7e74"
+    },
+    {
+      "path": "backend/app/reports/v2/composer.py",
+      "size": 5800,
+      "sha256": "48d30b9701a66478105a4e53c2ace8234df1d5f41766446dfbb5866449d82c78"
     },
     {
       "path": "backend/app/reports/v2/correlation.py",
@@ -1829,9 +1849,39 @@
       "sha256": "769f1c1ed0d9208ab6e74d6823517e850e26b62b813b0386ce78e053b7f5d722"
     },
     {
+      "path": "backend/app/reports/v2/migration.py",
+      "size": 1702,
+      "sha256": "e6d5b0e8a60a6d2505d6c93ff67cb695863aa626faaab9750f8f3680a0bd5502"
+    },
+    {
+      "path": "backend/app/reports/v2/phase.py",
+      "size": 1890,
+      "sha256": "318dbc8201d0f62cec98910eb33e9f217324987146042db7065a8cf4fc8e12ae"
+    },
+    {
+      "path": "backend/app/reports/v2/recommendation.py",
+      "size": 4538,
+      "sha256": "e833a3340fd7c41dd10af8ace9cb8e6a2028d9843c0762101eef654a16a6867a"
+    },
+    {
+      "path": "backend/app/reports/v2/renderer.py",
+      "size": 6565,
+      "sha256": "b605eb4dfb41b44987972104480d35d96cc646d0242fd541348017501142f9f4"
+    },
+    {
+      "path": "backend/app/reports/v2/runtime_adapter.py",
+      "size": 10567,
+      "sha256": "4a6a953dee4eb4ec15a99bf507ea72ba0885ac3ee6517690f92043c343257a4a"
+    },
+    {
+      "path": "backend/app/reports/v2/runtime_validator.py",
+      "size": 2408,
+      "sha256": "7bc90a5118215a35e0c5e50c09d66433ff8352152ba6fc1ce74e0483d9efa33c"
+    },
+    {
       "path": "backend/app/reports/v2/semantic_validator.py",
-      "size": 7906,
-      "sha256": "7bd812e8ffd55de4cf1e000dfa45860c725ee4da41dbc3ff8fd6b68a1d8e5a52"
+      "size": 17369,
+      "sha256": "c6f7abc680a25ab4d6b76d3cb87e5a9259049460b7ed8c7045457f66e92ace7c"
     },
     {
       "path": "backend/app/reports/v2/timeline.py",
@@ -2120,8 +2170,8 @@
     },
     {
       "path": "backend/app/services/evidence_report.py",
-      "size": 23162,
-      "sha256": "98ef97586537e9f31969554adc66d68c244fe8daab51da47bba50dba83bb6d18"
+      "size": 27169,
+      "sha256": "bafafa62fa40e8cf143a254bd97cebc459f794a8c643d787d11e18009c88e52b"
     },
     {
       "path": "backend/app/services/evidence_report_aggregation.py",
@@ -2135,8 +2185,8 @@
     },
     {
       "path": "backend/app/services/evidence_report_artifacts.py",
-      "size": 35455,
-      "sha256": "507864a9230e66c3a5a353d7ef6d9e0ade352fd380acf18d3115c1981872a7be"
+      "size": 35476,
+      "sha256": "7bb8bb5e62b905e9586a1046190240204010ff1ba5d186270c341864408e0b76"
     },
     {
       "path": "backend/app/services/evidence_report_context.py",
@@ -2162,6 +2212,11 @@
       "path": "backend/app/services/evidence_report_subject_call.py",
       "size": 5626,
       "sha256": "b0086547b791e787f5c4f0a4ea81126eab2349d048002194a1f1ad0710327c93"
+    },
+    {
+      "path": "backend/app/services/evidence_report_v2.py",
+      "size": 10200,
+      "sha256": "376e17d4fc9ba2bd4de011f7785edb2463db806a0daebc662a5201c5745bc939"
     },
     {
       "path": "backend/app/services/evidence_retention.py",
