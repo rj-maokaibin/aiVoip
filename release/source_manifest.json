@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "file_count": 687,
-  "aggregate_sha256": "4aa878d8c6540ec69477e8d59f087a833329b9c24ef7fafa685ad2a989c97cd7",
+  "file_count": 689,
+  "aggregate_sha256": "22a5809c7ed21920a6ecbfde3e451ad84037db51765637d2ef79f89e109f2e56",
   "files": [
     {
       "path": ".env.example",
@@ -25,8 +25,8 @@
     },
     {
       "path": "backend/Dockerfile",
-      "size": 648,
-      "sha256": "dde8a5fa8a95f168fbd576556de63de5056042b2084c00cab6ae400907e939fe"
+      "size": 773,
+      "sha256": "ca8755ea316a99b17b31d418d796f9075010e4ce830d41a0fafbd83c2dc2e67b"
     },
     {
       "path": "backend/alembic.ini",
@@ -2554,6 +2554,11 @@
       "sha256": "106d6f7a17eb91aa12b490b6d2504b8034b7a162d1d670c2036822ca713a7f2f"
     },
     {
+      "path": "deploy/evidence_v2_rollout.json",
+      "size": 343,
+      "sha256": "6b52b6f483cf44a4f799ce27720eefc9d3e4d569894c6d0fa3aad3299df4618d"
+    },
+    {
       "path": "deploy/exact_source_binding_gate.py",
       "size": 9761,
       "sha256": "169b218c1c625010f010ae9e40dcf53843b339588af023570dcfddeb533cbac4"
@@ -2640,8 +2645,8 @@
     },
     {
       "path": "deploy/voip-ai",
-      "size": 27565,
-      "sha256": "52c57e7749909baaa61aa4d7cc46db9ead261c32761aa5624fc59cb010a28956"
+      "size": 31110,
+      "sha256": "6e2ceef8d539174a0ea10206ba1fac546c51005d78d0ecbc3fc7afa675622115"
     },
     {
       "path": "docker-compose.e2e.yml",
@@ -3197,6 +3202,11 @@
       "path": "tools/evidence_report_release_gate.py",
       "size": 9126,
       "sha256": "70fa7469a9ab4880740c06d0c437a3f63fa8339fbaa70332cc8032dfc227455c"
+    },
+    {
+      "path": "tools/evidence_v2_production_acceptance.py",
+      "size": 7874,
+      "sha256": "eded9dcdb9d1cf0844c6b6d90b15ad56de961a178db1fca65302eec301242c76"
     },
     {
       "path": "tools/export_ai_eval_dataset.py",
