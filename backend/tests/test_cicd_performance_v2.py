@@ -72,7 +72,7 @@ def test_production_workflow_repairs_workspace_before_checkout():
     assert "PRODUCTION_RUNNER_WORKSPACE_REPAIR=PASS" in text
 
 
-def test_production_network_is_named_narrow_and_guarded():
+def test_production_network_is_named_narrow_guarded_and_idempotent():
     compose = (ROOT / "docker-compose.production.yml").read_text(encoding="utf-8")
     deploy = (ROOT / "deploy/voip-ai").read_text(encoding="utf-8")
     guard = (ROOT / "deploy/docker_network_guard.py").read_text(encoding="utf-8")
@@ -82,3 +82,7 @@ def test_production_network_is_named_narrow_and_guarded():
     assert "docker_network_guard.py cleanup" in deploy
     assert "DESIRED_SUBNET_CONTAINS_REGISTRY_MIRROR" in guard
     assert "LEGACY_CONFLICT_NETWORK_STILL_IN_USE" in guard
+    assert "EXISTING_PRODUCTION_NETWORK_SUBNET_MISMATCH" in guard
+    assert "PRODUCTION_NETWORK_NOT_MATERIALIZED_AS_EXPECTED" in guard
+    assert "n['name'] == network_name and subnet == desired" in guard
+    assert "created_by_guard" in guard
