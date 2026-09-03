@@ -1,0 +1,35 @@
+name: Temporary V2.2 Source Manifest Refresh
+
+on:
+  push:
+    branches:
+      - perf/cicd-v2-2
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: perf/cicd-v2-2
+          fetch-depth: 0
+
+      - name: Refresh source manifest exactly
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/source_manifest_gate.py --update
+          python3 tools/source_manifest_gate.py
+          if git diff --quiet -- release/source_manifest.json; then
+            echo "SOURCE_MANIFEST_REFRESH=NOOP"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add release/source_manifest.json
+          git commit -m "chore: refresh V2.2 source manifest"
+          git push origin HEAD:perf/cicd-v2-2
+          echo "SOURCE_MANIFEST_REFRESH=PASS"
