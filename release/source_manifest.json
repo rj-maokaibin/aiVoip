@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "file_count": 667,
-  "aggregate_sha256": "c2d4778ade25fc0b085b278e578699a24308b19f24604d5f367fab801a69f5ab",
+  "file_count": 669,
+  "aggregate_sha256": "70a5a2262d4bec8654134f98601ea71cf072d8a3a757a486d3e356f40fea06c1",
   "files": [
     {
       "path": ".env.example",
@@ -2440,8 +2440,8 @@
     },
     {
       "path": "deploy/DEPLOYMENT_GUIDE.md",
-      "size": 6794,
-      "sha256": "61df5eebf2c0379244685b628cbb44530918aff2380a3a2b2063317fb99bc2f7"
+      "size": 7067,
+      "sha256": "721f20c4b452bf7f886ffc099ed5ea40bb08bc11e0ddcda73205ef0c47a4761d"
     },
     {
       "path": "deploy/README.md",
@@ -2524,9 +2524,19 @@
       "sha256": "46db8e4bc64988a552958d6bad200585e66564fddc8c565913f62268e8dd79e1"
     },
     {
+      "path": "deploy/production_deploy_wrapper.sh",
+      "size": 1349,
+      "sha256": "25b0aac88c7c4f09edda07e2e802e295fbb1a9d1e84639a1b7e4467f604355c0"
+    },
+    {
       "path": "deploy/production_runtime_verify.py",
       "size": 7548,
       "sha256": "d4cc78e2d748a3383dda91033c61feba6f14fe545eefa02414a76688ec9ea109"
+    },
+    {
+      "path": "deploy/production_wrapper_migration.py",
+      "size": 4034,
+      "sha256": "d9568ad36049195963af738b0120f33937cf1cb5e2b7737fa0a6aff255f99dbd"
     },
     {
       "path": "deploy/registry_connectivity_probe.py",
@@ -2540,8 +2550,8 @@
     },
     {
       "path": "deploy/voip-ai",
-      "size": 27273,
-      "sha256": "7c1be7d0c71c0445d508ab80c8d9aaabbe54b7f6fe2722f721199a0885d5a8a0"
+      "size": 27565,
+      "sha256": "52c57e7749909baaa61aa4d7cc46db9ead261c32761aa5624fc59cb010a28956"
     },
     {
       "path": "docker-compose.e2e.yml",
