@@ -64,6 +64,7 @@ def reconstruct_call_v2(sip_call: CallDict) -> dict[str, Any]:
         None,
     )
     cancel = _first(ladder, method="CANCEL")
+    cancel_is_valid_termination = cancel is not None and success is None
 
     final_failure = None
     if success is None:
@@ -77,16 +78,15 @@ def reconstruct_call_v2(sip_call: CallDict) -> dict[str, Any]:
 
     termination = _termination_fact(
         bye=bye,
-        cancel=cancel,
+        cancel=cancel if cancel_is_valid_termination else None,
         final_failure=final_failure,
-        established=established_time is not None,
     )
 
     if termination["observed"] and termination["kind"] == "BYE":
         state = "TERMINATED"
     elif established_time is not None:
         state = "ESTABLISHED"
-    elif cancel is not None:
+    elif cancel_is_valid_termination:
         state = "CANCELLED"
     elif final_failure is not None:
         state = "FAILED"
@@ -138,7 +138,6 @@ def _termination_fact(
     bye: Mapping[str, Any] | None,
     cancel: Mapping[str, Any] | None,
     final_failure: Mapping[str, Any] | None,
-    established: bool,
 ) -> dict[str, Any]:
     if bye is not None:
         return {
@@ -149,9 +148,10 @@ def _termination_fact(
             "status_code": None,
         }
 
-    # CANCEL terminates an early INVITE attempt. It must not be used as the end
-    # of an already-established dialog.
-    if cancel is not None and not established:
+    # CANCEL terminates only an early INVITE attempt. Once a 2xx has been
+    # observed, CANCEL is no longer a valid lifecycle terminator; the dialog is
+    # answered and awaits ACK/BYE or remains incomplete in this capture.
+    if cancel is not None:
         return {
             "observed": True,
             "kind": "CANCEL",
