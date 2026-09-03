@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "file_count": 669,
-  "aggregate_sha256": "b10f49f152474cd71975cce26bbf50ce0efee6e12da055aaaa8790c7d45e9f11",
+  "file_count": 673,
+  "aggregate_sha256": "5de4af33142c3b53ffedfabd1f65597a4437f088b419959c3ed13fa3e6bd37c2",
   "files": [
     {
       "path": ".env.example",
@@ -1807,6 +1807,26 @@
       "path": "backend/app/reports/sip_flow_visual.py",
       "size": 3293,
       "sha256": "92a147875880709d687c0b26fc17318af876e6aa11e59348e9cdde9a0cd2ba85"
+    },
+    {
+      "path": "backend/app/reports/v2/__init__.py",
+      "size": 456,
+      "sha256": "f663ffc604bc52ca159bfb5b5265fc0e5639bb1a34c666f362ce2ddab7783b92"
+    },
+    {
+      "path": "backend/app/reports/v2/call_reconstruction.py",
+      "size": 6987,
+      "sha256": "f49992c1f843a5ed1e3f1bfe660e27267a8742d28344bd6e4fe1b2dd41104dc8"
+    },
+    {
+      "path": "backend/app/reports/v2/semantic_validator.py",
+      "size": 2614,
+      "sha256": "b1808799dbcbb356a7154760103ce49906a0adeac3f348a7a3b2035bfcf0c2d3"
+    },
+    {
+      "path": "backend/app/reports/v2/timeline.py",
+      "size": 4115,
+      "sha256": "0303e07e265913fcc7cd18de4adb9fe0c8f2eddfe1a36937ad8aa886a0a2f3c5"
     },
     {
       "path": "backend/app/reproduction/__init__.py",
