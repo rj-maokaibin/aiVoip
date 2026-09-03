@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "file_count": 664,
-  "aggregate_sha256": "325404b970b323fc2c054303b1ee6ba549e6b2079226db086d1821a0804e6b66",
+  "aggregate_sha256": "262e799d93b56ce6f08f552bd5ff6ffd7faf07908d1831aa71a6ba779d95100c",
   "files": [
     {
       "path": ".env.example",
@@ -10,13 +10,13 @@
     },
     {
       "path": ".github/workflows/production-deploy.yml",
-      "size": 5425,
-      "sha256": "cff8189e0257e4310d46482b46db973ff33f43b52b3891f0e83bdcdaf5c54ef7"
+      "size": 5473,
+      "sha256": "073a4cb8805bebbdc066adf3166730a1c5b454f430760bc4ac74a19fab3fe0b9"
     },
     {
       "path": ".github/workflows/source-manifest-gate.yml",
-      "size": 1519,
-      "sha256": "ce1b8bfb50ba2095966c7baa87f4cbcf2b45fc78c7383d38de7a747de4026290"
+      "size": 4080,
+      "sha256": "e6bb20524b1e8c6ef2abea2e50a372a3ca289755081059da390cd37a07115750"
     },
     {
       "path": "Makefile",
@@ -25,8 +25,8 @@
     },
     {
       "path": "backend/Dockerfile",
-      "size": 614,
-      "sha256": "2f5e1c03dc2d72de282c9c1c8c38927b21309a2f12739d754df9cbb4d4a419c7"
+      "size": 679,
+      "sha256": "8c4fd4896a91f34bcaed17e29e8097ab526d88361b47bcf93a278422c3808c29"
     },
     {
       "path": "backend/alembic.ini",
@@ -2510,8 +2510,8 @@
     },
     {
       "path": "deploy/offline_build_fallback.py",
-      "size": 4019,
-      "sha256": "7fa03b7f9e765eeb4e99911fe8cb9fb562bc36bbbf9f9855f66803e51416897f"
+      "size": 4064,
+      "sha256": "fbb3a9b8cc34a68075956415a7d3fc81f2a6f064ac42e38177827843e00cc1c7"
     },
     {
       "path": "deploy/production.env.example",
@@ -2525,8 +2525,8 @@
     },
     {
       "path": "deploy/voip-ai",
-      "size": 20132,
-      "sha256": "98e62cef494dc854fd714dfb64df983837172074ba1159008222e3e8c043d56d"
+      "size": 24271,
+      "sha256": "24ad548948f248bbd5ebb0452853d857d75dbb6ef6a4cc8495d437fab1722ab1"
     },
     {
       "path": "docker-compose.e2e.yml",
@@ -2545,8 +2545,8 @@
     },
     {
       "path": "frontend/Dockerfile",
-      "size": 500,
-      "sha256": "6b17250639234acfac23f2df71ee09e8fca0dd8c281a6b2078bcea174e29524c"
+      "size": 583,
+      "sha256": "a51b6f2f403097a408b8d5aaa3361774f6fb7c6a0a9d98bacd24e957dd459a56"
     },
     {
       "path": "frontend/nginx.conf",

@@ -17,18 +17,20 @@ BASE_IMAGES = (
 _NETWORK_FAILURE = re.compile(
     r"no route to host|network is unreachable|connection (?:refused|reset)|"
     r"i/o timeout|tls handshake timeout|temporary failure in name resolution|"
-    r"server misbehaving|dial tcp .*timeout|context deadline exceeded",
+    r"server misbehaving|dial tcp .*timeout|context deadline exceeded|"
+    r"registry probe timeout",
     re.IGNORECASE,
 )
 _REGISTRY_METADATA = re.compile(
     r"failed to resolve (?:source metadata|reference)|load metadata for|"
-    r"failed to do request: (?:Head|Get) .*/v2/|/manifests/",
+    r"failed to do request: (?:Head|Get) .*/v2/|/manifests/|"
+    r"registry probe",
     re.IGNORECASE,
 )
 
 
 def registry_network_failure(log_text: str) -> bool:
-    """Require both registry metadata context and a network transport error."""
+    """Require both registry context and a network transport error."""
     return bool(_NETWORK_FAILURE.search(log_text) and _REGISTRY_METADATA.search(log_text))
 
 
@@ -70,7 +72,7 @@ def build_audit(log_text: str, *, online_exit_code: int, images: Sequence[str], 
         if _NETWORK_FAILURE.search(line) or _REGISTRY_METADATA.search(line)
     ][:20]
     return {
-        "schema_version": "production-offline-build-fallback-v1",
+        "schema_version": "production-offline-build-fallback-v2",
         "created_at": datetime.now(timezone.utc).isoformat(),
         "status": "ALLOWED" if allowed else "BLOCKED",
         "reason": reason,

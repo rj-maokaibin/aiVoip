@@ -62,9 +62,13 @@ def test_production_cli_prefers_pull_and_uses_guarded_fallback():
         'compose build --pull=false --build-arg '
         '"BUILD_REVISION=$(env_value BUILD_REVISION)" "${services[@]}"'
     )
-    online = text.index(online_command)
-    guard = text.index("offline_build_fallback.py")
-    offline = text.index(offline_command)
-    assert online < guard < offline
+    probe = text.index("REGISTRY_PREFLIGHT=FAIL")
+    preflight_guard = text.index("offline_build_fallback.py", probe)
+    preflight_offline = text.index(offline_command, preflight_guard)
+    online = text.index(online_command, preflight_offline)
+    postbuild_guard = text.index("offline_build_fallback.py", online)
+    postbuild_offline = text.index(offline_command, postbuild_guard)
+    assert probe < preflight_guard < preflight_offline < online < postbuild_guard < postbuild_offline
     assert "VOIP_OFFLINE_BUILD_AUDIT" in text
-    assert text.count('BUILD_REVISION=$(env_value BUILD_REVISION)') >= 2
+    assert "VOIP_REGISTRY_PROBE_TIMEOUT_SECONDS" in text
+    assert text.count('BUILD_REVISION=$(env_value BUILD_REVISION)') >= 3
