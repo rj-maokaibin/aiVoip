@@ -6,7 +6,7 @@ from app.reports.v2.correlation import (
 from app.reports.v2.finding_events import aggregate_events, build_event
 
 
-def _event(event_id, layer, timestamp, call_id="call-1"):
+def _event(event_id, layer, timestamp, call_id="call-1", media_path=None):
     return build_event(
         event_id=event_id,
         observation_type="PACKET_INTERVAL_SPIKE",
@@ -14,6 +14,7 @@ def _event(event_id, layer, timestamp, call_id="call-1"):
         layer=layer,
         source_ref=f"src-{event_id}",
         call_id=call_id,
+        media_path=media_path,
     )
 
 
@@ -46,6 +47,15 @@ def test_different_call_or_outside_window_does_not_cluster():
         _event("a", "PCM_RX", 100.0, call_id="call-1"),
         _event("b", "RTP_UPSTREAM", 100.2, call_id="call-1"),
         _event("c", "PCM_TX", 100.001, call_id="call-2"),
+    ]
+
+    assert correlate_media_events(events, threshold_ms=50.0) == []
+
+
+def test_incompatible_explicit_media_paths_do_not_cluster():
+    events = [
+        _event("a", "PCM_RX", 100.0, media_path="caller-leg"),
+        _event("b", "RTP_UPSTREAM", 100.001, media_path="callee-leg"),
     ]
 
     assert correlate_media_events(events, threshold_ms=50.0) == []
