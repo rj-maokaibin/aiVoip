@@ -1,0 +1,26 @@
+{
+  "call": {
+    "state": "ESTABLISHED",
+    "invite_time": 1786967011.99584,
+    "answer_time": 1786967013.665956,
+    "ack_time": 1786967013.668796,
+    "established_time": 1786967013.668796,
+    "call_end_time": null,
+    "termination_observed": false
+  },
+  "timeline": {
+    "media_start": 1786967013.680036,
+    "media_end": 1786967026.360686,
+    "media_duration_seconds": 12.68065,
+    "media_source": "RTP_OBSERVATION",
+    "rtp_stream_count": 3
+  },
+  "report_assertions": {
+    "must_not_treat_ack_as_call_end": true,
+    "must_not_emit_zero_length_media_window": true,
+    "must_not_claim_call_termination_observed": true,
+    "must_not_claim_rtp_loss_when_lost_packets_are_zero": true,
+    "must_keep_dtmf_match_out_of_problem_count": true,
+    "must_correlate_pcm_and_rtp_timing_spikes": true
+  }
+}
