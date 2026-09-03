@@ -36,6 +36,7 @@ services:
       - "${VOIP_MINIO_CONSOLE_BIND:-0.0.0.0}:${VOIP_MINIO_CONSOLE_PORT:-9001}:9001"
 
   backend:
+    image: aivoip-backend:${BUILD_REVISION:?BUILD_REVISION is required}
     build:
       context: ./backend
       args:
@@ -64,10 +65,7 @@ services:
         condition: service_started
 
   collector-worker:
-    build:
-      context: ./backend
-      args:
-        BUILD_REVISION: ${BUILD_REVISION:?BUILD_REVISION is required}
+    image: aivoip-backend:${BUILD_REVISION:?BUILD_REVISION is required}
     env_file: ${VOIP_APP_ENV_FILE:-.env}
     command: celery -A app.workers.celery_app:celery_app worker -Q collector --loglevel=INFO --concurrency=4
     volumes:
@@ -84,10 +82,7 @@ services:
         condition: service_started
 
   packet-worker:
-    build:
-      context: ./backend
-      args:
-        BUILD_REVISION: ${BUILD_REVISION:?BUILD_REVISION is required}
+    image: aivoip-backend:${BUILD_REVISION:?BUILD_REVISION is required}
     env_file: ${VOIP_APP_ENV_FILE:-.env}
     command: celery -A app.workers.celery_app:celery_app worker -Q packet --loglevel=INFO --concurrency=2
     volumes:
@@ -105,10 +100,7 @@ services:
         condition: service_started
 
   pcm-worker:
-    build:
-      context: ./backend
-      args:
-        BUILD_REVISION: ${BUILD_REVISION:?BUILD_REVISION is required}
+    image: aivoip-backend:${BUILD_REVISION:?BUILD_REVISION is required}
     env_file: ${VOIP_APP_ENV_FILE:-.env}
     command: celery -A app.workers.celery_app:celery_app worker -Q pcm --loglevel=INFO --concurrency=2
     volumes:
@@ -126,10 +118,7 @@ services:
         condition: service_started
 
   media-worker:
-    build:
-      context: ./backend
-      args:
-        BUILD_REVISION: ${BUILD_REVISION:?BUILD_REVISION is required}
+    image: aivoip-backend:${BUILD_REVISION:?BUILD_REVISION is required}
     env_file: ${VOIP_APP_ENV_FILE:-.env}
     command: celery -A app.workers.celery_app:celery_app worker -Q media --loglevel=INFO --concurrency=2
     volumes:
@@ -147,10 +136,7 @@ services:
         condition: service_started
 
   diagnosis-worker:
-    build:
-      context: ./backend
-      args:
-        BUILD_REVISION: ${BUILD_REVISION:?BUILD_REVISION is required}
+    image: aivoip-backend:${BUILD_REVISION:?BUILD_REVISION is required}
     env_file: ${VOIP_APP_ENV_FILE:-.env}
     command: >-
       sh -c "ln -sfn /app/profiles /profiles &&
@@ -171,10 +157,7 @@ services:
         condition: service_started
 
   feishu-long-connection:
-    build:
-      context: ./backend
-      args:
-        BUILD_REVISION: ${BUILD_REVISION:?BUILD_REVISION is required}
+    image: aivoip-backend:${BUILD_REVISION:?BUILD_REVISION is required}
     env_file: ${VOIP_APP_ENV_FILE:-.env}
     command: python run_feishu_long_connection.py
     volumes:
@@ -190,10 +173,7 @@ services:
         condition: service_started
 
   reproduction-worker:
-    build:
-      context: ./backend
-      args:
-        BUILD_REVISION: ${BUILD_REVISION:?BUILD_REVISION is required}
+    image: aivoip-backend:${BUILD_REVISION:?BUILD_REVISION is required}
     env_file: ${VOIP_APP_ENV_FILE:-.env}
     command: >-
       sh -c "ln -sfn /app/profiles /profiles &&
@@ -215,10 +195,7 @@ services:
         condition: service_started
 
   reproduction-control-high-worker:
-    build:
-      context: ./backend
-      args:
-        BUILD_REVISION: ${BUILD_REVISION:?BUILD_REVISION is required}
+    image: aivoip-backend:${BUILD_REVISION:?BUILD_REVISION is required}
     env_file: ${VOIP_APP_ENV_FILE:-.env}
     command: >-
       sh -c "ln -sfn /app/profiles /profiles &&
@@ -240,10 +217,7 @@ services:
         condition: service_started
 
   reproduction-watch-worker:
-    build:
-      context: ./backend
-      args:
-        BUILD_REVISION: ${BUILD_REVISION:?BUILD_REVISION is required}
+    image: aivoip-backend:${BUILD_REVISION:?BUILD_REVISION is required}
     env_file: ${VOIP_APP_ENV_FILE:-.env}
     command: >-
       sh -c "ln -sfn /app/profiles /profiles &&
@@ -265,10 +239,7 @@ services:
         condition: service_started
 
   beat:
-    build:
-      context: ./backend
-      args:
-        BUILD_REVISION: ${BUILD_REVISION:?BUILD_REVISION is required}
+    image: aivoip-backend:${BUILD_REVISION:?BUILD_REVISION is required}
     env_file: ${VOIP_APP_ENV_FILE:-.env}
     command: celery -A app.workers.celery_app:celery_app beat --loglevel=INFO
     volumes:
