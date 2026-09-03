@@ -49,15 +49,19 @@ jobs:
             exit 1
           fi
 
-          curl -fsS --connect-timeout 3 --max-time 8 "http://$mirror_host:8090/v2/" -o /dev/null
+          http_code="$(curl -sS --connect-timeout 3 --max-time 8 -o /dev/null -w '%{http_code}' "http://$mirror_host:8090/v2/")"
+          if [[ "$http_code" == "000" ]]; then
+            echo "REGISTRY_ROUTE_REPAIR=FAIL reason=REGISTRY_UNREACHABLE" >&2
+            exit 1
+          fi
 
-          python3 - "$mirror_ip" "$default_gw" "$default_dev" "$before" "$after" > /tmp/registry-route-repair.json <<'PY'
+          python3 - "$mirror_ip" "$default_gw" "$default_dev" "$before" "$after" "$http_code" > /tmp/registry-route-repair.json <<'PY'
           import json,sys
-          ip,gw,dev,before,after=sys.argv[1:]
+          ip,gw,dev,before,after,http_code=sys.argv[1:]
           print(json.dumps({
             'status':'PASS','mirror_host':'mirror.ruijie.com.cn','mirror_ip':ip,
             'default_gateway':gw,'default_device':dev,'route_before':before,'route_after':after,
-            'registry_v2_reachable':True
+            'registry_v2_reachable':True,'registry_http_code':int(http_code)
           },ensure_ascii=False,indent=2))
           PY
           cat /tmp/registry-route-repair.json
@@ -73,4 +77,4 @@ jobs:
             -H 'X-GitHub-Api-Version: 2022-11-28' \
             "https://api.github.com/repos/$GITHUB_REPOSITORY/contents/validation/docker_registry_route_repair.json" \
             --data-binary @/tmp/payload.json >/dev/null
-          echo "REGISTRY_ROUTE_REPAIR=PASS mirror=$mirror_ip route=$after"
+          echo "REGISTRY_ROUTE_REPAIR=PASS mirror=$mirror_ip http_code=$http_code route=$after"
