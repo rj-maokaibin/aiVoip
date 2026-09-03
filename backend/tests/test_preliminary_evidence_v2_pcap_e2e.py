@@ -209,7 +209,7 @@ def test_pcap_e2e_bye_is_the_observed_protocol_termination(tmp_path: Path):
 
     assert report["call_reconstruction"]["state"] == "TERMINATED"
     assert report["call_reconstruction"]["termination"]["observed"] is True
-    assert report["call_reconstruction"]["termination"]["type"] == "BYE"
+    assert report["call_reconstruction"]["termination"]["kind"] == "BYE"
     assert report["call_reconstruction"]["call_end_time"] == pytest.approx(2.100, abs=1e-6)
     media_window = report["timeline"]["media_observation_window"]
     assert media_window["source"] == "RTP_OBSERVATION"
