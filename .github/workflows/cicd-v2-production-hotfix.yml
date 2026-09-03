@@ -1,4 +1,4 @@
-name: CI/CD V2 Production Fail-Closed Hotfix
+name: CI/CD V2 Source Manifest Refresh
 
 on:
   push:
@@ -10,12 +10,8 @@ on:
 permissions:
   contents: write
 
-concurrency:
-  group: cicd-v2-production-failclosed-hotfix
-  cancel-in-progress: true
-
 jobs:
-  patch:
+  refresh:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -24,26 +20,18 @@ jobs:
           ref: fix/cicd-v2-production-failclosed
           fetch-depth: 2
 
-      - name: Apply non-workflow hotfix
+      - name: Refresh source manifest
         shell: bash
         run: |
           set -euo pipefail
-          python3 tools/cicd_v2_hotfix_apply.py
-          # GitHub App token cannot update workflow files. Keep that user-authored change separate.
-          git checkout -- .github/workflows/production-deploy.yml
-          bash -n deploy/voip-ai
-          python3 -m py_compile deploy/docker_network_guard.py deploy/offline_build_fallback.py backend/tests/test_cicd_performance_v2.py
-
-      - name: Refresh source manifest and commit non-workflow patch
-        shell: bash
-        run: |
-          set -euo pipefail
-          git rm tools/cicd_v2_hotfix_apply.py
           python3 tools/source_manifest_gate.py --update
           python3 tools/source_manifest_gate.py
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add -A
-          git reset .github/workflows/cicd-v2-production-hotfix.yml
-          git commit -m 'fix(ci): fail closed and prevent docker registry route conflicts'
+          git add release/source_manifest.json
+          if git diff --cached --quiet; then
+            echo 'SOURCE_MANIFEST_REFRESH=NO_CHANGE'
+            exit 0
+          fi
+          git commit -m 'chore(release): refresh source manifest for production hotfix'
           git push origin HEAD:fix/cicd-v2-production-failclosed
