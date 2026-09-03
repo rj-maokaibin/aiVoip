@@ -16,12 +16,13 @@ def load_migration():
     return module
 
 
-def test_source_controlled_wrapper_never_writes_persistent_build_revision():
+def test_source_controlled_wrapper_never_writes_persistent_build_revision_and_does_not_double_verify():
     text = WRAPPER.read_text(encoding="utf-8")
     assert 'python3 - "$ENV_FILE" "$TARGET"' not in text
     assert 'BUILD_REVISION={target}' not in text
     assert '--revision "$TARGET" deploy' in text
-    assert '--revision "$TARGET" verify' in text
+    assert '--revision "$TARGET" verify' not in text
+    assert "verify_source=DEPLOY_RUNTIME_VERIFY" in text
     assert "PRODUCTION_WRAPPER_VERSION=source-controlled-v2" in text
 
 
@@ -57,8 +58,46 @@ def test_migration_refuses_unknown_privileged_wrapper(tmp_path):
         raise AssertionError("unknown wrapper must fail closed")
 
 
-def test_legacy_wrapper_hash_is_explicitly_pinned():
+def test_legacy_and_current_v2_wrapper_hashes_are_explicitly_pinned():
     migration = load_migration()
     assert migration.LEGACY_WRAPPER_SHA256 == {
         "77b2b30e448b1600a56e476dae9c359617d87706e1bf48e549ac4d4d35635edb"
     }
+    assert migration.SOURCE_CONTROLLED_V2_PREDECESSOR_SHA256 == {
+        "25b0aac88c7c4f09edda07e2e802e295fbb1a9d1e84639a1b7e4467f604355c0"
+    }
+    assert migration.ALLOWED_PREDECESSOR_SHA256 == (
+        migration.LEGACY_WRAPPER_SHA256 | migration.SOURCE_CONTROLLED_V2_PREDECESSOR_SHA256
+    )
+
+
+def test_current_v2_predecessor_can_migrate_to_new_source_wrapper(tmp_path):
+    migration = load_migration()
+    source = tmp_path / "source-wrapper"
+    source.write_text("#!/bin/sh\necho v2.2\n", encoding="utf-8")
+    target = tmp_path / "target-wrapper"
+    env = tmp_path / "production.env"
+    env.write_text("APP_ENV=production\n", encoding="utf-8")
+    env.chmod(0o600)
+
+    predecessor_hash = next(iter(migration.SOURCE_CONTROLLED_V2_PREDECESSOR_SHA256))
+    # sync() is tested against exact digests. Patch digest only for the target
+    # predecessor path while leaving the real source/post-install digest intact.
+    real_digest = migration.digest
+
+    def controlled_digest(path: Path) -> str:
+        if path == target and path.exists() and path.read_text(encoding="utf-8") == "installed-v2\n":
+            return predecessor_hash
+        return real_digest(path)
+
+    target.write_text("installed-v2\n", encoding="utf-8")
+    migration.digest = controlled_digest
+    try:
+        mode, removed, source_hash = migration.sync(source, target, env)
+    finally:
+        migration.digest = real_digest
+
+    assert mode == "MIGRATED"
+    assert removed == 0
+    assert source_hash == hashlib.sha256(source.read_bytes()).hexdigest()
+    assert target.read_bytes() == source.read_bytes()
