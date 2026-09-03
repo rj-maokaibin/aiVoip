@@ -148,4 +148,5 @@ jobs:
             validation/production_runtime_result.json
             validation/feishu_long_connection_runtime.json
             validation/exact_source_binding_result.json
+            validation/cicd_performance_v2.json
           if-no-files-found: warn
