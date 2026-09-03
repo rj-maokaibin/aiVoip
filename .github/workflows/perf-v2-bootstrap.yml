@@ -30,7 +30,16 @@ jobs:
         with:
           ref: perf/cicd-performance-v2
           fetch-depth: 2
-          clean: true
+          clean: false
+
+      - name: Repair runner workspace hygiene
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo -n find "$GITHUB_WORKSPACE" -type d \( -name __pycache__ -o -name .pytest_cache \) -prune -exec rm -rf {} + || true
+          sudo -n find "$GITHUB_WORKSPACE" -type f -name '*.pyc' -delete || true
+          test -z "$(find "$GITHUB_WORKSPACE" -type d -name __pycache__ -print -quit 2>/dev/null)"
+          echo "RUNNER_WORKSPACE_HYGIENE=PASS"
 
       - name: Collect real Production Deploy baseline
         env:
