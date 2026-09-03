@@ -1,3 +1,4 @@
+# refresh-trigger: idempotent-network-guard
 name: CI/CD V2 Source Manifest Refresh
 
 on:
