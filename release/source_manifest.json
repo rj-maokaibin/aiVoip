@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "file_count": 689,
-  "aggregate_sha256": "92b234545f3a9197e7a0303086672ff46d4e2b007e2be748270ef54bf7a6852e",
+  "file_count": 690,
+  "aggregate_sha256": "52e7c8f56b8b1524ed38af2fef25fdf303b8c6563e97b25be67a58e6b9dfcf59",
   "files": [
     {
       "path": ".env.example",
@@ -3207,6 +3207,11 @@
       "path": "tools/evidence_v2_production_acceptance.py",
       "size": 8538,
       "sha256": "7b3f0741b69180592b03ffa593d62f400f68c2e13c45e5f020b7b46cca10253f"
+    },
+    {
+      "path": "tools/evidence_v2_production_golden_bootstrap.py",
+      "size": 14699,
+      "sha256": "df28d2cb0c98f0c05b5287446f89102f82b38baf07b9500986c617b23162d887"
     },
     {
       "path": "tools/export_ai_eval_dataset.py",
