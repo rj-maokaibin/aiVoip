@@ -28,6 +28,7 @@ def build_event(
     source_ref: str,
     call_id: str | None = None,
     direction: str | None = None,
+    media_path: str | None = None,
     metrics: Mapping[str, Any] | None = None,
     evidence_refs: Iterable[str] | None = None,
 ) -> dict[str, Any]:
@@ -35,7 +36,8 @@ def build_event(
 
     Event type states what was actually measured. A timing observation is not
     silently promoted into a loss observation; causality and physical root
-    cause remain outside this layer.
+    cause remain outside this layer. ``media_path`` is an optional deterministic
+    path compatibility key supplied by upstream call/SDP mapping.
     """
 
     observation = str(observation_type).upper()
@@ -48,6 +50,7 @@ def build_event(
         "source_ref": source_ref,
         "call_id": call_id,
         "direction": direction,
+        "media_path": media_path,
         "metrics": dict(metrics or {}),
         "evidence_refs": list(evidence_refs or []),
         "instantaneous": True,
