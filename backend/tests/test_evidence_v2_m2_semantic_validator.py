@@ -109,8 +109,8 @@ def test_r009_and_r014_reject_timing_or_continuous_sequence_as_loss():
 def test_r015_rejects_cluster_member_finding_not_absorbed():
     call, timeline, rtp = _base()
     rx = build_event(event_id="rx", observation_type="PACKET_INTERVAL_SPIKE", timestamp=15.0, layer="PCM_RX", source_ref="p", call_id="c")
-    tx = build_event(event_id="tx", observation_type="PACKET_INTERVAL_SPIKE", timestamp=15.001, layer="PCM_TX", source_ref="p", call_id="c")
-    clusters = correlate_media_events([rx, tx])
+    up = build_event(event_id="up", observation_type="RTP_HIGH_DELTA", timestamp=15.001, layer="RTP_UPSTREAM", source_ref="rtp", call_id="c")
+    clusters = correlate_media_events([rx, up])
     finding = aggregate_events([rx], finding_id="f", finding_type="PCM_PACKET_INTERVAL_SPIKE", severity="MEDIUM")
 
     result = validate_m2_semantics(call=call, timeline=timeline, rtp_streams=rtp, findings=[finding], clusters=clusters)
