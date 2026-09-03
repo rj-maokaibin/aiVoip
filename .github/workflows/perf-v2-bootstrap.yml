@@ -32,7 +32,10 @@ jobs:
           clean: true
 
       - name: Apply V2 patch
-        run: python3 tools/perf_v2_patcher.py
+        run: |
+          set -euo pipefail
+          python3 tools/perf_v2_patcher.py
+          python3 tools/perf_v2_test_patcher.py
 
       - name: Refresh and verify source manifest
         run: |
@@ -43,7 +46,7 @@ jobs:
       - name: Self-remove bootstrap helpers and commit
         run: |
           set -euo pipefail
-          git rm .github/workflows/perf-v2-bootstrap.yml tools/perf_v2_patcher.py
+          git rm .github/workflows/perf-v2-bootstrap.yml tools/perf_v2_patcher.py tools/perf_v2_test_patcher.py
           python3 tools/source_manifest_gate.py --update
           python3 tools/source_manifest_gate.py
           git config user.name 'github-actions[bot]'
