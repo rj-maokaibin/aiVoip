@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "file_count": 686,
-  "aggregate_sha256": "d087ca2564c816e3712b4d33679163c1409513ee7f0161c04776f74292aa47d7",
+  "file_count": 687,
+  "aggregate_sha256": "18f1efacd07515f02ebcb61ab61e02db8ebe0d6f710b8646e8853de94cfa9f14",
   "files": [
     {
       "path": ".env.example",
@@ -315,8 +315,8 @@
     },
     {
       "path": "backend/app/api/v1/evidence_reports.py",
-      "size": 12044,
-      "sha256": "9bfd2a33c47370be5902a28557a06758ceb488e0ba61787428df1af919a524c1"
+      "size": 12066,
+      "sha256": "82853ca26ea8adf8cdd31328b527f1da6fcc1920abdbff117f373e76058a8eb6"
     },
     {
       "path": "backend/app/api/v1/evidence_retention.py",
@@ -1530,8 +1530,8 @@
     },
     {
       "path": "backend/app/integrations/feishu/evidence_document.py",
-      "size": 31710,
-      "sha256": "46224e1dda4a5b6397866e81408c1ca496c6a35e42dadb3b51e9c9cb73ea5d19"
+      "size": 37009,
+      "sha256": "ca5323aaee3a4781b0ec3e197b43372df425720bc3497fc091ea3db574d9df3f"
     },
     {
       "path": "backend/app/integrations/feishu/evidence_document_human_v2.py",
@@ -1795,8 +1795,8 @@
     },
     {
       "path": "backend/app/reports/report_grounding.py",
-      "size": 21315,
-      "sha256": "0665da0a3dc55475edae620c7753fcac0b46114f8500b224bf3443ad911a0f95"
+      "size": 21337,
+      "sha256": "49d2dd40c0f1288457852d520882f79867cf33ca6d85df8840a5ac7fb3730fae"
     },
     {
       "path": "backend/app/reports/rtp_high_delta.py",
@@ -1825,8 +1825,8 @@
     },
     {
       "path": "backend/app/reports/v2/artifact_binding.py",
-      "size": 4999,
-      "sha256": "66362dc59fe30e981d6e35a34c12ae2d3f3aed3259bd7324446a8a571ee190f4"
+      "size": 4869,
+      "sha256": "d8b79d708e8fc7dd3da65121ce4b13bfcb9009c0cfab07256d53c850ff9bc046"
     },
     {
       "path": "backend/app/reports/v2/call_reconstruction.py",
@@ -2170,8 +2170,8 @@
     },
     {
       "path": "backend/app/services/evidence_report.py",
-      "size": 23162,
-      "sha256": "98ef97586537e9f31969554adc66d68c244fe8daab51da47bba50dba83bb6d18"
+      "size": 27169,
+      "sha256": "bafafa62fa40e8cf143a254bd97cebc459f794a8c643d787d11e18009c88e52b"
     },
     {
       "path": "backend/app/services/evidence_report_aggregation.py",
@@ -2185,8 +2185,8 @@
     },
     {
       "path": "backend/app/services/evidence_report_artifacts.py",
-      "size": 35455,
-      "sha256": "507864a9230e66c3a5a353d7ef6d9e0ade352fd380acf18d3115c1981872a7be"
+      "size": 35476,
+      "sha256": "7bb8bb5e62b905e9586a1046190240204010ff1ba5d186270c341864408e0b76"
     },
     {
       "path": "backend/app/services/evidence_report_context.py",
@@ -2212,6 +2212,11 @@
       "path": "backend/app/services/evidence_report_subject_call.py",
       "size": 5626,
       "sha256": "b0086547b791e787f5c4f0a4ea81126eab2349d048002194a1f1ad0710327c93"
+    },
+    {
+      "path": "backend/app/services/evidence_report_v2.py",
+      "size": 9307,
+      "sha256": "c54183a3ef2afd98cde4fa46c7f7aa63417559d4e59433c3416f462d0c2197a4"
     },
     {
       "path": "backend/app/services/evidence_retention.py",

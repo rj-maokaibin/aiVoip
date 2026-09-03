@@ -36,6 +36,7 @@ def test_event_audio_clip_binds_event_finding_source_time_and_hash():
     assert len(record["sha256"]) == 64
     assert record["size"] == len(clip)
     assert record["mime_type"] == "audio/wav"
+    assert record["provenance_required"] is True
 
 
 def test_unsupported_wav_returns_structured_failure_with_source_available():

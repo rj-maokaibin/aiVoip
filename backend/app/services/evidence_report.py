@@ -12,12 +12,15 @@ from app.db.models import ReproductionCall, ReproductionEventRecord, Reproductio
 from app.integrations.storage import ObjectStorage
 from app.reports.evidence_brief import build_report_payload, canonical_hash, render_report_html
 from app.reports.prd_spec_v1_alignment import finalize_report_contract
+from app.reports.v2.migration import report_idempotency_mode_token, rollout_from_env
+from app.reports.v2.renderer import render_report_v2_html
 from app.services.audit import audit
 from app.services.evidence_boundary import apply_first_observable_boundaries
 from app.services.evidence_report_aggregation import enrich_aggregate_payload
 from app.services.evidence_report_analysis_artifacts import materialize_analyzer_json_artifacts
 from app.services.evidence_report_artifacts import build_manifest, generate_visual_artifacts, persist_artifact
 from app.services.evidence_report_context import resolve_report_analysis_context
+from app.services.evidence_report_v2 import bind_v2_anomaly_audio, compose_v2_runtime_payload
 from app.services.evidence_report_source_artifacts import finding_artifact_refs, link_source_artifacts
 from app.services.evidence_report_scope import (
     call_dict, case_dict, environment_snapshot, evidence_dict, latest_analyzer_runs,
@@ -34,10 +37,11 @@ def latest_report(db: Session, scope_type: str, scope_id: str) -> PreliminaryEvi
     ).order_by(PreliminaryEvidenceReport.version.desc()).limit(1))
 
 
-def report_idempotency_key(scope_type: str, scope_id: str, input_hash: str, analyzer_states: dict, *, forced_version: int|None=None) -> str:
+def report_idempotency_key(scope_type: str, scope_id: str, input_hash: str, analyzer_states: dict, *, forced_version: int|None=None, mode_token: str|None=None) -> str:
     versions={k:{"run_id":v.get("run_id"),"analyzer_version":v.get("analyzer_version"),"config_version":v.get("config_version")} for k,v in analyzer_states.items()}
     material={"scope_type":scope_type,"scope_id":scope_id,"input_snapshot_hash":input_hash,"schema_version":REPORT_SCHEMA_VERSION,
               "composer_version":REPORT_COMPOSER_VERSION,"analyzer_versions":versions}
+    if mode_token is not None: material["rollout_mode_token"]=mode_token
     if forced_version is not None: material["forced_rebuild_version"]=forced_version
     return canonical_hash(material)
 
@@ -209,7 +213,7 @@ def _persist_findings(db: Session, *, report: PreliminaryEvidenceReport, payload
 
 
 def generate_evidence_report(db: Session, *, scope_type, scope_id: str, actor: str|None=None, storage=None, force: bool=False) -> tuple[PreliminaryEvidenceReport,dict,bool]:
-    storage=storage or ObjectStorage(); scope_type=scope_value(scope_type); scope=resolve_scope(db,scope_type=scope_type,scope_id=scope_id)
+    storage=storage or ObjectStorage(); rollout=rollout_from_env(); scope_type=scope_value(scope_type); scope=resolve_scope(db,scope_type=scope_type,scope_id=scope_id)
     case=scope["case"]; scope_session=scope.get("session"); scope_call=scope.get("call")
     evidences=scoped_evidences(db,scope_type=scope_type,scope=scope); evidence_items=[evidence_dict(e) for e in evidences]; evidence_ids={e.id for e in evidences}
     runs=latest_analyzer_runs(db,case_id=case.id,evidence_ids=evidence_ids,case_scope=scope_type=="CASE")
@@ -263,7 +267,10 @@ def generate_evidence_report(db: Session, *, scope_type, scope_id: str, actor: s
                                                      "environment_groups":payload.get("environment_groups"),"ab_comparison":payload.get("ab_comparison"),
                                                      "analysis_context":payload.get("analysis_context"),"display_call":payload.get("display_call"),
                                                      "evidence_retention":payload.get("evidence_retention")})
-    idem=report_idempotency_key(scope_type,scope_id,payload["input_snapshot_hash"],states,forced_version=version if force else None)
+    mode_token=report_idempotency_mode_token(v1_schema=REPORT_SCHEMA_VERSION,v1_composer=REPORT_COMPOSER_VERSION,rollout=rollout)
+    payload["evidence_v2_rollout"]={"mode":rollout.mode,"compose":rollout.compose,"project":rollout.project,"strict_validator":rollout.strict_validator,"identity_token":rollout.identity_token}
+    payload["active_projection"]="V1"
+    idem=report_idempotency_key(scope_type,scope_id,payload["input_snapshot_hash"],states,forced_version=version if force else None,mode_token=mode_token)
     if not force:
         same=db.scalar(select(PreliminaryEvidenceReport).where(PreliminaryEvidenceReport.idempotency_key==idem).limit(1))
         if same:return same,same.snapshot_json or payload,True
@@ -285,15 +292,51 @@ def generate_evidence_report(db: Session, *, scope_type, scope_id: str, actor: s
         "size_bytes":a.size_bytes,"object_key":a.object_key,"created_at":a.created_at.isoformat() if a.created_at else None,
         "metadata":a.metadata_json or {},
     } for a in report_artifacts]
+    v2_payload=None
+    if rollout.compose:
+        try:
+            v2_payload=compose_v2_runtime_payload(report_id=report.id,results=results,analysis_context=analysis_context)
+            v2_created=bind_v2_anomaly_audio(db,storage,report_row=report,v2=v2_payload,results=results,runs=runs)
+            report_artifacts.extend(v2_created)
+            for a in v2_created:
+                payload["artifacts"].append({
+                    "artifact_id":a.id,"type":a.type,"filename":a.filename,"content_type":a.content_type,"sha256":a.sha256,
+                    "size_bytes":a.size_bytes,"object_key":a.object_key,"created_at":a.created_at.isoformat() if a.created_at else None,
+                    "metadata":a.metadata_json or {},
+                })
+            if rollout.project and rollout.strict_validator and not v2_payload.get("publishable"):
+                raise RuntimeError("EVIDENCE_V2_SEMANTIC_VALIDATION_FAILED")
+            if rollout.project:
+                payload["v2_canonical"]=v2_payload
+                payload["active_projection"]="V2"
+            else:
+                payload["v2_shadow"]=v2_payload
+                shadow_json=json.dumps(v2_payload,ensure_ascii=False,indent=2).encode("utf-8")
+                shadow_html=render_report_v2_html(v2_payload).encode("utf-8")
+                report_artifacts.extend([
+                    persist_artifact(db,storage,report=report,artifact_type="PRELIMINARY_REPORT_V2_SHADOW_JSON",filename="preliminary-evidence-report-v2-shadow.json",data=shadow_json,content_type="application/json",metadata={"schema_version":"preliminary-evidence-report-v2","rollout_mode":"SHADOW"},role="SHADOW"),
+                    persist_artifact(db,storage,report=report,artifact_type="PRELIMINARY_REPORT_V2_SHADOW_HTML",filename="preliminary-evidence-report-v2-shadow.html",data=shadow_html,content_type="text/html; charset=utf-8",metadata={"schema_version":"preliminary-evidence-report-v2","rollout_mode":"SHADOW"},role="SHADOW"),
+                ])
+            audit(db,case_id=case.id,actor=actor,event_type="PRELIMINARY_EVIDENCE_V2_COMPOSED",target_type="preliminary_evidence_report",target_id=report.id,
+                  detail={"mode":rollout.mode,"publishable":bool(v2_payload.get("publishable")),"semantic_status":(v2_payload.get("semantic_validation") or {}).get("status"),"problem_count":v2_payload.get("problem_count")})
+        except Exception as exc:
+            payload["v2_compose_failure"]={"status":"FAILED","error_code":type(exc).__name__,"error_message":str(exc),"mode":rollout.mode}
+            audit(db,case_id=case.id,actor=actor,event_type="PRELIMINARY_EVIDENCE_V2_COMPOSE_FAILED",target_type="preliminary_evidence_report",target_id=report.id,detail=payload["v2_compose_failure"])
+            if rollout.project:
+                raise
     for item in payload.get("findings",[]):
         refs=finding_artifact_refs(db,report_id=report.id,finding_id=item.get("finding_id")); item["artifact_refs"]=refs
         row=next((r for r in finding_rows if r.id==item.get("finding_id")),None)
         if row:row.artifact_refs_json=refs
     report.status=EvidenceReportStatus.COMPLETE.value if payload.get("completeness",{}).get("state")=="COMPLETE" else EvidenceReportStatus.PARTIAL_COMPLETE.value
     finalize_report_contract(report,payload)
-    html_bytes=render_report_html(payload).encode("utf-8"); json_bytes=json.dumps(payload,ensure_ascii=False,indent=2).encode("utf-8")
-    json_art=persist_artifact(db,storage,report=report,artifact_type=EvidenceReportArtifactType.PRELIMINARY_REPORT_JSON.value,filename="preliminary-evidence-report.json",data=json_bytes,content_type="application/json",metadata={"schema_version":REPORT_SCHEMA_VERSION},role="REPORT")
-    html_art=persist_artifact(db,storage,report=report,artifact_type=EvidenceReportArtifactType.PRELIMINARY_REPORT_HTML.value,filename="preliminary-evidence-report.html",data=html_bytes,content_type="text/html; charset=utf-8",metadata={"schema_version":REPORT_SCHEMA_VERSION},role="REPORT")
+    active_v2=payload.get("v2_canonical") if payload.get("active_projection")=="V2" else None
+    if active_v2:
+        html_bytes=render_report_v2_html(active_v2).encode("utf-8"); json_bytes=json.dumps(active_v2,ensure_ascii=False,indent=2).encode("utf-8"); active_schema="preliminary-evidence-report-v2"
+    else:
+        html_bytes=render_report_html(payload).encode("utf-8"); json_bytes=json.dumps(payload,ensure_ascii=False,indent=2).encode("utf-8"); active_schema=REPORT_SCHEMA_VERSION
+    json_art=persist_artifact(db,storage,report=report,artifact_type=EvidenceReportArtifactType.PRELIMINARY_REPORT_JSON.value,filename="preliminary-evidence-report.json",data=json_bytes,content_type="application/json",metadata={"schema_version":active_schema,"active_projection":payload.get("active_projection")},role="REPORT")
+    html_art=persist_artifact(db,storage,report=report,artifact_type=EvidenceReportArtifactType.PRELIMINARY_REPORT_HTML.value,filename="preliminary-evidence-report.html",data=html_bytes,content_type="text/html; charset=utf-8",metadata={"schema_version":active_schema,"active_projection":payload.get("active_projection")},role="REPORT")
     report.json_object_key=json_art.object_key; report.html_object_key=html_art.object_key
     manifest=build_manifest(report,report_artifacts+[json_art,html_art]); manifest_bytes=json.dumps(manifest,ensure_ascii=False,indent=2).encode("utf-8")
     manifest_art=persist_artifact(db,storage,report=report,artifact_type=EvidenceReportArtifactType.MANIFEST_JSON.value,filename="manifest.json",data=manifest_bytes,content_type="application/json",metadata={"manifest_schema":"evidence-bundle-manifest-v1"},role="MANIFEST")

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import wave
 from typing import Any, Mapping
 
 from app.reports.human_visuals.wav_window import slice_pcm16_wav_bytes
@@ -44,7 +45,7 @@ def render_event_audio_clip(
 
     try:
         clip, window = slice_pcm16_wav_bytes(wav_bytes, requested_start, requested_end)
-    except (ValueError, EOFError, wave_error_types()) as exc:  # type: ignore[misc]
+    except (ValueError, EOFError, wave.Error) as exc:
         return b"", audio_binding_failure(
             finding_id=finding_id,
             event_ref=event_id,
@@ -76,6 +77,7 @@ def render_event_audio_clip(
         "analyzer_name": analyzer_name,
         "analyzer_version": analyzer_version,
         "profile_version": profile_version,
+        "provenance_required": True,
         "window": window,
     }
 
@@ -137,9 +139,3 @@ def _render_reason(exc: BaseException) -> str:
         return "UNSUPPORTED_CODEC"
     return "RENDER_ERROR"
 
-
-def wave_error_types() -> type[Exception]:
-    # Imported lazily to keep the artifact contract module light.
-    import wave
-
-    return wave.Error
