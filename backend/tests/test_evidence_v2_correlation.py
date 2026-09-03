@@ -31,6 +31,7 @@ def test_same_call_timing_events_across_layers_form_one_candidate_cluster():
     cluster = clusters[0]
     assert cluster["cluster_id"] == "CC-001"
     assert cluster["type"] == "CROSS_LAYER_MEDIA_TIMING_SPIKE"
+    assert cluster["member_layer_families"] == ["PCM", "RTP"]
     assert cluster["member_events"] == [
         {"layer": "PCM_RX", "event_ref": "pcm-rx"},
         {"layer": "RTP_UPSTREAM", "event_ref": "rtp-up"},
@@ -40,6 +41,14 @@ def test_same_call_timing_events_across_layers_form_one_candidate_cluster():
     assert cluster["interpretation_boundary"] == "TIMING_CORRELATION_ONLY"
     assert cluster["causality_confirmed"] is False
     assert cluster["root_cause_confirmed"] is False
+
+
+def test_pcm_rx_and_tx_alone_are_not_cross_layer_media_cluster():
+    events = [
+        _event("rx", "PCM_RX", 100.0),
+        _event("tx", "PCM_TX", 100.001),
+    ]
+    assert correlate_media_events(events) == []
 
 
 def test_different_call_or_outside_window_does_not_cluster():
@@ -78,7 +87,7 @@ def test_incompatible_explicit_media_paths_do_not_cluster():
 
 def test_member_findings_are_absorbed_and_problem_count_becomes_one_cluster():
     rx = _event("rx", "PCM_RX", 100.0)
-    tx = _event("tx", "PCM_TX", 100.001)
+    rtp = _event("rtp", "RTP_UPSTREAM", 100.001)
     findings = [
         aggregate_events(
             [rx],
@@ -87,13 +96,13 @@ def test_member_findings_are_absorbed_and_problem_count_becomes_one_cluster():
             severity="MEDIUM",
         ),
         aggregate_events(
-            [tx],
-            finding_id="f-tx",
-            finding_type="PCM_PACKET_INTERVAL_SPIKE",
+            [rtp],
+            finding_id="f-rtp",
+            finding_type="RTP_HIGH_DELTA",
             severity="MEDIUM",
         ),
     ]
-    clusters = correlate_media_events([rx, tx])
+    clusters = correlate_media_events([rx, rtp])
 
     absorbed = absorb_member_findings(findings, clusters)
     assert {item["absorbed_by_cluster"] for item in absorbed} == {"CC-001"}
