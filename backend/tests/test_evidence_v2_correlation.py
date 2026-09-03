@@ -107,3 +107,22 @@ def test_member_findings_are_absorbed_and_problem_count_becomes_one_cluster():
     absorbed = absorb_member_findings(findings, clusters)
     assert {item["absorbed_by_cluster"] for item in absorbed} == {"CC-001"}
     assert correlation_problem_count(findings, clusters) == 1
+
+
+def test_finding_with_clustered_and_unclustered_events_is_not_fully_absorbed():
+    pre = _event("pre", "PCM_RX", 90.0)
+    active = _event("active", "PCM_RX", 100.0)
+    rtp = _event("rtp", "RTP_UPSTREAM", 100.001)
+    finding = aggregate_events(
+        [pre, active],
+        finding_id="f-rx",
+        finding_type="PCM_PACKET_INTERVAL_SPIKE",
+        severity="MEDIUM",
+    )
+    clusters = correlate_media_events([pre, active, rtp])
+
+    [normalized] = absorb_member_findings([finding], clusters)
+    assert normalized["absorbed_by_cluster"] is None
+    assert normalized["clustered_event_refs"] == ["active"]
+    assert normalized["unclustered_event_refs"] == ["pre"]
+    assert correlation_problem_count([finding], clusters) == 2
