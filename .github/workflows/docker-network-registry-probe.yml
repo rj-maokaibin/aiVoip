@@ -1,0 +1,108 @@
+name: Docker Network Registry Probe
+
+on:
+  push:
+    branches:
+      - ops/cicd-v2-production-probe
+    paths:
+      - '.github/workflows/docker-network-registry-probe.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  probe:
+    runs-on:
+      - self-hosted
+      - linux
+      - x64
+      - voip-controlled-linux
+    timeout-minutes: 10
+    steps:
+      - name: Inspect registry routing and Docker networks
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          out=/tmp/docker-network-registry-probe
+          rm -rf "$out" && mkdir -p "$out"
+
+          mirror_host=mirror.ruijie.com.cn
+          mirror_ip="$(getent ahostsv4 "$mirror_host" | awk 'NR==1{print $1}')"
+          printf '%s\n' "$mirror_ip" > "$out/mirror_ip.txt"
+
+          ip -4 route show table main > "$out/routes.txt" 2>&1 || true
+          ip -4 addr show > "$out/addrs.txt" 2>&1 || true
+          ip route get "$mirror_ip" > "$out/route_get.txt" 2>&1 || true
+          ip neigh show "$mirror_ip" > "$out/neigh.txt" 2>&1 || true
+          docker info > "$out/docker_info.txt" 2>&1 || true
+          cat /etc/docker/daemon.json > "$out/daemon_json.txt" 2>&1 || true
+
+          : > "$out/networks.txt"
+          while IFS= read -r n; do
+            docker network inspect "$n" --format '{{.Name}}|{{range .IPAM.Config}}{{.Subnet}}|{{.Gateway}}{{end}}' >> "$out/networks.txt" 2>&1 || true
+          done < <(docker network ls --format '{{.Name}}')
+
+          set +e
+          timeout 5 bash -lc "cat < /dev/null > /dev/tcp/$mirror_ip/8090" > "$out/tcp.txt" 2>&1
+          tcp_rc=$?
+          curl -sv --connect-timeout 3 --max-time 5 "http://$mirror_ip:8090/v2/" -o /dev/null > "$out/curl.txt" 2>&1
+          curl_rc=$?
+          set -e
+          printf '%s\n' "$tcp_rc" > "$out/tcp_rc.txt"
+          printf '%s\n' "$curl_rc" > "$out/curl_rc.txt"
+
+          python3 - "$out" <<'PY'
+          import ipaddress, json, pathlib, sys
+          root = pathlib.Path(sys.argv[1])
+          ip = ipaddress.ip_address((root/'mirror_ip.txt').read_text().strip())
+          conflicts=[]
+          for raw in (root/'networks.txt').read_text(errors='replace').splitlines():
+              parts=raw.split('|')
+              if len(parts) < 2: continue
+              name=parts[0]
+              subnet=parts[1].strip()
+              if not subnet: continue
+              try:
+                  net=ipaddress.ip_network(subnet, strict=False)
+              except ValueError:
+                  continue
+              if ip in net:
+                  conflicts.append({'network':name,'subnet':subnet,'gateway':parts[2] if len(parts)>2 else ''})
+          def read(name):
+              p=root/name
+              return p.read_text(errors='replace') if p.exists() else ''
+          payload={
+              'mirror_host':'mirror.ruijie.com.cn',
+              'mirror_ip':str(ip),
+              'docker_network_conflicts':conflicts,
+              'route_get':read('route_get.txt').strip(),
+              'routes':read('routes.txt'),
+              'addresses':read('addrs.txt'),
+              'docker_networks':read('networks.txt'),
+              'docker_daemon_json':read('daemon_json.txt'),
+              'docker_registry_info':'\n'.join([x for x in read('docker_info.txt').splitlines() if 'Registry Mirrors' in x or 'mirror' in x or 'http://' in x or 'https://' in x]),
+              'tcp_8090_rc':int(read('tcp_rc.txt').strip() or 999),
+              'curl_v2_rc':int(read('curl_rc.txt').strip() or 999),
+              'tcp_output':read('tcp.txt'),
+              'curl_output':read('curl.txt'),
+              'neighbor':read('neigh.txt').strip(),
+          }
+          (root/'result.json').write_text(json.dumps(payload,ensure_ascii=False,indent=2)+'\n')
+          print(json.dumps(payload,ensure_ascii=False,indent=2))
+          PY
+
+          python3 - "$out/result.json" > /tmp/payload.json <<'PY'
+          import base64,json,sys
+          p=sys.argv[1]
+          content=base64.b64encode(open(p,'rb').read()).decode()
+          print(json.dumps({'message':'ops: record docker network registry probe','content':content,'branch':'ops/cicd-v2-production-probe'}))
+          PY
+          curl -fsS -X PUT \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H 'Accept: application/vnd.github+json' \
+            -H 'X-GitHub-Api-Version: 2022-11-28' \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/contents/validation/docker_network_registry_probe.json" \
+            --data-binary @/tmp/payload.json >/tmp/put.json
+          echo 'DOCKER_NETWORK_REGISTRY_PROBE=PASS'
