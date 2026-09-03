@@ -256,6 +256,7 @@ jobs:
             validation/feishu_long_connection_runtime.json
             validation/exact_source_binding_result.json
             validation/runtime_revision_injection.json
+            validation/evidence_v2_production_acceptance.json
             validation/cicd_performance_v2.json
             validation/registry_connectivity_v2_1.json
             validation/docker_network_guard.json

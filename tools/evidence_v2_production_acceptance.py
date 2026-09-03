@@ -20,6 +20,7 @@ from human_evidence_feishu_live_acceptance import (
 
 STAGES = {"SHADOW", "CANARY", "DEFAULT"}
 V2_SCHEMA = "preliminary-evidence-report-v2"
+SHARED_RESULT_PATH = Path("/validation/evidence_v2_production_acceptance.json")
 
 
 def _validate_v2(v2: dict) -> None:
@@ -34,6 +35,19 @@ def _validate_v2(v2: dict) -> None:
     ]
     if p0:
         raise RuntimeError("EVIDENCE_V2_P0_SEMANTIC_DIVERGENCE")
+
+
+def _persist_result(result_path: Path, payload: dict) -> None:
+    text = json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
+    result_path.parent.mkdir(parents=True, exist_ok=True)
+    result_path.write_text(text, encoding="utf-8")
+
+    # Production mounts /validation read-write from the host. Persist the exact
+    # PASS/FAIL payload there as well so a fail-closed docker exec cannot hide
+    # the first causal error before deploy/voip-ai reaches its docker cp step.
+    # Local/unit-test environments without the production mount are unchanged.
+    if SHARED_RESULT_PATH != result_path and SHARED_RESULT_PATH.parent.is_dir():
+        SHARED_RESULT_PATH.write_text(text, encoding="utf-8")
 
 
 async def run(*, stage: str, expected_revision: str) -> dict:
@@ -174,8 +188,7 @@ def main() -> int:
             "error_code": type(exc).__name__,
             "error_message": str(exc)[:500],
         }
-    args.result.parent.mkdir(parents=True, exist_ok=True)
-    args.result.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    _persist_result(args.result, payload)
     print(json.dumps(payload, ensure_ascii=False))
     return 0 if payload.get("status") == "PASS" else 2
 
