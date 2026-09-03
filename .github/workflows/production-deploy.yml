@@ -160,4 +160,22 @@ jobs:
             validation/feishu_long_connection_runtime.json
             validation/exact_source_binding_result.json
             validation/cicd_performance_v2.json
+            validation/registry_connectivity_v2_1.json
+            validation/docker_network_guard.json
           if-no-files-found: warn
+
+      - name: Restore runner workspace ownership
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          uid="$(id -u)"
+          gid="$(id -g)"
+          docker image inspect python:3.12-slim >/dev/null
+          docker run --rm -v "$GITHUB_WORKSPACE:/workspace" python:3.12-slim \
+            sh -lc "for p in /workspace/.git /workspace/validation; do [ ! -e \"\$p\" ] || chown -R $uid:$gid \"\$p\"; done"
+          if [ -e "$GITHUB_WORKSPACE/.git/index" ]; then
+            test -w "$GITHUB_WORKSPACE/.git/index"
+            test "$(stat -c '%u:%g' "$GITHUB_WORKSPACE/.git/index")" = "$uid:$gid"
+          fi
+          echo "PRODUCTION_RUNNER_WORKSPACE_RESTORE=PASS"
