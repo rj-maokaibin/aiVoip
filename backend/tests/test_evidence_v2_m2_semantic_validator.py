@@ -108,6 +108,27 @@ def test_r009_and_r014_reject_timing_or_continuous_sequence_as_loss():
     assert {"R009", "R014"}.issubset(_rules(result))
 
 
+def test_r014_does_not_treat_missing_loss_metric_as_zero_loss():
+    call, timeline, rtp = _base()
+    loss = build_event(
+        event_id="loss",
+        observation_type="RTP_SEQUENCE_LOSS",
+        timestamp=15.0,
+        layer="RTP_UPSTREAM",
+        source_ref="rtp",
+    )
+    finding = aggregate_events(
+        [loss],
+        finding_id="loss",
+        finding_type="RTP_SEQUENCE_LOSS",
+        severity="HIGH",
+    )
+    finding["metrics"] = {}
+
+    result = validate_m2_semantics(call=call, timeline=timeline, rtp_streams=rtp, findings=[finding])
+    assert "R014" not in _rules(result)
+
+
 def test_r015_rejects_cluster_member_finding_not_absorbed():
     call, timeline, rtp = _base()
     rx = build_event(event_id="rx", observation_type="PACKET_INTERVAL_SPIKE", timestamp=15.0, layer="PCM_RX", source_ref="p", call_id="c")
