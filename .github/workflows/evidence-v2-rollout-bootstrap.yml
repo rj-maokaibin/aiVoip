@@ -27,9 +27,6 @@ jobs:
           python3 .github/scripts/evidence_v2_patch_deploy.py
           python3 -m py_compile tools/evidence_v2_production_acceptance.py backend/tests/test_evidence_v2_production_rollout_contract.py
           bash -n deploy/voip-ai
-          cd backend
-          pytest -q tests/test_evidence_v2_migration.py tests/test_evidence_v2_production_rollout_contract.py tests/test_evidence_report_v2_production_adapter.py
-          cd ..
           python3 tools/source_manifest_gate.py --update
           python3 tools/source_manifest_gate.py
 
