@@ -1,0 +1,40 @@
+name: Evidence V2 Manifest Refresh
+
+on:
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: evidence-v2-manifest-refresh-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  refresh:
+    if: github.event.pull_request.head.repo.full_name == github.repository && startsWith(github.head_ref, 'feat/evidence-v2-')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout Evidence V2 branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 1
+      - name: Refresh exact source manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/source_manifest_gate.py --update
+          python3 tools/source_manifest_gate.py
+          if git diff --quiet -- release/source_manifest.json; then
+            echo "EVIDENCE_V2_MANIFEST_REFRESH=NO_CHANGE"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add release/source_manifest.json
+          git commit -m "chore(evidence-v2): refresh exact source manifest"
+          git push origin "HEAD:${{ github.head_ref }}"
+          echo "EVIDENCE_V2_MANIFEST_REFRESH=PASS"
