@@ -17,7 +17,7 @@ def correlate_media_events(
     *,
     threshold_ms: float = 50.0,
 ) -> list[dict[str, Any]]:
-    """Create deterministic cross-layer candidate clusters.
+    """Create deterministic cross-layer correlation candidates.
 
     Correlation is based on shared call scope, event family, media-layer
     compatibility and temporal proximity. A cluster records co-occurrence only;
@@ -68,36 +68,42 @@ def correlate_media_events(
             members.append(candidate)
 
         layers = {str(member.get("layer") or "").upper() for member in members}
-        # A cross-layer cluster must contain evidence from at least two distinct
-        # layers. Same-layer repeated spikes remain a normal Finding aggregation.
         if len(layers) < 2:
             continue
 
         members.sort(key=lambda event: (float(event["timestamp"]), str(event.get("event_id") or "")))
         member_ids = [str(member["event_id"]) for member in members]
-        cluster_id = f"XLY-{cluster_number:03d}"
+        cluster_id = f"CC-{cluster_number:03d}"
         cluster_number += 1
         consumed.update(member_ids)
 
         representative = min(float(member["timestamp"]) for member in members)
         if anchor_family == "TIMING":
-            finding_type = "CROSS_LAYER_MEDIA_TIMING_SPIKE"
+            cluster_type = "CROSS_LAYER_MEDIA_TIMING_SPIKE"
+            interpretation_boundary = "TIMING_CORRELATION_ONLY"
         elif anchor_family == "LOSS":
-            finding_type = "CROSS_LAYER_MEDIA_LOSS_CORRELATION"
+            cluster_type = "CROSS_LAYER_MEDIA_LOSS_CORRELATION"
+            interpretation_boundary = "LOSS_CORRELATION_ONLY"
         else:
-            finding_type = f"CROSS_LAYER_{anchor_family}"
+            cluster_type = f"CROSS_LAYER_{anchor_family}"
+            interpretation_boundary = "CORRELATION_ONLY"
 
         clusters.append(
             {
                 "cluster_id": cluster_id,
-                "kind": "CORRELATION_CANDIDATE",
-                "finding_type": finding_type,
-                "event_family": anchor_family,
+                "type": cluster_type,
                 "call_id": anchor_call,
-                "member_event_refs": member_ids,
-                "member_layers": sorted(layers),
-                "event_count": len(member_ids),
+                "event_family": anchor_family,
                 "representative_time": representative,
+                "member_events": [
+                    {
+                        "layer": str(member.get("layer") or "").upper(),
+                        "event_ref": str(member["event_id"]),
+                    }
+                    for member in members
+                ],
+                "packet_loss_observed": anchor_family == "LOSS",
+                "interpretation_boundary": interpretation_boundary,
                 "time_span": {
                     "start": representative,
                     "end": max(float(member["timestamp"]) for member in members),
@@ -120,8 +126,9 @@ def absorb_member_findings(
     event_to_cluster: dict[str, str] = {}
     for cluster in clusters:
         cluster_id = str(cluster.get("cluster_id") or "")
-        for event_ref in cluster.get("member_event_refs") or []:
-            event_to_cluster[str(event_ref)] = cluster_id
+        for member in cluster.get("member_events") or []:
+            if isinstance(member, Mapping) and member.get("event_ref"):
+                event_to_cluster[str(member["event_ref"])] = cluster_id
 
     out: list[dict[str, Any]] = []
     for finding in findings:
@@ -141,7 +148,7 @@ def correlation_problem_count(
     findings: Iterable[Mapping[str, Any]],
     clusters: Iterable[Mapping[str, Any]],
 ) -> int:
-    """Count one primary problem per cluster plus unabsorbed abnormal findings."""
+    """Count one primary problem per cluster plus unabsorbed ABNORMAL findings."""
 
     from .finding_events import problem_count
 
