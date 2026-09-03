@@ -79,12 +79,7 @@ def validate_m2_semantics(
     visibility: Mapping[str, Any] | None = None,
     claims: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Validate lifecycle + event/correlation/visibility rules implemented in M2.
-
-    Covered rules: R001-R004, R007-R009, R014-R015. Remaining R005/R006/
-    R010-R013 are added by later implementation phases; this function never
-    marks those unimplemented rules as PASS.
-    """
+    """Validate lifecycle + event/correlation/visibility rules implemented in M2."""
 
     rtp_list = [dict(stream) for stream in rtp_streams]
     finding_list = [dict(finding) for finding in findings]
@@ -150,8 +145,10 @@ def validate_m2_semantics(
                     )
                 )
 
-    media_visibility = (visibility or {}).get("media") or {}
-    if (claims or {}).get("end_to_end_media_complete") is True and media_visibility.get("end_to_end") != "COMPLETE":
+    visibility_payload = visibility or {}
+    media_visibility = visibility_payload.get("media") or {}
+    end_to_end_visibility = visibility_payload.get("end_to_end_media") or media_visibility.get("end_to_end")
+    if (claims or {}).get("end_to_end_media_complete") is True and end_to_end_visibility != "COMPLETE":
         violations.append(
             SemanticViolation(
                 rule="R008",
@@ -171,20 +168,18 @@ def validate_m2_semantics(
     for index, finding in enumerate(finding_list):
         if finding.get("independent_failure_domain") is True:
             continue
-        cluster_ids = {
-            event_to_cluster[str(ref)]
-            for ref in finding.get("event_refs") or []
-            if str(ref) in event_to_cluster
-        }
-        if len(cluster_ids) == 1:
-            cluster_id = next(iter(cluster_ids))
+        event_refs = [str(ref) for ref in finding.get("event_refs") or []]
+        mapped = [event_to_cluster[ref] for ref in event_refs if ref in event_to_cluster]
+        fully_represented = bool(event_refs) and len(mapped) == len(event_refs) and len(set(mapped)) == 1
+        if fully_represented:
+            cluster_id = mapped[0]
             if finding.get("absorbed_by_cluster") != cluster_id:
                 violations.append(
                     SemanticViolation(
                         rule="R015",
                         severity="P0",
                         path=f"findings[{index}].absorbed_by_cluster",
-                        detail=f"Finding belongs to correlation cluster {cluster_id} but remains independently countable.",
+                        detail=f"Finding is fully represented by correlation cluster {cluster_id} but remains independently countable.",
                     )
                 )
 
