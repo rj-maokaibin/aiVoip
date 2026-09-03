@@ -1,0 +1,169 @@
+name: Evidence V2 Production Golden Baseline Bootstrap
+
+on:
+  pull_request:
+    branches:
+      - master
+    paths:
+      - 'tools/evidence_v2_production_golden_bootstrap.py'
+      - '.github/workflows/evidence-v2-production-golden-bootstrap.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: evidence-v2-production-golden-bootstrap
+  cancel-in-progress: false
+
+jobs:
+  contract:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate bootstrap source contract
+        run: |
+          set -euo pipefail
+          python3 -m py_compile tools/evidence_v2_production_golden_bootstrap.py
+          python3 - <<'PY'
+          from pathlib import Path
+          text=Path('tools/evidence_v2_production_golden_bootstrap.py').read_text(encoding='utf-8')
+          required=[
+              'REAL_GOLDEN_001_SHA256',
+              'rollout.mode != "SHADOW"',
+              '_select_bound_golden(db)',
+              'PRODUCTION_EVIDENCE_V2_ACCEPTANCE_BASELINE',
+              'baseline_remote_readback',
+              'strict_selector_verified',
+          ]
+          missing=[item for item in required if item not in text]
+          assert not missing, missing
+          print('EVIDENCE_V2_GOLDEN_BOOTSTRAP_CONTRACT=PASS')
+          PY
+
+  bootstrap:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master'
+    runs-on:
+      - self-hosted
+      - linux
+      - x64
+      - voip-controlled-linux
+    timeout-minutes: 75
+    env:
+      EXPECTED_SHA: ${{ github.sha }}
+      GOLDEN_PCAP: /tmp/tcpdump-2026-08-14.pcap
+      GOLDEN_SHA256: b038aa7c9a0644581f2815f654fcdee4620860796382265b178823fccba2e3f0
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.EXPECTED_SHA }}
+          fetch-depth: 1
+
+      - name: Verify exact source and SHADOW governance
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          python3 tools/source_manifest_gate.py
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          p=json.loads(Path('deploy/evidence_v2_rollout.json').read_text(encoding='utf-8'))
+          assert p.get('stage') == 'SHADOW', p
+          assert p.get('canary_selector') == 'BOUND_REAL_GOLDEN_001', p
+          assert p.get('strict_validator') is True, p
+          assert p.get('default_projection') == 'V1', p
+          print('EVIDENCE_V2_GOLDEN_BOOTSTRAP_SHADOW_GOVERNANCE=PASS')
+          PY
+
+      - name: Verify exact production runtime is already promoted
+        run: |
+          set -euo pipefail
+          mapfile -t ids < <(docker ps -q \
+            --filter 'label=com.docker.compose.project=aivoip' \
+            --filter 'label=com.docker.compose.service=backend')
+          test "${#ids[@]}" -eq 1
+          cid="${ids[0]}"
+          container_rev="$(docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$cid" \
+            | awk -F= '$1=="BUILD_REVISION" {print substr($0,index($0,"=")+1); exit}')"
+          image_id="$(docker inspect -f '{{.Image}}' "$cid")"
+          image_rev="$(docker image inspect -f '{{ index .Config.Labels "org.opencontainers.image.revision" }}' "$image_id")"
+          test "$container_rev" = "$EXPECTED_SHA"
+          test "$image_rev" = "$EXPECTED_SHA"
+          ready="$(curl -fsS http://127.0.0.1:18001/health/ready)"
+          health_rev="$(printf '%s' "$ready" | python3 -c 'import json,sys; print(json.load(sys.stdin)["build_revision"])')"
+          test "$health_rev" = "$EXPECTED_SHA"
+          printf 'BACKEND_CID=%s\n' "$cid" >> "$GITHUB_ENV"
+          echo "EVIDENCE_V2_GOLDEN_BOOTSTRAP_RUNTIME_BINDING=PASS revision=$EXPECTED_SHA"
+
+      - name: Verify reviewed Real Golden 001 fixture
+        run: |
+          set -euo pipefail
+          fixture="$GOLDEN_PCAP"
+          if [ ! -r "$fixture" ]; then
+            staged="$RUNNER_TEMP/evidence-v2-production-golden-001.pcap"
+            rm -f "$staged"
+            docker run --rm \
+              -v /tmp:/source:ro \
+              -v "$RUNNER_TEMP":/output \
+              --entrypoint sh postgres:16 \
+              -c 'cp /source/tcpdump-2026-08-14.pcap /output/evidence-v2-production-golden-001.pcap && chmod 0644 /output/evidence-v2-production-golden-001.pcap'
+            fixture="$staged"
+          fi
+          test -r "$fixture"
+          actual="$(sha256sum "$fixture" | awk '{print $1}')"
+          test "$actual" = "$GOLDEN_SHA256"
+          printf 'VERIFIED_GOLDEN_PCAP=%s\n' "$fixture" >> "$GITHUB_ENV"
+          echo "REAL_OFFLINE_GOLDEN_001_SOURCE_IDENTITY=PASS sha256=$actual"
+
+      - name: Bootstrap dedicated production baseline
+        run: |
+          set -euo pipefail
+          result="$RUNNER_TEMP/evidence-v2-production-golden-bootstrap.json"
+          in_pcap=/tmp/evidence-v2-production-real-golden-001.pcap
+          in_script=/tmp/evidence-v2-production-golden-bootstrap.py
+          in_result=/tmp/evidence-v2-production-golden-bootstrap.json
+          docker cp "$VERIFIED_GOLDEN_PCAP" "$BACKEND_CID:$in_pcap"
+          docker cp tools/evidence_v2_production_golden_bootstrap.py "$BACKEND_CID:$in_script"
+          cleanup() {
+            docker exec "$BACKEND_CID" rm -f "$in_pcap" "$in_script" "$in_result" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+          test "$(docker exec "$BACKEND_CID" sha256sum "$in_pcap" | awk '{print $1}')" = "$GOLDEN_SHA256"
+          set +e
+          docker exec \
+            -e PYTHONPATH=/app:/tools \
+            "$BACKEND_CID" python "$in_script" \
+            --pcap "$in_pcap" \
+            --expected-revision "$EXPECTED_SHA" \
+            --result "$in_result"
+          rc="$?"
+          set -e
+          docker cp "$BACKEND_CID:$in_result" "$result" >/dev/null 2>&1 || true
+          test -s "$result"
+          cp "$result" validation/evidence_v2_production_golden_bootstrap.json
+          python3 - "$EXPECTED_SHA" <<'PY'
+          import json,sys
+          from pathlib import Path
+          revision=sys.argv[1]
+          p=json.loads(Path('validation/evidence_v2_production_golden_bootstrap.json').read_text(encoding='utf-8'))
+          assert p.get('status') == 'PASS', p
+          assert p.get('source_revision') == revision, p
+          assert p.get('stage') == 'SHADOW', p
+          assert p.get('golden_sha256') == 'b038aa7c9a0644581f2815f654fcdee4620860796382265b178823fccba2e3f0', p
+          assert p.get('strict_selector_verified') is True, p
+          assert p.get('baseline_remote_readback') in {'PASS','PREVIOUSLY_VERIFIED'}, p
+          assert p.get('document_fingerprint'), p
+          print('EVIDENCE_V2_PRODUCTION_GOLDEN_BASELINE=PASS revision='+revision)
+          PY
+          test "$rc" -eq 0
+
+      - name: Upload sanitized bootstrap evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: evidence-v2-production-golden-bootstrap-${{ github.run_id }}-${{ github.run_attempt }}
+          path: validation/evidence_v2_production_golden_bootstrap.json
+          if-no-files-found: warn
+          retention-days: 14
