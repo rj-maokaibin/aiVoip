@@ -19,9 +19,10 @@ def correlate_media_events(
 ) -> list[dict[str, Any]]:
     """Create deterministic cross-layer correlation candidates.
 
-    Correlation is based on shared call scope, event family, media-layer
-    compatibility and temporal proximity. A cluster records co-occurrence only;
-    it never asserts physical causality or root cause.
+    Correlation is based on shared call scope, event family, compatible media
+    path and temporal proximity. ``media_path`` may be absent while upstream
+    mapping is incomplete; when both events declare a path, those paths must
+    match. A cluster records co-occurrence only and never asserts causality.
     """
 
     threshold_seconds = float(threshold_ms) / 1000.0
@@ -62,6 +63,8 @@ def correlate_media_events(
             if candidate.get("call_id") != anchor_call:
                 continue
             if str(candidate.get("event_family")) != anchor_family:
+                continue
+            if not _compatible_media_path(anchor, candidate):
                 continue
             if abs(float(candidate["timestamp"]) - anchor_time) > threshold_seconds:
                 continue
@@ -115,6 +118,14 @@ def correlate_media_events(
         )
 
     return clusters
+
+
+def _compatible_media_path(a: Mapping[str, Any], b: Mapping[str, Any]) -> bool:
+    a_path = a.get("media_path")
+    b_path = b.get("media_path")
+    if a_path and b_path:
+        return str(a_path) == str(b_path)
+    return True
 
 
 def absorb_member_findings(
