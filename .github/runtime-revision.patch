@@ -1,0 +1,450 @@
+diff --git a/.github/workflows/production-deploy.yml b/.github/workflows/production-deploy.yml
+index 398734a..a2882ef 100644
+--- a/.github/workflows/production-deploy.yml
++++ b/.github/workflows/production-deploy.yml
+@@ -86,8 +86,11 @@ jobs:
+         shell: bash
+         run: |
+           set -euo pipefail
+-          sudo -n /usr/local/sbin/voip-ai-production-deploy "$TARGET_SHA"
+-          echo "FORMAL_PRODUCTION_DEPLOY=PASS"
++          sudo -n ./deploy/voip-ai \
++            --env /etc/voip-ai/production.env \
++            --revision "$TARGET_SHA" \
++            deploy
++          echo "FORMAL_PRODUCTION_DEPLOY=PASS entrypoint=SOURCE_CONTROLLED revision=$TARGET_SHA"
+ 
+       - name: Verify exact source binding evidence
+         shell: bash
+diff --git a/backend/tests/test_cicd_performance_v2.py b/backend/tests/test_cicd_performance_v2.py
+index 0dd8c6a..2afcd55 100644
+--- a/backend/tests/test_cicd_performance_v2.py
++++ b/backend/tests/test_cicd_performance_v2.py
+@@ -113,3 +113,90 @@ def test_v2_1_production_workflow_restores_workspace_ownership():
+     assert "Restore runner workspace ownership" in text
+     assert "PRODUCTION_RUNNER_WORKSPACE_RESTORE=PASS" in text
+     assert "validation/registry_connectivity_v2_1.json" in text
++
++
++def test_v2_2_runtime_build_revision_does_not_mutate_persistent_env(tmp_path):
++    import stat
++    import subprocess
++    import sys
++
++    base = tmp_path / "production.env"
++    base.write_text(
++        "APP_ENV=production\n"
++        "BUILD_REVISION=1111111111111111111111111111111111111111\n"
++        "VOIP_PROJECT_NAME=aivoip\n",
++        encoding="utf-8",
++    )
++    base.chmod(0o600)
++    before = base.read_bytes()
++    out = tmp_path / "runtime.env"
++    revision = "a" * 40
++    cp = subprocess.run(
++        [
++            sys.executable,
++            str(ROOT / "deploy/runtime_env.py"),
++            "--base-env",
++            str(base),
++            "--revision",
++            revision,
++            "--out",
++            str(out),
++        ],
++        cwd=ROOT,
++        text=True,
++        capture_output=True,
++    )
++    assert cp.returncode == 0, cp.stdout + cp.stderr
++    assert base.read_bytes() == before
++    runtime = out.read_text(encoding="utf-8")
++    assert runtime.count("BUILD_REVISION=") == 1
++    assert f"BUILD_REVISION={revision}" in runtime
++    assert "1111111111111111111111111111111111111111" not in runtime
++    assert stat.S_IMODE(out.stat().st_mode) == 0o600
++    assert "persistent_env_mutated=false" in cp.stdout
++
++
++def test_v2_2_runtime_env_rejects_insecure_base_env(tmp_path):
++    import subprocess
++    import sys
++
++    base = tmp_path / "production.env"
++    base.write_text("APP_ENV=production\n", encoding="utf-8")
++    base.chmod(0o644)
++    out = tmp_path / "runtime.env"
++    cp = subprocess.run(
++        [
++            sys.executable,
++            str(ROOT / "deploy/runtime_env.py"),
++            "--base-env",
++            str(base),
++            "--revision",
++            "b" * 40,
++            "--out",
++            str(out),
++        ],
++        cwd=ROOT,
++        text=True,
++        capture_output=True,
++    )
++    assert cp.returncode == 2
++    assert "group/world accessible" in cp.stderr
++    assert not out.exists()
++
++
++def test_v2_2_cli_and_formal_workflow_use_source_controlled_runtime_revision():
++    deploy = (ROOT / "deploy/voip-ai").read_text(encoding="utf-8")
++    workflow = (ROOT / ".github/workflows/production-deploy.yml").read_text(encoding="utf-8")
++    template = (ROOT / "deploy/production.env.example").read_text(encoding="utf-8")
++
++    assert "--revision SHA" in deploy
++    assert "materialize_runtime_env" in deploy
++    assert "python3 deploy/runtime_env.py" in deploy
++    assert "persistent_env_mutated=false" in deploy
++    assert "requested revision does not match checked-out source" in deploy
++    assert "/usr/local/sbin/voip-ai-production-deploy" not in workflow
++    assert "sudo -n ./deploy/voip-ai" in workflow
++    assert '--revision "$TARGET_SHA"' in workflow
++    assert "entrypoint=SOURCE_CONTROLLED" in workflow
++    assert "BUILD_REVISION=<immutable-git-sha-or-build-id>" not in template
++    assert "do not maintain BUILD_REVISION here" in template
+diff --git a/deploy/DEPLOYMENT_GUIDE.md b/deploy/DEPLOYMENT_GUIDE.md
+index acb7f6a..0add640 100644
+--- a/deploy/DEPLOYMENT_GUIDE.md
++++ b/deploy/DEPLOYMENT_GUIDE.md
+@@ -15,6 +15,9 @@
+   - frontend：`0.0.0.0:8088`（**8080 被同机 FusionPBX websockets 占用，禁止使用 8080**）
+   - backend：生产环境按 `/etc/voip-ai/production.env` 的 `VOIP_BACKEND_PORT` 暴露（当前站点为 `127.0.0.1:18001`，容器内 8000）
+   - MinIO console：按生产 env 绑定
++- **BUILD_REVISION 无需人工维护**：`deploy/voip-ai` 默认使用当前 checkout 的 40 位 Git SHA，
++  生成 `0600` 临时 effective env 后注入 `BUILD_REVISION`；`/etc/voip-ai/production.env` 不会被修改。
++  CI/CD 可显式传 `--revision <SHA>`，但该 SHA 必须与 Git HEAD 精确一致，否则 fail-closed。
+ - **source manifest 一致性**：`build` 前 `tools/source_manifest_gate.py` 强制 manifest 与当前代码一致。
+   `deploy/`、`backend/app`、`backend/run_feishu_long_connection.py`、`frontend/src`、`tools`、compose 等生产源码均受约束。
+ - **本机 docker 组**：普通 `dev` 会话可能未加载 docker 组，直接敲 `docker` 会 permission denied；
+@@ -35,6 +38,9 @@ sudo ./deploy/voip-ai --env /etc/voip-ai/production.env status
+ sudo ./deploy/voip-ai --env /etc/voip-ai/production.env verify
+ ```
+ 
++`deploy` 前不需要、也不应该手工修改 `production.env` 中的 `BUILD_REVISION`。历史文件中即使残留该字段也会被忽略，
++真正的 revision 由当前 checkout（或显式 `--revision`）注入临时 env，部署结束后删除。
++
+ `deploy` 是全流程：preflight → prepare-host → 自动 `pg_dump` 备份 → source-bound build →
+ up postgres/redis/minio → `alembic upgrade head` → up backend/workers/Feishu long-connection/beat/frontend →
+ 等待 backend、frontend 和 Feishu listener 健康 → host Feishu consumer gate → runtime verify。
+@@ -55,7 +61,7 @@ up postgres/redis/minio → `alembic upgrade head` → up backend/workers/Feishu
+ - listener 启动失败或内部监听线程异常退出时以非零状态退出，让 Docker restart policy 接管；
+ - 生产 `preflight` 强制 `FEISHU_LIVE_ENABLED=true`、Feishu App/目标配置以及 Identity RBAC；
+ - 当 Feishu Live 启用时，`verify` 全局扫描 `com.docker.compose.service=feishu-long-connection`，要求**运行中的 consumer 恰好 1 个**；
+-- 唯一 consumer 必须属于当前 `aivoip` project、`BUILD_REVISION` 与生产 env 一致且 Docker health=`healthy`；
++- 唯一 consumer 必须属于当前 `aivoip` project、`BUILD_REVISION` 与本次 immutable deployment revision 一致且 Docker health=`healthy`；
+ - 通用开发/测试环境若明确关闭 Feishu Live，`status` 的 consumer gate 会输出 `SKIP`，而不是把非 Feishu 部署误判为故障；这不影响生产，因为生产 `preflight` 会先 fail-closed；
+ - `status` 和 `logs` 均包含 Feishu long-connection；
+ - `backend/run_feishu_long_connection.py` 已纳入 `source_manifest`，避免入口脚本脱离 exact-source 发布门禁。
+@@ -83,6 +89,7 @@ up postgres/redis/minio → `alembic upgrade head` → up backend/workers/Feishu
+ ## 5. 注意事项
+ 
+ - **禁用 8080**：同机 FusionPBX websockets 占用 `127.0.0.1:8080`；前端固定使用生产 env 配置的 8088。
++- 禁止手工同步 `BUILD_REVISION` 到 `/etc/voip-ai/production.env`；该值由部署入口运行时注入。
+ - 修改纳入 source manifest 的文件后必须刷新 manifest，否则 build fail-closed。
+ - env / secret 为 `root:0600`，查看/修改需 `sudo`，禁止通过 chmod 放宽权限绕过预检。
+ - `FEISHU_LIVE_ENABLED=true` 是正式生产 deploy 的必需项，由 `deployment_preflight.py` 强制；通用非生产 `status` 场景允许 Feishu disabled 并明确显示 `SKIP`。
+diff --git a/deploy/README.md b/deploy/README.md
+index 169478b..4f5fc7a 100644
+--- a/deploy/README.md
++++ b/deploy/README.md
+@@ -9,8 +9,9 @@ sudo chmod 600 /etc/voip-ai/production.env
+ sudo chmod 600 /etc/voip-ai/secrets/*
+ ```
+ 
+-Replace every `<...>` placeholder. EC-02 intentionally remains a release blocker until the real
+-DUT Platform Contract is approved.
++Replace every `<...>` placeholder. `BUILD_REVISION` is intentionally not a persistent setting: the deployment CLI
++injects the checked-out immutable Git SHA into a private temporary runtime env and never rewrites
++`/etc/voip-ai/production.env`. EC-02 intentionally remains a release blocker until the real DUT Platform Contract is approved.
+ 
+ ## 2. Preflight
+ 
+@@ -25,7 +26,7 @@ sudo ./deploy/voip-ai --env /etc/voip-ai/production.env prepare-host
+ ./deploy/voip-ai --env /etc/voip-ai/production.env deploy
+ ```
+ 
+-`deploy` performs preflight, a PostgreSQL backup when an existing DB is running, Docker image
++`deploy` derives `BUILD_REVISION` from the checked-out Git HEAD by default (or accepts `--revision <SHA>` only when it exactly matches HEAD), then performs preflight, a PostgreSQL backup when an existing DB is running, Docker image
+ build, infrastructure startup, explicit Alembic migration, application promotion, and live runtime
+ verification.
+ 
+diff --git a/deploy/production.env.example b/deploy/production.env.example
+index 8ed59d8..2e581e3 100644
+--- a/deploy/production.env.example
++++ b/deploy/production.env.example
+@@ -4,7 +4,8 @@
+ 
+ APP_ENV=production
+ APP_VERSION=1.0.0
+-BUILD_REVISION=<immutable-git-sha-or-build-id>
++# BUILD_REVISION is deployment state. deploy/voip-ai injects the checked-out immutable
++# Git SHA into a private temporary runtime env; do not maintain BUILD_REVISION here.
+ AUTH_ALLOW_ANONYMOUS_DEV=false
+ PRODUCTION_AUTH_PROVIDER=gateway_hmac
+ AUTH_GATEWAY_HMAC_SECRET_FILE=/run/secrets/auth_gateway_hmac
+diff --git a/deploy/runtime_env.py b/deploy/runtime_env.py
+new file mode 100755
+index 0000000..2e12d17
+--- /dev/null
++++ b/deploy/runtime_env.py
+@@ -0,0 +1,91 @@
++#!/usr/bin/env python3
++"""Materialize a private runtime env with an immutable BUILD_REVISION overlay.
++
++The persistent production env contains site configuration and secrets/bootstrap
++values. BUILD_REVISION is deployment state, so it is injected into a temporary
++copy instead of mutating /etc/voip-ai/production.env.
++"""
++
++from __future__ import annotations
++
++import argparse
++import os
++import re
++import stat
++from pathlib import Path
++
++SHA_RE = re.compile(r"^[0-9a-f]{40}$")
++BUILD_REVISION_RE = re.compile(r"^\s*(?:export\s+)?BUILD_REVISION\s*=")
++
++
++def _private_mode(path: Path) -> int:
++    try:
++        return stat.S_IMODE(path.stat().st_mode)
++    except OSError as exc:
++        raise RuntimeError(f"base env is not accessible: {path}: {exc.__class__.__name__}") from exc
++
++
++def materialize(base_env: Path, output: Path, revision: str, *, require_private: bool = True) -> int:
++    if not SHA_RE.fullmatch(revision):
++        raise RuntimeError(f"revision must be an immutable 40-char lowercase git SHA: {revision!r}")
++    if not base_env.is_file():
++        raise RuntimeError(f"production env file missing: {base_env}")
++
++    mode = _private_mode(base_env)
++    if require_private and mode & 0o077:
++        raise RuntimeError(
++            f"base production env must not be group/world accessible: {base_env} mode={mode:04o}"
++        )
++
++    raw_lines = base_env.read_text(encoding="utf-8").splitlines()
++    kept: list[str] = []
++    removed = 0
++    for line in raw_lines:
++        if BUILD_REVISION_RE.match(line):
++            removed += 1
++            continue
++        kept.append(line)
++
++    output.parent.mkdir(parents=True, exist_ok=True)
++    body = "\n".join(kept).rstrip("\n")
++    if body:
++        body += "\n"
++    body += f"BUILD_REVISION={revision}\n"
++    output.write_text(body, encoding="utf-8")
++    os.chmod(output, stat.S_IRUSR | stat.S_IWUSR)
++
++    out_mode = stat.S_IMODE(output.stat().st_mode)
++    if out_mode != 0o600:
++        raise RuntimeError(f"runtime env mode must be 0600: {output} mode={out_mode:04o}")
++    return removed
++
++
++def main() -> int:
++    parser = argparse.ArgumentParser()
++    parser.add_argument("--base-env", required=True, type=Path)
++    parser.add_argument("--revision", required=True)
++    parser.add_argument("--out", required=True, type=Path)
++    parser.add_argument("--allow-insecure-base", action="store_true")
++    args = parser.parse_args()
++
++    try:
++        removed = materialize(
++            args.base_env.resolve(),
++            args.out.resolve(),
++            args.revision,
++            require_private=not args.allow_insecure_base,
++        )
++    except RuntimeError as exc:
++        print(f"RUNTIME_ENV=BLOCKED reason={exc}", file=__import__("sys").stderr)
++        return 2
++
++    print(
++        "RUNTIME_ENV=PASS "
++        f"revision={args.revision} persistent_build_revision_entries_ignored={removed} "
++        "persistent_env_mutated=false mode=0600"
++    )
++    return 0
++
++
++if __name__ == "__main__":
++    raise SystemExit(main())
+diff --git a/deploy/voip-ai b/deploy/voip-ai
+index d04e6a0..5be08c0 100755
+--- a/deploy/voip-ai
++++ b/deploy/voip-ai
+@@ -7,6 +7,10 @@ export GIT_OPTIONAL_LOCKS=0
+ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ DEFAULT_ENV="${VOIP_ENV_FILE:-/etc/voip-ai/production.env}"
+ ENV_FILE="$DEFAULT_ENV"
++BASE_ENV_FILE="$DEFAULT_ENV"
++RUNTIME_ENV_FILE=""
++RUNTIME_ENV_READY=0
++TARGET_REVISION=""
+ # Compose project name. Last-resort default is the production stack name
+ # (aivoip); the authoritative value is resolved from the production env file
+ # (VOIP_PROJECT_NAME) after --env is parsed, unless --project is given on the
+@@ -26,7 +30,8 @@ Usage:
+   deploy/voip-ai [global options] <command>
+ 
+ Global options:
+-  --env FILE          Production env file (default: /etc/voip-ai/production.env)
++  --env FILE          Persistent production env file (default: /etc/voip-ai/production.env)
++  --revision SHA      Immutable deployment revision (default: current Git HEAD; must equal HEAD)
+   --project NAME      Docker Compose project name (default: aivoip; env VOIP_PROJECT_NAME wins)
+   --field-pcap FILE   Field PCAP used by release verification
+   --keep-stack        Keep E2E stack on failure
+@@ -52,7 +57,8 @@ USAGE
+ 
+ while [[ $# -gt 0 ]]; do
+   case "$1" in
+-    --env) ENV_FILE="$2"; shift 2 ;;
++    --env) ENV_FILE="$2"; BASE_ENV_FILE="$2"; shift 2 ;;
++    --revision) TARGET_REVISION="$2"; shift 2 ;;
+     --project) PROJECT="$2"; PROJECT_FROM_CLI=1; shift 2 ;;
+     --field-pcap) FIELD_PCAP="$2"; shift 2 ;;
+     --keep-stack) KEEP_STACK=1; shift ;;
+@@ -64,14 +70,65 @@ done
+ COMMAND="${COMMAND:-help}"
+ 
+ cd "$ROOT"
+-ENV_FILE="$(python3 - "$ENV_FILE" <<'PY'
++BASE_ENV_FILE="$(python3 - "$BASE_ENV_FILE" <<'PY'
+ from pathlib import Path
+ import sys
+ print(Path(sys.argv[1]).expanduser().resolve())
+ PY
+ )"
++ENV_FILE="$BASE_ENV_FILE"
++
++cleanup_runtime_env() {
++  if [[ -n "$RUNTIME_ENV_FILE" ]]; then
++    rm -f "$RUNTIME_ENV_FILE"
++  fi
++}
++trap cleanup_runtime_env EXIT
++
++materialize_runtime_env() {
++  local security_mode="${1:-strict}"
++  if [[ "$RUNTIME_ENV_READY" == "1" ]]; then
++    return 0
++  fi
++
++  local head revision
++  head="$(git rev-parse HEAD 2>/dev/null || true)"
++  if [[ ! "$head" =~ ^[0-9a-f]{40}$ ]]; then
++    echo "ERROR: unable to resolve immutable Git HEAD for runtime BUILD_REVISION" >&2
++    return 2
++  fi
++  revision="${TARGET_REVISION:-$head}"
++  if [[ ! "$revision" =~ ^[0-9a-f]{40}$ ]]; then
++    echo "ERROR: --revision must be an immutable 40-char lowercase git SHA; observed=${revision:-missing}" >&2
++    return 2
++  fi
++  if [[ "$revision" != "$head" ]]; then
++    echo "ERROR: requested revision does not match checked-out source: requested=$revision git_head=$head" >&2
++    return 2
++  fi
++
++  RUNTIME_ENV_FILE="$(mktemp "${TMPDIR:-/tmp}/voip-ai-runtime-env.XXXXXX")"
++  local -a runtime_env_args=(
++    --base-env "$BASE_ENV_FILE"
++    --revision "$revision"
++    --out "$RUNTIME_ENV_FILE"
++  )
++  if [[ "$security_mode" == "relaxed" ]]; then
++    runtime_env_args+=(--allow-insecure-base)
++  fi
++  if ! python3 deploy/runtime_env.py "${runtime_env_args[@]}"; then
++    rm -f "$RUNTIME_ENV_FILE"
++    RUNTIME_ENV_FILE=""
++    return 2
++  fi
++  ENV_FILE="$RUNTIME_ENV_FILE"
++  TARGET_REVISION="$revision"
++  RUNTIME_ENV_READY=1
++  echo "BUILD_REVISION_SOURCE=RUNTIME revision=$revision base_env=$BASE_ENV_FILE persistent_env_mutated=false"
++}
+ 
+ compose() {
++  materialize_runtime_env relaxed
+   DOCKER_BUILDKIT="${DOCKER_BUILDKIT:-1}" COMPOSE_DOCKER_CLI_BUILD="${COMPOSE_DOCKER_CLI_BUILD:-1}" \
+     VOIP_APP_ENV_FILE="$ENV_FILE" docker compose \
+     --project-name "$PROJECT" \
+@@ -101,6 +158,7 @@ PY
+ # the production env file (VOIP_PROJECT_NAME) is authoritative, falling back to
+ # the production stack name (aivoip).
+ if [[ "$PROJECT_FROM_CLI" != "1" ]]; then
++  ENV_FILE="$BASE_ENV_FILE"
+   PROJECT="$(env_value VOIP_PROJECT_NAME 2>/dev/null || printf '%s' "$PROJECT")"
+ fi
+ 
+@@ -192,6 +250,7 @@ require_docker() {
+ }
+ 
+ source_binding_preflight() {
++  materialize_runtime_env || return $?
+   local expected head dirty
+   expected="$(env_value BUILD_REVISION 2>/dev/null || true)"
+   head="$(git rev-parse HEAD 2>/dev/null || true)"
+@@ -220,7 +279,8 @@ source_binding_preflight() {
+ 
+ host_preflight() {
+   require_docker
+-  [[ -f "$ENV_FILE" ]] || { echo "ERROR: production env file missing: $ENV_FILE" >&2; exit 2; }
++  materialize_runtime_env || return $?
++  [[ -f "$ENV_FILE" ]] || { echo "ERROR: effective production env file missing: $ENV_FILE" >&2; exit 2; }
+   source_binding_preflight
+   mkdir -p validation
+   python3 deploy/deployment_preflight.py --env-file "$ENV_FILE" --mode deploy --out validation/phase_f3_deployment_preflight.json
+@@ -231,6 +291,7 @@ host_preflight() {
+ }
+ 
+ prepare_host() {
++  materialize_runtime_env relaxed || return $?
+   local root min_gb
+   root="$(env_value VOIP_DATA_ROOT 2>/dev/null || echo /data/voip)"
+   min_gb="$(env_value VOIP_MIN_FREE_GB 2>/dev/null || echo 20)"
+@@ -251,6 +312,7 @@ prepare_host() {
+ 
+ backup_db() {
+   require_docker
++  materialize_runtime_env relaxed || return $?
+   local data_root ts out
+   data_root="$(env_value VOIP_DATA_ROOT 2>/dev/null || echo /data/voip)"
+   mkdir -p "$data_root/backups"
+@@ -487,6 +549,7 @@ deploy_stack() {
+ 
+ verify_stack() {
+   require_docker
++  materialize_runtime_env relaxed || return $?
+   mkdir -p validation
+   rm -f validation/feishu_long_connection_runtime.json
+   verify_feishu_consumer_host || return $?
+@@ -590,6 +653,7 @@ PYFIELD
+ 
+ status_cmd() {
+   require_docker
++  materialize_runtime_env relaxed || return $?
+   compose ps
+   local bp fp
+   bp="$(env_value VOIP_BACKEND_PORT 2>/dev/null || echo 8000)"
