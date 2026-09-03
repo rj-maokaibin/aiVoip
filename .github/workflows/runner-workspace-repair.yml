@@ -8,8 +8,10 @@ on:
 permissions:
   contents: read
 
+# Deliberately share the stale bootstrap concurrency group so this one-shot
+# operational run cancels any obsolete CI/CD Performance V2 bootstrap run.
 concurrency:
-  group: voip-runner-workspace-repair
+  group: cicd-performance-v2-bootstrap
   cancel-in-progress: true
 
 jobs:
