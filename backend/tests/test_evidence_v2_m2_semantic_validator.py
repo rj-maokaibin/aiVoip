@@ -4,6 +4,8 @@ from app.reports.v2.semantic_validator import validate_m2_semantics
 from app.reports.v2.visibility import calculate_visibility
 
 
+# This suite intentionally exercises the production M2 contract on the exact PR
+# head; a prior full-acceptance attempt was runner-killed with exit 137.
 def _base():
     return (
         {"call_end_time": None, "termination": {"observed": False}},
