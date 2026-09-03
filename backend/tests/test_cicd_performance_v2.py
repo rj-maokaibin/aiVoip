@@ -194,9 +194,13 @@ def test_v2_2_cli_and_formal_workflow_use_source_controlled_runtime_revision():
     assert "python3 deploy/runtime_env.py" in deploy
     assert "persistent_env_mutated=false" in deploy
     assert "requested revision does not match checked-out source" in deploy
-    assert "/usr/local/sbin/voip-ai-production-deploy" not in workflow
-    assert "sudo -n ./deploy/voip-ai" in workflow
-    assert '--revision "$TARGET_SHA"' in workflow
-    assert "entrypoint=SOURCE_CONTROLLED" in workflow
+    assert 'sudo -n /usr/local/sbin/voip-ai-production-deploy "$TARGET_SHA"' in workflow
+    assert "sudo -n ./deploy/voip-ai" not in workflow
+    assert "privilege_boundary=HOST_WRAPPER" in workflow
+    assert "BUILD_REVISION_SOURCE=RUNTIME revision=$TARGET_SHA" in workflow
+    assert "persistent_env_mutated=false" in workflow
+    assert "PRODUCTION_PERSISTENT_ENV_UNCHANGED=PASS" in workflow
+    assert "runtime_revision_injection.json" in workflow
+    assert "-v /etc/voip-ai/production.env:/input:ro" in workflow
     assert "BUILD_REVISION=<immutable-git-sha-or-build-id>" not in template
     assert "do not maintain BUILD_REVISION here" in template
