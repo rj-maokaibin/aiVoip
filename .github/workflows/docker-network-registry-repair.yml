@@ -38,7 +38,9 @@ jobs:
           fi
 
           if grep -Eq 'dev (br-|docker0)' <<<"$before"; then
-            sudo ip route replace "$mirror_ip/32" via "$default_gw" dev "$default_dev"
+            docker image inspect node:22-alpine >/dev/null
+            docker run --rm --privileged --network host node:22-alpine \
+              ip route replace "$mirror_ip/32" via "$default_gw" dev "$default_dev"
           fi
 
           after="$(ip route get "$mirror_ip" | head -1)"
