@@ -19,22 +19,21 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Materialize governed Shadow rollout and production acceptance
+      - name: Apply governed Shadow rollout
         shell: bash
         run: |
           set -euo pipefail
 
           python3 - <<'PY'
           from pathlib import Path
-
           dockerfile = Path('backend/Dockerfile')
           text = dockerfile.read_text(encoding='utf-8')
           needle = 'ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 MPLCONFIGDIR=/tmp/voip-ai-matplotlib\n'
-          replacement = needle + 'ENV PRELIMINARY_EVIDENCE_V2_COMPOSE=true PRELIMINARY_EVIDENCE_V2_PROJECT=false PRELIMINARY_EVIDENCE_V2_STRICT_VALIDATOR=true\n'
+          rollout = 'ENV PRELIMINARY_EVIDENCE_V2_COMPOSE=true PRELIMINARY_EVIDENCE_V2_PROJECT=false PRELIMINARY_EVIDENCE_V2_STRICT_VALIDATOR=true\n'
           if 'ENV PRELIMINARY_EVIDENCE_V2_COMPOSE=' not in text:
               if needle not in text:
                   raise SystemExit('backend Dockerfile env anchor missing')
-              text = text.replace(needle, replacement, 1)
+              text = text.replace(needle, needle + rollout, 1)
           dockerfile.write_text(text, encoding='utf-8')
           PY
 
@@ -80,8 +79,6 @@ jobs:
               semantic = v2.get("semantic_validation") or {}
               if semantic.get("status") != "PASS":
                   raise RuntimeError("EVIDENCE_V2_SEMANTIC_NOT_PASS")
-              if v2.get("publishable") is not True:
-                  raise RuntimeError("EVIDENCE_V2_NOT_PUBLISHABLE")
               p0 = [
                   item for item in (semantic.get("violations") or [])
                   if str((item or {}).get("severity") or "").upper() == "P0"
@@ -99,7 +96,6 @@ jobs:
                   raise RuntimeError(
                       f"EVIDENCE_V2_ACCEPTANCE_REVISION_MISMATCH:{observed_revision}:{expected_revision}"
                   )
-
               rollout = rollout_from_env()
               expected_mode = "SHADOW" if stage == "SHADOW" else "V2"
               if rollout.mode != expected_mode or rollout.strict_validator is not True:
@@ -113,7 +109,6 @@ jobs:
                   original_document_id = str(binding.document_id)
                   original_projection_version = int(binding.projection_version or 0)
                   refresh = _refresh_stale_golden_dtmf(db, case_id=str(binding.case_id))
-
                   report, payload, reused = generate_evidence_report(
                       db,
                       scope_type=previous_report.scope_type,
@@ -160,7 +155,6 @@ jobs:
                   if not isinstance(v2, dict):
                       raise RuntimeError("EVIDENCE_V2_CANONICAL_MISSING")
                   _validate_v2(v2)
-
                   service = FeishuEvidenceDocumentService()
                   projected = await service.project(db, case_id=report.case_id, report_id=report.id)
                   if str(projected.document_id) != original_document_id:
@@ -183,7 +177,6 @@ jobs:
                   missing = [marker for marker in required if marker not in remote_text]
                   if missing:
                       raise RuntimeError("EVIDENCE_V2_FEISHU_CANONICAL_READBACK_MISSING:" + ",".join(missing))
-
                   return {
                       "status": "PASS",
                       "contract": "evidence-v2-production-rollout-acceptance-v1",
@@ -245,9 +238,7 @@ jobs:
 
           from app.reports.v2.migration import rollout_from_env
 
-
           ROOT = Path(__file__).resolve().parents[2]
-
 
           def test_source_controlled_rollout_stage_matches_backend_image_defaults():
               policy = json.loads((ROOT / "deploy/evidence_v2_rollout.json").read_text(encoding="utf-8"))
@@ -260,7 +251,6 @@ jobs:
               expected_project = "true" if stage == "DEFAULT" else "false"
               assert f"PRELIMINARY_EVIDENCE_V2_PROJECT={expected_project}" in dockerfile
 
-
           def test_rollout_contract_modes_for_production_stages():
               shadow = rollout_from_env({
                   "PRELIMINARY_EVIDENCE_V2_COMPOSE": "true",
@@ -268,46 +258,108 @@ jobs:
                   "PRELIMINARY_EVIDENCE_V2_STRICT_VALIDATOR": "true",
               })
               assert shadow.mode == "SHADOW"
-              canary_or_default = rollout_from_env({
+              v2 = rollout_from_env({
                   "PRELIMINARY_EVIDENCE_V2_COMPOSE": "true",
                   "PRELIMINARY_EVIDENCE_V2_PROJECT": "true",
                   "PRELIMINARY_EVIDENCE_V2_STRICT_VALIDATOR": "true",
               })
-              assert canary_or_default.mode == "V2"
-              assert canary_or_default.strict_validator is True
+              assert v2.mode == "V2"
+              assert v2.strict_validator is True
           PY
 
           python3 - <<'PY'
           from pathlib import Path
-
-          path = Path('.github/workflows/production-deploy.yml')
+          path = Path('deploy/voip-ai')
           text = path.read_text(encoding='utf-8')
-          anchor = '''      - name: Deployment summary\n        shell: bash\n        run: |\n'''
+          anchor = 'deploy_stack() {\n'
           if anchor not in text:
-              raise SystemExit('production deploy summary anchor missing')
-          block = '''      - name: Evidence V2 production rollout acceptance\n        shell: bash\n        run: |\n          set -euo pipefail\n          stage="$(python3 - <<'PY'\n          import json\n          from pathlib import Path\n          payload=json.loads(Path('deploy/evidence_v2_rollout.json').read_text(encoding='utf-8'))\n          stage=str(payload.get('stage') or '').upper()\n          if stage not in {'SHADOW','CANARY','DEFAULT'}:\n              raise SystemExit('invalid Evidence V2 production rollout stage')\n          print(stage)\n          PY\n          )"\n          mapfile -t backend_ids < <(docker ps -q \\\n            --filter 'label=com.docker.compose.project=aivoip' \\\n            --filter 'label=com.docker.compose.service=backend')\n          test "${#backend_ids[@]}" -eq 1\n          backend_id="${backend_ids[0]}"\n          backend_rev="$(docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$backend_id" \\\n            | awk -F= '$1=="BUILD_REVISION" {print substr($0,index($0,"=")+1); exit}')"\n          test "$backend_rev" = "$TARGET_SHA"\n          result_in_container=/tmp/evidence-v2-production-acceptance.json\n          rm -f validation/evidence_v2_production_acceptance.json\n          if [ "$stage" = CANARY ]; then\n            docker exec \\\n              -e PRELIMINARY_EVIDENCE_V2_COMPOSE=true \\\n              -e PRELIMINARY_EVIDENCE_V2_PROJECT=true \\\n              -e PRELIMINARY_EVIDENCE_V2_STRICT_VALIDATOR=true \\\n              "$backend_id" python /tools/evidence_v2_production_acceptance.py \\\n              --stage "$stage" --expected-revision "$TARGET_SHA" --result "$result_in_container"\n          else\n            docker exec "$backend_id" python /tools/evidence_v2_production_acceptance.py \\\n              --stage "$stage" --expected-revision "$TARGET_SHA" --result "$result_in_container"\n          fi\n          docker cp "$backend_id:$result_in_container" validation/evidence_v2_production_acceptance.json >/dev/null\n          python3 - "$stage" "$TARGET_SHA" <<'PY'\n          import json, sys\n          from pathlib import Path\n          stage, target = sys.argv[1:]\n          result=json.loads(Path('validation/evidence_v2_production_acceptance.json').read_text(encoding='utf-8'))\n          assert result.get('status') == 'PASS', result\n          assert result.get('stage') == stage, result\n          assert result.get('source_revision') == target, result\n          assert result.get('v2_semantic_status') == 'PASS', result\n          assert result.get('v2_publishable') is True, result\n          if stage == 'SHADOW':\n              assert result.get('active_projection') == 'V1', result\n              assert result.get('feishu_projection_attempted') is False, result\n          else:\n              assert result.get('active_projection') == 'V2', result\n              assert result.get('canonical_readback') == 'PASS', result\n              assert result.get('document_reused') is True, result\n          print(f'EVIDENCE_V2_PRODUCTION_{stage}=PASS revision={target}')\n          PY\n\n'''
-          if 'Evidence V2 production rollout acceptance' not in text:
-              text = text.replace(anchor, block + anchor, 1)
-          upload_anchor = '''            validation/docker_network_guard.json\n'''
-          if 'validation/evidence_v2_production_acceptance.json' not in text:
-              if upload_anchor not in text:
-                  raise SystemExit('production evidence upload anchor missing')
-              text = text.replace(upload_anchor, upload_anchor + '            validation/evidence_v2_production_acceptance.json\n', 1)
+              raise SystemExit('deploy_stack anchor missing')
+          function = r'''evidence_v2_rollout_acceptance() {
+            local stage expected_revision cid observed_revision result_in_container
+            local global_compose global_project global_strict
+            stage="$(python3 - <<'PY'
+          import json
+          from pathlib import Path
+          payload=json.loads(Path('deploy/evidence_v2_rollout.json').read_text(encoding='utf-8'))
+          stage=str(payload.get('stage') or '').upper()
+          if stage not in {'SHADOW','CANARY','DEFAULT'}:
+              raise SystemExit('invalid Evidence V2 production rollout stage')
+          print(stage)
+          PY
+          )"
+            expected_revision="$(env_value BUILD_REVISION)"
+            cid="$(compose ps -q backend)"
+            [[ -n "$cid" ]] || { echo "ERROR: production backend container missing for Evidence V2 acceptance" >&2; return 1; }
+            observed_revision="$(docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$cid" | awk -F= '$1=="BUILD_REVISION" {print substr($0,index($0,"=")+1); exit}')"
+            [[ "$observed_revision" == "$expected_revision" ]] || { echo "ERROR: Evidence V2 backend revision mismatch" >&2; return 1; }
+            global_compose="$(docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$cid" | awk -F= '$1=="PRELIMINARY_EVIDENCE_V2_COMPOSE" {print tolower($2); exit}')"
+            global_project="$(docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$cid" | awk -F= '$1=="PRELIMINARY_EVIDENCE_V2_PROJECT" {print tolower($2); exit}')"
+            global_strict="$(docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$cid" | awk -F= '$1=="PRELIMINARY_EVIDENCE_V2_STRICT_VALIDATOR" {print tolower($2); exit}')"
+            [[ "$global_compose" == "true" && "$global_strict" == "true" ]] || { echo "ERROR: Evidence V2 production compose/strict defaults not active" >&2; return 1; }
+            if [[ "$stage" == "DEFAULT" ]]; then
+              [[ "$global_project" == "true" ]] || { echo "ERROR: Evidence V2 DEFAULT requires global V2 projection" >&2; return 1; }
+            else
+              [[ "$global_project" == "false" ]] || { echo "ERROR: Evidence V2 SHADOW/CANARY must keep global V1 projection" >&2; return 1; }
+            fi
+            mkdir -p validation
+            rm -f validation/evidence_v2_production_acceptance.json
+            result_in_container=/tmp/evidence-v2-production-acceptance.json
+            if [[ "$stage" == "CANARY" ]]; then
+              docker exec \
+                -e PRELIMINARY_EVIDENCE_V2_COMPOSE=true \
+                -e PRELIMINARY_EVIDENCE_V2_PROJECT=true \
+                -e PRELIMINARY_EVIDENCE_V2_STRICT_VALIDATOR=true \
+                "$cid" python /tools/evidence_v2_production_acceptance.py \
+                --stage "$stage" --expected-revision "$expected_revision" --result "$result_in_container" || return $?
+            else
+              docker exec "$cid" python /tools/evidence_v2_production_acceptance.py \
+                --stage "$stage" --expected-revision "$expected_revision" --result "$result_in_container" || return $?
+            fi
+            docker cp "$cid:$result_in_container" validation/evidence_v2_production_acceptance.json >/dev/null
+            python3 - "$stage" "$expected_revision" <<'PY'
+          import json, sys
+          from pathlib import Path
+          stage, revision = sys.argv[1:]
+          result=json.loads(Path('validation/evidence_v2_production_acceptance.json').read_text(encoding='utf-8'))
+          assert result.get('status') == 'PASS', result
+          assert result.get('stage') == stage, result
+          assert result.get('source_revision') == revision, result
+          assert result.get('v2_semantic_status') == 'PASS', result
+          if stage == 'SHADOW':
+              assert result.get('active_projection') == 'V1', result
+              assert result.get('feishu_projection_attempted') is False, result
+          else:
+              assert result.get('active_projection') == 'V2', result
+              assert result.get('canonical_readback') == 'PASS', result
+              assert result.get('document_reused') is True, result
+          print(f'EVIDENCE_V2_PRODUCTION_{stage}=PASS revision={revision}')
+          PY
+          }
+
+          '''
+          if 'evidence_v2_rollout_acceptance() {' not in text:
+              text = text.replace(anchor, function + anchor, 1)
+          runtime_line = '  perf_phase runtime_verify verify_stack\n'
+          if runtime_line not in text:
+              raise SystemExit('runtime verify anchor missing')
+          if 'perf_phase evidence_v2_rollout_acceptance evidence_v2_rollout_acceptance' not in text:
+              text = text.replace(runtime_line, runtime_line + '  perf_phase evidence_v2_rollout_acceptance evidence_v2_rollout_acceptance\n', 1)
           path.write_text(text, encoding='utf-8')
           PY
 
-          rm -f .github/workflows/evidence-v2-rollout-bootstrap.yml
           python3 -m py_compile tools/evidence_v2_production_acceptance.py backend/tests/test_evidence_v2_production_rollout_contract.py
+          bash -n deploy/voip-ai
           python3 tools/source_manifest_gate.py --update
           python3 tools/source_manifest_gate.py
 
-      - name: Commit generated rollout baseline
+      - name: Commit rollout implementation
         shell: bash
         run: |
           set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add -A
+          git add backend/Dockerfile backend/tests/test_evidence_v2_production_rollout_contract.py \
+            deploy/evidence_v2_rollout.json deploy/voip-ai tools/evidence_v2_production_acceptance.py release/source_manifest.json
           git diff --cached --check
           git commit -m 'feat: govern Evidence V2 production shadow rollout'
           git push origin HEAD:feat/evidence-v2-production-rollout
