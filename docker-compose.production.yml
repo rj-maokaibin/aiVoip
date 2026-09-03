@@ -127,3 +127,13 @@ secrets:
     file: ${FEISHU_APP_SECRET_HOST_FILE:?FEISHU_APP_SECRET_HOST_FILE is required}
   feishu_verification_token:
     file: ${FEISHU_VERIFICATION_TOKEN_HOST_FILE:?FEISHU_VERIFICATION_TOKEN_HOST_FILE is required}
+
+
+# Production uses a named, narrow subnet instead of Docker's automatic /16 pools.
+# The deploy guard validates this subnet against host routes and registry endpoints.
+networks:
+  default:
+    name: ${VOIP_DOCKER_NETWORK_NAME:-aivoip-production}
+    ipam:
+      config:
+        - subnet: ${VOIP_DOCKER_SUBNET:-172.30.250.0/24}
