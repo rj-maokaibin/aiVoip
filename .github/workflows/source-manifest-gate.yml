@@ -88,6 +88,7 @@ jobs:
           sha_file="$RUNNER_TEMP/exact-source/source.sha"
           test -s "$bundle"
           test "$(cat "$sha_file")" = "$EXPECTED_SHA"
+          cd "$RUNNER_TEMP"
           rm -rf "$GITHUB_WORKSPACE"
           git clone -q -b bundle-head "$bundle" "$GITHUB_WORKSPACE"
           git -C "$GITHUB_WORKSPACE" checkout -q --detach "$EXPECTED_SHA"
