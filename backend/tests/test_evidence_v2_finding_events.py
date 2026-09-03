@@ -37,18 +37,21 @@ def test_multiple_instant_events_remain_discrete():
         severity="MEDIUM",
     )
 
+    assert finding["class"] == "ABNORMAL"
     assert finding["event_count"] == 2
     assert finding["time_span"] == {"start": 10.0, "end": 20.0}
     assert finding["continuous"] is False
     assert finding["event_refs"] == ["e1", "e2"]
 
 
-def test_problem_count_excludes_normal_exclusion_and_absorbed_findings():
+def test_problem_count_excludes_non_abnormal_and_absorbed_findings():
     findings = [
-        {"finding_id": "a", "kind": "ABNORMAL", "absorbed_by_cluster": None},
-        {"finding_id": "b", "kind": "NORMAL", "absorbed_by_cluster": None},
-        {"finding_id": "c", "kind": "EXCLUSION", "absorbed_by_cluster": None},
-        {"finding_id": "d", "kind": "ABNORMAL", "absorbed_by_cluster": "XLY-001"},
+        {"finding_id": "a", "class": "ABNORMAL", "absorbed_by_cluster": None},
+        {"finding_id": "b", "class": "NORMAL", "absorbed_by_cluster": None},
+        {"finding_id": "c", "class": "EXCLUSION", "absorbed_by_cluster": None},
+        {"finding_id": "u", "class": "UNCERTAIN", "absorbed_by_cluster": None},
+        {"finding_id": "q", "class": "EVIDENCE_QUALITY", "absorbed_by_cluster": None},
+        {"finding_id": "d", "class": "ABNORMAL", "absorbed_by_cluster": "XLY-001"},
     ]
 
     assert problem_count(findings) == 1
