@@ -76,6 +76,7 @@ No Source Manifest, Full Acceptance, Runtime Verify, Exact Source Binding, Golde
 ## Elapsed checkpoints
 
 - `2026-09-03T15:17:14+08:00`: 18m13s since implementation start. M0 merged; M1 CI has a clean measured pass; M2 implementation has started in a stacked PR.
+- `2026-09-03T15:22:00+08:00`: 22m59s since implementation start. M1 hardened CANCEL lifecycle semantics; source manifest was regenerated and verified. The manifest self-commit was produced by `github-actions[bot]`, which GitHub records as `action_required` for downstream PR workflows, so this user-authored checkpoint commit intentionally retriggers the authoritative gates on the exact refreshed head.
 
 ## Rules for this log
 
