@@ -1,0 +1,75 @@
+{
+  "target_sha": "c701685f2f389ab639eb20a0b4270797734ad50d",
+  "run": {
+    "id": 33706118584,
+    "run_number": 3,
+    "run_attempt": 1,
+    "event": "push",
+    "status": "in_progress",
+    "conclusion": null,
+    "created_at": "2026-09-03T02:03:13Z",
+    "run_started_at": "2026-09-03T02:03:13Z",
+    "updated_at": "2026-09-03T02:03:17Z",
+    "html_url": "https://github.com/rj-maokaibin/aiVoip/actions/runs/33706118584"
+  },
+  "jobs": [
+    {
+      "id": 100495478825,
+      "name": "deploy-and-verify",
+      "status": "in_progress",
+      "conclusion": null,
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Checkout exact master",
+          "status": "in_progress",
+          "conclusion": null
+        },
+        {
+          "name": "Resolve immutable deployment target",
+          "status": "pending",
+          "conclusion": null
+        },
+        {
+          "name": "Source manifest release gate",
+          "status": "pending",
+          "conclusion": null
+        },
+        {
+          "name": "Formal production deployment",
+          "status": "pending",
+          "conclusion": null
+        },
+        {
+          "name": "Verify exact source binding evidence",
+          "status": "pending",
+          "conclusion": null
+        },
+        {
+          "name": "Verify live containers and image revision labels",
+          "status": "pending",
+          "conclusion": null
+        },
+        {
+          "name": "Deployment summary",
+          "status": "pending",
+          "conclusion": null
+        },
+        {
+          "name": "Upload production release evidence",
+          "status": "pending",
+          "conclusion": null
+        },
+        {
+          "name": "Post Checkout exact master",
+          "status": "pending",
+          "conclusion": null
+        }
+      ]
+    }
+  ]
+}
