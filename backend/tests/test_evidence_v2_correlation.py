@@ -1,0 +1,69 @@
+from app.reports.v2.correlation import (
+    absorb_member_findings,
+    correlate_media_events,
+    correlation_problem_count,
+)
+from app.reports.v2.finding_events import aggregate_events, build_event
+
+
+def _event(event_id, layer, timestamp, call_id="call-1"):
+    return build_event(
+        event_id=event_id,
+        observation_type="PACKET_INTERVAL_SPIKE",
+        timestamp=timestamp,
+        layer=layer,
+        source_ref=f"src-{event_id}",
+        call_id=call_id,
+    )
+
+
+def test_same_call_timing_events_across_layers_form_one_candidate_cluster():
+    events = [
+        _event("pcm-rx", "PCM_RX", 100.000),
+        _event("rtp-up", "RTP_UPSTREAM", 100.0011),
+        _event("pcm-tx", "PCM_TX", 100.0020),
+    ]
+
+    clusters = correlate_media_events(events, threshold_ms=50.0)
+
+    assert len(clusters) == 1
+    cluster = clusters[0]
+    assert cluster["finding_type"] == "CROSS_LAYER_MEDIA_TIMING_SPIKE"
+    assert cluster["member_event_refs"] == ["pcm-rx", "rtp-up", "pcm-tx"]
+    assert cluster["member_layers"] == ["PCM_RX", "PCM_TX", "RTP_UPSTREAM"]
+    assert cluster["causality_confirmed"] is False
+    assert cluster["root_cause_confirmed"] is False
+
+
+def test_different_call_or_outside_window_does_not_cluster():
+    events = [
+        _event("a", "PCM_RX", 100.0, call_id="call-1"),
+        _event("b", "RTP_UPSTREAM", 100.2, call_id="call-1"),
+        _event("c", "PCM_TX", 100.001, call_id="call-2"),
+    ]
+
+    assert correlate_media_events(events, threshold_ms=50.0) == []
+
+
+def test_member_findings_are_absorbed_and_problem_count_becomes_one_cluster():
+    rx = _event("rx", "PCM_RX", 100.0)
+    tx = _event("tx", "PCM_TX", 100.001)
+    findings = [
+        aggregate_events(
+            [rx],
+            finding_id="f-rx",
+            finding_type="PCM_PACKET_INTERVAL_SPIKE",
+            severity="MEDIUM",
+        ),
+        aggregate_events(
+            [tx],
+            finding_id="f-tx",
+            finding_type="PCM_PACKET_INTERVAL_SPIKE",
+            severity="MEDIUM",
+        ),
+    ]
+    clusters = correlate_media_events([rx, tx])
+
+    absorbed = absorb_member_findings(findings, clusters)
+    assert {item["absorbed_by_cluster"] for item in absorbed} == {"XLY-001"}
+    assert correlation_problem_count(findings, clusters) == 1
