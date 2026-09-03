@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "file_count": 676,
-  "aggregate_sha256": "95ff9570cba9f28d91ae37deb0450d2976f612f54296f77a2624f2961ed73a79",
+  "file_count": 686,
+  "aggregate_sha256": "d087ca2564c816e3712b4d33679163c1409513ee7f0161c04776f74292aa47d7",
   "files": [
     {
       "path": ".env.example",
@@ -1814,9 +1814,29 @@
       "sha256": "f663ffc604bc52ca159bfb5b5265fc0e5639bb1a34c666f362ce2ddab7783b92"
     },
     {
+      "path": "backend/app/reports/v2/adapter.py",
+      "size": 23401,
+      "sha256": "8972bfe02c2ca2673821b6b04933581f4db501c363ed6ede5e8dbfed72cfd145"
+    },
+    {
+      "path": "backend/app/reports/v2/ai_authority.py",
+      "size": 3183,
+      "sha256": "324ebd2b2b9cee6adaeb5924b48f18028e7d7879df852486b1ad5f12e5664145"
+    },
+    {
+      "path": "backend/app/reports/v2/artifact_binding.py",
+      "size": 4999,
+      "sha256": "66362dc59fe30e981d6e35a34c12ae2d3f3aed3259bd7324446a8a571ee190f4"
+    },
+    {
       "path": "backend/app/reports/v2/call_reconstruction.py",
       "size": 7124,
       "sha256": "3ec377cbd3b9f084d8ee86caff0fe0f7a0b8ae4ac51a279976766a9f9b4d7e74"
+    },
+    {
+      "path": "backend/app/reports/v2/composer.py",
+      "size": 5800,
+      "sha256": "48d30b9701a66478105a4e53c2ace8234df1d5f41766446dfbb5866449d82c78"
     },
     {
       "path": "backend/app/reports/v2/correlation.py",
@@ -1829,9 +1849,39 @@
       "sha256": "769f1c1ed0d9208ab6e74d6823517e850e26b62b813b0386ce78e053b7f5d722"
     },
     {
+      "path": "backend/app/reports/v2/migration.py",
+      "size": 1702,
+      "sha256": "e6d5b0e8a60a6d2505d6c93ff67cb695863aa626faaab9750f8f3680a0bd5502"
+    },
+    {
+      "path": "backend/app/reports/v2/phase.py",
+      "size": 1890,
+      "sha256": "318dbc8201d0f62cec98910eb33e9f217324987146042db7065a8cf4fc8e12ae"
+    },
+    {
+      "path": "backend/app/reports/v2/recommendation.py",
+      "size": 4538,
+      "sha256": "e833a3340fd7c41dd10af8ace9cb8e6a2028d9843c0762101eef654a16a6867a"
+    },
+    {
+      "path": "backend/app/reports/v2/renderer.py",
+      "size": 6565,
+      "sha256": "b605eb4dfb41b44987972104480d35d96cc646d0242fd541348017501142f9f4"
+    },
+    {
+      "path": "backend/app/reports/v2/runtime_adapter.py",
+      "size": 10567,
+      "sha256": "4a6a953dee4eb4ec15a99bf507ea72ba0885ac3ee6517690f92043c343257a4a"
+    },
+    {
+      "path": "backend/app/reports/v2/runtime_validator.py",
+      "size": 2408,
+      "sha256": "7bc90a5118215a35e0c5e50c09d66433ff8352152ba6fc1ce74e0483d9efa33c"
+    },
+    {
       "path": "backend/app/reports/v2/semantic_validator.py",
-      "size": 7906,
-      "sha256": "7bd812e8ffd55de4cf1e000dfa45860c725ee4da41dbc3ff8fd6b68a1d8e5a52"
+      "size": 17369,
+      "sha256": "c6f7abc680a25ab4d6b76d3cb87e5a9259049460b7ed8c7045457f66e92ace7c"
     },
     {
       "path": "backend/app/reports/v2/timeline.py",
