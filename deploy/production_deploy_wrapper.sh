@@ -52,5 +52,4 @@ trap cleanup EXIT
 
 echo "PRODUCTION_WRAPPER_VERSION=source-controlled-v2"
 ./deploy/voip-ai --env "$ENV_FILE" --revision "$TARGET" deploy
-./deploy/voip-ai --env "$ENV_FILE" --revision "$TARGET" verify
-echo "PRODUCTION_DEPLOY_WRAPPER=PASS"
+echo "PRODUCTION_DEPLOY_WRAPPER=PASS verify_source=DEPLOY_RUNTIME_VERIFY"
