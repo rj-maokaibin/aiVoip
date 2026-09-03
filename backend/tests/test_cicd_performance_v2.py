@@ -5,8 +5,13 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def test_backend_revision_label_does_not_invalidate_dependency_layers():
     text = (ROOT / "backend/Dockerfile").read_text(encoding="utf-8")
-    assert text.index("pip install -r requirements.txt") < text.index("ARG BUILD_REVISION=unknown")
-    assert "--mount=type=cache,target=/root/.cache/pip" in text
+    requirements_copy = text.index("COPY requirements.txt .")
+    pip_cache_layer = text.index("RUN --mount=type=cache,target=/root/.cache/pip", requirements_copy)
+    source_copy = text.index("COPY . .", pip_cache_layer)
+    revision = text.index("ARG BUILD_REVISION=unknown", source_copy)
+    assert requirements_copy < pip_cache_layer < source_copy < revision
+    assert "pip install" in text[pip_cache_layer:source_copy]
+    assert "--mount=type=cache,target=/root/.cache/pip" in text[pip_cache_layer:source_copy]
 
 
 def test_frontend_npm_install_isolated_from_source_copy():
