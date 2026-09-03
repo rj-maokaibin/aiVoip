@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from math import isclose
 from typing import Any, Iterable, Mapping
 
 
@@ -66,7 +67,11 @@ def correlate_media_events(
                 continue
             if not _compatible_media_path(anchor, candidate):
                 continue
-            if abs(float(candidate["timestamp"]) - anchor_time) > threshold_seconds:
+            if not _within_temporal_window(
+                anchor_time,
+                float(candidate["timestamp"]),
+                threshold_seconds=threshold_seconds,
+            ):
                 continue
             members.append(candidate)
 
@@ -126,6 +131,18 @@ def _compatible_media_path(a: Mapping[str, Any], b: Mapping[str, Any]) -> bool:
     if a_path and b_path:
         return str(a_path) == str(b_path)
     return True
+
+
+def _within_temporal_window(a: float, b: float, *, threshold_seconds: float) -> bool:
+    """Inclusive temporal threshold with protection against float boundary drift."""
+
+    distance = abs(float(a) - float(b))
+    return distance <= threshold_seconds or isclose(
+        distance,
+        threshold_seconds,
+        rel_tol=0.0,
+        abs_tol=1e-12,
+    )
 
 
 def absorb_member_findings(
