@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
+# Production deploy runs under sudo; prevent read-only Git checks from refreshing
+# the index as root and polluting the self-hosted runner workspace.
+export GIT_OPTIONAL_LOCKS=0
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DEFAULT_ENV="${VOIP_ENV_FILE:-/etc/voip-ai/production.env}"
@@ -221,6 +224,8 @@ host_preflight() {
   source_binding_preflight
   mkdir -p validation
   python3 deploy/deployment_preflight.py --env-file "$ENV_FILE" --mode deploy --out validation/phase_f3_deployment_preflight.json
+  # Repair an existing Docker bridge route hijack without stopping the live stack.
+  python3 deploy/docker_network_guard.py prepare --project "$PROJECT"
   compose config >/dev/null
   echo "Docker/Compose configuration: PASS"
 }
@@ -302,7 +307,15 @@ build_images() {
         --online-exit-code "$probe_rc" \
         --audit "$audit_file"; then
       echo "OFFLINE_IMAGE_FALLBACK=AUTHORIZED source=REGISTRY_PREFLIGHT audit=$audit_file"
+      local offline_rc
+      set +e
       BUILDKIT_PROGRESS="${BUILDKIT_PROGRESS:-plain}" compose build --pull=false --build-arg "BUILD_REVISION=$(env_value BUILD_REVISION)" "${services[@]}"
+      offline_rc="$?"
+      set -e
+      if [[ "$offline_rc" != "0" ]]; then
+        echo "PRODUCTION_IMAGE_BUILD=FAIL mode=OFFLINE_LOCAL_INVENTORY source=REGISTRY_PREFLIGHT exit_code=$offline_rc audit=$audit_file" >&2
+        return "$offline_rc"
+      fi
       echo "PRODUCTION_IMAGE_BUILD=PASS mode=OFFLINE_LOCAL_INVENTORY audit=$audit_file"
       return 0
     fi
@@ -332,8 +345,17 @@ build_images() {
   fi
 
   echo "OFFLINE_IMAGE_FALLBACK=AUTHORIZED audit=$audit_file"
+  local offline_rc
+  set +e
   BUILDKIT_PROGRESS="${BUILDKIT_PROGRESS:-plain}" compose build --pull=false --build-arg "BUILD_REVISION=$(env_value BUILD_REVISION)" "${services[@]}"
+  offline_rc="$?"
+  set -e
+  if [[ "$offline_rc" != "0" ]]; then
+    echo "PRODUCTION_IMAGE_BUILD=FAIL mode=OFFLINE_LOCAL_INVENTORY source=POSTBUILD_FALLBACK exit_code=$offline_rc audit=$audit_file" >&2
+    return "$offline_rc"
+  fi
   echo "PRODUCTION_IMAGE_BUILD=PASS mode=OFFLINE_LOCAL_INVENTORY audit=$audit_file"
+  return 0
 }
 
 wait_http() {
@@ -460,6 +482,8 @@ deploy_stack() {
     backend collector-worker packet-worker pcm-worker media-worker diagnosis-worker \
     feishu-long-connection \
     reproduction-worker reproduction-control-high-worker reproduction-watch-worker beat frontend
+  # All managed services have now moved to the named safe production network.
+  perf_phase network_cleanup python3 deploy/docker_network_guard.py cleanup --project "$PROJECT"
 
   local timeout backend_port frontend_port
   timeout="$(env_value VOIP_HEALTH_TIMEOUT_SECONDS 2>/dev/null || echo 180)"
@@ -475,9 +499,9 @@ verify_stack() {
   require_docker
   mkdir -p validation
   rm -f validation/feishu_long_connection_runtime.json
-  verify_feishu_consumer_host
+  verify_feishu_consumer_host || return $?
   compose run --rm -e PRODUCTION_RUNTIME_EVIDENCE=/workspace/validation/production_runtime_result.json release-runner \
-    python deploy/production_runtime_verify.py
+    python deploy/production_runtime_verify.py || return $?
   local backend_port
   backend_port="$(env_value VOIP_BACKEND_PORT 2>/dev/null || echo 8000)"
   python3 deploy/exact_source_binding_gate.py \
@@ -487,7 +511,7 @@ verify_stack() {
     --backend-url "http://127.0.0.1:${backend_port}/health/ready" \
     --runtime-evidence validation/production_runtime_result.json \
     --feishu-evidence validation/feishu_long_connection_runtime.json \
-    --out validation/exact_source_binding_result.json
+    --out validation/exact_source_binding_result.json || return $?
   echo "Runtime evidence: validation/production_runtime_result.json"
   echo "Exact source binding evidence: validation/exact_source_binding_result.json"
   if [[ -f validation/feishu_long_connection_runtime.json ]]; then

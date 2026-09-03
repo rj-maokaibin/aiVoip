@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "file_count": 664,
-  "aggregate_sha256": "262e799d93b56ce6f08f552bd5ff6ffd7faf07908d1831aa71a6ba779d95100c",
+  "file_count": 665,
+  "aggregate_sha256": "a95658688effbeadb5bb7c71e1266577af6b46620960aa1c1a0285414fd7c298",
   "files": [
     {
       "path": ".env.example",
@@ -25,8 +25,8 @@
     },
     {
       "path": "backend/Dockerfile",
-      "size": 679,
-      "sha256": "8c4fd4896a91f34bcaed17e29e8097ab526d88361b47bcf93a278422c3808c29"
+      "size": 648,
+      "sha256": "dde8a5fa8a95f168fbd576556de63de5056042b2084c00cab6ae400907e939fe"
     },
     {
       "path": "backend/alembic.ini",
@@ -2459,6 +2459,11 @@
       "sha256": "62e8a18b504fdc7904cb00a45ba7f2b6747369afefb87d46055805e3762ed165"
     },
     {
+      "path": "deploy/docker_network_guard.py",
+      "size": 8539,
+      "sha256": "8c591684ea1e2d16faebe88d36cf51de6df6c76fb4a4a0fc722c2c4240bf6772"
+    },
+    {
       "path": "deploy/exact_source_binding_gate.py",
       "size": 9761,
       "sha256": "169b218c1c625010f010ae9e40dcf53843b339588af023570dcfddeb533cbac4"
@@ -2525,8 +2530,8 @@
     },
     {
       "path": "deploy/voip-ai",
-      "size": 24271,
-      "sha256": "24ad548948f248bbd5ebb0452853d857d75dbb6ef6a4cc8495d437fab1722ab1"
+      "size": 25381,
+      "sha256": "6f1da7a62d11d1a51a9f7397260fb5eee82702961f0f97244ad88838141ba257"
     },
     {
       "path": "docker-compose.e2e.yml",
@@ -2535,8 +2540,8 @@
     },
     {
       "path": "docker-compose.production.yml",
-      "size": 3867,
-      "sha256": "74f4b495eb1e1b910fa29b29bcfa92fb35a931a805cd93dfecd56c3235151cb0"
+      "size": 4195,
+      "sha256": "ce86281a8ebff16ebb8e530898dc49930fdb78d83130f5290cf51eb93e281a72"
     },
     {
       "path": "docker-compose.yml",
@@ -2545,8 +2550,8 @@
     },
     {
       "path": "frontend/Dockerfile",
-      "size": 583,
-      "sha256": "a51b6f2f403097a408b8d5aaa3361774f6fb7c6a0a9d98bacd24e957dd459a56"
+      "size": 552,
+      "sha256": "ea1891fb1e8ddacea28d5ff60b844dca852c6cf96a05ac371396a2f052a81007"
     },
     {
       "path": "frontend/nginx.conf",

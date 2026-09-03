@@ -1,4 +1,3 @@
-# syntax=docker/dockerfile:1.7
 ARG BUILD_REVISION=unknown
 FROM node:22-alpine AS build
 WORKDIR /app

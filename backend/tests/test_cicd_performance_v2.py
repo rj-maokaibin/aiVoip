@@ -48,3 +48,37 @@ def test_self_hosted_pr_gates_use_immutable_source_bundle():
         assert "EXACT_SOURCE_MATERIALIZATION=PASS" in text
         assert "EXPECTED_SHA" in text
         assert "voip-controlled-linux" in text
+
+
+def test_production_offline_build_is_explicitly_fail_closed():
+    deploy = (ROOT / "deploy/voip-ai").read_text(encoding="utf-8")
+    assert deploy.count('offline_rc="$?"') == 2
+    assert "PRODUCTION_IMAGE_BUILD=FAIL mode=OFFLINE_LOCAL_INVENTORY source=REGISTRY_PREFLIGHT" in deploy
+    assert "PRODUCTION_IMAGE_BUILD=FAIL mode=OFFLINE_LOCAL_INVENTORY source=POSTBUILD_FALLBACK" in deploy
+    assert "verify_feishu_consumer_host || return $?" in deploy
+    assert "--out validation/exact_source_binding_result.json || return $?" in deploy
+
+
+def test_offline_build_has_no_external_dockerfile_frontend_dependency():
+    for rel in ("backend/Dockerfile", "frontend/Dockerfile"):
+        text = (ROOT / rel).read_text(encoding="utf-8")
+        assert not text.startswith("# syntax=docker/dockerfile:")
+        assert "RUN --mount=type=cache" in text
+
+
+def test_production_workflow_repairs_workspace_before_checkout():
+    text = (ROOT / ".github/workflows/production-deploy.yml").read_text(encoding="utf-8")
+    assert text.index("Repair self-hosted workspace before checkout") < text.index("Checkout exact master")
+    assert "PRODUCTION_RUNNER_WORKSPACE_REPAIR=PASS" in text
+
+
+def test_production_network_is_named_narrow_and_guarded():
+    compose = (ROOT / "docker-compose.production.yml").read_text(encoding="utf-8")
+    deploy = (ROOT / "deploy/voip-ai").read_text(encoding="utf-8")
+    guard = (ROOT / "deploy/docker_network_guard.py").read_text(encoding="utf-8")
+    assert "VOIP_DOCKER_NETWORK_NAME:-aivoip-production" in compose
+    assert "VOIP_DOCKER_SUBNET:-172.30.250.0/24" in compose
+    assert "docker_network_guard.py prepare" in deploy
+    assert "docker_network_guard.py cleanup" in deploy
+    assert "DESIRED_SUBNET_CONTAINS_REGISTRY_MIRROR" in guard
+    assert "LEGACY_CONFLICT_NETWORK_STILL_IN_USE" in guard
