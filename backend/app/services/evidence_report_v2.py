@@ -57,6 +57,25 @@ def compose_v2_runtime_payload(
     )
 
 
+def _pcm_source_run(
+    results: Mapping[str, Mapping[str, Any] | None],
+    runs: Mapping[str, AnalyzerRun | None],
+) -> AnalyzerRun | None:
+    """Return the AnalyzerRun that owns the PCM facts selected by visual_source_results.
+
+    Standalone PCM is authoritative when present, including an intentionally empty
+    result object. Only when standalone PCM is absent may Media Intelligence's nested
+    PCM projection own the persisted PCM_WAV artifacts. Keeping fact-source and
+    artifact-source selection identical prevents false AUDIO_SOURCE_UNAVAILABLE.
+    """
+    if results.get("pcm_intelligence") is not None:
+        return runs.get("pcm_intelligence")
+    media = results.get("media_intelligence")
+    if isinstance(media, Mapping) and media.get("pcm") is not None:
+        return runs.get("media_intelligence")
+    return runs.get("pcm_intelligence") or runs.get("media_intelligence")
+
+
 def bind_v2_anomaly_audio(
     db: Session,
     storage,
@@ -69,8 +88,8 @@ def bind_v2_anomaly_audio(
     """Bind ACTIVE_MEDIA PCM timing evidence to the exact analyzer PCM WAV when available."""
     resolved = visual_source_results(results)
     pcm = resolved.get("pcm_intelligence") or {}
-    media_run = runs.get("media_intelligence")
-    wavs = _pcm_wavs(db, media_run)
+    pcm_run = _pcm_source_run(results, runs)
+    wavs = _pcm_wavs(db, pcm_run)
     event_by_id = {
         str(item.get("event_id")): item
         for item in v2.get("events") or []
@@ -173,11 +192,11 @@ def _active_pcm_event(finding: Mapping[str, Any], event_by_id: Mapping[str, Mapp
     return None
 
 
-def _pcm_wavs(db: Session, media_run: AnalyzerRun | None) -> list[Artifact]:
-    if media_run is None:
+def _pcm_wavs(db: Session, pcm_run: AnalyzerRun | None) -> list[Artifact]:
+    if pcm_run is None:
         return []
     return list(db.scalars(select(Artifact).where(
-        Artifact.analyzer_run_id == media_run.id,
+        Artifact.analyzer_run_id == pcm_run.id,
         Artifact.type == "PCM_WAV",
     ).order_by(Artifact.created_at.asc())))
 
