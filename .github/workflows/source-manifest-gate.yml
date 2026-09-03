@@ -11,6 +11,8 @@ on:
       - 'tools/**'
       - 'contracts/**'
       - 'deploy/**'
+      - 'golden_cases/**'
+      - 'docs/02_Core_Documents/Preliminary_Evidence_Report_V1.0/**'
       - 'Makefile'
       - '.env.example'
       - 'docker-compose.yml'
@@ -19,6 +21,8 @@ on:
       - 'release/release_policy.yaml'
       - 'release/source_manifest.json'
       - '.github/workflows/source-manifest-gate.yml'
+      - '.github/workflows/prd-spec-v1-release.yml'
+      - '.github/workflows/preliminary-evidence-v1.yml'
       - '.github/workflows/production-deploy.yml'
   workflow_dispatch:
 
@@ -33,17 +37,17 @@ jobs:
   exact-source-bundle:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    env:
+      EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
-      - name: Checkout exact PR head on GitHub-hosted transport
+      - name: Checkout exact source on GitHub-hosted transport
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ env.EXPECTED_SHA }}
           fetch-depth: 0
 
       - name: Build immutable Git bundle
         shell: bash
-        env:
-          EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
@@ -53,10 +57,10 @@ jobs:
           git bundle verify "$RUNNER_TEMP/source.bundle"
           echo "EXACT_SOURCE_BUNDLE=PASS revision=$EXPECTED_SHA"
 
-      - name: Upload immutable source bundle
+      - name: Upload shared immutable source bundle
         uses: actions/upload-artifact@v4
         with:
-          name: exact-source-${{ github.run_id }}-${{ github.run_attempt }}
+          name: exact-source-${{ env.EXPECTED_SHA }}
           path: |
             ${{ runner.temp }}/source.bundle
             ${{ runner.temp }}/source.sha
@@ -65,32 +69,18 @@ jobs:
 
   source-manifest:
     needs: exact-source-bundle
-    runs-on:
-      - self-hosted
-      - linux
-      - x64
-      - voip-controlled-linux
+    runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
       EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
-      - name: Reset self-hosted workspace
-        shell: bash
-        run: |
-          set -euo pipefail
-          docker info >/dev/null
-          docker image inspect python:3.12-slim >/dev/null
-          docker run --rm -v "$GITHUB_WORKSPACE:/workspace" python:3.12-slim \
-            sh -lc 'find /workspace -mindepth 1 -maxdepth 1 -exec rm -rf {} +'
-          test -z "$(find "$GITHUB_WORKSPACE" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null)"
-
-      - name: Download immutable source bundle
+      - name: Download shared immutable source bundle
         uses: actions/download-artifact@v4
         with:
-          name: exact-source-${{ github.run_id }}-${{ github.run_attempt }}
+          name: exact-source-${{ env.EXPECTED_SHA }}
           path: ${{ runner.temp }}/exact-source
 
-      - name: Materialize exact PR source offline
+      - name: Materialize exact source offline
         shell: bash
         run: |
           set -euo pipefail
@@ -98,6 +88,7 @@ jobs:
           sha_file="$RUNNER_TEMP/exact-source/source.sha"
           test -s "$bundle"
           test "$(cat "$sha_file")" = "$EXPECTED_SHA"
+          rm -rf "$GITHUB_WORKSPACE"
           git clone -q -b bundle-head "$bundle" "$GITHUB_WORKSPACE"
           git -C "$GITHUB_WORKSPACE" checkout -q --detach "$EXPECTED_SHA"
           test "$(git -C "$GITHUB_WORKSPACE" rev-parse HEAD)" = "$EXPECTED_SHA"
