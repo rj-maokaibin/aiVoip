@@ -86,8 +86,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          sudo -n /usr/local/sbin/voip-ai-production-deploy "$TARGET_SHA"
-          echo "FORMAL_PRODUCTION_DEPLOY=PASS"
+          sudo -n ./deploy/voip-ai \
+            --env /etc/voip-ai/production.env \
+            --revision "$TARGET_SHA" \
+            deploy
+          echo "FORMAL_PRODUCTION_DEPLOY=PASS entrypoint=SOURCE_CONTROLLED revision=$TARGET_SHA"
 
       - name: Verify exact source binding evidence
         shell: bash
