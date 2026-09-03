@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "file_count": 667,
-  "aggregate_sha256": "940b44dbf3c54733de2a581d7b9ae7080c193d92f6481d5530d90515926fde44",
+  "aggregate_sha256": "c2d4778ade25fc0b085b278e578699a24308b19f24604d5f367fab801a69f5ab",
   "files": [
     {
       "path": ".env.example",
@@ -10,8 +10,8 @@
     },
     {
       "path": ".github/workflows/production-deploy.yml",
-      "size": 6932,
-      "sha256": "e8ed6ac95ab23a32b59729fdf1e60b242c6705ebe636a754ed70355b0f1b62e6"
+      "size": 9582,
+      "sha256": "0951a609b98a723ed17ab48090683b8b71b8497c2b4c6c287532e909a7bc7b0d"
     },
     {
       "path": ".github/workflows/source-manifest-gate.yml",
