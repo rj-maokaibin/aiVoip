@@ -1,0 +1,118 @@
+cases:
+  - id: MOCK-WEB-CONFIG-PASS
+    version: 1
+    suite_id: mock-framework-v1
+    name: mock_web_config_pass
+    entry: web
+    environment: {profile: mock-lab}
+    parameters: {extension: "7901"}
+    snapshot: [voip.account]
+    steps:
+      - action: voip.account.configure
+        purpose: test
+        args: {extension: "${extension}"}
+    assertions:
+      - id: entry-accepted
+        source: entry
+        path: result
+        op: eq
+        value: accepted
+    cleanup: {strategy: restore_snapshot, verify: true}
+
+  - id: MOCK-WEB-CONFIG-FAIL
+    version: 1
+    suite_id: mock-framework-v1
+    name: mock_web_config_fail
+    entry: web
+    environment: {profile: mock-lab}
+    parameters: {extension: "7902"}
+    snapshot: [voip.account]
+    steps:
+      - action: voip.account.configure
+        purpose: test
+        args: {extension: "${extension}"}
+    assertions:
+      - id: entry-accepted
+        source: entry
+        path: result
+        op: eq
+        value: accepted
+    cleanup: {strategy: restore_snapshot, verify: true}
+
+  - id: MOCK-WEB-TIMEOUT-UNKNOWN
+    version: 1
+    suite_id: mock-framework-v1
+    name: mock_web_timeout_unknown
+    entry: web
+    environment: {profile: mock-lab}
+    parameters: {extension: "7903"}
+    snapshot: [voip.account]
+    steps:
+      - action: voip.account.configure
+        purpose: test
+        args: {extension: "${extension}"}
+    assertions:
+      - id: entry-accepted
+        source: entry
+        path: result
+        op: eq
+        value: accepted
+    cleanup: {strategy: restore_snapshot, verify: true}
+
+  - id: MOCK-CLEANUP-RESUME
+    version: 1
+    suite_id: mock-framework-v1
+    name: mock_cleanup_resume
+    entry: web
+    environment: {profile: mock-lab}
+    parameters: {}
+    snapshot: [voip.account]
+    steps:
+      - action: voip.account.observe
+        purpose: observation
+        args: {}
+    assertions:
+      - id: observation-exists
+        source: config_framework
+        path: state
+        op: exists
+    cleanup: {strategy: restore_snapshot, verify: true}
+
+  - id: MOCK-LEASE-CONFLICT
+    version: 1
+    suite_id: mock-framework-v1
+    name: mock_lease_conflict
+    entry: web
+    environment: {profile: mock-lab}
+    parameters: {}
+    snapshot: [voip.account]
+    steps:
+      - action: voip.account.observe
+        purpose: observation
+        args: {}
+    assertions:
+      - id: entry-exists
+        source: entry
+        path: result
+        op: exists
+    cleanup: {strategy: restore_snapshot, verify: true}
+
+  - id: MOCK-NO-SSH-FALLBACK
+    version: 1
+    suite_id: mock-framework-v1
+    name: mock_no_ssh_fallback
+    entry: web
+    environment: {profile: mock-lab}
+    parameters: {extension: "7904"}
+    snapshot: [voip.account]
+    steps:
+      - action: voip.account.configure
+        purpose: test
+        args: {extension: "${extension}"}
+    assertions:
+      - id: entry-accepted
+        source: entry
+        path: result
+        op: eq
+        value: accepted
+    cleanup: {strategy: restore_snapshot, verify: true}

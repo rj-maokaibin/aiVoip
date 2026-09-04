@@ -1,0 +1,6 @@
+id: mock-lab
+version: 1
+kind: mock
+runner_labels: [voip-controlled-linux]
+devices: {}
+pbx: null
