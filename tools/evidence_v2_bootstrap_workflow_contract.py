@@ -33,6 +33,7 @@ def main() -> int:
         "REAL_OFFLINE_GOLDEN_001_SOURCE_IDENTITY=PASS",
         "GOLDEN_SHA256: b038aa7c9a0644581f2815f654fcdee4620860796382265b178823fccba2e3f0",
         "Bootstrap dedicated production baseline",
+        "PYTHONPATH=/app:/app/tools:/tools",
         "Upload sanitized bootstrap evidence",
         "Restore self-hosted runner workspace ownership",
         "EVIDENCE_V2_GOLDEN_BOOTSTRAP_RUNNER_WORKSPACE_RESTORE=PASS",
