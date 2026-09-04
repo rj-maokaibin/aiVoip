@@ -2,6 +2,8 @@
 # Shared CI dependency preparation for authoritative acceptance gates.
 # This file is sourced by gate scripts; callers keep set -Eeuo pipefail.
 
+CI_REPO_ROOT="${CI_REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+
 ci_now_ms() {
   python3 - <<'PY'
 import time
@@ -9,21 +11,28 @@ print(time.time_ns() // 1_000_000)
 PY
 }
 
+ci_perf_out() {
+  local configured="${CICD_PERFORMANCE_V3_EVIDENCE:-validation/cicd_performance_v3.json}"
+  if [[ "$configured" = /* ]]; then printf '%s\n' "$configured"; else printf '%s/%s\n' "$CI_REPO_ROOT" "$configured"; fi
+}
+
 ci_record_perf() {
   local phase="$1" status="$2" duration_ms="$3"
   shift 3
-  local args=(--out "${CICD_PERFORMANCE_V3_EVIDENCE:-validation/cicd_performance_v3.json}" record --phase "$phase" --status "$status" --duration-ms "$duration_ms")
+  local args=(--out "$(ci_perf_out)" record --phase "$phase" --status "$status" --duration-ms "$duration_ms")
   local item
   for item in "$@"; do args+=(--meta "$item"); done
-  python3 tools/cicd_performance_v3.py "${args[@]}"
+  python3 "$CI_REPO_ROOT/tools/cicd_performance_v3.py" "${args[@]}"
 }
 
 ci_prepare_python_runtime() {
   local venv_dir="$1" requirements="$2"
+  local requirements_path="$requirements"
+  [[ "$requirements_path" = /* ]] || requirements_path="$CI_REPO_ROOT/$requirements_path"
   local start end duration key marker status cache_state
   start="$(ci_now_ms)"
   marker="$venv_dir/.voip-ai-dependency-key"
-  key="$(python3 - "$requirements" <<'PY'
+  key="$(python3 - "$requirements_path" <<'PY'
 import hashlib, platform, sys
 from pathlib import Path
 p=Path(sys.argv[1])
@@ -46,7 +55,7 @@ PY
       --disable-pip-version-check
       --retries "${VOIP_PIP_RETRIES:-1}"
       --timeout "${VOIP_PIP_TIMEOUT_SECONDS:-10}"
-      -r "$requirements"
+      -r "$requirements_path"
     )
     if [[ -n "${VOIP_PIP_PRIMARY_INDEX:-}" ]]; then
       pip_args=(--index-url "$VOIP_PIP_PRIMARY_INDEX" "${pip_args[@]}")
@@ -58,7 +67,7 @@ PY
         ci_record_perf python_dependency_prepare FAIL "$duration" "cache=$cache_state" "fallback=none" || true
         return 1
       fi
-      python -m pip install --disable-pip-version-check --retries 1 --timeout "${VOIP_PIP_FALLBACK_TIMEOUT_SECONDS:-15}" --index-url "$fallback" -r "$requirements" || {
+      python -m pip install --disable-pip-version-check --retries 1 --timeout "${VOIP_PIP_FALLBACK_TIMEOUT_SECONDS:-15}" --index-url "$fallback" -r "$requirements_path" || {
         end="$(ci_now_ms)"; duration="$((end-start))"
         ci_record_perf python_dependency_prepare FAIL "$duration" "cache=$cache_state" "fallback=$fallback" || true
         return 1
