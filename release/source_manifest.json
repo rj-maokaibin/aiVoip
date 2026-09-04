@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "file_count": 692,
-  "aggregate_sha256": "d5c0852c944374126e8500271bec7b86cd3dcf7e20525129fefd9a18b760703d",
+  "aggregate_sha256": "e64e3dadbee4c9f38d8c56f1dbf8067f536a3e236fb83c51d115955fe2795f65",
   "files": [
     {
       "path": ".env.example",
@@ -10,8 +10,8 @@
     },
     {
       "path": ".github/workflows/evidence-v2-production-golden-bootstrap.yml",
-      "size": 12859,
-      "sha256": "4b62c78c4190e61e0bc0bcb33413deed8e937733e119f3b8e6d7640a6605468b"
+      "size": 13454,
+      "sha256": "c05e996ce328521cccbcf4449f577326d7a4192f4f0072d5bdf5438200d84523"
     },
     {
       "path": ".github/workflows/production-deploy.yml",
@@ -3210,8 +3210,8 @@
     },
     {
       "path": "tools/evidence_v2_bootstrap_workflow_contract.py",
-      "size": 4436,
-      "sha256": "b2b787632cd7a65fa51aba5804d9bb54826b0d8971ecb5150835612645de09c1"
+      "size": 6215,
+      "sha256": "dc8fa70f484dcc9fc44178f858fb1e057d15d39aa114e7103ba51c26571d20a7"
     },
     {
       "path": "tools/evidence_v2_production_acceptance.py",
