@@ -1,0 +1,39 @@
+name: Evidence V2 Acceptance Artifact Manifest Refresh
+
+on:
+  pull_request:
+    branches:
+      - master
+    paths:
+      - 'deploy/production_deploy_wrapper.sh'
+      - 'backend/tests/test_evidence_v2_acceptance_artifact_recovery_contract.py'
+      - '.github/workflows/evidence-v2-acceptance-artifact-manifest-refresh.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+      - name: Refresh final source manifest and remove temporary workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .github/workflows/evidence-v2-acceptance-artifact-manifest-refresh.yml
+          python3 tools/source_manifest_gate.py --update
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          if git diff --cached --quiet; then
+            echo 'SOURCE_MANIFEST_REFRESH=NO_CHANGES'
+            exit 0
+          fi
+          git commit -m 'Refresh source manifest for Evidence V2 acceptance artifact recovery'
+          git push origin "HEAD:${{ github.head_ref }}"
