@@ -26,12 +26,11 @@ ci_record_perf() {
 }
 
 ci_prepare_python_runtime() {
-  local venv_dir="$1" requirements="$2"
+  local requested_venv_dir="$1" requirements="$2"
   local requirements_path="$requirements"
   [[ "$requirements_path" = /* ]] || requirements_path="$CI_REPO_ROOT/$requirements_path"
-  local start end duration key marker status cache_state
+  local start end duration key marker status cache_state cache_root cache_dir lock_file
   start="$(ci_now_ms)"
-  marker="$venv_dir/.voip-ai-dependency-key"
   key="$(python3 - "$requirements_path" <<'PY'
 import hashlib, platform, sys
 from pathlib import Path
@@ -40,17 +39,28 @@ data=p.read_bytes()
 print(hashlib.sha256(data + platform.python_version().encode()).hexdigest())
 PY
 )"
-  if [[ -x "$venv_dir/bin/python" && -f "$marker" && "$(cat "$marker")" == "$key" ]]; then
-    # shellcheck disable=SC1090
-    source "$venv_dir/bin/activate"
+
+  # The caller keeps a run-scoped venv path for isolation, but the expensive
+  # dependency payload is content-addressed and persisted across workflow runs
+  # on the controlled self-hosted runner. The marker is written only after a
+  # complete install, so an interrupted MISS is rebuilt on the next run.
+  cache_root="${VOIP_PYTHON_RUNTIME_CACHE_ROOT:-/tmp/voip-ai-python-runtime-cache-v1}"
+  cache_dir="$cache_root/$key"
+  marker="$cache_dir/.voip-ai-dependency-key"
+  lock_file="$cache_root/$key.lock"
+  mkdir -p "$cache_root"
+
+  exec {cache_lock_fd}>"$lock_file"
+  flock "$cache_lock_fd"
+  if [[ -x "$cache_dir/bin/python" && -f "$marker" && "$(cat "$marker")" == "$key" ]]; then
     cache_state=HIT
     status=PASS
   else
-    rm -rf "$venv_dir"
-    python3 -m venv "$venv_dir"
-    # shellcheck disable=SC1090
-    source "$venv_dir/bin/activate"
     cache_state=MISS
+    rm -rf "$cache_dir"
+    python3 -m venv "$cache_dir"
+    # shellcheck disable=SC1090
+    source "$cache_dir/bin/activate"
     local -a pip_args=(
       --disable-pip-version-check
       --retries "${VOIP_PIP_RETRIES:-1}"
@@ -63,21 +73,40 @@ PY
     if ! python -m pip install "${pip_args[@]}"; then
       local fallback="${VOIP_PIP_FALLBACK_INDEX:-}"
       if [[ -z "$fallback" || "$fallback" == "${VOIP_PIP_PRIMARY_INDEX:-}" ]]; then
+        rm -rf "$cache_dir"
         end="$(ci_now_ms)"; duration="$((end-start))"
-        ci_record_perf python_dependency_prepare FAIL "$duration" "cache=$cache_state" "fallback=none" || true
+        ci_record_perf python_dependency_prepare FAIL "$duration" "cache=$cache_state" "cache_scope=cross_run" "fallback=none" || true
+        flock -u "$cache_lock_fd"
+        exec {cache_lock_fd}>&-
         return 1
       fi
-      python -m pip install --disable-pip-version-check --retries 1 --timeout "${VOIP_PIP_FALLBACK_TIMEOUT_SECONDS:-15}" --index-url "$fallback" -r "$requirements_path" || {
+      if ! python -m pip install --disable-pip-version-check --retries 1 --timeout "${VOIP_PIP_FALLBACK_TIMEOUT_SECONDS:-15}" --index-url "$fallback" -r "$requirements_path"; then
+        rm -rf "$cache_dir"
         end="$(ci_now_ms)"; duration="$((end-start))"
-        ci_record_perf python_dependency_prepare FAIL "$duration" "cache=$cache_state" "fallback=$fallback" || true
+        ci_record_perf python_dependency_prepare FAIL "$duration" "cache=$cache_state" "cache_scope=cross_run" "fallback=$fallback" || true
+        flock -u "$cache_lock_fd"
+        exec {cache_lock_fd}>&-
         return 1
-      }
+      fi
     fi
     printf '%s\n' "$key" > "$marker"
     status=PASS
   fi
+  flock -u "$cache_lock_fd"
+  exec {cache_lock_fd}>&-
+
+  # Preserve the existing run-scoped activation contract while pointing it at
+  # the immutable content-addressed runtime. This avoids changing every caller.
+  if [[ "$requested_venv_dir" != "$cache_dir" ]]; then
+    rm -rf "$requested_venv_dir"
+    ln -s "$cache_dir" "$requested_venv_dir"
+  fi
+  # shellcheck disable=SC1090
+  source "$requested_venv_dir/bin/activate"
+
   end="$(ci_now_ms)"; duration="$((end-start))"
-  ci_record_perf python_dependency_prepare "$status" "$duration" "cache=$cache_state" "dependency_key=$key"
+  ci_record_perf python_dependency_prepare "$status" "$duration" "cache=$cache_state" "cache_scope=cross_run" "dependency_key=$key"
+  printf 'PYTHON_RUNTIME_CACHE=%s key=%s path=%s\n' "$cache_state" "$key" "$cache_dir"
 }
 
 ci_run_timed() {
