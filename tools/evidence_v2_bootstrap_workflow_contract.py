@@ -10,6 +10,18 @@ WORKFLOW = ROOT / ".github" / "workflows" / "evidence-v2-production-golden-boots
 def main() -> int:
     text = WORKFLOW.read_text(encoding="utf-8")
     required = [
+        "workflow_dispatch:",
+        "workflow_run:",
+        "Production Deploy",
+        "actions: read",
+        "qualify-auto-bootstrap:",
+        "github.event.workflow_run.head_branch == 'master'",
+        "github.event.workflow_run.conclusion == 'failure'",
+        "Checkout current master for anti-stale binding",
+        "Download triggering Production Deploy evidence",
+        "NO_BOUND_REAL_GOLDEN_001_CASE_EVIDENCE",
+        "EVIDENCE_V2_AUTO_BOOTSTRAP_QUALIFICATION=PASS",
+        "github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha",
         "Repair self-hosted workspace before checkout",
         "EVIDENCE_V2_GOLDEN_BOOTSTRAP_RUNNER_WORKSPACE_REPAIR=PASS",
         "Checkout exact bootstrap source",
@@ -28,6 +40,17 @@ def main() -> int:
     missing = [item for item in required if item not in text]
     assert not missing, f"missing workflow contract markers: {missing}"
 
+    qualification_ordered = [
+        "Checkout current master for anti-stale binding",
+        "Verify triggering run is still exact current master",
+        "Download triggering Production Deploy evidence",
+        "Qualify only expected missing-golden fail-closed",
+    ]
+    qualification_positions = [text.index(item) for item in qualification_ordered]
+    assert qualification_positions == sorted(qualification_positions), (
+        f"auto-bootstrap qualification order changed: {qualification_ordered}"
+    )
+
     ordered = [
         "Repair self-hosted workspace before checkout",
         "Checkout exact bootstrap source",
@@ -40,6 +63,12 @@ def main() -> int:
     ]
     positions = [text.index(item) for item in ordered]
     assert positions == sorted(positions), f"workflow step order changed: {ordered}"
+
+    assert "runtime.get('checks_passed') == runtime.get('checks_total') == 9" in text
+    assert "exact.get('passed') is True" in text
+    assert "feishu.get('passed') is True" in text
+    assert "acceptance.get('stage') == 'SHADOW'" in text
+    assert "needs.qualify-auto-bootstrap.result == 'success'" in text
 
     restore_pos = text.index("Restore self-hosted runner workspace ownership")
     restore_block = text[restore_pos : restore_pos + 260]
