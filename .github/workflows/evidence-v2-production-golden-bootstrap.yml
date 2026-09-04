@@ -144,27 +144,26 @@ jobs:
       GOLDEN_PCAP: /tmp/tcpdump-2026-08-14.pcap
       GOLDEN_SHA256: b038aa7c9a0644581f2815f654fcdee4620860796382265b178823fccba2e3f0
     steps:
-      - name: Repair self-hosted workspace before checkout
+      - name: Verify self-hosted production workspace without mutation
         shell: bash
         run: |
           set -euo pipefail
           docker info >/dev/null
-          docker image inspect python:3.12-slim >/dev/null
-          docker run --rm -v "$GITHUB_WORKSPACE:/workspace" python:3.12-slim \
-            sh -lc 'find /workspace -mindepth 1 -maxdepth 1 -exec rm -rf {} +'
-          test -z "$(find "$GITHUB_WORKSPACE" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null)"
-          echo "EVIDENCE_V2_GOLDEN_BOOTSTRAP_RUNNER_WORKSPACE_REPAIR=PASS"
-
-      - name: Checkout exact bootstrap source
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ env.EXPECTED_SHA }}
-          fetch-depth: 1
+          test -d "$GITHUB_WORKSPACE/.git"
+          git_safe() {
+            git -c "safe.directory=$GITHUB_WORKSPACE" -C "$GITHUB_WORKSPACE" "$@"
+          }
+          test "$(git_safe rev-parse HEAD)" = "$EXPECTED_SHA"
+          test "$(git_safe rev-parse refs/remotes/origin/master)" = "$EXPECTED_SHA"
+          test -z "$(git_safe status --porcelain --untracked-files=no)"
+          (cd "$GITHUB_WORKSPACE" && python3 tools/source_manifest_gate.py)
+          echo "EVIDENCE_V2_GOLDEN_BOOTSTRAP_PRODUCTION_WORKSPACE_BINDING=PASS revision=$EXPECTED_SHA mode=READ_ONLY"
 
       - name: Verify exact source and SHADOW governance
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          cd "$GITHUB_WORKSPACE"
+          test "$(git -c "safe.directory=$GITHUB_WORKSPACE" rev-parse HEAD)" = "$EXPECTED_SHA"
           python3 tools/source_manifest_gate.py
           python3 - <<'PY'
           import json
@@ -194,6 +193,21 @@ jobs:
           ready="$(curl -fsS http://127.0.0.1:18001/health/ready)"
           health_rev="$(printf '%s' "$ready" | python3 -c 'import json,sys; print(json.load(sys.stdin)["build_revision"])')"
           test "$health_rev" = "$EXPECTED_SHA"
+
+          while IFS='|' read -r host_rel runtime_path; do
+            host_path="$GITHUB_WORKSPACE/$host_rel"
+            test -r "$host_path"
+            host_sha="$(sha256sum "$host_path" | awk '{print $1}')"
+            runtime_sha="$(docker exec "$cid" sha256sum "$runtime_path" | awk '{print $1}')"
+            test "$runtime_sha" = "$host_sha"
+          done <<'BINDINGS'
+          profiles/analyzers/voip_v1.yaml|/app/profiles/analyzers/voip_v1.yaml
+          profiles/pcm/ruijie_aim_diag_v1.yaml|/app/profiles/pcm/ruijie_aim_diag_v1.yaml
+          tools/evidence_v2_production_golden_bootstrap.py|/tools/evidence_v2_production_golden_bootstrap.py
+          tools/human_evidence_feishu_live_acceptance.py|/tools/human_evidence_feishu_live_acceptance.py
+          BINDINGS
+          echo "EVIDENCE_V2_GOLDEN_BOOTSTRAP_PROFILE_BINDING=PASS revision=$EXPECTED_SHA"
+
           printf 'BACKEND_CID=%s\n' "$cid" >> "$GITHUB_ENV"
           echo "EVIDENCE_V2_GOLDEN_BOOTSTRAP_RUNTIME_BINDING=PASS revision=$EXPECTED_SHA"
 
@@ -220,16 +234,18 @@ jobs:
       - name: Bootstrap dedicated production baseline
         run: |
           set -euo pipefail
-          mkdir -p validation
           result="$RUNNER_TEMP/evidence-v2-production-golden-bootstrap.json"
+          rm -f "$result"
           in_pcap=/tmp/evidence-v2-production-real-golden-001.pcap
           in_script=/tmp/evidence-v2-production-golden-bootstrap.py
           in_helper=/tmp/human_evidence_feishu_live_acceptance.py
           in_result=/tmp/evidence-v2-production-golden-bootstrap.json
-          helper_sha="$(sha256sum tools/human_evidence_feishu_live_acceptance.py | awk '{print $1}')"
+          script_path="$GITHUB_WORKSPACE/tools/evidence_v2_production_golden_bootstrap.py"
+          helper_path="$GITHUB_WORKSPACE/tools/human_evidence_feishu_live_acceptance.py"
+          helper_sha="$(sha256sum "$helper_path" | awk '{print $1}')"
           docker cp "$VERIFIED_GOLDEN_PCAP" "$BACKEND_CID:$in_pcap"
-          docker cp tools/evidence_v2_production_golden_bootstrap.py "$BACKEND_CID:$in_script"
-          docker cp tools/human_evidence_feishu_live_acceptance.py "$BACKEND_CID:$in_helper"
+          docker cp "$script_path" "$BACKEND_CID:$in_script"
+          docker cp "$helper_path" "$BACKEND_CID:$in_helper"
           cleanup() {
             docker exec "$BACKEND_CID" rm -f "$in_pcap" "$in_script" "$in_helper" "$in_result" >/dev/null 2>&1 || true
           }
@@ -248,12 +264,11 @@ jobs:
           set -e
           docker cp "$BACKEND_CID:$in_result" "$result" >/dev/null 2>&1 || true
           test -s "$result"
-          cp "$result" validation/evidence_v2_production_golden_bootstrap.json
-          python3 - "$EXPECTED_SHA" <<'PY'
+          python3 - "$EXPECTED_SHA" "$result" <<'PY'
           import json,sys
           from pathlib import Path
-          revision=sys.argv[1]
-          p=json.loads(Path('validation/evidence_v2_production_golden_bootstrap.json').read_text(encoding='utf-8'))
+          revision,path=sys.argv[1:]
+          p=json.loads(Path(path).read_text(encoding='utf-8'))
           assert p.get('status') == 'PASS', p
           assert p.get('source_revision') == revision, p
           assert p.get('stage') == 'SHADOW', p
@@ -270,22 +285,15 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: evidence-v2-production-golden-bootstrap-${{ github.run_id }}-${{ github.run_attempt }}
-          path: validation/evidence_v2_production_golden_bootstrap.json
+          path: ${{ runner.temp }}/evidence-v2-production-golden-bootstrap.json
           if-no-files-found: warn
           retention-days: 14
 
-      - name: Restore self-hosted runner workspace ownership
+      - name: Clean bootstrap scratch without mutating production workspace
         if: always()
         shell: bash
         run: |
           set -euo pipefail
-          uid="$(id -u)"
-          gid="$(id -g)"
-          docker image inspect python:3.12-slim >/dev/null
-          docker run --rm -v "$GITHUB_WORKSPACE:/workspace" python:3.12-slim \
-            sh -lc "find /workspace -type d \( -name __pycache__ -o -name .pytest_cache \) -prune -exec rm -rf {} +; chown -R $uid:$gid /workspace"
-          if [ -e "$GITHUB_WORKSPACE/.git/index" ]; then
-            test -w "$GITHUB_WORKSPACE/.git/index"
-            test "$(stat -c '%u:%g' "$GITHUB_WORKSPACE/.git/index")" = "$uid:$gid"
-          fi
-          echo "EVIDENCE_V2_GOLDEN_BOOTSTRAP_RUNNER_WORKSPACE_RESTORE=PASS"
+          rm -f "$RUNNER_TEMP/evidence-v2-production-golden-bootstrap.json"
+          rm -f "$RUNNER_TEMP/evidence-v2-production-golden-001.pcap"
+          echo "EVIDENCE_V2_GOLDEN_BOOTSTRAP_SCRATCH_CLEANUP=PASS production_workspace_mutated=false"
