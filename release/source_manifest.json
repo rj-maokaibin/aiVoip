@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "file_count": 691,
-  "aggregate_sha256": "9e3b4fc75ba524c87aef338ef1e90cc39a5b74fde70088fbac515e7c2f9bee50",
+  "aggregate_sha256": "54c7a8add0b7845803d09927dd4d752b26f4c3e20c8355df45a9230f4c3cfd98",
   "files": [
     {
       "path": ".env.example",
@@ -10,8 +10,8 @@
     },
     {
       "path": ".github/workflows/evidence-v2-production-golden-bootstrap.yml",
-      "size": 7473,
-      "sha256": "1a7f57d7f9f64c6c7cf53e8c6f41973bcedbccf74d5de6a9335485925e6607c5"
+      "size": 8825,
+      "sha256": "89612ee6ec370f6e593449a174a3f9a520e6d59e41434ba572259dfa6c0d8467"
     },
     {
       "path": ".github/workflows/production-deploy.yml",
