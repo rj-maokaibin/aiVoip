@@ -6,12 +6,19 @@ on:
       - master
     paths:
       - 'tools/evidence_v2_production_golden_bootstrap.py'
+      - 'tools/evidence_v2_bootstrap_workflow_contract.py'
       - 'tools/source_manifest_gate.py'
       - 'release/source_manifest.json'
       - '.github/workflows/evidence-v2-production-golden-bootstrap.yml'
   workflow_dispatch:
+  workflow_run:
+    workflows:
+      - Production Deploy
+    types:
+      - completed
 
 permissions:
+  actions: read
   contents: read
 
 concurrency:
@@ -48,8 +55,83 @@ jobs:
           print('EVIDENCE_V2_GOLDEN_BOOTSTRAP_CONTRACT=PASS')
           PY
 
+  qualify-auto-bootstrap:
+    if: >-
+      github.event_name == 'workflow_run' &&
+      github.event.workflow_run.head_branch == 'master' &&
+      github.event.workflow_run.conclusion == 'failure'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      EXPECTED_SHA: ${{ github.event.workflow_run.head_sha }}
+      TRIGGER_RUN_ID: ${{ github.event.workflow_run.id }}
+    steps:
+      - name: Checkout current master for anti-stale binding
+        uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 1
+
+      - name: Verify triggering run is still exact current master
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          echo "EVIDENCE_V2_AUTO_BOOTSTRAP_CURRENT_MASTER=PASS revision=$EXPECTED_SHA"
+
+      - name: Download triggering Production Deploy evidence
+        uses: actions/download-artifact@v4
+        with:
+          pattern: production-release-${{ github.event.workflow_run.id }}-*
+          path: ${{ runner.temp }}/trigger-production-evidence
+          merge-multiple: true
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ github.event.workflow_run.id }}
+
+      - name: Qualify only expected missing-golden fail-closed
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - "$EXPECTED_SHA" "$RUNNER_TEMP/trigger-production-evidence" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          revision = sys.argv[1]
+          root = Path(sys.argv[2])
+
+          def load(name: str):
+              matches = list(root.rglob(name))
+              assert len(matches) == 1, (name, matches)
+              return json.loads(matches[0].read_text(encoding='utf-8'))
+
+          runtime = load('production_runtime_result.json')
+          exact = load('exact_source_binding_result.json')
+          feishu = load('feishu_long_connection_runtime.json')
+          acceptance = load('evidence_v2_production_acceptance.json')
+
+          assert runtime.get('passed') is True, runtime
+          assert runtime.get('build_revision') == revision, runtime
+          assert runtime.get('checks_passed') == runtime.get('checks_total') == 9, runtime
+          assert exact.get('passed') is True, exact
+          assert exact.get('expected_revision') == revision, exact
+          assert feishu.get('passed') is True, feishu
+          assert feishu.get('build_revision') == revision, feishu
+          assert acceptance.get('status') == 'FAIL', acceptance
+          assert acceptance.get('stage') == 'SHADOW', acceptance
+          assert acceptance.get('source_revision') == revision, acceptance
+          assert acceptance.get('error_message') == 'NO_BOUND_REAL_GOLDEN_001_CASE_EVIDENCE', acceptance
+          print('EVIDENCE_V2_AUTO_BOOTSTRAP_QUALIFICATION=PASS revision='+revision)
+          PY
+
   bootstrap:
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master'
+    needs:
+      - qualify-auto-bootstrap
+    if: >-
+      always() &&
+      ((github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master') ||
+       (github.event_name == 'workflow_run' && needs.qualify-auto-bootstrap.result == 'success'))
     runs-on:
       - self-hosted
       - linux
@@ -57,7 +139,7 @@ jobs:
       - voip-controlled-linux
     timeout-minutes: 75
     env:
-      EXPECTED_SHA: ${{ github.sha }}
+      EXPECTED_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
       GOLDEN_PCAP: /tmp/tcpdump-2026-08-14.pcap
       GOLDEN_SHA256: b038aa7c9a0644581f2815f654fcdee4620860796382265b178823fccba2e3f0
     steps:
