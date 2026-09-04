@@ -25,13 +25,100 @@ on:
 
 permissions:
   contents: read
+  actions: read
+  pull-requests: read
 
 concurrency:
   group: voip-production-deploy
   cancel-in-progress: false
 
 jobs:
+  release-authority:
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      EXPECTED_SHA: ${{ github.sha }}
+    steps:
+      - name: Checkout exact master provenance
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.EXPECTED_SHA }}
+          fetch-depth: 0
+
+      - name: Require clean merge commit with accepted-head tree identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          parents="$(git show -s --format='%P' "$EXPECTED_SHA")"
+          read -r -a parent_array <<< "$parents"
+          test "${#parent_array[@]}" -eq 2
+          base_parent="${parent_array[0]}"
+          accepted_head="${parent_array[1]}"
+          target_tree="$(git rev-parse "$EXPECTED_SHA^{tree}")"
+          accepted_tree="$(git rev-parse "$accepted_head^{tree}")"
+          test "$target_tree" = "$accepted_tree"
+          printf 'RELEASE_BASE_PARENT=%s\n' "$base_parent" >> "$GITHUB_ENV"
+          printf 'RELEASE_ACCEPTED_HEAD=%s\n' "$accepted_head" >> "$GITHUB_ENV"
+          echo "PRODUCTION_MERGE_TREE_AUTHORITY=PASS target=$EXPECTED_SHA accepted_head=$accepted_head tree=$target_tree"
+
+      - name: Require exact accepted PR head gates
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const target = process.env.EXPECTED_SHA;
+            const head = process.env.RELEASE_ACCEPTED_HEAD;
+            const associated = await github.rest.repos.listPullRequestsAssociatedWithCommit({
+              owner,
+              repo,
+              commit_sha: head,
+              per_page: 100,
+            });
+            const pr = associated.data.find((item) =>
+              item.merged_at &&
+              item.base?.ref === 'master' &&
+              item.head?.sha === head &&
+              item.merge_commit_sha === target
+            );
+            if (!pr) {
+              core.setFailed(`No merged master PR binds accepted head ${head} to target merge ${target}`);
+              return;
+            }
+            const mergedAt = Date.parse(pr.merged_at);
+            const required = [
+              ['source-manifest-gate.yml', 'Source Manifest Gate'],
+              ['prd-spec-v1-release.yml', 'Full Acceptance'],
+              ['preliminary-evidence-v1.yml', 'Preliminary Evidence'],
+            ];
+            const acceptedRuns = {};
+            for (const [workflowId, label] of required) {
+              const response = await github.rest.actions.listWorkflowRuns({
+                owner,
+                repo,
+                workflow_id: workflowId,
+                event: 'pull_request',
+                head_sha: head,
+                per_page: 50,
+              });
+              const successful = response.data.workflow_runs
+                .filter((run) => run.head_sha === head)
+                .filter((run) => run.status === 'completed' && run.conclusion === 'success')
+                .filter((run) => Date.parse(run.updated_at) <= mergedAt)
+                .sort((a, b) => b.id - a.id);
+              if (successful.length === 0) {
+                core.setFailed(`${label} has no successful pre-merge exact-head run for ${head}`);
+                return;
+              }
+              acceptedRuns[label] = successful[0].id;
+            }
+            core.info(`PRODUCTION_PR_AUTHORITY=PASS pr=${pr.number} head=${head} target=${target}`);
+            core.info(`PRODUCTION_ACCEPTED_GATES=${JSON.stringify(acceptedRuns)}`);
+
   immutable-source-bundle:
+    needs: release-authority
     if: github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
     timeout-minutes: 10

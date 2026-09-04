@@ -91,10 +91,17 @@ def test_v2_2_production_repairs_workspace_then_materializes_immutable_source_of
     repair = text.index("Repair self-hosted workspace before materialization")
     download = text.index("Download immutable production source")
     materialize = text.index("Materialize exact master offline")
+    self_hosted = text[text.index("deploy-and-verify:"):]
     assert repair < download < materialize
     assert "immutable-source-bundle:" in text
     assert "Checkout exact deployment source on GitHub-hosted transport" in text
-    assert "Checkout exact master" not in text
+    assert "Checkout exact master" not in self_hosted
+    assert "uses: actions/checkout@" not in self_hosted
+    assert "release-authority:" in text
+    assert "Require clean merge commit with accepted-head tree identity" in text
+    assert "Require exact accepted PR head gates" in text
+    assert "PRODUCTION_PR_AUTHORITY=PASS" in text
+    assert "needs: release-authority" in text
     assert "git -C \"$GITHUB_WORKSPACE\" update-ref refs/remotes/origin/master \"$EXPECTED_SHA\"" in text
     assert "PRODUCTION_TARGET_RESOLUTION=PASS source=IMMUTABLE_BUNDLE" in text
     assert "PRODUCTION_SOURCE_TRANSPORT=IMMUTABLE_BUNDLE" in text

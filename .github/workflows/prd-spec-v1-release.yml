@@ -108,6 +108,55 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
+  resolve-reusable-full-acceptance:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
+    outputs:
+      reusable: ${{ steps.resolve.outputs.reusable }}
+      run_id: ${{ steps.resolve.outputs.run_id }}
+    steps:
+      - name: Find prior successful exact-SHA Full Acceptance artifact
+        id: resolve
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const sha = process.env.EXPECTED_SHA;
+            core.setOutput('reusable', 'false');
+            const response = await github.rest.actions.listWorkflowRuns({
+              owner,
+              repo,
+              workflow_id: 'prd-spec-v1-release.yml',
+              event: 'pull_request',
+              head_sha: sha,
+              per_page: 50,
+            });
+            const candidates = response.data.workflow_runs
+              .filter((run) => run.id !== context.runId)
+              .filter((run) => run.head_sha === sha && run.status === 'completed' && run.conclusion === 'success')
+              .sort((a, b) => b.id - a.id);
+            for (const run of candidates) {
+              const artifacts = await github.rest.actions.listWorkflowRunArtifacts({
+                owner,
+                repo,
+                run_id: run.id,
+                per_page: 100,
+              });
+              const name = `full-acceptance-${sha}`;
+              const artifact = artifacts.data.artifacts.find((item) => item.name === name && !item.expired);
+              if (artifact) {
+                core.info(`Reusable exact-SHA Full Acceptance found: run=${run.id} artifact=${artifact.id}`);
+                core.setOutput('reusable', 'true');
+                core.setOutput('run_id', String(run.id));
+                return;
+              }
+            }
+            core.info(`No reusable Full Acceptance artifact found for ${sha}`);
+
   frontend-acceptance:
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -175,15 +224,96 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
+  reuse-full-acceptance:
+    needs:
+      - resolve-shared-source
+      - resolve-reusable-full-acceptance
+      - frontend-acceptance
+    if: >-
+      always() &&
+      github.event_name == 'pull_request' &&
+      needs.resolve-shared-source.result == 'success' &&
+      needs.frontend-acceptance.result == 'success' &&
+      needs.resolve-reusable-full-acceptance.outputs.reusable == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
+    steps:
+      - name: Checkout exact validator source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.EXPECTED_SHA }}
+          fetch-depth: 1
+
+      - name: Download current exact-SHA source identity
+        uses: actions/download-artifact@v4
+        with:
+          name: exact-source-${{ env.EXPECTED_SHA }}
+          path: ${{ runner.temp }}/current-source
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ needs.resolve-shared-source.outputs.run_id }}
+
+      - name: Download prior reusable Full Acceptance evidence
+        uses: actions/download-artifact@v4
+        with:
+          name: full-acceptance-${{ env.EXPECTED_SHA }}
+          path: ${{ runner.temp }}/prior-full-acceptance
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ needs.resolve-reusable-full-acceptance.outputs.run_id }}
+
+      - name: Revalidate prior evidence against current exact source
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          test "$(cat "$RUNNER_TEMP/current-source/source.sha")" = "$EXPECTED_SHA"
+          python3 tools/source_manifest_gate.py --expected "$RUNNER_TEMP/current-source/source_manifest_expected.json"
+          python3 tools/full_acceptance_evidence_gate.py \
+            --root "$RUNNER_TEMP/prior-full-acceptance" \
+            --revision "$EXPECTED_SHA" \
+            --current-manifest "$RUNNER_TEMP/current-source/source_manifest_expected.json"
+          echo "FULL_ACCEPTANCE_REUSE=PASS source_run=${{ needs.resolve-reusable-full-acceptance.outputs.run_id }} revision=$EXPECTED_SHA"
+
+      - name: Mark reuse upload start
+        shell: bash
+        run: |
+          set -euo pipefail
+          date +%s%3N > "$RUNNER_TEMP/full-acceptance-upload-start-ms"
+          bytes="$(du -sb "$RUNNER_TEMP/prior-full-acceptance" | awk '{print $1}')"
+          printf '%s\n' "$bytes" > "$RUNNER_TEMP/full-acceptance-upload-bytes"
+          echo "FULL_ACCEPTANCE_REUSE_BYTES=$bytes"
+
+      - name: Republish exact-SHA Full Acceptance evidence for current run
+        uses: actions/upload-artifact@v4
+        with:
+          name: full-acceptance-${{ env.EXPECTED_SHA }}
+          path: ${{ runner.temp }}/prior-full-acceptance
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Record reuse artifact upload timing
+        shell: bash
+        run: |
+          set -euo pipefail
+          start="$(cat "$RUNNER_TEMP/full-acceptance-upload-start-ms")"
+          end="$(date +%s%3N)"
+          bytes="$(cat "$RUNNER_TEMP/full-acceptance-upload-bytes")"
+          echo "FULL_ACCEPTANCE_ARTIFACT_UPLOAD source=REUSED duration_ms=$((end-start)) bytes=$bytes"
+
   full-software-acceptance:
     needs:
       - resolve-shared-source
       - manual-source-bundle
+      - resolve-reusable-full-acceptance
       - frontend-acceptance
     if: >-
       always() &&
       needs.frontend-acceptance.result == 'success' &&
-      (needs.resolve-shared-source.result == 'success' || needs.manual-source-bundle.result == 'success')
+      (needs.resolve-shared-source.result == 'success' || needs.manual-source-bundle.result == 'success') &&
+      (github.event_name != 'pull_request' || needs.resolve-reusable-full-acceptance.outputs.reusable != 'true')
     runs-on:
       - self-hosted
       - linux
@@ -349,11 +479,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 - "$EXPECTED_SHA" <<'PY'
+          python3 - "$EXPECTED_SHA" "$OFFLINE_GOLDEN_SHA256" <<'PY'
           import json
           import sys
           from pathlib import Path
-          revision = sys.argv[1]
+          revision, golden_sha256 = sys.argv[1:]
           golden = json.loads(Path("offline-golden-result.json").read_text(encoding="utf-8"))
           human = json.loads(Path("offline-golden-human-artifacts/human-golden-result.json").read_text(encoding="utf-8"))
           perf = json.loads(Path("validation/cicd_performance_v3.json").read_text(encoding="utf-8"))
@@ -362,6 +492,12 @@ jobs:
               "schema_version": "full-software-acceptance-v2",
               "revision": revision,
               "passed": True,
+              "artifact_profile": "COMPACT_SUCCESS_V1",
+              "diagnostics": {
+                  "full_raw_artifacts_uploaded_on_success": False,
+                  "reproducible_from_golden_sha256": golden_sha256,
+                  "full_raw_artifacts_uploaded_on_failure": True,
+              },
               "frozen_contracts": {"passed": True},
               "full_release_gate": {"passed": True},
               "frontend_acceptance": {
@@ -396,7 +532,7 @@ jobs:
               json.dumps(evidence, ensure_ascii=False, indent=2) + "\n",
               encoding="utf-8",
           )
-          print("FULL_ACCEPTANCE_EVIDENCE=PASS")
+          print("FULL_ACCEPTANCE_EVIDENCE=PASS profile=COMPACT_SUCCESS_V1")
           PY
 
       - name: Acceptance summary
@@ -410,8 +546,28 @@ jobs:
           printf 'CICD_PERFORMANCE_V3=PASS\n'
           printf 'ACCEPTANCE_COMMIT=%s\n' "$(git rev-parse HEAD)"
 
-      - name: Upload Full Acceptance evidence
-        if: always()
+      - name: Mark Full Acceptance artifact upload start
+        if: success()
+        shell: bash
+        run: |
+          set -euo pipefail
+          date +%s%3N > "$RUNNER_TEMP/full-acceptance-upload-start-ms"
+          bytes="$(du -cb \
+            full-acceptance-result.json \
+            validation/cicd_performance_v3.json \
+            validation/frontend_acceptance_result.json \
+            validation/frontend_cicd_performance_v3.json \
+            validation/source_manifest_expected.json \
+            offline-golden-result.json \
+            offline-golden-human-artifacts/human-golden-result.json \
+            offline-golden-human-artifacts/pcm_rx_periodic_spectrum_human_v2.png \
+            offline-golden-human-artifacts/pcm_rx_periodic_spectrogram_human_v2.png \
+            offline-golden-human-artifacts/pcm_rx_dtmf_first_digit_inspector_human_v2.png | tail -n1 | awk '{print $1}')"
+          printf '%s\n' "$bytes" > "$RUNNER_TEMP/full-acceptance-upload-bytes"
+          echo "FULL_ACCEPTANCE_COMPACT_EVIDENCE_BYTES=$bytes"
+
+      - name: Upload compact Full Acceptance evidence
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: full-acceptance-${{ env.EXPECTED_SHA }}
@@ -422,7 +578,52 @@ jobs:
             validation/frontend_cicd_performance_v3.json
             validation/source_manifest_expected.json
             offline-golden-result.json
+            offline-golden-human-artifacts/human-golden-result.json
+            offline-golden-human-artifacts/pcm_rx_periodic_spectrum_human_v2.png
+            offline-golden-human-artifacts/pcm_rx_periodic_spectrogram_human_v2.png
+            offline-golden-human-artifacts/pcm_rx_dtmf_first_digit_inspector_human_v2.png
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Record Full Acceptance artifact upload timing
+        if: success()
+        shell: bash
+        run: |
+          set -euo pipefail
+          start="$(cat "$RUNNER_TEMP/full-acceptance-upload-start-ms")"
+          end="$(date +%s%3N)"
+          bytes="$(cat "$RUNNER_TEMP/full-acceptance-upload-bytes")"
+          echo "FULL_ACCEPTANCE_ARTIFACT_UPLOAD source=FRESH_COMPACT duration_ms=$((end-start)) bytes=$bytes"
+
+      - name: Upload failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: full-acceptance-failure-diagnostics-${{ env.EXPECTED_SHA }}-${{ github.run_attempt }}
+          path: |
+            full-acceptance-result.json
+            validation
+            offline-golden-result.json
             offline-golden-artifacts
             offline-golden-human-artifacts
           if-no-files-found: ignore
           retention-days: 1
+
+  full-acceptance-authority:
+    needs:
+      - reuse-full-acceptance
+      - full-software-acceptance
+    if: >-
+      always() &&
+      (needs.reuse-full-acceptance.result == 'success' || needs.full-software-acceptance.result == 'success')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Authoritative Full Acceptance result
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ needs.reuse-full-acceptance.result }}" = "success" ]; then
+            echo "FULL_ACCEPTANCE_AUTHORITY=PASS source=REUSED_IMMUTABLE_EVIDENCE"
+          else
+            echo "FULL_ACCEPTANCE_AUTHORITY=PASS source=FRESH_EXECUTION"
+          fi
