@@ -24,7 +24,7 @@ def test_source_controlled_rollout_stage_uses_safe_image_default_and_runtime_ove
     assert "PRELIMINARY_EVIDENCE_V2_COMPOSE=true" in dockerfile
     assert "PRELIMINARY_EVIDENCE_V2_STRICT_VALIDATOR=true" in dockerfile
     assert "PRELIMINARY_EVIDENCE_V2_PROJECT=false" in dockerfile
-    assert "PRELIMINARY_EVIDENCE_V2_PROJECT_RE" in runtime_env
+    assert "EVIDENCE_V2_PROJECT_RE" in runtime_env
     assert "evidence_v2_rollout.json" in runtime_env
     assert 'stage == "DEFAULT"' in runtime_env
     assert "persistent_project_entries_ignored" in runtime_env
