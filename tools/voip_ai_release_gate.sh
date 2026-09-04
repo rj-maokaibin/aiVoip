@@ -3,10 +3,12 @@ set -Eeuo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
+# shellcheck source=tools/ci_dependency_runtime.sh
+source tools/ci_dependency_runtime.sh
 
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 VENV_BASE="${RUNNER_TEMP:-/tmp}"
-VENV_DIR="${VOIP_AI_GATE_VENV:-$VENV_BASE/voip-ai-release-gate}"
+VENV_DIR="${VOIP_AI_GATE_VENV:-${PRELIMINARY_EVIDENCE_V1_VENV:-$VENV_BASE/voip-ai-acceptance-runtime}}"
 PG_CONTAINER="voip-ai-gate-pg-$$"
 REDIS_CONTAINER="voip-ai-gate-redis-$$"
 PG_PORT=""
@@ -23,18 +25,13 @@ trap cleanup EXIT INT TERM
 
 need "$PYTHON_BIN"
 need docker
-need npm
-need curl
 
 docker info >/dev/null 2>&1 || fail "Docker daemon is not available"
 
-log "Preparing isolated Python environment: $VENV_DIR"
-if [[ ! -x "$VENV_DIR/bin/python" ]]; then
-  "$PYTHON_BIN" -m venv "$VENV_DIR"
-fi
+log "Preparing shared Python acceptance environment: $VENV_DIR"
+ci_prepare_python_runtime "$VENV_DIR" backend/requirements.txt
+# shellcheck disable=SC1090
 source "$VENV_DIR/bin/activate"
-python -m pip install --upgrade pip
-pip install -r backend/requirements.txt
 
 log "Starting ephemeral PostgreSQL 16 and Redis 7"
 docker run -d --rm --name "$PG_CONTAINER" -e POSTGRES_DB=voip -e POSTGRES_USER=voip -e POSTGRES_PASSWORD=voip -p 127.0.0.1::5432 postgres:16 >/dev/null
@@ -48,10 +45,6 @@ export REDIS_URL="redis://127.0.0.1:${REDIS_PORT}/0"
 export REPRODUCTION_PLATFORM_MODE="real"
 export PYTHONPATH="backend:."
 
-# postgres's entrypoint runs a transient init server (CREATE DATABASE) before
-# exec'ing the final server. A single ready probe can catch the init server and
-# then fail during the init->final handoff, so require two consecutive ready
-# states before declaring PostgreSQL ready.
 pg_ready=0
 for _ in $(seq 1 60); do
   if docker exec "$PG_CONTAINER" pg_isready -U voip -d voip >/dev/null 2>&1; then
@@ -67,35 +60,63 @@ for _ in $(seq 1 30); do docker exec "$REDIS_CONTAINER" redis-cli ping 2>/dev/nu
 docker exec "$REDIS_CONTAINER" redis-cli ping 2>/dev/null | grep -q PONG || fail "Redis did not become ready"
 
 log "1/11 Python compile"
-python -m compileall -q backend/app backend/tests tools
+ci_run_timed python_compile python -m compileall -q backend/app backend/tests tools
 log "2/11 AI contract coverage"
-make ai-eval-gate
+ci_run_timed ai_contract_coverage make ai-eval-gate
 log "3/11 AI E1-E6 regression"
-make ai-e1-e6-gate
+ci_run_timed ai_e1_e6 make ai-e1-e6-gate
 
 if [[ -f backend/tests/test_ai1_semantic_router_v1.py ]]; then
   log "4/11 AI1 Semantic Router gate"
-  pytest -q backend/tests/test_ai1_semantic_router_v1.py backend/tests/test_ai1_semantic_gateway_v1.py backend/tests/test_ai1_semantic_eval_gate_v1.py backend/tests/test_ai1_semantic_api_v1.py backend/tests/test_ai1_semantic_real_corpus_eval_v1.py
+  ci_run_timed ai1_semantic_router pytest -q backend/tests/test_ai1_semantic_router_v1.py backend/tests/test_ai1_semantic_gateway_v1.py backend/tests/test_ai1_semantic_eval_gate_v1.py backend/tests/test_ai1_semantic_api_v1.py backend/tests/test_ai1_semantic_real_corpus_eval_v1.py
 fi
 if [[ -f backend/tests/test_ai3_case_copilot_v1.py ]]; then
   log "5/11 AI3 Case Copilot gate"
-  pytest -q backend/tests/test_ai3_case_copilot_v1.py backend/tests/test_ai3_copilot_gateway_v1.py backend/tests/test_ai3_copilot_api_v1.py backend/tests/test_ai3_copilot_idempotency_isolation_v1.py backend/tests/test_ai3_feishu_copilot_v1.py backend/tests/test_ai3_feishu_tenant_idempotency_v1.py backend/tests/test_ai3_copilot_fail_closed_v1.py
+  ci_run_timed ai3_case_copilot pytest -q backend/tests/test_ai3_case_copilot_v1.py backend/tests/test_ai3_copilot_gateway_v1.py backend/tests/test_ai3_copilot_api_v1.py backend/tests/test_ai3_copilot_idempotency_isolation_v1.py backend/tests/test_ai3_feishu_copilot_v1.py backend/tests/test_ai3_feishu_tenant_idempotency_v1.py backend/tests/test_ai3_copilot_fail_closed_v1.py
 fi
 if [[ -f backend/tests/test_ai2_diagnostic_loop_v1.py ]]; then
   log "6/11 AI2 Diagnostic Loop SHADOW/SUGGEST gate"
-  pytest -q backend/tests/test_ai2_diagnostic_loop_v1.py backend/tests/test_ai2_cycles_api_v1.py backend/tests/test_ai2_diagnosis_sidecar_v1.py backend/tests/test_ai2_cycle_concurrency_contract_v1.py backend/tests/test_ai2_reasoning_gateway_redaction_v1.py backend/tests/test_ai2_suggest_bridge_v1.py backend/tests/test_ai2_suggest_concurrency_contract_v1.py backend/tests/test_ai2_reproduction_publish_recovery_v1.py backend/tests/test_ai2_feishu_suggest_v1.py backend/tests/test_ai2_feishu_retry_card_v1.py backend/tests/test_ai2_feishu_dispatch_order_v1.py
+  ci_run_timed ai2_diagnostic_loop pytest -q backend/tests/test_ai2_diagnostic_loop_v1.py backend/tests/test_ai2_cycles_api_v1.py backend/tests/test_ai2_diagnosis_sidecar_v1.py backend/tests/test_ai2_cycle_concurrency_contract_v1.py backend/tests/test_ai2_reasoning_gateway_redaction_v1.py backend/tests/test_ai2_suggest_bridge_v1.py backend/tests/test_ai2_suggest_concurrency_contract_v1.py backend/tests/test_ai2_reproduction_publish_recovery_v1.py backend/tests/test_ai2_feishu_suggest_v1.py backend/tests/test_ai2_feishu_retry_card_v1.py backend/tests/test_ai2_feishu_dispatch_order_v1.py
 fi
 
 log "7/11 M7 acceptance contract"
-pytest -q backend/tests/test_m7_acceptance_gate.py
+ci_run_timed m7_acceptance_contract pytest -q backend/tests/test_m7_acceptance_gate.py
 log "8/11 PostgreSQL clean migration"
+start_ms="$(ci_now_ms)"
 (cd backend && alembic upgrade head)
+end_ms="$(ci_now_ms)"
+ci_record_perf clean_migration PASS "$((end_ms-start_ms))"
 log "9/11 Full backend regression"
-pytest -q backend/tests --tb=line
+ci_run_timed full_backend_regression pytest -q backend/tests --tb=line
 log "10/11 Preliminary Evidence Report software gate"
-python tools/evidence_report_release_gate.py --skip-tests
-log "11/11 Frontend dependency audit and production build"
-(cd frontend && npm ci && npm audit --audit-level=low && npm run build && test -s dist/index.html && test -s dist/evidence-report.html)
+ci_run_timed evidence_report_release_gate python tools/evidence_report_release_gate.py --skip-tests
+log "11/11 Verify exact-SHA frontend dependency audit and production build evidence"
+start_ms="$(ci_now_ms)"
+python3 - <<'PY'
+import hashlib
+import json
+import os
+from pathlib import Path
+
+path = Path("validation/frontend_acceptance_result.json")
+assert path.is_file(), "frontend acceptance evidence missing"
+payload = json.loads(path.read_text(encoding="utf-8"))
+expected = os.environ.get("EXPECTED_SHA", "")
+lock_sha = hashlib.sha256(Path("frontend/package-lock.json").read_bytes()).hexdigest()
+assert payload.get("schema_version") == "frontend-acceptance-v1", payload
+assert payload.get("passed") is True, payload
+assert payload.get("revision") == expected, payload
+assert payload.get("package_lock_sha256") == lock_sha, payload
+assert payload.get("npm_audit_passed") is True, payload
+assert payload.get("production_build_passed") is True, payload
+print(
+    "FRONTEND_ACCEPTANCE_EVIDENCE=PASS "
+    f"revision={expected} lock_sha256={lock_sha} source=GITHUB_HOSTED"
+)
+PY
+end_ms="$(ci_now_ms)"
+ci_record_perf frontend_acceptance_evidence_verify PASS "$((end_ms-start_ms))" "source=GITHUB_HOSTED"
+python3 tools/cicd_performance_v3.py --out "${CICD_PERFORMANCE_V3_EVIDENCE:-validation/cicd_performance_v3.json}" summary
 
 printf '\n=============================================\nVOIP AI SOFTWARE RELEASE GATE: PASS\n'
 printf 'Branch: %s\n' "$(git branch --show-current 2>/dev/null || echo unknown)"

@@ -89,6 +89,9 @@ jobs:
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          python3 tools/source_manifest_gate.py --write "$RUNNER_TEMP/source_manifest_expected.json"
+          python3 tools/source_manifest_gate.py --expected "$RUNNER_TEMP/source_manifest_expected.json"
+          test -z "$(git status --porcelain --untracked-files=no)"
           git branch -f bundle-head "$EXPECTED_SHA"
           git bundle create "$RUNNER_TEMP/source.bundle" refs/heads/bundle-head
           printf '%s\n' "$EXPECTED_SHA" > "$RUNNER_TEMP/source.sha"
@@ -101,6 +104,74 @@ jobs:
           path: |
             ${{ runner.temp }}/source.bundle
             ${{ runner.temp }}/source.sha
+            ${{ runner.temp }}/source_manifest_expected.json
+          if-no-files-found: error
+          retention-days: 1
+
+  frontend-acceptance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      CICD_PERFORMANCE_V3_EVIDENCE: validation/frontend_cicd_performance_v3.json
+    steps:
+      - name: Checkout exact frontend source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.EXPECTED_SHA }}
+          fetch-depth: 1
+
+      - name: Exact-SHA frontend dependency audit and production build
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          source tools/ci_dependency_runtime.sh
+          pushd frontend >/dev/null
+          ci_npm_ci
+          ci_npm_audit
+          ci_run_timed frontend_build npm run build
+          test -s dist/index.html
+          test -s dist/evidence-report.html
+          popd >/dev/null
+          python3 tools/cicd_performance_v3.py --out "$CICD_PERFORMANCE_V3_EVIDENCE" summary
+          python3 - "$EXPECTED_SHA" <<'PY'
+          import hashlib
+          import json
+          import sys
+          from pathlib import Path
+
+          revision = sys.argv[1]
+          lock_sha = hashlib.sha256(Path("frontend/package-lock.json").read_bytes()).hexdigest()
+          perf = json.loads(Path("validation/frontend_cicd_performance_v3.json").read_text(encoding="utf-8"))
+          payload = {
+              "schema_version": "frontend-acceptance-v1",
+              "revision": revision,
+              "passed": True,
+              "package_lock_sha256": lock_sha,
+              "npm_audit_passed": True,
+              "production_build_passed": True,
+              "execution_source": "GITHUB_HOSTED",
+              "performance": {
+                  "status": perf.get("status"),
+                  "total_duration_ms": perf.get("total_duration_ms"),
+              },
+          }
+          assert payload["performance"]["status"] == "PASS", payload
+          Path("validation/frontend_acceptance_result.json").write_text(
+              json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+              encoding="utf-8",
+          )
+          print(f"FRONTEND_ACCEPTANCE=PASS revision={revision} lock_sha256={lock_sha}")
+          PY
+
+      - name: Upload exact-SHA frontend acceptance evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-acceptance-${{ env.EXPECTED_SHA }}
+          path: |
+            validation/frontend_acceptance_result.json
+            validation/frontend_cicd_performance_v3.json
           if-no-files-found: error
           retention-days: 1
 
@@ -108,7 +179,11 @@ jobs:
     needs:
       - resolve-shared-source
       - manual-source-bundle
-    if: always() && (needs.resolve-shared-source.result == 'success' || needs.manual-source-bundle.result == 'success')
+      - frontend-acceptance
+    if: >-
+      always() &&
+      needs.frontend-acceptance.result == 'success' &&
+      (needs.resolve-shared-source.result == 'success' || needs.manual-source-bundle.result == 'success')
     runs-on:
       - self-hosted
       - linux
@@ -119,8 +194,9 @@ jobs:
       EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
       OFFLINE_GOLDEN_PCAP: /tmp/tcpdump-2026-08-14.pcap
       OFFLINE_GOLDEN_SHA256: b038aa7c9a0644581f2815f654fcdee4620860796382265b178823fccba2e3f0
-      PRELIMINARY_EVIDENCE_V1_VENV: /tmp/voip-ai-preliminary-evidence-v1-${{ github.run_id }}-${{ github.run_attempt }}
-      VOIP_AI_GATE_VENV: /tmp/voip-ai-release-gate-${{ github.run_id }}-${{ github.run_attempt }}
+      PRELIMINARY_EVIDENCE_V1_VENV: /tmp/voip-ai-acceptance-runtime-${{ github.run_id }}-${{ github.run_attempt }}
+      VOIP_AI_GATE_VENV: /tmp/voip-ai-acceptance-runtime-${{ github.run_id }}-${{ github.run_attempt }}
+      CICD_PERFORMANCE_V3_EVIDENCE: validation/cicd_performance_v3.json
     steps:
       - name: Reset self-hosted workspace
         shell: bash
@@ -148,19 +224,34 @@ jobs:
           name: exact-source-${{ env.EXPECTED_SHA }}
           path: ${{ runner.temp }}/exact-source
 
-      - name: Materialize exact source offline
+      - name: Materialize exact source and verify derived manifest
         shell: bash
         run: |
           set -euo pipefail
           bundle="$RUNNER_TEMP/exact-source/source.bundle"
           sha_file="$RUNNER_TEMP/exact-source/source.sha"
+          manifest="$RUNNER_TEMP/exact-source/source_manifest_expected.json"
           test -s "$bundle"
+          test -s "$manifest"
           test "$(cat "$sha_file")" = "$EXPECTED_SHA"
           git clone -q -b bundle-head "$bundle" "$GITHUB_WORKSPACE"
           git -C "$GITHUB_WORKSPACE" checkout -q --detach "$EXPECTED_SHA"
           test "$(git -C "$GITHUB_WORKSPACE" rev-parse HEAD)" = "$EXPECTED_SHA"
           test -z "$(git -C "$GITHUB_WORKSPACE" status --porcelain --untracked-files=no)"
+          mkdir -p "$GITHUB_WORKSPACE/validation"
+          cp "$manifest" "$GITHUB_WORKSPACE/validation/source_manifest_expected.json"
+          cd "$GITHUB_WORKSPACE"
+          python3 tools/source_manifest_gate.py --expected validation/source_manifest_expected.json
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          test -z "$(git status --porcelain --untracked-files=no)"
           echo "EXACT_SOURCE_MATERIALIZATION=PASS revision=$EXPECTED_SHA"
+          echo "SOURCE_MANIFEST_ACCEPTANCE_BINDING=PASS mode=DERIVED_ARTIFACT"
+
+      - name: Download exact-SHA frontend acceptance evidence
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-acceptance-${{ env.EXPECTED_SHA }}
+          path: validation
 
       - name: Environment and prepared-PCAP identity
         run: |
@@ -168,8 +259,6 @@ jobs:
           test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
           printf 'ACCEPTANCE_HEAD=%s\n' "$(git rev-parse HEAD)"
           printf 'PYTHON=%s\n' "$(python3 --version 2>&1)"
-          printf 'NODE=%s\n' "$(node --version 2>&1)"
-          printf 'NPM=%s\n' "$(npm --version 2>&1)"
           docker info >/dev/null
 
           fixture="$OFFLINE_GOLDEN_PCAP"
@@ -267,12 +356,19 @@ jobs:
           revision = sys.argv[1]
           golden = json.loads(Path("offline-golden-result.json").read_text(encoding="utf-8"))
           human = json.loads(Path("offline-golden-human-artifacts/human-golden-result.json").read_text(encoding="utf-8"))
+          perf = json.loads(Path("validation/cicd_performance_v3.json").read_text(encoding="utf-8"))
+          frontend = json.loads(Path("validation/frontend_acceptance_result.json").read_text(encoding="utf-8"))
           evidence = {
               "schema_version": "full-software-acceptance-v2",
               "revision": revision,
               "passed": True,
               "frozen_contracts": {"passed": True},
               "full_release_gate": {"passed": True},
+              "frontend_acceptance": {
+                  "passed": frontend.get("passed") is True,
+                  "source": frontend.get("execution_source"),
+                  "package_lock_sha256": frontend.get("package_lock_sha256"),
+              },
               "golden_001": {
                   "passed": golden.get("passed") is True,
                   "checks_passed": golden.get("checks_passed"),
@@ -282,13 +378,20 @@ jobs:
                   "passed": human.get("status") == "PASS",
                   "schema_version": human.get("schema_version"),
               },
+              "performance_v3": {
+                  "status": perf.get("status"),
+                  "total_duration_ms": perf.get("total_duration_ms"),
+              },
           }
+          assert evidence["frontend_acceptance"]["passed"] is True, evidence
+          assert evidence["frontend_acceptance"]["source"] == "GITHUB_HOSTED", evidence
           assert evidence["golden_001"] == {
               "passed": True,
               "checks_passed": 142,
               "checks_total": 142,
           }, evidence
           assert evidence["human_evidence"]["passed"] is True, evidence
+          assert evidence["performance_v3"]["status"] == "PASS", evidence
           Path("full-acceptance-result.json").write_text(
               json.dumps(evidence, ensure_ascii=False, indent=2) + "\n",
               encoding="utf-8",
@@ -301,8 +404,10 @@ jobs:
           set -euo pipefail
           printf 'PRD_SPEC_V1_FROZEN_CONTRACTS=PASS\n'
           printf 'VOIP_AI_SOFTWARE_RELEASE_GATE=PASS\n'
+          printf 'FRONTEND_ACCEPTANCE_EVIDENCE=PASS source=GITHUB_HOSTED\n'
           printf 'REAL_OFFLINE_GOLDEN_001=PASS 142/142\n'
           printf 'HUMAN_REAL_OFFLINE_GOLDEN_001=PASS\n'
+          printf 'CICD_PERFORMANCE_V3=PASS\n'
           printf 'ACCEPTANCE_COMMIT=%s\n' "$(git rev-parse HEAD)"
 
       - name: Upload Full Acceptance evidence
@@ -312,6 +417,10 @@ jobs:
           name: full-acceptance-${{ env.EXPECTED_SHA }}
           path: |
             full-acceptance-result.json
+            validation/cicd_performance_v3.json
+            validation/frontend_acceptance_result.json
+            validation/frontend_cicd_performance_v3.json
+            validation/source_manifest_expected.json
             offline-golden-result.json
             offline-golden-artifacts
             offline-golden-human-artifacts
