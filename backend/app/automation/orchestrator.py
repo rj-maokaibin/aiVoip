@@ -13,8 +13,9 @@ from app.automation.assertions.resolver import EvidenceEnvelope, NormalizedEvide
 from app.automation.cleanup import AutomationCleanupError, PersistedCleanupCoordinator
 from app.automation.contracts import ActionStepSpec, TestCaseSpec, TestVerdict, WaitForSpec
 from app.automation.event_wait import EventWaitTimeout, InMemoryEventBus
+from app.automation.persistence import NullRuntimeRecorder, RuntimeRecorder
 from app.automation.state_machine import AutomationRunState, AutomationStateMachine
-from app.infrastructure.action_route import RunIntent
+from app.infrastructure.action_route import ActionPurpose, RunIntent
 
 
 class RuntimeBlocked(RuntimeError):
@@ -89,12 +90,35 @@ class AutomationOrchestrator:
         assertions: AssertionEngine,
         cleanup: PersistedCleanupCoordinator,
         hooks: RuntimeHooks | None = None,
+        recorder: RuntimeRecorder | None = None,
     ) -> None:
         self.dispatcher = dispatcher
         self.events = events
         self.assertions = assertions
         self.cleanup = cleanup
         self.hooks = hooks or RuntimeHooks()
+        self.recorder = recorder or NullRuntimeRecorder()
+
+    def _transition(
+        self,
+        machine: AutomationStateMachine,
+        run_id: str,
+        target: AutomationRunState,
+    ) -> AutomationRunState:
+        state = machine.transition(target)
+        self.recorder.record_state(run_id, state)
+        return state
+
+    def _to_cleanup(
+        self,
+        machine: AutomationStateMachine,
+        run_id: str,
+    ) -> AutomationRunState:
+        before = machine.state
+        state = machine.to_cleanup()
+        if state != before:
+            self.recorder.record_state(run_id, state)
+        return state
 
     async def run(
         self,
@@ -116,13 +140,14 @@ class AutomationOrchestrator:
         cleanup_verified = False
 
         try:
-            machine.transition(AutomationRunState.PRECHECK)
+            self.recorder.record_state(run_id, AutomationRunState.CREATED)
+            self._transition(machine, run_id, AutomationRunState.PRECHECK)
             precheck = await self.hooks.precheck(context)
             if not precheck.ok:
                 blocked_reason = precheck.reason or "PRECHECK_FAILED"
                 raise RuntimeBlocked(blocked_reason)
 
-            machine.transition(AutomationRunState.RESERVE)
+            self._transition(machine, run_id, AutomationRunState.RESERVE)
             try:
                 context.authority_token = await self.hooks.reserve(context)
             except RuntimeBlocked:
@@ -133,16 +158,16 @@ class AutomationOrchestrator:
                     raise RuntimeBlocked("LEASE_BUSY") from exc
                 raise
 
-            machine.transition(AutomationRunState.SNAPSHOT)
+            self._transition(machine, run_id, AutomationRunState.SNAPSHOT)
             await self.hooks.snapshot(context)
 
-            machine.transition(AutomationRunState.PROVISION)
+            self._transition(machine, run_id, AutomationRunState.PROVISION)
             await self.hooks.provision(context)
 
-            machine.transition(AutomationRunState.ARM)
+            self._transition(machine, run_id, AutomationRunState.ARM)
             await self.hooks.arm(context)
 
-            machine.transition(AutomationRunState.EXECUTE)
+            self._transition(machine, run_id, AutomationRunState.EXECUTE)
             dispatch_context = DispatchContext(
                 run_id=run_id,
                 intent=intent,
@@ -151,7 +176,7 @@ class AutomationOrchestrator:
                 parameters=dict(case.parameters),
                 metadata=context.metadata,
             )
-            for step in case.steps:
+            for step_no, step in enumerate(case.steps, start=1):
                 if isinstance(step, ActionStepSpec):
                     try:
                         dispatched = await self.dispatcher.dispatch(
@@ -161,8 +186,31 @@ class AutomationOrchestrator:
                             args=step.args,
                         )
                     except ActionDispatchError as exc:
+                        self.recorder.record_step(
+                            run_id,
+                            step_no=step_no,
+                            action_id=step.action,
+                            route=None,
+                            purpose=step.purpose,
+                            status="DISPATCH_ERROR",
+                            output={"error": str(exc)},
+                        )
                         inconclusive_reason = f"ACTION_DISPATCH:{exc}"
                         break
+                    status = (
+                        "UNKNOWN" if dispatched.result.unknown_result
+                        else "SUCCEEDED" if dispatched.result.success
+                        else "FAILED"
+                    )
+                    self.recorder.record_step(
+                        run_id,
+                        step_no=step_no,
+                        action_id=step.action,
+                        route=dispatched.route,
+                        purpose=step.purpose,
+                        status=status,
+                        output=dispatched.result.output,
+                    )
                     for item in dispatched.result.evidence:
                         context.evidence.put(
                             item.source,
@@ -183,8 +231,26 @@ class AutomationOrchestrator:
                             timeout=step.timeout_seconds,
                         )
                     except EventWaitTimeout:
+                        self.recorder.record_step(
+                            run_id,
+                            step_no=step_no,
+                            action_id=f"wait_for.{step.event}",
+                            route=None,
+                            purpose=ActionPurpose.OBSERVATION,
+                            status="TIMEOUT",
+                            output={"timeout_seconds": step.timeout_seconds},
+                        )
                         inconclusive_reason = f"EVENT_TIMEOUT:{step.event}"
                         break
+                    self.recorder.record_step(
+                        run_id,
+                        step_no=step_no,
+                        action_id=f"wait_for.{step.event}",
+                        route=None,
+                        purpose=ActionPurpose.OBSERVATION,
+                        status="SUCCEEDED",
+                        output={"event": step.event, "payload": event.payload},
+                    )
                     context.evidence.put(
                         f"event:{step.event}",
                         EvidenceEnvelope(
@@ -195,7 +261,7 @@ class AutomationOrchestrator:
                         ),
                     )
 
-            machine.transition(AutomationRunState.ASSERT)
+            self._transition(machine, run_id, AutomationRunState.ASSERT)
         except RuntimeBlocked as exc:
             blocked_reason = blocked_reason or str(exc)
         except Exception as exc:
@@ -203,7 +269,7 @@ class AutomationOrchestrator:
                 f"RUNTIME_EXCEPTION:{type(exc).__name__}"
             )
         finally:
-            machine.to_cleanup()
+            self._to_cleanup(machine, run_id)
             try:
                 await self.cleanup.run(run_id=run_id)
                 cleanup_verified = True
@@ -217,9 +283,9 @@ class AutomationOrchestrator:
                 cleanup_verified = False
 
             if machine.state == AutomationRunState.CLEANUP:
-                machine.transition(AutomationRunState.VERIFY_CLEANUP)
+                self._transition(machine, run_id, AutomationRunState.VERIFY_CLEANUP)
             if machine.state == AutomationRunState.VERIFY_CLEANUP:
-                machine.transition(AutomationRunState.REPORT)
+                self._transition(machine, run_id, AutomationRunState.REPORT)
 
         evaluation = self.assertions.evaluate(
             case.assertions,
@@ -229,6 +295,7 @@ class AutomationOrchestrator:
             inconclusive_reason=inconclusive_reason,
             cleanup_verified=cleanup_verified,
         )
+        self.recorder.record_assertions(run_id, evaluation)
         await self.hooks.report(context, evaluation)
 
         terminal = {
@@ -238,6 +305,7 @@ class AutomationOrchestrator:
             TestVerdict.INCONCLUSIVE: AutomationRunState.INCONCLUSIVE,
         }[evaluation.verdict]
         machine.finish(terminal)
+        self.recorder.finish(run_id, state=machine.state, evaluation=evaluation)
         return OrchestrationResult(
             state=machine.state,
             verdict=evaluation.verdict,

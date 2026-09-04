@@ -34,6 +34,7 @@ from app.automation.orchestrator import (
     PrecheckResult,
     RuntimeHooks,
 )
+from app.automation.persistence import InMemoryRuntimeRecorder
 from app.automation.registry import TestRegistry, TestRegistryError
 from app.automation.state_machine import (
     AutomationRunState,
@@ -309,6 +310,7 @@ def test_dispatcher_web_test_never_uses_ssh_fallback():
                 run_id="run-no-fallback",
                 intent=RunIntent.VERIFY,
                 case_entry=ActionEntry.WEB,
+                authority_token=object(),
             ),
             action_id="voip.account.configure",
             purpose=ActionPurpose.TEST,
@@ -317,6 +319,40 @@ def test_dispatcher_web_test_never_uses_ssh_fallback():
         assert result.route.entry == ActionEntry.WEB
         assert result.route.transport == ActionTransport.HTTP_API
         assert calls == {"web": 1, "ssh": 0}
+
+    asyncio.run(scenario())
+
+
+def test_mutating_dispatch_requires_device_authority():
+    async def scenario():
+        dispatcher = ActionDispatcher()
+
+        async def handler(context, args):
+            raise AssertionError("handler must not run without authority")
+
+        dispatcher.register(
+            action_id="voip.account.configure",
+            route=ActionRoute(
+                entry=ActionEntry.WEB,
+                transport=ActionTransport.HTTP_API,
+                backend=ActionBackend.CONFIG_FRAMEWORK,
+                purpose=ActionPurpose.TEST,
+                target="voip",
+            ),
+            handler=handler,
+            mutates=True,
+        )
+        with pytest.raises(Exception, match="MUTATION_AUTHORITY_REQUIRED"):
+            await dispatcher.dispatch(
+                context=DispatchContext(
+                    run_id="run-no-authority",
+                    intent=RunIntent.VERIFY,
+                    case_entry=ActionEntry.WEB,
+                ),
+                action_id="voip.account.configure",
+                purpose=ActionPurpose.TEST,
+                args={},
+            )
 
     asyncio.run(scenario())
 
@@ -458,36 +494,46 @@ def test_orchestrator_terminal_paths_always_cleanup_and_assertion_decides_verdic
         async def precheck(context):
             return PrecheckResult(precheck_ok, None if precheck_ok else "NO_RESOURCE")
 
+        async def reserve(context):
+            return object()
+
+        recorder = InMemoryRuntimeRecorder()
         orchestrator = AutomationOrchestrator(
             dispatcher=_web_dispatcher(result, unknown=unknown),
             events=InMemoryEventBus(),
             assertions=AssertionEngine(),
             cleanup=_build_cleanup(cleanup_log),
-            hooks=RuntimeHooks(precheck=precheck),
+            hooks=RuntimeHooks(precheck=precheck, reserve=reserve),
+            recorder=recorder,
         )
         outcome = await orchestrator.run(
             parse_test_case(_raw_case()),
             run_id=f"run-{result}-{unknown}-{precheck_ok}",
             worker_id="worker-1",
         )
-        return outcome, cleanup_log
+        return outcome, cleanup_log, recorder
 
-    passed, pass_cleanup = asyncio.run(run_case("accepted"))
+    passed, pass_cleanup, pass_recorder = asyncio.run(run_case("accepted"))
     assert passed.verdict == TestVerdict.PASS
     assert passed.state == AutomationRunState.PASSED
     assert pass_cleanup == ["restore", "release"]
+    assert pass_recorder.steps[0]["purpose"] == "test"
+    assert pass_recorder.steps[0]["route"]["entry"] == "web"
+    assert pass_recorder.steps[0]["route"]["transport"] == "http_api"
+    assert pass_recorder.assertions[0]["evidence_refs"] == ["ev-entry"]
+    assert pass_recorder.finals[0]["verdict"] == "PASS"
 
-    failed, fail_cleanup = asyncio.run(run_case("rejected"))
+    failed, fail_cleanup, fail_recorder = asyncio.run(run_case("rejected"))
     assert failed.verdict == TestVerdict.FAIL
     assert failed.state == AutomationRunState.FAILED
     assert fail_cleanup == ["restore", "release"]
 
-    unknown, unknown_cleanup = asyncio.run(run_case("accepted", unknown=True))
+    unknown, unknown_cleanup, unknown_recorder = asyncio.run(run_case("accepted", unknown=True))
     assert unknown.verdict == TestVerdict.INCONCLUSIVE
     assert unknown.state == AutomationRunState.INCONCLUSIVE
     assert unknown_cleanup == ["restore", "release"]
 
-    blocked, blocked_cleanup = asyncio.run(run_case("accepted", precheck_ok=False))
+    blocked, blocked_cleanup, blocked_recorder = asyncio.run(run_case("accepted", precheck_ok=False))
     assert blocked.verdict == TestVerdict.BLOCKED
     assert blocked.state == AutomationRunState.BLOCKED
     assert blocked_cleanup == ["restore", "release"]

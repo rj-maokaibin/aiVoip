@@ -128,6 +128,8 @@ class ActionDispatcher:
             case_entry=context.case_entry,
         )
         route = binding.route
+        if binding.mutates and context.authority_token is None:
+            raise ActionDispatchError("MUTATION_AUTHORITY_REQUIRED")
         if purpose == ActionPurpose.TEST and context.case_entry != ActionEntry.NONE:
             if route.entry != context.case_entry:
                 raise ActionDispatchError("TEST_PATH_ENTRY_MISMATCH")
