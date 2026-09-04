@@ -1,0 +1,32 @@
+name: Production Wrapper Predecessor Manifest Refresh
+
+on:
+  push:
+    branches:
+      - fix/production-wrapper-predecessor
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/production-wrapper-predecessor
+          fetch-depth: 0
+      - name: Refresh final source manifest and remove temporary workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/source_manifest_gate.py --update
+          python3 tools/source_manifest_gate.py
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git rm .github/workflows/production-wrapper-predecessor-manifest-refresh.yml
+          git add release/source_manifest.json
+          git diff --cached --check
+          git commit -m 'Refresh source manifest for production wrapper predecessor'
+          git push origin HEAD:fix/production-wrapper-predecessor
