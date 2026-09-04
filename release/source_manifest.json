@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "file_count": 692,
-  "aggregate_sha256": "bd60d5701b3eeec0e071d715b7c3641ae48456d4fa69cc34b73f5f99e8cdc0e2",
+  "aggregate_sha256": "408ae7eef04068de5f95311bd95a5c6cd802765768f514d68389537a3f4c182f",
   "files": [
     {
       "path": ".env.example",
@@ -2560,8 +2560,8 @@
     },
     {
       "path": "deploy/evidence_v2_rollout.json",
-      "size": 343,
-      "sha256": "6b52b6f483cf44a4f799ce27720eefc9d3e4d569894c6d0fa3aad3299df4618d"
+      "size": 395,
+      "sha256": "5008a90cb0301c5fe8489210537a698db0f432bb42998ad67a996b6231c8cca7"
     },
     {
       "path": "deploy/exact_source_binding_gate.py",
