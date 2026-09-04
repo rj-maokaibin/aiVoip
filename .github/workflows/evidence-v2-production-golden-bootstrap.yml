@@ -7,6 +7,7 @@ on:
     paths:
       - 'tools/evidence_v2_production_golden_bootstrap.py'
       - 'tools/evidence_v2_bootstrap_workflow_contract.py'
+      - 'tools/human_evidence_feishu_live_acceptance.py'
       - 'tools/source_manifest_gate.py'
       - 'release/source_manifest.json'
       - '.github/workflows/evidence-v2-production-golden-bootstrap.yml'
@@ -35,7 +36,7 @@ jobs:
       - name: Validate bootstrap source contract
         run: |
           set -euo pipefail
-          python3 -m py_compile tools/evidence_v2_production_golden_bootstrap.py tools/evidence_v2_bootstrap_workflow_contract.py
+          python3 -m py_compile tools/evidence_v2_production_golden_bootstrap.py tools/evidence_v2_bootstrap_workflow_contract.py tools/human_evidence_feishu_live_acceptance.py
           python3 tools/evidence_v2_bootstrap_workflow_contract.py
           python3 - <<'PY'
           from pathlib import Path
@@ -223,17 +224,22 @@ jobs:
           result="$RUNNER_TEMP/evidence-v2-production-golden-bootstrap.json"
           in_pcap=/tmp/evidence-v2-production-real-golden-001.pcap
           in_script=/tmp/evidence-v2-production-golden-bootstrap.py
+          in_helper=/tmp/human_evidence_feishu_live_acceptance.py
           in_result=/tmp/evidence-v2-production-golden-bootstrap.json
+          helper_sha="$(sha256sum tools/human_evidence_feishu_live_acceptance.py | awk '{print $1}')"
           docker cp "$VERIFIED_GOLDEN_PCAP" "$BACKEND_CID:$in_pcap"
           docker cp tools/evidence_v2_production_golden_bootstrap.py "$BACKEND_CID:$in_script"
+          docker cp tools/human_evidence_feishu_live_acceptance.py "$BACKEND_CID:$in_helper"
           cleanup() {
-            docker exec "$BACKEND_CID" rm -f "$in_pcap" "$in_script" "$in_result" >/dev/null 2>&1 || true
+            docker exec "$BACKEND_CID" rm -f "$in_pcap" "$in_script" "$in_helper" "$in_result" >/dev/null 2>&1 || true
           }
           trap cleanup EXIT
           test "$(docker exec "$BACKEND_CID" sha256sum "$in_pcap" | awk '{print $1}')" = "$GOLDEN_SHA256"
+          test "$(docker exec "$BACKEND_CID" sha256sum "$in_helper" | awk '{print $1}')" = "$helper_sha"
+          echo "EVIDENCE_V2_GOLDEN_BOOTSTRAP_HELPER_BINDING=PASS sha256=$helper_sha"
           set +e
           docker exec \
-            -e PYTHONPATH=/app:/tools \
+            -e PYTHONPATH=/tmp:/app:/tools \
             "$BACKEND_CID" python "$in_script" \
             --pcap "$in_pcap" \
             --expected-revision "$EXPECTED_SHA" \
