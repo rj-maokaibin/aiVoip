@@ -57,7 +57,7 @@ def test_authoritative_workflows_use_derived_manifest_artifact() -> None:
     assert "release/source_manifest.json" not in production
 
 
-def test_full_acceptance_reuses_one_python_runtime_and_bounds_npm() -> None:
+def test_full_acceptance_reuses_one_python_runtime_and_bounds_network() -> None:
     workflow = (ROOT / ".github/workflows/prd-spec-v1-release.yml").read_text(encoding="utf-8")
     release_gate = (ROOT / "tools/voip_ai_release_gate.sh").read_text(encoding="utf-8")
     frozen_gate = (ROOT / "tools/preliminary_evidence_v1_gate.sh").read_text(encoding="utf-8")
@@ -75,3 +75,27 @@ def test_full_acceptance_reuses_one_python_runtime_and_bounds_npm() -> None:
     assert "npm ci --prefer-offline --no-audit --no-fund" in helper
     assert "npm audit --audit-level=low" in helper
     assert "PERF_PHASE_V3" in (ROOT / "tools/cicd_performance_v3.py").read_text(encoding="utf-8")
+
+
+def test_frontend_acceptance_is_exact_sha_github_hosted_and_reused() -> None:
+    workflow = (ROOT / ".github/workflows/prd-spec-v1-release.yml").read_text(encoding="utf-8")
+    release_gate = (ROOT / "tools/voip_ai_release_gate.sh").read_text(encoding="utf-8")
+
+    assert "frontend-acceptance:" in workflow
+    frontend_section = workflow.split("  frontend-acceptance:", 1)[1].split("  full-software-acceptance:", 1)[0]
+    assert "runs-on: ubuntu-latest" in frontend_section
+    assert "ref: ${{ env.EXPECTED_SHA }}" in frontend_section
+    assert "frontend-acceptance-${{ env.EXPECTED_SHA }}" in frontend_section
+    assert "ci_npm_ci" in frontend_section
+    assert "ci_npm_audit" in frontend_section
+    assert "FRONTEND_ACCEPTANCE=PASS" in frontend_section
+
+    full_section = workflow.split("  full-software-acceptance:", 1)[1]
+    assert "needs.frontend-acceptance.result == 'success'" in full_section
+    assert "Download exact-SHA frontend acceptance evidence" in full_section
+    assert "FRONTEND_ACCEPTANCE_EVIDENCE=PASS source=GITHUB_HOSTED" in full_section
+
+    assert "FRONTEND_ACCEPTANCE_EVIDENCE=PASS" in release_gate
+    assert "frontend_acceptance_result.json" in release_gate
+    assert "npm ci" not in release_gate
+    assert "npm audit" not in release_gate
