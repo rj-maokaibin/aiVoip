@@ -1,0 +1,76 @@
+name: Evidence V2 DEFAULT manifest refresh
+
+on:
+  pull_request:
+    branches: [master]
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    if: github.event.pull_request.head.ref == 'promote/evidence-v2-default'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - name: Validate DEFAULT immutable runtime contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          p = json.loads(Path('deploy/evidence_v2_rollout.json').read_text(encoding='utf-8'))
+          assert p['schema_version'] == 'evidence-v2-production-rollout-v1'
+          assert p['stage'] == 'DEFAULT'
+          assert p['strict_validator'] is True
+          assert p['default_projection'] == 'V2'
+          assert p['canary_selector'] == 'BOUND_REAL_GOLDEN_001'
+          dockerfile = Path('backend/Dockerfile').read_text(encoding='utf-8')
+          assert 'PRELIMINARY_EVIDENCE_V2_PROJECT=false' in dockerfile
+          runtime = Path('deploy/runtime_env.py').read_text(encoding='utf-8')
+          contract = Path('backend/tests/test_evidence_v2_production_rollout_contract.py').read_text(encoding='utf-8')
+          assert 'EVIDENCE_V2_PROJECT_RE' in runtime
+          assert 'assert "EVIDENCE_V2_PROJECT_RE" in runtime_env' in contract
+          assert 'PRELIMINARY_EVIDENCE_V2_PROJECT_RE' not in contract
+          assert 'persistent_project_entries_ignored' in runtime
+          assert 'stage == "DEFAULT"' in runtime
+          PY
+          python3 -m py_compile deploy/runtime_env.py backend/tests/test_evidence_v2_production_rollout_contract.py backend/tests/test_evidence_v2_runtime_env_rollout.py
+
+          base="$(mktemp)"
+          out="$(mktemp)"
+          trap 'rm -f "$base" "$out"' EXIT
+          cat >"$base" <<'EOF'
+          PRELIMINARY_EVIDENCE_V2_COMPOSE=true
+          PRELIMINARY_EVIDENCE_V2_STRICT_VALIDATOR=true
+          PRELIMINARY_EVIDENCE_V2_PROJECT=false
+          BUILD_REVISION=0000000000000000000000000000000000000000
+          EOF
+          chmod 600 "$base"
+          before="$(sha256sum "$base" | awk '{print $1}')"
+          head="$(git rev-parse HEAD)"
+          python3 deploy/runtime_env.py --base-env "$base" --revision "$head" --out "$out"
+          grep -qx 'PRELIMINARY_EVIDENCE_V2_PROJECT=true' "$out"
+          test "$(grep -c '^PRELIMINARY_EVIDENCE_V2_PROJECT=' "$out")" = 1
+          test "$(sha256sum "$base" | awk '{print $1}')" = "$before"
+          test "$(stat -c '%a' "$out")" = 600
+
+      - name: Refresh governed source manifest and remove helper workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git checkout '${{ github.event.pull_request.head.ref }}'
+          rm -f .github/workflows/evidence-v2-default-manifest-refresh.yml
+          python3 tools/source_manifest_gate.py --update
+          python3 tools/source_manifest_gate.py
+          git add release/source_manifest.json .github/workflows/evidence-v2-default-manifest-refresh.yml
+          git commit -m 'Refresh source manifest after DEFAULT contract typo fix'
+          git push origin HEAD:'${{ github.event.pull_request.head.ref }}'
