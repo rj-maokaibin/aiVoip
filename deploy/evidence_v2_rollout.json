@@ -1,8 +1,8 @@
 {
   "schema_version": "evidence-v2-production-rollout-v1",
-  "stage": "SHADOW",
+  "stage": "CANARY",
   "canary_selector": "BOUND_REAL_GOLDEN_001",
   "strict_validator": true,
   "default_projection": "V1",
-  "description": "Production composes Canonical V2 in shadow while user-visible projection remains V1. Canary/default transitions are exact-source commits."
+  "description": "Production keeps the global user-visible projection on V1 while Canonical V2 is promoted only for the exact bound Real Golden #001 canary. Default transition remains an exact-source commit."
 }
