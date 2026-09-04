@@ -60,7 +60,19 @@ jobs:
       GOLDEN_PCAP: /tmp/tcpdump-2026-08-14.pcap
       GOLDEN_SHA256: b038aa7c9a0644581f2815f654fcdee4620860796382265b178823fccba2e3f0
     steps:
-      - uses: actions/checkout@v4
+      - name: Repair self-hosted workspace before checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker info >/dev/null
+          docker image inspect python:3.12-slim >/dev/null
+          docker run --rm -v "$GITHUB_WORKSPACE:/workspace" python:3.12-slim \
+            sh -lc 'find /workspace -mindepth 1 -maxdepth 1 -exec rm -rf {} +'
+          test -z "$(find "$GITHUB_WORKSPACE" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null)"
+          echo "EVIDENCE_V2_GOLDEN_BOOTSTRAP_RUNNER_WORKSPACE_REPAIR=PASS"
+
+      - name: Checkout exact bootstrap source
+        uses: actions/checkout@v4
         with:
           ref: ${{ env.EXPECTED_SHA }}
           fetch-depth: 1
@@ -172,3 +184,19 @@ jobs:
           path: validation/evidence_v2_production_golden_bootstrap.json
           if-no-files-found: warn
           retention-days: 14
+
+      - name: Restore self-hosted runner workspace ownership
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          uid="$(id -u)"
+          gid="$(id -g)"
+          docker image inspect python:3.12-slim >/dev/null
+          docker run --rm -v "$GITHUB_WORKSPACE:/workspace" python:3.12-slim \
+            sh -lc "find /workspace -type d \( -name __pycache__ -o -name .pytest_cache \) -prune -exec rm -rf {} +; chown -R $uid:$gid /workspace"
+          if [ -e "$GITHUB_WORKSPACE/.git/index" ]; then
+            test -w "$GITHUB_WORKSPACE/.git/index"
+            test "$(stat -c '%u:%g' "$GITHUB_WORKSPACE/.git/index")" = "$uid:$gid"
+          fi
+          echo "EVIDENCE_V2_GOLDEN_BOOTSTRAP_RUNNER_WORKSPACE_RESTORE=PASS"
