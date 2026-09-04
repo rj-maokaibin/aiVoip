@@ -25,9 +25,6 @@ trap cleanup EXIT INT TERM
 
 need "$PYTHON_BIN"
 need docker
-need npm
-need curl
-need timeout
 
 docker info >/dev/null 2>&1 || fail "Docker daemon is not available"
 
@@ -93,14 +90,32 @@ log "9/11 Full backend regression"
 ci_run_timed full_backend_regression pytest -q backend/tests --tb=line
 log "10/11 Preliminary Evidence Report software gate"
 ci_run_timed evidence_report_release_gate python tools/evidence_report_release_gate.py --skip-tests
-log "11/11 Frontend dependency audit and production build"
-pushd frontend >/dev/null
-ci_npm_ci
-ci_npm_audit
-ci_run_timed frontend_build npm run build
-test -s dist/index.html
-test -s dist/evidence-report.html
-popd >/dev/null
+log "11/11 Verify exact-SHA frontend dependency audit and production build evidence"
+start_ms="$(ci_now_ms)"
+python3 - <<'PY'
+import hashlib
+import json
+import os
+from pathlib import Path
+
+path = Path("validation/frontend_acceptance_result.json")
+assert path.is_file(), "frontend acceptance evidence missing"
+payload = json.loads(path.read_text(encoding="utf-8"))
+expected = os.environ.get("EXPECTED_SHA", "")
+lock_sha = hashlib.sha256(Path("frontend/package-lock.json").read_bytes()).hexdigest()
+assert payload.get("schema_version") == "frontend-acceptance-v1", payload
+assert payload.get("passed") is True, payload
+assert payload.get("revision") == expected, payload
+assert payload.get("package_lock_sha256") == lock_sha, payload
+assert payload.get("npm_audit_passed") is True, payload
+assert payload.get("production_build_passed") is True, payload
+print(
+    "FRONTEND_ACCEPTANCE_EVIDENCE=PASS "
+    f"revision={expected} lock_sha256={lock_sha} source=GITHUB_HOSTED"
+)
+PY
+end_ms="$(ci_now_ms)"
+ci_record_perf frontend_acceptance_evidence_verify PASS "$((end_ms-start_ms))" "source=GITHUB_HOSTED"
 python3 tools/cicd_performance_v3.py --out "${CICD_PERFORMANCE_V3_EVIDENCE:-validation/cicd_performance_v3.json}" summary
 
 printf '\n=============================================\nVOIP AI SOFTWARE RELEASE GATE: PASS\n'
