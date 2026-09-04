@@ -3,10 +3,12 @@ set -Eeuo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
+# shellcheck source=tools/ci_dependency_runtime.sh
+source tools/ci_dependency_runtime.sh
 
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 VENV_BASE="${RUNNER_TEMP:-/tmp}"
-VENV_DIR="${PRELIMINARY_EVIDENCE_V1_VENV:-$VENV_BASE/voip-ai-preliminary-evidence-v1}"
+VENV_DIR="${PRELIMINARY_EVIDENCE_V1_VENV:-${VOIP_AI_GATE_VENV:-$VENV_BASE/voip-ai-acceptance-runtime}}"
 
 TESTS=(
   backend/tests/test_prd_spec_v1_alignment.py
@@ -27,14 +29,11 @@ printf 'PRELIMINARY_EVIDENCE_V1_GATE_HEAD=%s\n' "$(git rev-parse HEAD)"
 printf 'PRELIMINARY_EVIDENCE_V1_GATE_PYTHON=%s\n' "$($PYTHON_BIN --version 2>&1)"
 printf 'PRELIMINARY_EVIDENCE_V1_GATE_VENV=%s\n' "$VENV_DIR"
 
-if [[ ! -x "$VENV_DIR/bin/python" ]]; then
-  "$PYTHON_BIN" -m venv "$VENV_DIR"
-fi
+ci_prepare_python_runtime "$VENV_DIR" backend/requirements.txt
+# shellcheck disable=SC1090
 source "$VENV_DIR/bin/activate"
-python -m pip install --upgrade pip
-python -m pip install -r backend/requirements.txt
 
 export PYTHONPATH="backend:${PYTHONPATH:-}"
-python -m compileall -q backend/app "${TESTS[@]}"
-python -m pytest -q "${TESTS[@]}"
+ci_run_timed frozen_contract_compile python -m compileall -q backend/app "${TESTS[@]}"
+ci_run_timed frozen_contract_tests python -m pytest -q "${TESTS[@]}"
 printf 'PRELIMINARY_EVIDENCE_V1_GATE=PASS\n'
