@@ -89,7 +89,12 @@ def _exact_successful_analyzers(db, *, case_id: str, evidence_id: str) -> set[st
     }
 
 
-def _existing_binding(db, *, case_id: str) -> tuple[FeishuEvidenceDocumentBinding, PreliminaryEvidenceReport] | None:
+def _existing_binding(
+    db,
+    *,
+    case_id: str,
+    evidence_id: str,
+) -> tuple[FeishuEvidenceDocumentBinding, PreliminaryEvidenceReport] | None:
     binding = db.scalar(select(FeishuEvidenceDocumentBinding).where(
         FeishuEvidenceDocumentBinding.case_id == case_id,
         FeishuEvidenceDocumentBinding.document_id.is_not(None),
@@ -100,10 +105,18 @@ def _existing_binding(db, *, case_id: str) -> tuple[FeishuEvidenceDocumentBindin
     report = db.get(PreliminaryEvidenceReport, binding.projected_report_id)
     if report is None or str(report.case_id) != str(case_id):
         raise RuntimeError("EVIDENCE_V2_GOLDEN_BASELINE_REPORT_BINDING_INVALID")
+
+    # A prior failed bootstrap can legitimately leave a projected document binding
+    # while the exact Golden evidence or one of its required analyzer runs is still
+    # incomplete. That is a recoverable partial bootstrap state, not a valid final
+    # baseline and not a structural binding corruption. Return None so run() repairs
+    # the missing evidence/analyzers, regenerates the report, reprojects the same
+    # case, and performs a fresh remote read-back.
     if not _case_has_exact_golden(db, case_id):
-        raise RuntimeError("EVIDENCE_V2_GOLDEN_BASELINE_EXACT_EVIDENCE_MISSING")
-    if not _case_has_required_analyzers(db, case_id):
-        raise RuntimeError("EVIDENCE_V2_GOLDEN_BASELINE_ANALYZERS_MISSING")
+        return None
+    exact_analyzers = _exact_successful_analyzers(db, case_id=case_id, evidence_id=evidence_id)
+    if set(REQUIRED_ANALYZERS) - exact_analyzers:
+        return None
     return binding, report
 
 
@@ -228,7 +241,12 @@ async def run(*, pcap: Path, expected_revision: str) -> dict:
             )
             case_created = True
 
-        existing = _existing_binding(db, case_id=str(case.id))
+        evidence, evidence_created = _ensure_evidence(db, case=case, pcap=pcap)
+        existing = _existing_binding(
+            db,
+            case_id=str(case.id),
+            evidence_id=str(evidence.id),
+        )
         if existing is not None:
             binding, report = existing
             selected_binding, selected_report = _select_bound_golden(db)
@@ -243,7 +261,8 @@ async def run(*, pcap: Path, expected_revision: str) -> dict:
                 "golden_sha256": REAL_GOLDEN_001_SHA256,
                 "case_id": case.id,
                 "case_created": False,
-                "evidence_created": False,
+                "evidence_id": evidence.id,
+                "evidence_created": evidence_created,
                 "analyzer_refresh_components": [],
                 "report_id": report.id,
                 "report_version": report.version,
@@ -254,10 +273,14 @@ async def run(*, pcap: Path, expected_revision: str) -> dict:
                 "baseline_remote_readback": "PREVIOUSLY_VERIFIED",
             }
 
-        evidence, evidence_created = _ensure_evidence(db, case=case, pcap=pcap)
         analyzer_components = _ensure_analyzers(db, case_id=str(case.id), evidence_id=str(evidence.id))
         db.expire_all()
-        if not _case_has_exact_golden(db, str(case.id)) or not _case_has_required_analyzers(db, str(case.id)):
+        exact_analyzers = _exact_successful_analyzers(
+            db,
+            case_id=str(case.id),
+            evidence_id=str(evidence.id),
+        )
+        if not _case_has_exact_golden(db, str(case.id)) or set(REQUIRED_ANALYZERS) - exact_analyzers:
             raise RuntimeError("EVIDENCE_V2_GOLDEN_BASELINE_PRE_REPORT_CONTRACT_FAILED")
 
         report, payload, _ = generate_evidence_report(
