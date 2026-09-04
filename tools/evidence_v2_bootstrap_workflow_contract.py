@@ -22,25 +22,29 @@ def main() -> int:
         "NO_BOUND_REAL_GOLDEN_001_CASE_EVIDENCE",
         "EVIDENCE_V2_AUTO_BOOTSTRAP_QUALIFICATION=PASS",
         "github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha",
-        "Repair self-hosted workspace before checkout",
-        "EVIDENCE_V2_GOLDEN_BOOTSTRAP_RUNNER_WORKSPACE_REPAIR=PASS",
-        "Checkout exact bootstrap source",
+        "Verify self-hosted production workspace without mutation",
+        "EVIDENCE_V2_GOLDEN_BOOTSTRAP_PRODUCTION_WORKSPACE_BINDING=PASS",
         "python3 tools/source_manifest_gate.py",
         "tools/human_evidence_feishu_live_acceptance.py",
         "BOUND_REAL_GOLDEN_001",
         "strict_validator",
         "default_projection",
         "Verify exact production runtime is already promoted",
+        "EVIDENCE_V2_GOLDEN_BOOTSTRAP_PROFILE_BINDING=PASS",
+        "profiles/analyzers/voip_v1.yaml|/app/profiles/analyzers/voip_v1.yaml",
+        "profiles/pcm/ruijie_aim_diag_v1.yaml|/app/profiles/pcm/ruijie_aim_diag_v1.yaml",
+        "tools/evidence_v2_production_golden_bootstrap.py|/tools/evidence_v2_production_golden_bootstrap.py",
+        "tools/human_evidence_feishu_live_acceptance.py|/tools/human_evidence_feishu_live_acceptance.py",
         "REAL_OFFLINE_GOLDEN_001_SOURCE_IDENTITY=PASS",
         "GOLDEN_SHA256: b038aa7c9a0644581f2815f654fcdee4620860796382265b178823fccba2e3f0",
         "Bootstrap dedicated production baseline",
         "in_helper=/tmp/human_evidence_feishu_live_acceptance.py",
-        "docker cp tools/human_evidence_feishu_live_acceptance.py \"$BACKEND_CID:$in_helper\"",
+        "docker cp \"$helper_path\" \"$BACKEND_CID:$in_helper\"",
         "EVIDENCE_V2_GOLDEN_BOOTSTRAP_HELPER_BINDING=PASS",
         "-e PYTHONPATH=/tmp:/app:/tools",
         "Upload sanitized bootstrap evidence",
-        "Restore self-hosted runner workspace ownership",
-        "EVIDENCE_V2_GOLDEN_BOOTSTRAP_RUNNER_WORKSPACE_RESTORE=PASS",
+        "Clean bootstrap scratch without mutating production workspace",
+        "EVIDENCE_V2_GOLDEN_BOOTSTRAP_SCRATCH_CLEANUP=PASS production_workspace_mutated=false",
     ]
     missing = [item for item in required if item not in text]
     assert not missing, f"missing workflow contract markers: {missing}"
@@ -57,25 +61,52 @@ def main() -> int:
     )
 
     ordered = [
-        "Repair self-hosted workspace before checkout",
-        "Checkout exact bootstrap source",
+        "Verify self-hosted production workspace without mutation",
         "Verify exact source and SHADOW governance",
         "Verify exact production runtime is already promoted",
         "Verify reviewed Real Golden 001 fixture",
         "Bootstrap dedicated production baseline",
         "Upload sanitized bootstrap evidence",
-        "Restore self-hosted runner workspace ownership",
+        "Clean bootstrap scratch without mutating production workspace",
     ]
     positions = [text.index(item) for item in ordered]
     assert positions == sorted(positions), f"workflow step order changed: {ordered}"
 
-    helper_copy_pos = text.index("docker cp tools/human_evidence_feishu_live_acceptance.py")
+    bootstrap_pos = text.index("  bootstrap:")
+    bootstrap_text = text[bootstrap_pos:]
+    forbidden_bootstrap_mutations = [
+        "Repair self-hosted workspace before checkout",
+        "find /workspace -mindepth 1 -maxdepth 1 -exec rm -rf",
+        "chown -R $uid:$gid /workspace",
+        "Checkout exact bootstrap source",
+        "uses: actions/checkout@v4",
+    ]
+    present_forbidden = [item for item in forbidden_bootstrap_mutations if item in bootstrap_text]
+    assert not present_forbidden, (
+        "bootstrap must not mutate or replace the production bind-mount workspace: "
+        f"{present_forbidden}"
+    )
+
+    workspace_pos = text.index("EVIDENCE_V2_GOLDEN_BOOTSTRAP_PRODUCTION_WORKSPACE_BINDING=PASS")
+    runtime_pos = text.index("EVIDENCE_V2_GOLDEN_BOOTSTRAP_RUNTIME_BINDING=PASS")
+    profile_pos = text.index("EVIDENCE_V2_GOLDEN_BOOTSTRAP_PROFILE_BINDING=PASS")
+    exec_pos = text.index("-e PYTHONPATH=/tmp:/app:/tools")
+    assert workspace_pos < profile_pos < runtime_pos < exec_pos, (
+        "exact production workspace and live bind mounts must be verified before bootstrap execution"
+    )
+
+    helper_copy_pos = text.index("docker cp \"$helper_path\"")
     helper_binding_pos = text.index("EVIDENCE_V2_GOLDEN_BOOTSTRAP_HELPER_BINDING=PASS")
-    bootstrap_exec_pos = text.index("-e PYTHONPATH=/tmp:/app:/tools")
-    assert helper_copy_pos < helper_binding_pos < bootstrap_exec_pos, (
+    assert helper_copy_pos < helper_binding_pos < exec_pos, (
         "bootstrap helper must be copied, digest-bound, then exposed through controlled PYTHONPATH before execution"
     )
     assert "sha256sum \"$in_helper\"" in text, "bootstrap helper digest must be verified inside production runtime"
+
+    assert "git_safe rev-parse HEAD" in text
+    assert "git_safe rev-parse refs/remotes/origin/master" in text
+    assert "git_safe status --porcelain --untracked-files=no" in text
+    assert "runtime_sha=\"$(docker exec \"$cid\" sha256sum \"$runtime_path\"" in text
+    assert "test \"$runtime_sha\" = \"$host_sha\"" in text
 
     assert "runtime.get('checks_passed') == runtime.get('checks_total') == 9" in text
     assert "exact.get('passed') is True" in text
@@ -83,9 +114,9 @@ def main() -> int:
     assert "acceptance.get('stage') == 'SHADOW'" in text
     assert "needs.qualify-auto-bootstrap.result == 'success'" in text
 
-    restore_pos = text.index("Restore self-hosted runner workspace ownership")
-    restore_block = text[restore_pos : restore_pos + 260]
-    assert "if: always()" in restore_block, "runner ownership restore must always execute"
+    cleanup_pos = text.index("Clean bootstrap scratch without mutating production workspace")
+    cleanup_block = text[cleanup_pos : cleanup_pos + 260]
+    assert "if: always()" in cleanup_block, "bootstrap scratch cleanup must always execute"
 
     print("EVIDENCE_V2_BOOTSTRAP_WORKFLOW_CONTRACT=PASS")
     return 0
