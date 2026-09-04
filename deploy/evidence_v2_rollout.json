@@ -1,8 +1,8 @@
 {
   "schema_version": "evidence-v2-production-rollout-v1",
-  "stage": "CANARY",
+  "stage": "DEFAULT",
   "canary_selector": "BOUND_REAL_GOLDEN_001",
   "strict_validator": true,
-  "default_projection": "V1",
-  "description": "Production keeps the global user-visible projection on V1 while Canonical V2 is promoted only for the exact bound Real Golden #001 canary. Default transition remains an exact-source commit."
+  "default_projection": "V2",
+  "description": "Production promotes Canonical Evidence V2 as the global user-visible projection. The exact bound Real Golden #001 remains the release acceptance anchor, strict semantic validation stays mandatory, and the transition is source-controlled through this exact commit."
 }
