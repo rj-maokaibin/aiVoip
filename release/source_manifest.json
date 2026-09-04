@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "file_count": 692,
-  "aggregate_sha256": "e64e3dadbee4c9f38d8c56f1dbf8067f536a3e236fb83c51d115955fe2795f65",
+  "aggregate_sha256": "bd60d5701b3eeec0e071d715b7c3641ae48456d4fa69cc34b73f5f99e8cdc0e2",
   "files": [
     {
       "path": ".env.example",
@@ -3210,8 +3210,8 @@
     },
     {
       "path": "tools/evidence_v2_bootstrap_workflow_contract.py",
-      "size": 6215,
-      "sha256": "dc8fa70f484dcc9fc44178f858fb1e057d15d39aa114e7103ba51c26571d20a7"
+      "size": 8166,
+      "sha256": "4b2f4a3ded7d5bd370b3f8f5f0e9f2205971f201b39fa7d5f2656a99ba9bc1ce"
     },
     {
       "path": "tools/evidence_v2_production_acceptance.py",
@@ -3220,8 +3220,8 @@
     },
     {
       "path": "tools/evidence_v2_production_golden_bootstrap.py",
-      "size": 14699,
-      "sha256": "df28d2cb0c98f0c05b5287446f89102f82b38baf07b9500986c617b23162d887"
+      "size": 15460,
+      "sha256": "310aa87868fd848a56f46cf601c8722b779b9b8e54b2f0388401427706cab9c9"
     },
     {
       "path": "tools/export_ai_eval_dataset.py",

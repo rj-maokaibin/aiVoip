@@ -5,10 +5,12 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW = ROOT / ".github" / "workflows" / "evidence-v2-production-golden-bootstrap.yml"
+BOOTSTRAP = ROOT / "tools" / "evidence_v2_production_golden_bootstrap.py"
 
 
 def main() -> int:
     text = WORKFLOW.read_text(encoding="utf-8")
+    bootstrap = BOOTSTRAP.read_text(encoding="utf-8")
     required = [
         "workflow_dispatch:",
         "workflow_run:",
@@ -117,6 +119,31 @@ def main() -> int:
     cleanup_pos = text.index("Clean bootstrap scratch without mutating production workspace")
     cleanup_block = text[cleanup_pos : cleanup_pos + 260]
     assert "if: always()" in cleanup_block, "bootstrap scratch cleanup must always execute"
+
+    bootstrap_required = [
+        "def _existing_binding(\n    db,\n    *,\n    case_id: str,\n    evidence_id: str,",
+        "exact_analyzers = _exact_successful_analyzers(db, case_id=case_id, evidence_id=evidence_id)",
+        "if set(REQUIRED_ANALYZERS) - exact_analyzers:\n        return None",
+        "evidence, evidence_created = _ensure_evidence(db, case=case, pcap=pcap)",
+        "existing = _existing_binding(\n            db,\n            case_id=str(case.id),\n            evidence_id=str(evidence.id),",
+        "analyzer_components = _ensure_analyzers(db, case_id=str(case.id), evidence_id=str(evidence.id))",
+        "exact_analyzers = _exact_successful_analyzers(\n            db,\n            case_id=str(case.id),\n            evidence_id=str(evidence.id),",
+    ]
+    missing_bootstrap = [item for item in bootstrap_required if item not in bootstrap]
+    assert not missing_bootstrap, f"missing partial-recovery bootstrap contract markers: {missing_bootstrap}"
+    evidence_pos = bootstrap.index("evidence, evidence_created = _ensure_evidence")
+    binding_pos = bootstrap.index("existing = _existing_binding")
+    analyzer_pos = bootstrap.index("analyzer_components = _ensure_analyzers")
+    assert evidence_pos < binding_pos < analyzer_pos, (
+        "bootstrap must materialize exact Golden evidence before deciding whether an existing binding is reusable, "
+        "and must repair missing exact analyzers before report reprojection"
+    )
+    assert "EVIDENCE_V2_GOLDEN_BASELINE_ANALYZERS_MISSING" not in bootstrap, (
+        "missing analyzers on an otherwise structurally valid binding are a recoverable partial bootstrap state"
+    )
+    assert "EVIDENCE_V2_GOLDEN_BASELINE_REPORT_BINDING_INVALID" in bootstrap, (
+        "structurally invalid report bindings must remain fail-closed"
+    )
 
     print("EVIDENCE_V2_BOOTSTRAP_WORKFLOW_CONTRACT=PASS")
     return 0
