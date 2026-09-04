@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "file_count": 692,
-  "aggregate_sha256": "408ae7eef04068de5f95311bd95a5c6cd802765768f514d68389537a3f4c182f",
+  "aggregate_sha256": "398425ce2ab95849c5a2edff0dae028d0b362408e8a412ac8a3eaf6427b40529",
   "files": [
     {
       "path": ".env.example",
@@ -2560,8 +2560,8 @@
     },
     {
       "path": "deploy/evidence_v2_rollout.json",
-      "size": 395,
-      "sha256": "5008a90cb0301c5fe8489210537a698db0f432bb42998ad67a996b6231c8cca7"
+      "size": 470,
+      "sha256": "8956a238792638c2512df634d99bf551a7dcf32ef50d39959468a69974441398"
     },
     {
       "path": "deploy/exact_source_binding_gate.py",
@@ -2645,8 +2645,8 @@
     },
     {
       "path": "deploy/runtime_env.py",
-      "size": 2959,
-      "sha256": "cce27463de3deeae9062450e236a07061f4e345b68c129b0ca518d43cfc5e608"
+      "size": 5562,
+      "sha256": "5a67172c25330707c4d0107dee1e4a1473cc99f0c9939bc0ca2f3389ec513a8b"
     },
     {
       "path": "deploy/voip-ai",
