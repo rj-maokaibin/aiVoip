@@ -233,7 +233,7 @@ jobs:
           test "$(docker exec "$BACKEND_CID" sha256sum "$in_pcap" | awk '{print $1}')" = "$GOLDEN_SHA256"
           set +e
           docker exec \
-            -e PYTHONPATH=/app:/tools \
+            -e PYTHONPATH=/app:/app/tools:/tools \
             "$BACKEND_CID" python "$in_script" \
             --pcap "$in_pcap" \
             --expected-revision "$EXPECTED_SHA" \
