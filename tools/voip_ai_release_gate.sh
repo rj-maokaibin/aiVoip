@@ -86,14 +86,8 @@ start_ms="$(ci_now_ms)"
 (cd backend && alembic upgrade head)
 end_ms="$(ci_now_ms)"
 ci_record_perf clean_migration PASS "$((end_ms-start_ms))"
-log "9/11 Full backend regression (remaining files after dedicated exact-SHA gates)"
-backend_plan="${RUNNER_TEMP:-/tmp}/backend-regression-remaining-${$}.txt"
-python tools/backend_regression_remaining.py --out "$backend_plan"
-mapfile -t backend_remaining_tests < "$backend_plan"
-rm -f "$backend_plan"
-[[ "${#backend_remaining_tests[@]}" -gt 0 ]] || fail "backend regression dedup plan emitted no remaining tests"
-printf 'BACKEND_REGRESSION_REMAINING_FILES=%s\n' "${#backend_remaining_tests[@]}"
-ci_run_timed full_backend_regression pytest -q "${backend_remaining_tests[@]}" --tb=line
+log "9/11 Full backend regression"
+ci_run_timed full_backend_regression pytest -q backend/tests --tb=line
 log "10/11 Preliminary Evidence Report software gate"
 ci_run_timed evidence_report_release_gate python tools/evidence_report_release_gate.py --skip-tests
 log "11/11 Verify exact-SHA frontend dependency audit and production build evidence"
