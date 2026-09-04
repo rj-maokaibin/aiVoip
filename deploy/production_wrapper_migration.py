@@ -14,12 +14,12 @@ LEGACY_WRAPPER_SHA256 = {
     "77b2b30e448b1600a56e476dae9c359617d87706e1bf48e549ac4d4d35635edb",
 }
 
-# Exact source-controlled-v2 wrapper currently installed by PR #115. V2.2 changes
-# only the wrapper implementation (removes its redundant second verify call), so
-# production may migrate from this exact predecessor without widening sudoers or
-# accepting an arbitrary privileged host file.
+# Exact source-controlled wrapper predecessors that were previously promoted to
+# production. Migration remains fail-closed: only these reviewed digests may be
+# replaced by the current source-controlled wrapper.
 SOURCE_CONTROLLED_V2_PREDECESSOR_SHA256 = {
     "25b0aac88c7c4f09edda07e2e802e295fbb1a9d1e84639a1b7e4467f604355c0",
+    "ed785b9a6c9b019afcd9d02fb2bd9240cb39130b6d49776e76b37f59dcbdd41f",
 }
 
 ALLOWED_PREDECESSOR_SHA256 = LEGACY_WRAPPER_SHA256 | SOURCE_CONTROLLED_V2_PREDECESSOR_SHA256

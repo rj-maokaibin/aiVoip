@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "file_count": 692,
-  "aggregate_sha256": "f180691434d73cd3c02d9a11762f829aef524216049fa7099c06cdb44e5006e4",
+  "aggregate_sha256": "99178c256c9ca614aa6d783141fbc03337c0771ba3b2a1a4f325515ea6e10e96",
   "files": [
     {
       "path": ".env.example",
@@ -2635,8 +2635,8 @@
     },
     {
       "path": "deploy/production_wrapper_migration.py",
-      "size": 4631,
-      "sha256": "d928f17f96736a27a716a991b45e47723000c8cf8103989f7aefa374bb1c893e"
+      "size": 4625,
+      "sha256": "8fdbb7a4ed8c4c2b8444d3561bd1e7c8291f0c8fa4782f36ec245d7966ca0eb0"
     },
     {
       "path": "deploy/registry_connectivity_probe.py",
