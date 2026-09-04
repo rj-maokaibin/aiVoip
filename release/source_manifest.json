@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "file_count": 692,
-  "aggregate_sha256": "8223e6a31df215f75011214432eedebb35964f5dc02b363fdf80c9125c1afecc",
+  "aggregate_sha256": "f180691434d73cd3c02d9a11762f829aef524216049fa7099c06cdb44e5006e4",
   "files": [
     {
       "path": ".env.example",
@@ -2625,8 +2625,8 @@
     },
     {
       "path": "deploy/production_deploy_wrapper.sh",
-      "size": 1322,
-      "sha256": "ed785b9a6c9b019afcd9d02fb2bd9240cb39130b6d49776e76b37f59dcbdd41f"
+      "size": 3728,
+      "sha256": "932593b4a9fe6060fb0651411baca33841bef30b2632e48a43477f59dda31383"
     },
     {
       "path": "deploy/production_runtime_verify.py",
