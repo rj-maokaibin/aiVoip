@@ -28,7 +28,8 @@ jobs:
       - name: Validate bootstrap source contract
         run: |
           set -euo pipefail
-          python3 -m py_compile tools/evidence_v2_production_golden_bootstrap.py
+          python3 -m py_compile tools/evidence_v2_production_golden_bootstrap.py tools/evidence_v2_bootstrap_workflow_contract.py
+          python3 tools/evidence_v2_bootstrap_workflow_contract.py
           python3 - <<'PY'
           from pathlib import Path
           text=Path('tools/evidence_v2_production_golden_bootstrap.py').read_text(encoding='utf-8')
