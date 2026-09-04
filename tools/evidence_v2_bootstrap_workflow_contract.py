@@ -26,6 +26,7 @@ def main() -> int:
         "EVIDENCE_V2_GOLDEN_BOOTSTRAP_RUNNER_WORKSPACE_REPAIR=PASS",
         "Checkout exact bootstrap source",
         "python3 tools/source_manifest_gate.py",
+        "tools/human_evidence_feishu_live_acceptance.py",
         "BOUND_REAL_GOLDEN_001",
         "strict_validator",
         "default_projection",
@@ -33,6 +34,10 @@ def main() -> int:
         "REAL_OFFLINE_GOLDEN_001_SOURCE_IDENTITY=PASS",
         "GOLDEN_SHA256: b038aa7c9a0644581f2815f654fcdee4620860796382265b178823fccba2e3f0",
         "Bootstrap dedicated production baseline",
+        "in_helper=/tmp/human_evidence_feishu_live_acceptance.py",
+        "docker cp tools/human_evidence_feishu_live_acceptance.py \"$BACKEND_CID:$in_helper\"",
+        "EVIDENCE_V2_GOLDEN_BOOTSTRAP_HELPER_BINDING=PASS",
+        "-e PYTHONPATH=/tmp:/app:/tools",
         "Upload sanitized bootstrap evidence",
         "Restore self-hosted runner workspace ownership",
         "EVIDENCE_V2_GOLDEN_BOOTSTRAP_RUNNER_WORKSPACE_RESTORE=PASS",
@@ -63,6 +68,14 @@ def main() -> int:
     ]
     positions = [text.index(item) for item in ordered]
     assert positions == sorted(positions), f"workflow step order changed: {ordered}"
+
+    helper_copy_pos = text.index("docker cp tools/human_evidence_feishu_live_acceptance.py")
+    helper_binding_pos = text.index("EVIDENCE_V2_GOLDEN_BOOTSTRAP_HELPER_BINDING=PASS")
+    bootstrap_exec_pos = text.index("-e PYTHONPATH=/tmp:/app:/tools")
+    assert helper_copy_pos < helper_binding_pos < bootstrap_exec_pos, (
+        "bootstrap helper must be copied, digest-bound, then exposed through controlled PYTHONPATH before execution"
+    )
+    assert "sha256sum \"$in_helper\"" in text, "bootstrap helper digest must be verified inside production runtime"
 
     assert "runtime.get('checks_passed') == runtime.get('checks_total') == 9" in text
     assert "exact.get('passed') is True" in text
