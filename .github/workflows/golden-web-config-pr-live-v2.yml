@@ -1,0 +1,228 @@
+name: Golden WEB CONFIG PR Live Gate
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: golden-web-config-pr-live
+  cancel-in-progress: false
+
+jobs:
+  golden-web-config-pr-live:
+    if: >-
+      github.event.issue.pull_request != null &&
+      github.event.issue.number == 151 &&
+      github.event.comment.user.login == github.repository_owner &&
+      startsWith(github.event.comment.body, '/run-golden-web-config ')
+    runs-on: [self-hosted, linux, x64, voip-controlled-linux]
+    timeout-minutes: 30
+    env:
+      REAL_LIVE_MUTATION: EXPLICIT_ONLY
+      REPRODUCTION_PLATFORM_MODE: real
+      LIVE_ENV_FILE: /home/github-runner/.config/voip-ai/.env
+      LIVE_VENV: /tmp/voip-golden-web-config-${{ github.run_id }}-${{ github.run_attempt }}
+      LIVE_RUNTIME_ROOT: /tmp/voip-golden-web-config-runtime-${{ github.run_id }}-${{ github.run_attempt }}
+      LIVE_OUTPUT_ROOT: /tmp/voip-golden-web-config-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+      WEB_BASE_URL: https://10.48.8.74:10003
+      HOST_SECRET_FILE: /home/dev/secret.yaml
+
+    steps:
+      - name: Authorize exact current PR-D head
+        id: authorize
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TRIGGER_BODY: ${{ github.event.comment.body }}
+          TRIGGER_ACTOR: ${{ github.event.comment.user.login }}
+        run: |
+          set -euo pipefail
+          test "$TRIGGER_ACTOR" = "$GITHUB_REPOSITORY_OWNER"
+          case "$TRIGGER_BODY" in
+            '/run-golden-web-config '*) requested="${TRIGGER_BODY#'/run-golden-web-config '}" ;;
+            *) exit 64 ;;
+          esac
+          printf '%s' "$requested" | grep -Eq '^[0-9a-f]{40}$'
+          pr_json="$(curl -fsSL -H "Authorization: Bearer $GH_TOKEN" -H 'Accept: application/vnd.github+json' "https://api.github.com/repos/${GITHUB_REPOSITORY}/pulls/151")"
+          facts="$(PR_JSON="$pr_json" python3 - <<'PY'
+          import json, os
+          pr=json.loads(os.environ['PR_JSON'])
+          print(pr['head']['sha'])
+          print(pr['head']['ref'])
+          print(pr['base']['ref'])
+          print(pr['state'])
+          PY
+          )"
+          mapfile -t lines <<< "$facts"
+          test "${lines[0]:-}" = "$requested"
+          test "${lines[1]:-}" = 'feat/generic-voip-automation-v1-pr-d-web-golden'
+          test "${lines[2]:-}" = 'master'
+          test "${lines[3]:-}" = 'open'
+          printf 'TARGET_SHA=%s\n' "$requested" >> "$GITHUB_ENV"
+          printf 'PR_D_LIVE_AUTHORIZATION=PASS sha=%s\n' "$requested" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Checkout exact control-plane revision
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+
+      - name: Verify control-plane contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          python3 tools/validate_golden_web_live_control.py
+
+      - name: Repair self-hosted workspace
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker image inspect python:3.12-slim >/dev/null
+          docker run --rm -v "$GITHUB_WORKSPACE:/workspace" python:3.12-slim sh -lc 'find /workspace -mindepth 1 -maxdepth 1 -exec rm -rf {} +'
+
+      - name: Checkout current PR-D branch
+        uses: actions/checkout@v4
+        with:
+          ref: feat/generic-voip-automation-v1-pr-d-web-golden
+          fetch-depth: 1
+
+      - name: Verify checkout still equals authorized SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$TARGET_SHA"
+          test -z "$(git status --porcelain --untracked-files=no)"
+          grep -Fq 'id: Golden-WEB-CONFIG-001' profiles/tests/golden_web_config_001.yaml
+          grep -Fq 'target_number: "7900"' profiles/tests/golden_web_config_001.yaml
+          if grep -Eq 'TemporaryExtensionProvider|database->save|devConfig\.set' tools/run_golden_web_config.py; then
+            echo 'Forbidden alternate mutation path in PR-D runner' >&2
+            exit 65
+          fi
+          echo "GOLDEN_WEB_EXACT_SOURCE=PASS revision=$TARGET_SHA"
+
+      - name: Prepare isolated runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -r "$LIVE_ENV_FILE"
+          rm -rf "$LIVE_VENV" "$LIVE_RUNTIME_ROOT" "$LIVE_OUTPUT_ROOT"
+          mkdir -p "$LIVE_RUNTIME_ROOT" "$LIVE_OUTPUT_ROOT"
+          chmod 0700 "$LIVE_RUNTIME_ROOT"
+          python3 -m venv "$LIVE_VENV"
+          "$LIVE_VENV/bin/pip" install --disable-pip-version-check -q -r backend/requirements.txt
+          export PYTHONPATH="$GITHUB_WORKSPACE/backend"
+          "$LIVE_VENV/bin/python" -m py_compile tools/run_golden_web_config.py tools/resolve_current_web_credential_env.py backend/app/automation/gates/golden_web_config.py backend/app/automation/adapters/pbx/registration.py
+
+      - name: Resolve production DB and exactly one eligible DUT
+        shell: bash
+        run: |
+          set -euo pipefail
+          set -a; source "$LIVE_ENV_FILE"; set +a
+          export PYTHONPATH="$GITHUB_WORKSPACE/backend"
+          "$LIVE_VENV/bin/python" tools/resolve_real_sip_aba_database_env.py > "$LIVE_RUNTIME_ROOT/production_db.env"
+          chmod 0600 "$LIVE_RUNTIME_ROOT/production_db.env"
+          set -a; source "$LIVE_RUNTIME_ROOT/production_db.env"; set +a
+          "$LIVE_VENV/bin/python" tools/resolve_real_sip_aba_context.py --output-root "$LIVE_OUTPUT_ROOT/context" --runtime-root "$LIVE_RUNTIME_ROOT"
+
+      - name: Resolve existing DUT SSH credential
+        shell: bash
+        run: |
+          set -euo pipefail
+          set -a
+          source "$LIVE_RUNTIME_ROOT/production_db.env"
+          source "$LIVE_RUNTIME_ROOT/db_runtime.env"
+          source "$LIVE_RUNTIME_ROOT/resolved_dut.env"
+          set +a
+          export PYTHONPATH="$GITHUB_WORKSPACE/backend"
+          "$LIVE_VENV/bin/python" tools/resolve_real_sip_aba_credential_env.py --container "$SIP_ABA_PRODUCTION_CREDENTIAL_CONTAINER" --expected-provider "$SIP_ABA_PRODUCTION_CREDENTIAL_PROVIDER" --sn "$DEVICE_SN" --ip "$DEVICE_HOST" --product "$DEVICE_MODEL" --fallback-user "$DEVICE_USER" --output "$LIVE_RUNTIME_ROOT/device_credential.env"
+          test -s "$LIVE_RUNTIME_ROOT/device_credential.env"
+          test "$(stat -c '%a' "$LIVE_RUNTIME_ROOT/device_credential.env")" = '600'
+
+      - name: Prove current WEB credential read-only
+        shell: bash
+        run: |
+          set -euo pipefail
+          set -a
+          source "$LIVE_RUNTIME_ROOT/resolved_dut.env"
+          source "$LIVE_RUNTIME_ROOT/device_credential.env"
+          set +a
+          export PYTHONPATH="$GITHUB_WORKSPACE/backend"
+          "$LIVE_VENV/bin/python" tools/resolve_current_web_credential_env.py --base-url "$WEB_BASE_URL" --device-host "$DEVICE_HOST" --secret-file "$HOST_SECRET_FILE" --output "$LIVE_RUNTIME_ROOT/web_credential.env" --evidence-output "$LIVE_OUTPUT_ROOT/web-credential-resolution.json" --insecure-tls
+          test -s "$LIVE_RUNTIME_ROOT/web_credential.env"
+          test "$(stat -c '%a' "$LIVE_RUNTIME_ROOT/web_credential.env")" = '600'
+
+      - name: Execute real Golden-WEB-CONFIG-001 with mandatory cleanup
+        shell: bash
+        run: |
+          set -uo pipefail
+          set -a
+          source "$LIVE_ENV_FILE"
+          source "$LIVE_RUNTIME_ROOT/production_db.env"
+          source "$LIVE_RUNTIME_ROOT/db_runtime.env"
+          source "$LIVE_RUNTIME_ROOT/resolved_dut.env"
+          source "$LIVE_RUNTIME_ROOT/device_credential.env"
+          source "$LIVE_RUNTIME_ROOT/web_credential.env"
+          set +a
+          export PYTHONPATH="$GITHUB_WORKSPACE/backend"
+          export REAL_LIVE_MUTATION=EXPLICIT_ONLY
+          args=(--device-id "$DEVICE_ID" --model "$DEVICE_MODEL" --host "$DEVICE_HOST" --port "$DEVICE_PORT" --username "$SIP_ABA_SSH_USERNAME" --password-env 'ENV:SIP_ABA_SSH_PASSWORD' --web-base-url "$WEB_BASE_URL" --target-number '7900' --registration-timeout 60 --worker-id "github-golden-web-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" --profile-root "$GITHUB_WORKSPACE/profiles" --output-root "$LIVE_OUTPUT_ROOT/golden" --web-insecure-tls --allow-live-mutation)
+          case "$DEVICE_PLATFORM" in mt7621|mt7981) args+=(--platform-id "$DEVICE_PLATFORM") ;; esac
+          set +e
+          "$LIVE_VENV/bin/python" tools/run_golden_web_config.py "${args[@]}" 2>&1 | tee "$LIVE_OUTPUT_ROOT/cli-output.log"
+          rc=${PIPESTATUS[0]}
+          set -e
+          printf '%s\n' "$rc" > "$LIVE_OUTPUT_ROOT/exit_code.txt"
+          exit "$rc"
+
+      - name: Audit evidence for raw secret leakage
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          export LIVE_OUTPUT_ROOT LIVE_RUNTIME_ROOT
+          python3 - <<'PY'
+          import json, os, shlex
+          from pathlib import Path
+          output=Path(os.environ['LIVE_OUTPUT_ROOT']); runtime=Path(os.environ['LIVE_RUNTIME_ROOT']); secrets=set()
+          for env_file in (runtime/'device_credential.env', runtime/'web_credential.env'):
+              if not env_file.is_file(): continue
+              for line in env_file.read_text(encoding='utf-8', errors='ignore').splitlines():
+                  try: parts=shlex.split(line)
+                  except ValueError: continue
+                  if not parts or '=' not in parts[0]: continue
+                  value=parts[0].split('=',1)[1]
+                  if value: secrets.add(value)
+          for path in output.rglob('*'):
+              if not path.is_file(): continue
+              text=path.read_text(encoding='utf-8', errors='ignore')
+              if any(secret and secret in text for secret in secrets): raise SystemExit(f'RAW_SECRET_LEAK:{path.name}')
+          result=output/'golden'/'golden-web-config-001.json'
+          if result.is_file():
+              payload=json.loads(result.read_text(encoding='utf-8'))
+              if payload.get('secret_values_emitted') is not False: raise SystemExit('SECRET_AUDIT_FLAG_FAILED')
+              if payload.get('verdict') == 'PASS':
+                  mutation=payload.get('mutation') or {}; authority=payload.get('authority') or {}
+                  if mutation.get('entry') != 'WEB' or mutation.get('ssh_fallback') is not False: raise SystemExit('WEB_ONLY_MUTATION_CONTRACT_FAILED')
+                  if mutation.get('auth_id_preserved') is not True or mutation.get('password_preserved') is not True: raise SystemExit('FROZEN_IDENTITY_PRESERVATION_FAILED')
+                  if authority.get('release_last') is not True: raise SystemExit('AUTHORITY_RELEASE_LAST_FAILED')
+          print('GOLDEN_WEB_SECRET_AUDIT=PASS')
+          PY
+
+      - name: Upload immutable safe Golden evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: golden-web-config-pr-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.LIVE_OUTPUT_ROOT }}
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Remove runtime secrets
+        if: always()
+        shell: bash
+        run: rm -rf "$LIVE_RUNTIME_ROOT" "$LIVE_VENV"
