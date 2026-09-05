@@ -28,13 +28,13 @@ jobs:
   resolve-shared-source:
     if: github.event_name == 'pull_request'
     runs-on: [self-hosted, linux, x64, voip-controlled-linux]
-    timeout-minutes: 15
+    timeout-minutes: 5
     env:
       EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     outputs:
       run_id: ${{ steps.resolve.outputs.run_id }}
     steps:
-      - name: Wait for Source Manifest Gate exact-SHA bundle
+      - name: Resolve completed Source Manifest Gate exact-SHA bundle without blocking runner
         id: resolve
         uses: actions/github-script@v7
         with:
@@ -42,34 +42,32 @@ jobs:
             const owner = context.repo.owner;
             const repo = context.repo.repo;
             const sha = process.env.EXPECTED_SHA;
-            const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-            for (let i = 0; i < 120; i++) {
-              const response = await github.rest.actions.listWorkflowRuns({
-                owner,
-                repo,
-                workflow_id: 'source-manifest-gate.yml',
-                event: 'pull_request',
-                head_sha: sha,
-                per_page: 20,
-              });
-              const runs = response.data.workflow_runs
-                .filter((run) => run.head_sha === sha)
-                .sort((a, b) => b.id - a.id);
-              if (runs.length > 0) {
-                const run = runs[0];
-                core.info(`Source Manifest run ${run.id}: ${run.status}/${run.conclusion || 'pending'}`);
-                if (run.status === 'completed') {
-                  if (run.conclusion !== 'success') {
-                    core.setFailed(`Source Manifest Gate failed for ${sha}: ${run.conclusion}`);
-                    return;
-                  }
-                  core.setOutput('run_id', String(run.id));
-                  return;
-                }
-              }
-              await sleep(5000);
+            const response = await github.rest.actions.listWorkflowRuns({
+              owner,
+              repo,
+              workflow_id: 'source-manifest-gate.yml',
+              event: 'pull_request',
+              head_sha: sha,
+              per_page: 20,
+            });
+            const runs = response.data.workflow_runs
+              .filter((run) => run.head_sha === sha)
+              .sort((a, b) => b.id - a.id);
+            if (runs.length === 0) {
+              core.setFailed(`Source Manifest Gate has not started for ${sha}; rerun Full Acceptance after Source Manifest completes`);
+              return;
             }
-            core.setFailed(`Timed out waiting for Source Manifest Gate for ${sha}`);
+            const run = runs[0];
+            core.info(`Source Manifest run ${run.id}: ${run.status}/${run.conclusion || 'pending'}`);
+            if (run.status !== 'completed') {
+              core.setFailed(`Source Manifest Gate still ${run.status} for ${sha}; rerun Full Acceptance after completion`);
+              return;
+            }
+            if (run.conclusion !== 'success') {
+              core.setFailed(`Source Manifest Gate failed for ${sha}: ${run.conclusion}`);
+              return;
+            }
+            core.setOutput('run_id', String(run.id));
 
   manual-source-bundle:
     if: github.event_name != 'pull_request'
