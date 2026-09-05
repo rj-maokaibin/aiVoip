@@ -47,7 +47,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ env.EXPECTED_SHA }}
-          fetch-depth: 0
+          fetch-depth: 1
 
       - name: Verify exact PR source identity
         shell: bash
