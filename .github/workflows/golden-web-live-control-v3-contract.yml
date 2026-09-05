@@ -1,0 +1,31 @@
+name: Golden WEB Live Control V3 Contract Gate
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - '.github/workflows/golden-web-config-pr-live-v3.yml'
+      - '.github/workflows/golden-web-live-control-v3-contract.yml'
+      - 'tools/validate_golden_web_live_control_v3.py'
+
+permissions:
+  contents: read
+
+jobs:
+  control-v3-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
+    steps:
+      - name: Checkout exact PR head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.EXPECTED_SHA }}
+          fetch-depth: 1
+      - name: Validate fail-closed V3 control contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          python3 tools/validate_golden_web_live_control_v3.py
