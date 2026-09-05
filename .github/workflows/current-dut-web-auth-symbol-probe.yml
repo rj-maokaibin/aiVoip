@@ -1,0 +1,133 @@
+name: Current DUT WEB Auth Symbol Probe
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - "tools/probe_dut_web_auth_symbols.py"
+      - ".github/workflows/current-dut-web-auth-symbol-probe.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: current-dut-web-auth-symbol-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  read-only-auth-symbols:
+    runs-on: [self-hosted, linux, x64, voip-controlled-linux]
+    timeout-minutes: 15
+    env:
+      EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
+      PROBE_ENV_FILE: /home/github-runner/.config/voip-ai/.env
+      PROBE_VENV: /tmp/voip-auth-symbol-${{ github.run_id }}-${{ github.run_attempt }}
+      PROBE_RUNTIME_ROOT: /tmp/voip-auth-symbol-runtime-${{ github.run_id }}-${{ github.run_attempt }}
+      PROBE_EVIDENCE_ROOT: /tmp/voip-auth-symbol-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+
+    steps:
+      - name: Repair workspace
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker image inspect python:3.12-slim >/dev/null
+          docker run --rm -v "$GITHUB_WORKSPACE:/workspace" python:3.12-slim \
+            sh -lc 'find /workspace -mindepth 1 -maxdepth 1 -exec rm -rf {} +'
+          rm -rf "$PROBE_VENV" "$PROBE_RUNTIME_ROOT" "$PROBE_EVIDENCE_ROOT"
+          mkdir -p "$PROBE_RUNTIME_ROOT" "$PROBE_EVIDENCE_ROOT"
+          chmod 0700 "$PROBE_RUNTIME_ROOT"
+
+      - name: Materialize exact PR head from GitHub archive
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          api="https://api.github.com/repos/${GITHUB_REPOSITORY}"
+          actual="$(curl -fsSL -H "Authorization: Bearer ${GH_TOKEN}" -H 'Accept: application/vnd.github+json' "${api}/commits/${EXPECTED_SHA}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["sha"])')"
+          test "$actual" = "$EXPECTED_SHA"
+          archive="$RUNNER_TEMP/dut-auth-symbol-${EXPECTED_SHA}.tar.gz"
+          curl -fsSL -H "Authorization: Bearer ${GH_TOKEN}" -H 'Accept: application/vnd.github+json' "${api}/tarball/${EXPECTED_SHA}" -o "$archive"
+          test -s "$archive"
+          tar -xzf "$archive" -C "$GITHUB_WORKSPACE" --strip-components=1
+          test -s tools/probe_dut_web_auth_symbols.py
+          printf '%s\n' "$EXPECTED_SHA" > "$PROBE_EVIDENCE_ROOT/exact-source.sha"
+
+      - name: Prepare isolated runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -r "$PROBE_ENV_FILE"
+          python3 -m venv "$PROBE_VENV"
+          "$PROBE_VENV/bin/pip" install --disable-pip-version-check -q -r backend/requirements.txt
+          export PYTHONPATH="$GITHUB_WORKSPACE/backend"
+          "$PROBE_VENV/bin/python" -m py_compile tools/probe_dut_web_auth_symbols.py
+
+      - name: Resolve exact DUT and SSH credential read-only
+        shell: bash
+        run: |
+          set -euo pipefail
+          set -a
+          source "$PROBE_ENV_FILE"
+          set +a
+          export PYTHONPATH="$GITHUB_WORKSPACE/backend"
+          "$PROBE_VENV/bin/python" tools/resolve_real_sip_aba_database_env.py > "$PROBE_RUNTIME_ROOT/production_db.env"
+          chmod 0600 "$PROBE_RUNTIME_ROOT/production_db.env"
+          set -a
+          source "$PROBE_RUNTIME_ROOT/production_db.env"
+          set +a
+          "$PROBE_VENV/bin/python" tools/resolve_real_sip_aba_context.py \
+            --output-root "$PROBE_EVIDENCE_ROOT/context" \
+            --runtime-root "$PROBE_RUNTIME_ROOT"
+          set -a
+          source "$PROBE_RUNTIME_ROOT/db_runtime.env"
+          source "$PROBE_RUNTIME_ROOT/resolved_dut.env"
+          set +a
+          "$PROBE_VENV/bin/python" tools/resolve_real_sip_aba_credential_env.py \
+            --container "$SIP_ABA_PRODUCTION_CREDENTIAL_CONTAINER" \
+            --expected-provider "$SIP_ABA_PRODUCTION_CREDENTIAL_PROVIDER" \
+            --sn "$DEVICE_SN" \
+            --ip "$DEVICE_HOST" \
+            --product "$DEVICE_MODEL" \
+            --fallback-user "$DEVICE_USER" \
+            --output "$PROBE_RUNTIME_ROOT/device_credential.env"
+          chmod 0600 "$PROBE_RUNTIME_ROOT/device_credential.env"
+
+      - name: Probe exact source auth symbols without source lines or hashes
+        shell: bash
+        run: |
+          set -euo pipefail
+          set -a
+          source "$PROBE_RUNTIME_ROOT/resolved_dut.env"
+          source "$PROBE_RUNTIME_ROOT/device_credential.env"
+          set +a
+          export PYTHONPATH="$GITHUB_WORKSPACE/backend"
+          args=(
+            tools/probe_dut_web_auth_symbols.py
+            --device-id "$DEVICE_ID"
+            --model "$DEVICE_MODEL"
+            --host "$DEVICE_HOST"
+            --port "$DEVICE_PORT"
+            --username "$SIP_ABA_SSH_USERNAME"
+            --password-env 'ENV:SIP_ABA_SSH_PASSWORD'
+            --output "$PROBE_EVIDENCE_ROOT/dut-web-auth-symbols.json"
+          )
+          case "$DEVICE_PLATFORM" in
+            mt7621|mt7981) args+=(--platform-id "$DEVICE_PLATFORM") ;;
+          esac
+          "$PROBE_VENV/bin/python" "${args[@]}"
+
+      - name: Upload immutable secret-safe evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: current-dut-web-auth-symbols-${{ env.EXPECTED_SHA }}
+          path: ${{ env.PROBE_EVIDENCE_ROOT }}
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Remove runtime secrets
+        if: always()
+        shell: bash
+        run: |
+          rm -rf "$PROBE_RUNTIME_ROOT" "$PROBE_VENV"
