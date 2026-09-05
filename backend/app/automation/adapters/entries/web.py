@@ -33,9 +33,9 @@ class EntryResult:
     accepted: bool
     status_code: int | None = None
     output: Any | None = None
-    # Raw runtime data is process-private and must never be emitted as evidence or
-    # persisted. It exists only so reversible WEB mutation can restore exact
-    # secret-bearing configuration without replacing secrets with redaction masks.
+    # Process-private raw output. Evidence/persistence must use only ``output``.
+    # This exists so reversible WEB mutation can restore exact secret-bearing
+    # configuration instead of accidentally writing redaction masks.
     runtime_output: Any | None = field(default=None, repr=False, compare=False)
     evidence: tuple[HttpEvidence, ...] = ()
     unknown_result: bool = False
@@ -95,34 +95,33 @@ class WebEntryAdapter:
         }
 
     @staticmethod
-    def _request_operation(
-        operation: WebOperationProfile,
-        args: Mapping[str, Any],
-    ) -> HttpRequest:
+    def _payload(operation: WebOperationProfile, args: Mapping[str, Any]) -> Any:
         if not operation.source_bound:
             raise WebProfileUnboundError(
                 f"WEB_OPERATION_NOT_SOURCE_BOUND:{operation.semantic_action}"
             )
         if operation.rpc_style == "cmd_array":
-            payload = WebEntryAdapter._cmd_array_payload(operation, args)
-        elif operation.rpc_method is not None:
+            return WebEntryAdapter._cmd_array_payload(operation, args)
+        if operation.rpc_method is not None:
             if operation.rpc_method == TBD_CURRENT_PRODUCT:
                 raise WebProfileUnboundError(
                     f"WEB_OPERATION_NOT_SOURCE_BOUND:{operation.semantic_action}"
                 )
-            payload = {"method": operation.rpc_method, "params": dict(args)}
-        else:
-            payload = dict(args)
-        return HttpRequest(
-            method=operation.method,
-            path=operation.endpoint,
-            json_body=payload,
-            mutation=operation.mutation,
-        )
+            return {"method": operation.rpc_method, "params": dict(args)}
+        return dict(args)
 
-    async def _request(self, operation: WebOperationProfile, args: Mapping[str, Any]) -> HttpResponse:
+    async def _request_operation(
+        self,
+        operation: WebOperationProfile,
+        args: Mapping[str, Any],
+    ) -> HttpResponse:
         return await self.session_manager.request(
-            self._request_operation(operation, args),
+            HttpRequest(
+                method=operation.method,
+                path=operation.endpoint,
+                json_body=self._payload(operation, args),
+                mutation=operation.mutation,
+            ),
             retry_policy=self.retry_policy,
         )
 
@@ -192,10 +191,11 @@ class WebEntryAdapter:
         if operation.rpc_style == "cmd_array":
             return WebEntryAdapter._cmd_array_result(response, operation)
         raw_output = response.json_body if response.json_body is not None else response.text
+        output = mask_http_secrets(raw_output)
         return EntryResult(
             accepted=response.success,
             status_code=response.status_code,
-            output=mask_http_secrets(raw_output),
+            output=output,
             evidence=(response.evidence,),
             error=None if response.success else f"WEB_HTTP_{response.status_code}",
         )
@@ -210,7 +210,7 @@ class WebEntryAdapter:
         readback_op = self.profile.operation(operation.readback_operation)
         if readback_op.mutation:
             raise WebApiProfileError("WEB_READBACK_OPERATION_MUST_BE_READ_ONLY")
-        return self._to_result(await self._request(readback_op, args), readback_op)
+        return self._to_result(await self._request_operation(readback_op, args), readback_op)
 
     async def execute(
         self,
@@ -222,7 +222,7 @@ class WebEntryAdapter:
         operation = self.profile.operation(semantic_action)
         try:
             return self._to_result(
-                await self._request(operation, args),
+                await self._request_operation(operation, args),
                 operation,
             )
         except HttpMutationResultUnknown as exc:
