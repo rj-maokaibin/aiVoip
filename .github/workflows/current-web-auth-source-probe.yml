@@ -141,6 +141,126 @@ jobs:
           chmod 0600 "$AUTH_RUNTIME_ROOT/credential.env"
           echo 'DUT_WEB_AUTH_SOURCE_CREDENTIAL_RESOLUTION=PASS mutation=false'
 
+      - name: Probe PBX provider source read-only
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -r "$AUTH_ENV_FILE"
+          mkdir -p web-auth-source-evidence
+          python3 - "$AUTH_ENV_FILE" <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          import re
+          import shutil
+          import subprocess
+          import sys
+
+          env_path = Path(sys.argv[1])
+          key_pattern = re.compile(
+              r"(?:PBX|FUSION|FREESWITCH|(?:^|_)FS_|EXTENSION|ALIAS|SIP.*(?:HOST|URL|API|PBX))",
+              re.IGNORECASE,
+          )
+          env_keys = []
+          for raw in env_path.read_text(encoding="utf-8", errors="ignore").splitlines():
+              line = raw.strip()
+              if not line or line.startswith("#") or "=" not in line:
+                  continue
+              key = line.split("=", 1)[0].strip()
+              if key.startswith("export "):
+                  key = key[7:].strip()
+              if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", key) and key_pattern.search(key):
+                  env_keys.append(key)
+
+          fusion_roots = [
+              Path("/var/www/fusionpbx"),
+              Path("/usr/share/fusionpbx"),
+              Path("/opt/fusionpbx"),
+          ]
+          present_roots = [str(path) for path in fusion_roots if path.is_dir()]
+          root = next((path for path in fusion_roots if path.is_dir()), None)
+
+          source_markers = []
+          if root is not None:
+              marker_candidates = [
+                  root / "app/extensions",
+                  root / "app/api",
+                  root / "app/commands",
+                  root / "resources/classes",
+                  root / "core",
+              ]
+              source_markers = [str(path.relative_to(root)) for path in marker_candidates if path.exists()]
+              for base in (root / "app", root / "core"):
+                  if not base.is_dir():
+                      continue
+                  for path in base.rglob("*"):
+                      if not path.is_file():
+                          continue
+                      name = path.name.lower()
+                      if any(token in name for token in ("extension", "api", "command")):
+                          source_markers.append(str(path.relative_to(root)))
+                          if len(source_markers) >= 50:
+                              break
+                  if len(source_markers) >= 50:
+                      break
+
+          def run_text(argv):
+              try:
+                  completed = subprocess.run(
+                      argv,
+                      check=False,
+                      stdout=subprocess.PIPE,
+                      stderr=subprocess.DEVNULL,
+                      text=True,
+                      timeout=5,
+                  )
+              except Exception:
+                  return None
+              value = completed.stdout.strip()
+              return value or None
+
+          freeswitch_state = run_text(["systemctl", "is-active", "freeswitch"])
+          fusion_git_revision = None
+          if root is not None and (root / ".git").exists():
+              fusion_git_revision = run_text(["git", "-C", str(root), "rev-parse", "HEAD"])
+
+          docker_names = []
+          docker_output = run_text(["docker", "ps", "--format", "{{.Names}}"])
+          if docker_output:
+              for name in docker_output.splitlines():
+                  if re.search(r"(?:pbx|fusion|freeswitch)", name, re.IGNORECASE):
+                      docker_names.append(name)
+
+          payload = {
+              "mutation_executed": False,
+              "secret_values_emitted": False,
+              "runner_env_matching_key_names": sorted(set(env_keys)),
+              "fs_cli_path": shutil.which("fs_cli"),
+              "freeswitch_service_state": freeswitch_state,
+              "fusionpbx_roots": present_roots,
+              "fusionpbx_git_revision": fusion_git_revision,
+              "fusionpbx_source_markers": sorted(set(source_markers))[:50],
+              "pbx_related_running_container_names": sorted(set(docker_names)),
+              "freeswitch_config_roots": [
+                  path for path in (
+                      "/etc/freeswitch",
+                      "/usr/local/freeswitch/conf",
+                      "/usr/share/freeswitch",
+                  ) if Path(path).exists()
+              ],
+          }
+          out = Path("web-auth-source-evidence/pbx-provider-source-probe.json")
+          out.write_text(json.dumps(payload, ensure_ascii=False, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+          print(json.dumps({
+              "PBX_PROVIDER_SOURCE_PROBE": "PASS",
+              "mutation": False,
+              "secret_values_emitted": False,
+              "matching_key_count": len(payload["runner_env_matching_key_names"]),
+              "fusionpbx_present": bool(payload["fusionpbx_roots"]),
+              "fs_cli_present": bool(payload["fs_cli_path"]),
+          }, sort_keys=True))
+          PY
+
       - name: Probe DUT packaged WEB auth source over SSH read-only
         shell: bash
         run: |
