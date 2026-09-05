@@ -1,0 +1,172 @@
+name: Current WEB Live Prereq Probe
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - ".github/workflows/current-web-live-prereq-probe.yml"
+      - "tools/resolve_current_web_credential_env.py"
+      - "tools/run_golden_web_config.py"
+      - "backend/app/automation/adapters/entries/web.py"
+      - "backend/app/automation/adapters/pbx/**"
+      - "backend/app/automation/adapters/web_auth/**"
+      - "backend/app/automation/gates/golden_web_config.py"
+      - "backend/app/infrastructure/transport/http.py"
+      - "profiles/web_api/**"
+      - "profiles/tests/golden_web_config_001.yaml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: current-web-live-prereq-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  read-only-live-prereq:
+    runs-on: [self-hosted, linux, x64, voip-controlled-linux]
+    timeout-minutes: 20
+    env:
+      EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
+      PREREQ_ENV_FILE: /home/github-runner/.config/voip-ai/.env
+      PREREQ_VENV: /tmp/voip-web-prereq-${{ github.run_id }}-${{ github.run_attempt }}
+      PREREQ_RUNTIME_ROOT: /tmp/voip-web-prereq-runtime-${{ github.run_id }}-${{ github.run_attempt }}
+      PREREQ_EVIDENCE_ROOT: /tmp/voip-web-prereq-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+      WEB_BASE_URL: https://10.48.8.74:10003
+
+    steps:
+      - name: Repair self-hosted workspace
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker image inspect python:3.12-slim >/dev/null
+          docker run --rm -v "$GITHUB_WORKSPACE:/workspace" python:3.12-slim \
+            sh -lc 'find /workspace -mindepth 1 -maxdepth 1 -exec rm -rf {} +'
+
+      - name: Checkout exact PR head read-only
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.EXPECTED_SHA }}
+          fetch-depth: 0
+
+      - name: Verify exact PR source identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          test -z "$(git status --porcelain --untracked-files=no)"
+          echo "WEB_PREREQ_EXACT_HEAD=PASS revision=$EXPECTED_SHA"
+
+      - name: Prepare isolated read-only runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -r "$PREREQ_ENV_FILE"
+          rm -rf "$PREREQ_VENV" "$PREREQ_RUNTIME_ROOT" "$PREREQ_EVIDENCE_ROOT"
+          mkdir -p "$PREREQ_RUNTIME_ROOT" "$PREREQ_EVIDENCE_ROOT"
+          chmod 0700 "$PREREQ_RUNTIME_ROOT"
+          python3 -m venv "$PREREQ_VENV"
+          "$PREREQ_VENV/bin/pip" install --disable-pip-version-check -q -r backend/requirements.txt
+          export PYTHONPATH="$GITHUB_WORKSPACE/backend"
+          "$PREREQ_VENV/bin/python" -m py_compile \
+            backend/app/automation/adapters/web_auth/base.py \
+            backend/app/infrastructure/transport/http.py \
+            backend/app/automation/adapters/pbx/registration.py \
+            backend/app/automation/gates/golden_web_config.py \
+            tools/resolve_current_web_credential_env.py \
+            tools/run_golden_web_config.py
+          echo 'WEB_PREREQ_COMPILE=PASS'
+
+      - name: Run focused non-mutating contract tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="$GITHUB_WORKSPACE/backend"
+          "$PREREQ_VENV/bin/pytest" -q \
+            backend/tests/test_web_secret_repr_contract.py \
+            backend/tests/test_apf3260m_web_auth_encoder.py \
+            backend/tests/test_fusionpbx_registration_probe.py \
+            backend/tests/test_golden_web_config_contract.py
+
+      - name: Resolve production DB, DUT and existing device credential read-only
+        shell: bash
+        run: |
+          set -euo pipefail
+          set -a
+          source "$PREREQ_ENV_FILE"
+          set +a
+          export PYTHONPATH="$GITHUB_WORKSPACE/backend"
+          "$PREREQ_VENV/bin/python" tools/resolve_real_sip_aba_database_env.py > "$PREREQ_RUNTIME_ROOT/production_db.env"
+          chmod 0600 "$PREREQ_RUNTIME_ROOT/production_db.env"
+          set -a
+          source "$PREREQ_RUNTIME_ROOT/production_db.env"
+          set +a
+          "$PREREQ_VENV/bin/python" tools/resolve_real_sip_aba_context.py \
+            --output-root "$PREREQ_EVIDENCE_ROOT/context" \
+            --runtime-root "$PREREQ_RUNTIME_ROOT"
+          set -a
+          source "$PREREQ_RUNTIME_ROOT/db_runtime.env"
+          source "$PREREQ_RUNTIME_ROOT/resolved_dut.env"
+          set +a
+          "$PREREQ_VENV/bin/python" tools/resolve_real_sip_aba_credential_env.py \
+            --container "$SIP_ABA_PRODUCTION_CREDENTIAL_CONTAINER" \
+            --expected-provider "$SIP_ABA_PRODUCTION_CREDENTIAL_PROVIDER" \
+            --sn "$DEVICE_SN" \
+            --ip "$DEVICE_HOST" \
+            --product "$DEVICE_MODEL" \
+            --fallback-user "$DEVICE_USER" \
+            --output "$PREREQ_RUNTIME_ROOT/device_credential.env"
+          chmod 0600 "$PREREQ_RUNTIME_ROOT/device_credential.env"
+          echo 'WEB_PREREQ_DEVICE_CONTEXT=PASS mutation=false'
+
+      - name: Prove exactly one existing credential authenticates to current WEB
+        shell: bash
+        run: |
+          set -euo pipefail
+          set -a
+          source "$PREREQ_RUNTIME_ROOT/resolved_dut.env"
+          source "$PREREQ_RUNTIME_ROOT/device_credential.env"
+          set +a
+          export PYTHONPATH="$GITHUB_WORKSPACE/backend"
+          "$PREREQ_VENV/bin/python" tools/resolve_current_web_credential_env.py \
+            --base-url "$WEB_BASE_URL" \
+            --device-host "$DEVICE_HOST" \
+            --output "$PREREQ_RUNTIME_ROOT/web_credential.env" \
+            --evidence-output "$PREREQ_EVIDENCE_ROOT/web-credential-resolution.json" \
+            --insecure-tls
+          test -s "$PREREQ_RUNTIME_ROOT/web_credential.env"
+          test "$(stat -c '%a' "$PREREQ_RUNTIME_ROOT/web_credential.env")" = "600"
+          echo 'WEB_PREREQ_CREDENTIAL=PASS mutation=false secret_values_emitted=false'
+
+      - name: Verify PBX registration observer is available read-only
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="$GITHUB_WORKSPACE/backend"
+          "$PREREQ_VENV/bin/python" - <<'PY'
+          import json
+          from app.automation.adapters.pbx.registration import FusionPbxRegistrationProbe
+          probe = FusionPbxRegistrationProbe()
+          registered, details, _refs = probe._observe_once('7102')
+          print(json.dumps({
+              'PBX_REGISTRATION_READ_PROBE': 'PASS',
+              'current_7102_observed': bool(registered),
+              'mutation': False,
+              'secret_values_emitted': details.get('secret_values_emitted') is False,
+          }, sort_keys=True))
+          PY
+
+      - name: Upload immutable safe prerequisite evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: current-web-live-prereq-${{ env.EXPECTED_SHA }}
+          path: ${{ env.PREREQ_EVIDENCE_ROOT }}
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Remove runtime secrets
+        if: always()
+        shell: bash
+        run: |
+          rm -rf "$PREREQ_RUNTIME_ROOT" "$PREREQ_VENV"
