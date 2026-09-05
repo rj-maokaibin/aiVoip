@@ -9,6 +9,7 @@ import pytest
 from app.automation.gates.g0_recovery import G0RecoveryMarkerStore
 from app.automation.gates.golden_cfg_config import GoldenCfgConfigGate, original_display_name
 from app.infrastructure.config_framework.schema import ConfigResult
+from tools.observe_g0_recovery_state import derive_recovery_candidate, parse_historical_disnames
 
 
 class _ReadbackConfig:
@@ -138,3 +139,56 @@ def test_restore_reverse_verify_retains_marker_when_state_does_not_match(tmp_pat
     assert details["recovery_marker_retained"] is True
     assert store.retained(run_id="run-001") is True
     assert store.read_for_recovery(run_id="run-001", device_id="dut-001") == "old"
+
+
+def test_history_parser_persists_only_disname_fragment_and_source_position():
+    raw = (
+        '/tmp/voip_ipc_cli_log.txt:10:"disName":"7900"\n'
+        '/tmp/voip_ipc_cli_log.txt:11:"disName" : "G0"\n'
+        '/tmp/voip_log.txt:21:"disName":"7900"\n'
+        '/tmp/voip_log.txt:22:"disName":"G0"\n'
+        '/tmp/other.log:23:"disName":"should-ignore"\n'
+        '/tmp/voip_log.txt:24:"passwd":"must-not-parse"\n'
+    )
+    rows = parse_historical_disnames(raw)
+    assert rows == [
+        {"source": "/tmp/voip_ipc_cli_log.txt", "line": 10, "disName": "7900"},
+        {"source": "/tmp/voip_ipc_cli_log.txt", "line": 11, "disName": "G0"},
+        {"source": "/tmp/voip_log.txt", "line": 21, "disName": "7900"},
+        {"source": "/tmp/voip_log.txt", "line": 22, "disName": "G0"},
+    ]
+    serialized = json.dumps(rows, ensure_ascii=False).lower()
+    assert "passwd" not in serialized
+    assert "authid" not in serialized
+
+
+def test_recovery_candidate_requires_prior_value_before_failed_marker():
+    rows = [
+        {"source": "/tmp/voip_ipc_cli_log.txt", "line": 10, "disName": "7900"},
+        {"source": "/tmp/voip_ipc_cli_log.txt", "line": 11, "disName": "G0"},
+        {"source": "/tmp/voip_log.txt", "line": 20, "disName": "7900"},
+        {"source": "/tmp/voip_log.txt", "line": 21, "disName": "G0"},
+    ]
+    candidate = derive_recovery_candidate(rows, failed_probe_marker="G0")
+    assert candidate["consensus"] == "7900"
+    assert candidate["confidence"] == "HIGH"
+    assert candidate["sources_with_prior"] == 2
+
+
+def test_recovery_candidate_refuses_conflicting_or_marker_only_history():
+    conflicting = [
+        {"source": "/tmp/voip_ipc_cli_log.txt", "line": 10, "disName": "7900"},
+        {"source": "/tmp/voip_ipc_cli_log.txt", "line": 11, "disName": "G0"},
+        {"source": "/tmp/voip_log.txt", "line": 20, "disName": "7901"},
+        {"source": "/tmp/voip_log.txt", "line": 21, "disName": "G0"},
+    ]
+    candidate = derive_recovery_candidate(conflicting, failed_probe_marker="G0")
+    assert candidate["consensus"] is None
+    assert candidate["confidence"] == "NONE"
+
+    marker_only = [
+        {"source": "/tmp/voip_log.txt", "line": 21, "disName": "G0"},
+    ]
+    candidate = derive_recovery_candidate(marker_only, failed_probe_marker="G0")
+    assert candidate["consensus"] is None
+    assert candidate["confidence"] == "NONE"
