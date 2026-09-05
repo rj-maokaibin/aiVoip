@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass, field
 from typing import Any, Mapping, Protocol, runtime_checkable
 
+import httpx
+
 from app.automation.adapters.web_auth.base import SessionManager
+from app.automation.adapters.web_auth.legacy_luci import LegacyLuciAuthError
 from app.automation.adapters.web_profiles.schema import (
     TBD_CURRENT_PRODUCT,
     WebApiProfile,
@@ -17,6 +21,14 @@ from app.infrastructure.transport.http import (
     HttpResponse,
     HttpRetryPolicy,
     mask_http_secrets,
+)
+
+_UNKNOWN_OBSERVE_BACKOFF_SECONDS = (0.0, 1.0, 2.0, 4.0, 8.0)
+_UNKNOWN_OBSERVE_RETRYABLE = (
+    LegacyLuciAuthError,
+    httpx.TransportError,
+    asyncio.TimeoutError,
+    TimeoutError,
 )
 
 
@@ -211,16 +223,45 @@ class WebEntryAdapter:
         readback_op = self.profile.operation(operation.readback_operation)
         if readback_op.mutation:
             raise WebApiProfileError("WEB_READBACK_OPERATION_MUST_BE_READ_ONLY")
-        # A mutation transport UNKNOWN can leave the LuCI SID stale even when
-        # the endpoint still answers HTTP 200 with an application-level auth
-        # envelope. SessionManager only auto-refreshes on explicit HTTP 401/403,
-        # so production SessionManager instances refresh before the read-only
-        # observe step. Lightweight request-compatible stubs/adapters that do not
-        # own session state remain supported and simply perform the readback.
+
         ensure_session = getattr(self.session_manager, "ensure_session", None)
-        if callable(ensure_session):
-            await ensure_session(force=True)
-        return self._to_result(await self._request_operation(readback_op, args), readback_op)
+        if not callable(ensure_session):
+            # Request-compatible unit-test/future adapter doubles do not own a
+            # WEB session. They still get exactly one read-only observation.
+            return self._to_result(
+                await self._request_operation(readback_op, args),
+                readback_op,
+            )
+
+        invalidate = getattr(self.session_manager, "invalidate", None)
+        if callable(invalidate):
+            invalidate()
+
+        # A transport-UNKNOWN Save can temporarily invalidate LuCI/auth while
+        # the DUT applies configuration. The mutation itself is NEVER retried.
+        # Only authentication plus the profile-bound read-only observation may
+        # retry, with a finite backoff window. A still-unavailable WEB session
+        # degrades to UNKNOWN instead of escaping as a runtime exception, so the
+        # orchestrator can continue mandatory cleanup/reverse verification.
+        last_result: EntryResult | None = None
+        for delay in _UNKNOWN_OBSERVE_BACKOFF_SECONDS:
+            if delay:
+                await asyncio.sleep(delay)
+            try:
+                await ensure_session(force=True)
+                last_result = self._to_result(
+                    await self._request_operation(readback_op, args),
+                    readback_op,
+                )
+            except _UNKNOWN_OBSERVE_RETRYABLE:
+                if callable(invalidate):
+                    invalidate()
+                continue
+            if last_result.accepted:
+                return last_result
+            if callable(invalidate):
+                invalidate()
+        return last_result
 
     async def execute(
         self,
@@ -245,7 +286,11 @@ class WebEntryAdapter:
                 unknown_result=True,
                 evidence=tuple(evidence),
                 readback=(readback.output if readback is not None else None),
-                error="HTTP_MUTATION_RESULT_UNKNOWN",
+                error=(
+                    "HTTP_MUTATION_RESULT_UNKNOWN"
+                    if readback is not None and readback.accepted
+                    else "HTTP_MUTATION_RESULT_UNKNOWN_OBSERVE_UNAVAILABLE"
+                ),
             )
 
     async def configure_voip_account(
