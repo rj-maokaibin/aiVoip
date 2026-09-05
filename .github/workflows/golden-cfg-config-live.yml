@@ -1,0 +1,148 @@
+name: Golden CFG CONFIG 001 Live Gate
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: golden-cfg-config-001-live
+  cancel-in-progress: false
+
+jobs:
+  golden-cfg-config:
+    if: >-
+      github.event.issue.pull_request != null &&
+      github.event.comment.user.login == github.repository_owner &&
+      startsWith(github.event.comment.body, '/run-golden-cfg-config ')
+    runs-on:
+      - self-hosted
+      - linux
+      - x64
+      - voip-controlled-linux
+    timeout-minutes: 20
+    env:
+      REAL_LIVE_MUTATION: EXPLICIT_ONLY
+      G0_ENV_FILE: /home/github-runner/.config/voip-ai/.env
+      G0_VENV: /tmp/voip-ai-g0-${{ github.run_id }}-${{ github.run_attempt }}
+      G0_OUTPUT_ROOT: /tmp/voip-ai-g0-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+      G0_RUNTIME_ROOT: /tmp/voip-ai-g0-runtime-${{ github.run_id }}-${{ github.run_attempt }}
+
+    steps:
+      - name: Checkout exact master
+        uses: actions/checkout@v4
+        timeout-minutes: 5
+        with:
+          ref: master
+
+      - name: Authorize exact master and explicit live mutation
+        shell: bash
+        env:
+          TRIGGER_BODY: ${{ github.event.comment.body }}
+          TRIGGER_ACTOR: ${{ github.event.comment.user.login }}
+        run: |
+          set -euo pipefail
+          head_sha="$(git rev-parse HEAD)"
+          expected="/run-golden-cfg-config ${head_sha}"
+          test "$TRIGGER_ACTOR" = "$GITHUB_REPOSITORY_OWNER"
+          test "$TRIGGER_BODY" = "$expected"
+          printf 'G0_EXACT_MASTER=%s\n' "$head_sha"
+          printf 'G0_LIVE_MUTATION_AUTHORIZATION=PASS\n'
+
+      - name: Prepare isolated runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -r "$G0_ENV_FILE"
+          rm -rf "$G0_VENV" "$G0_RUNTIME_ROOT" "$G0_OUTPUT_ROOT"
+          mkdir -p "$G0_RUNTIME_ROOT" "$G0_OUTPUT_ROOT"
+          chmod 0700 "$G0_RUNTIME_ROOT"
+          python3 -m venv "$G0_VENV"
+          "$G0_VENV/bin/pip" install --disable-pip-version-check -q -r backend/requirements.txt
+
+      - name: Resolve production DB and exactly one eligible DUT
+        shell: bash
+        run: |
+          set -euo pipefail
+          set -a
+          source "$G0_ENV_FILE"
+          set +a
+          export PYTHONPATH="$GITHUB_WORKSPACE/backend"
+          "$G0_VENV/bin/python" tools/resolve_real_sip_aba_database_env.py > "$G0_RUNTIME_ROOT/production_db.env"
+          chmod 0600 "$G0_RUNTIME_ROOT/production_db.env"
+          set -a
+          source "$G0_RUNTIME_ROOT/production_db.env"
+          set +a
+          "$G0_VENV/bin/python" tools/resolve_real_sip_aba_context.py \
+            --output-root "$G0_OUTPUT_ROOT" \
+            --runtime-root "$G0_RUNTIME_ROOT"
+
+      - name: Resolve existing production SSH credential
+        shell: bash
+        run: |
+          set -euo pipefail
+          set -a
+          source "$G0_RUNTIME_ROOT/production_db.env"
+          source "$G0_RUNTIME_ROOT/db_runtime.env"
+          source "$G0_RUNTIME_ROOT/resolved_dut.env"
+          set +a
+          export PYTHONPATH="$GITHUB_WORKSPACE/backend"
+          credential_file="$G0_RUNTIME_ROOT/credential.env"
+          "$G0_VENV/bin/python" tools/resolve_real_sip_aba_credential_env.py \
+            --container "$SIP_ABA_PRODUCTION_CREDENTIAL_CONTAINER" \
+            --expected-provider "$SIP_ABA_PRODUCTION_CREDENTIAL_PROVIDER" \
+            --sn "$DEVICE_SN" \
+            --ip "$DEVICE_HOST" \
+            --product "$DEVICE_MODEL" \
+            --fallback-user "$DEVICE_USER" \
+            --output "$credential_file"
+          test -s "$credential_file"
+          test "$(stat -c '%a' "$credential_file")" = "600"
+          echo 'G0_CREDENTIAL_RESOLUTION=PASS'
+
+      - name: Execute Golden CFG CONFIG 001 with mandatory restore
+        shell: bash
+        run: |
+          set -euo pipefail
+          set -a
+          source "$G0_ENV_FILE"
+          source "$G0_RUNTIME_ROOT/db_runtime.env"
+          source "$G0_RUNTIME_ROOT/resolved_dut.env"
+          source "$G0_RUNTIME_ROOT/credential.env"
+          set +a
+          export PYTHONPATH="$GITHUB_WORKSPACE/backend"
+          export REAL_LIVE_MUTATION=EXPLICIT_ONLY
+          args=(
+            tools/run_golden_cfg_config.py
+            --device-id "$DEVICE_ID"
+            --model "$DEVICE_MODEL"
+            --host "$DEVICE_HOST"
+            --port "$DEVICE_PORT"
+            --username "$SIP_ABA_SSH_USERNAME"
+            --password-env "ENV:SIP_ABA_SSH_PASSWORD"
+            --worker-id "github-g0-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+            --profile-root "$GITHUB_WORKSPACE/profiles"
+            --output-root "$G0_OUTPUT_ROOT"
+            --allow-live-mutation
+          )
+          case "$DEVICE_PLATFORM" in
+            mt7621|mt7981) args+=(--platform-id "$DEVICE_PLATFORM") ;;
+          esac
+          "$G0_VENV/bin/python" "${args[@]}"
+
+      - name: Upload immutable G0 evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: golden-cfg-config-001-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.G0_OUTPUT_ROOT }}
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Remove runtime secrets
+        if: always()
+        shell: bash
+        run: |
+          rm -rf "$G0_RUNTIME_ROOT"
