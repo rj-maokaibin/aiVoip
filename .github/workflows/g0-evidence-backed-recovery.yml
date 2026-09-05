@@ -1,0 +1,175 @@
+name: G0 Evidence-Backed Recovery
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - "tools/recover_g0_evidence_backed.py"
+      - "tools/g0_recovery_authorization.json"
+      - ".github/workflows/g0-evidence-backed-recovery.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  exact-source-bundle:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.actor == github.repository_owner
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
+    steps:
+      - name: Checkout exact PR head on GitHub-hosted transport
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.EXPECTED_SHA }}
+          fetch-depth: 0
+      - name: Build immutable exact source bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          git branch -f bundle-head "$EXPECTED_SHA"
+          git bundle create "$RUNNER_TEMP/source.bundle" refs/heads/bundle-head
+          printf '%s\n' "$EXPECTED_SHA" > "$RUNNER_TEMP/source.sha"
+          git bundle verify "$RUNNER_TEMP/source.bundle"
+      - name: Upload exact source bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: g0-recovery-source-${{ env.EXPECTED_SHA }}
+          path: |
+            ${{ runner.temp }}/source.bundle
+            ${{ runner.temp }}/source.sha
+          if-no-files-found: error
+          retention-days: 1
+
+  recover:
+    needs: exact-source-bundle
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.actor == github.repository_owner
+    runs-on: [self-hosted, linux, x64, voip-controlled-linux]
+    timeout-minutes: 20
+    env:
+      EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
+      G0_ENV_FILE: /home/github-runner/.config/voip-ai/.env
+      REC_VENV: /tmp/voip-ai-g0-recovery-${{ github.run_id }}-${{ github.run_attempt }}
+      REC_RUNTIME_ROOT: /tmp/voip-ai-g0-recovery-runtime-${{ github.run_id }}-${{ github.run_attempt }}
+      REC_SOURCE_ROOT: /tmp/voip-ai-g0-recovery-src-${{ github.run_id }}-${{ github.run_attempt }}
+      REC_OUTPUT: /tmp/voip-ai-g0-recovery-output-${{ github.run_id }}-${{ github.run_attempt }}.json
+    steps:
+      - name: Download immutable exact source bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: g0-recovery-source-${{ env.EXPECTED_SHA }}
+          path: ${{ runner.temp }}/g0-evidence-backed-recovery-source
+
+      - name: Materialize exact PR head offline
+        shell: bash
+        run: |
+          set -euo pipefail
+          bundle="$RUNNER_TEMP/g0-evidence-backed-recovery-source/source.bundle"
+          sha_file="$RUNNER_TEMP/g0-evidence-backed-recovery-source/source.sha"
+          test -s "$bundle"
+          test "$(cat "$sha_file")" = "$EXPECTED_SHA"
+          rm -rf "$REC_SOURCE_ROOT"
+          cd "$RUNNER_TEMP"
+          git clone -q -b bundle-head "$bundle" "$REC_SOURCE_ROOT"
+          git -C "$REC_SOURCE_ROOT" checkout -q --detach "$EXPECTED_SHA"
+          test "$(git -C "$REC_SOURCE_ROOT" rev-parse HEAD)" = "$EXPECTED_SHA"
+          test -z "$(git -C "$REC_SOURCE_ROOT" status --porcelain --untracked-files=no)"
+          echo "G0_RECOVERY_EXACT_SOURCE=PASS revision=$EXPECTED_SHA"
+
+      - name: Prepare isolated runtime and resolve production DUT
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -r "$G0_ENV_FILE"
+          rm -rf "$REC_VENV" "$REC_RUNTIME_ROOT"
+          mkdir -p "$REC_RUNTIME_ROOT"
+          chmod 0700 "$REC_RUNTIME_ROOT"
+          python3 -m venv "$REC_VENV"
+          "$REC_VENV/bin/pip" install --disable-pip-version-check -q -r "$REC_SOURCE_ROOT/backend/requirements.txt"
+          set -a
+          source "$G0_ENV_FILE"
+          set +a
+          export PYTHONPATH="$REC_SOURCE_ROOT/backend"
+          cd "$REC_SOURCE_ROOT"
+          "$REC_VENV/bin/python" tools/resolve_real_sip_aba_database_env.py > "$REC_RUNTIME_ROOT/production_db.env"
+          chmod 0600 "$REC_RUNTIME_ROOT/production_db.env"
+          set -a
+          source "$REC_RUNTIME_ROOT/production_db.env"
+          set +a
+          "$REC_VENV/bin/python" tools/resolve_real_sip_aba_context.py \
+            --output-root "$REC_RUNTIME_ROOT/context-evidence" \
+            --runtime-root "$REC_RUNTIME_ROOT"
+          set -a
+          source "$REC_RUNTIME_ROOT/db_runtime.env"
+          source "$REC_RUNTIME_ROOT/resolved_dut.env"
+          set +a
+          "$REC_VENV/bin/python" tools/resolve_real_sip_aba_credential_env.py \
+            --container "$SIP_ABA_PRODUCTION_CREDENTIAL_CONTAINER" \
+            --expected-provider "$SIP_ABA_PRODUCTION_CREDENTIAL_PROVIDER" \
+            --sn "$DEVICE_SN" --ip "$DEVICE_HOST" --product "$DEVICE_MODEL" \
+            --fallback-user "$DEVICE_USER" \
+            --output "$REC_RUNTIME_ROOT/credential.env"
+          chmod 0600 "$REC_RUNTIME_ROOT/credential.env"
+
+      - name: Recover failed G0 residue from evidence-backed 7102 target
+        shell: bash
+        run: |
+          set -euo pipefail
+          set -a
+          source "$G0_ENV_FILE"
+          source "$REC_RUNTIME_ROOT/production_db.env"
+          source "$REC_RUNTIME_ROOT/db_runtime.env"
+          source "$REC_RUNTIME_ROOT/resolved_dut.env"
+          source "$REC_RUNTIME_ROOT/credential.env"
+          set +a
+          export PYTHONPATH="$REC_SOURCE_ROOT/backend"
+          export REAL_LIVE_MUTATION=EXPLICIT_ONLY
+          cd "$REC_SOURCE_ROOT"
+          "$REC_VENV/bin/python" tools/recover_g0_evidence_backed.py \
+            --device-id "$DEVICE_ID" --model "$DEVICE_MODEL" --host "$DEVICE_HOST" \
+            --port "$DEVICE_PORT" --username "$SIP_ABA_SSH_USERNAME" \
+            --password-env 'ENV:SIP_ABA_SSH_PASSWORD' --platform-id "$DEVICE_PLATFORM" \
+            --worker-id "github-g0-recovery-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
+            --profile-root "$REC_SOURCE_ROOT/profiles" \
+            --authorization "$REC_SOURCE_ROOT/tools/g0_recovery_authorization.json" \
+            --output "$REC_OUTPUT" --allow-live-recovery
+
+      - name: Verify sanitized recovery result
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os
+          p=json.load(open(os.environ['REC_OUTPUT'], encoding='utf-8'))
+          assert p['verdict'] == 'PASS', p
+          assert p['pre_disname'] == 'G0', p
+          assert p['restore_disname'] == '7102', p
+          assert p['post_disname'] == '7102', p
+          assert p['restore_verified'] is True, p
+          assert p['authority']['release_verified'] is True, p
+          assert p['secret_values_persisted'] is False, p
+          assert p['raw_module_snapshot_persisted'] is False, p
+          assert p.get('resolved_ssh_username'), p
+          assert p.get('remote_whoami'), p
+          print('G0_EVIDENCE_BACKED_RECOVERY=PASS')
+          print('G0_EFFECTIVE_SSH_USERNAME=' + p['resolved_ssh_username'])
+          print('G0_REMOTE_WHOAMI=' + p['remote_whoami'])
+          PY
+
+      - name: Upload immutable sanitized recovery evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: g0-evidence-backed-recovery-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.REC_OUTPUT }}
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Remove runtime credentials and source materialization
+        if: always()
+        shell: bash
+        run: |
+          rm -rf "$REC_RUNTIME_ROOT" "$REC_VENV" "$REC_SOURCE_ROOT"
+          rm -f "$REC_OUTPUT"
