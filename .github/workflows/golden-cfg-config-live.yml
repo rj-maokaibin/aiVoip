@@ -31,6 +31,17 @@ jobs:
       G0_RUNTIME_ROOT: /tmp/voip-ai-g0-runtime-${{ github.run_id }}-${{ github.run_attempt }}
 
     steps:
+      - name: Repair self-hosted workspace before checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker info >/dev/null
+          docker image inspect python:3.12-slim >/dev/null
+          docker run --rm -v "$GITHUB_WORKSPACE:/workspace" python:3.12-slim \
+            sh -lc 'find /workspace -mindepth 1 -maxdepth 1 -exec rm -rf {} +'
+          test -z "$(find "$GITHUB_WORKSPACE" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null)"
+          echo "G0_RUNNER_WORKSPACE_REPAIR=PASS"
+
       - name: Checkout exact master
         uses: actions/checkout@v4
         timeout-minutes: 5
