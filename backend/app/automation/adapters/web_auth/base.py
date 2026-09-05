@@ -44,6 +44,11 @@ class SessionManager:
         self.credential_provider = credential_provider
         self._session: WebSession | None = None
 
+    def invalidate(self) -> None:
+        """Drop only local session state; this performs no network or mutation."""
+
+        self._session = None
+
     async def ensure_session(self, *, force: bool = False) -> WebSession:
         if force or self._session is None or self._session.expired():
             self._session = await self.auth_provider.authenticate(self.transport, self.credential_provider())
