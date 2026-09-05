@@ -33,14 +33,15 @@ class EntryResult:
     accepted: bool
     status_code: int | None = None
     output: Any | None = None
-    # Process-private raw output. Evidence/persistence must use only ``output``.
-    # This exists so reversible WEB mutation can restore exact secret-bearing
-    # configuration instead of accidentally writing redaction masks.
-    runtime_output: Any | None = field(default=None, repr=False, compare=False)
     evidence: tuple[HttpEvidence, ...] = ()
     unknown_result: bool = False
     readback: Any | None = None
     error: str | None = None
+    # Process-private raw output. Evidence/persistence must use only ``output``.
+    # Keep this field last so existing positional construction remains compatible.
+    # It exists so reversible WEB mutation can restore exact secret-bearing
+    # configuration instead of accidentally writing redaction masks.
+    runtime_output: Any | None = field(default=None, repr=False, compare=False)
 
 
 @runtime_checkable
@@ -181,9 +182,9 @@ class WebEntryAdapter:
             accepted=accepted,
             status_code=response.status_code,
             output=output,
-            runtime_output={"modules": runtime_modules},
             evidence=(response.evidence,),
             error=error,
+            runtime_output={"modules": runtime_modules},
         )
 
     @staticmethod
