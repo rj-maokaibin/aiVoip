@@ -33,6 +33,10 @@ class EntryResult:
     accepted: bool
     status_code: int | None = None
     output: Any | None = None
+    # Raw runtime data is process-private and must never be emitted as evidence or
+    # persisted. It exists only so reversible WEB mutation can restore exact
+    # secret-bearing configuration without replacing secrets with redaction masks.
+    runtime_output: Any | None = field(default=None, repr=False, compare=False)
     evidence: tuple[HttpEvidence, ...] = ()
     unknown_result: bool = False
     readback: Any | None = None
@@ -91,33 +95,34 @@ class WebEntryAdapter:
         }
 
     @staticmethod
-    def _payload(operation: WebOperationProfile, args: Mapping[str, Any]) -> Any:
+    def _request_operation(
+        operation: WebOperationProfile,
+        args: Mapping[str, Any],
+    ) -> HttpRequest:
         if not operation.source_bound:
             raise WebProfileUnboundError(
                 f"WEB_OPERATION_NOT_SOURCE_BOUND:{operation.semantic_action}"
             )
         if operation.rpc_style == "cmd_array":
-            return WebEntryAdapter._cmd_array_payload(operation, args)
-        if operation.rpc_method is not None:
+            payload = WebEntryAdapter._cmd_array_payload(operation, args)
+        elif operation.rpc_method is not None:
             if operation.rpc_method == TBD_CURRENT_PRODUCT:
                 raise WebProfileUnboundError(
                     f"WEB_OPERATION_NOT_SOURCE_BOUND:{operation.semantic_action}"
                 )
-            return {"method": operation.rpc_method, "params": dict(args)}
-        return dict(args)
+            payload = {"method": operation.rpc_method, "params": dict(args)}
+        else:
+            payload = dict(args)
+        return HttpRequest(
+            method=operation.method,
+            path=operation.endpoint,
+            json_body=payload,
+            mutation=operation.mutation,
+        )
 
-    async def _request_operation(
-        self,
-        operation: WebOperationProfile,
-        args: Mapping[str, Any],
-    ) -> HttpResponse:
+    async def _request(self, operation: WebOperationProfile, args: Mapping[str, Any]) -> HttpResponse:
         return await self.session_manager.request(
-            HttpRequest(
-                method=operation.method,
-                path=operation.endpoint,
-                json_body=self._payload(operation, args),
-                mutation=operation.mutation,
-            ),
+            self._request_operation(operation, args),
             retry_policy=self.retry_policy,
         )
 
@@ -134,6 +139,7 @@ class WebEntryAdapter:
         )
         raw_data = body.get("data") if isinstance(body, Mapping) else None
         modules: dict[str, Any] = {}
+        runtime_modules: dict[str, Any] = {}
         if isinstance(raw_data, list):
             for index, item in enumerate(operation.rpc_items):
                 if index >= len(raw_data):
@@ -141,6 +147,7 @@ class WebEntryAdapter:
                 value = raw_data[index]
                 if isinstance(value, Mapping) and "data" in value:
                     value = value.get("data")
+                runtime_modules[item.module] = value
                 modules[item.module] = mask_http_secrets(value)
 
         accepted = protocol_ok
@@ -175,6 +182,7 @@ class WebEntryAdapter:
             accepted=accepted,
             status_code=response.status_code,
             output=output,
+            runtime_output={"modules": runtime_modules},
             evidence=(response.evidence,),
             error=error,
         )
@@ -184,11 +192,10 @@ class WebEntryAdapter:
         if operation.rpc_style == "cmd_array":
             return WebEntryAdapter._cmd_array_result(response, operation)
         raw_output = response.json_body if response.json_body is not None else response.text
-        output = mask_http_secrets(raw_output)
         return EntryResult(
             accepted=response.success,
             status_code=response.status_code,
-            output=output,
+            output=mask_http_secrets(raw_output),
             evidence=(response.evidence,),
             error=None if response.success else f"WEB_HTTP_{response.status_code}",
         )
@@ -203,7 +210,7 @@ class WebEntryAdapter:
         readback_op = self.profile.operation(operation.readback_operation)
         if readback_op.mutation:
             raise WebApiProfileError("WEB_READBACK_OPERATION_MUST_BE_READ_ONLY")
-        return self._to_result(await self._request_operation(readback_op, args), readback_op)
+        return self._to_result(await self._request(readback_op, args), readback_op)
 
     async def execute(
         self,
@@ -215,7 +222,7 @@ class WebEntryAdapter:
         operation = self.profile.operation(semantic_action)
         try:
             return self._to_result(
-                await self._request_operation(operation, args),
+                await self._request(operation, args),
                 operation,
             )
         except HttpMutationResultUnknown as exc:
