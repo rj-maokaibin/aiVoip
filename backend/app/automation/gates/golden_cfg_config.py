@@ -10,6 +10,7 @@ from app.automation.assertions.engine import AssertionEngine
 from app.automation.assertions.resolver import EvidenceEnvelope
 from app.automation.cleanup import CleanupStepSpec, PersistedCleanupCoordinator, SqlAlchemyCleanupStepStore
 from app.automation.event_wait import InMemoryEventBus
+from app.automation.gates.g0_recovery import G0RecoveryMarkerStore
 from app.automation.orchestrator import AutomationOrchestrator, AutomationRunContext, PrecheckResult, RuntimeBlocked, RuntimeHooks
 from app.automation.persistence import SqlAlchemyRuntimeRecorder
 from app.automation.registry import TestDefinition
@@ -19,6 +20,7 @@ from app.infrastructure.action_route import ActionBackend, ActionEntry, ActionPu
 from app.infrastructure.config_framework.executor import ConfigFrameworkExecutor
 from app.infrastructure.config_framework.schema import ConfigResult, mask_secrets
 from app.infrastructure.device_authority.capture_lease_adapter import CaptureLeaseCompatibilityAdapter
+from app.infrastructure.device_authority.keepalive import AuthorityKeepalive
 from app.infrastructure.mutation.contract import MutationStatus
 
 GOLDEN_CFG_CONFIG_CASE_ID = "Golden-CFG-CONFIG-001"
@@ -57,6 +59,13 @@ def build_display_name_probe(snapshot: Mapping[str, Any]) -> tuple[dict[str, Any
     return payload, marker
 
 
+def original_display_name(snapshot: Mapping[str, Any]) -> str:
+    rows = snapshot.get("data")
+    if not isinstance(rows, list) or not rows or not isinstance(rows[0], Mapping):
+        raise RuntimeBlocked("G0_EXISTING_VOIP_ACCOUNT_REQUIRED")
+    return str(rows[0].get("disName") or "")
+
+
 def safe_readback(result: ConfigResult) -> dict[str, Any]:
     masked = mask_secrets(result.raw)
     return {
@@ -80,6 +89,8 @@ class GoldenCfgConfigGate:
         authority: CaptureLeaseCompatibilityAdapter,
         session_factory,
         command_timeout: float = 20.0,
+        authority_keepalive_interval: float = 30.0,
+        recovery_store: G0RecoveryMarkerStore | None = None,
     ) -> None:
         if definition.case.case_id != GOLDEN_CFG_CONFIG_CASE_ID:
             raise ValueError("G0_CASE_ID_MISMATCH")
@@ -94,7 +105,18 @@ class GoldenCfgConfigGate:
         self.authority = authority
         self.session_factory = session_factory
         self.command_timeout = command_timeout
-        self.runtime: dict[str, Any] = {"token": None, "snapshot": None, "probe": None, "marker": None}
+        self.recovery_store = recovery_store
+        self.keepalive = AuthorityKeepalive(
+            authority,
+            interval_seconds=authority_keepalive_interval,
+        )
+        self.runtime: dict[str, Any] = {
+            "token": None,
+            "snapshot": None,
+            "probe": None,
+            "marker": None,
+            "recovery_marker_written": False,
+        }
 
     async def _precheck(self, context: AutomationRunContext) -> PrecheckResult:
         return PrecheckResult(context.case.case_id == GOLDEN_CFG_CONFIG_CASE_ID, "G0_CASE_ID_MISMATCH")
@@ -106,6 +128,20 @@ class GoldenCfgConfigGate:
             owner_worker_id=self.worker_id,
         )
         self.runtime["token"] = token
+        self.keepalive.start(token)
+        return token
+
+    def _current_token(self):
+        token = self.runtime.get("token")
+        if token is None:
+            raise RuntimeError("G0_AUTHORITY_MISSING")
+        if self.keepalive.error is not None:
+            self.keepalive.raise_if_failed()
+        try:
+            token = self.keepalive.token
+        except RuntimeError:
+            pass
+        self.runtime["token"] = token
         return token
 
     async def _snapshot(self, context: AutomationRunContext) -> None:
@@ -115,6 +151,13 @@ class GoldenCfgConfigGate:
         snapshot = extract_set_payload(result)
         probe, marker = build_display_name_probe(snapshot)
         self.runtime.update(snapshot=snapshot, probe=probe, marker=marker)
+        if self.recovery_store is not None:
+            self.recovery_store.write(
+                run_id=self.run_id,
+                device_id=self.device_id,
+                original_disname=original_display_name(snapshot),
+            )
+            self.runtime["recovery_marker_written"] = True
         self.case.parameters["probe_disname"] = marker
         context.evidence.put(
             "system",
@@ -136,10 +179,11 @@ class GoldenCfgConfigGate:
         probe = self.runtime.get("probe")
         if not isinstance(probe, Mapping):
             raise RuntimeError("G0_PROBE_NOT_PREPARED")
+        token = self._current_token()
         mutation = await self.config.set(
             G0_MODULE,
             probe,
-            authority_token=context.authority_token,
+            authority_token=token,
             timeout=self.command_timeout,
         )
         readback = await self.config.get(G0_MODULE, timeout=self.command_timeout)
@@ -162,11 +206,9 @@ class GoldenCfgConfigGate:
 
     async def _restore_action(self) -> dict[str, Any]:
         snapshot = self.runtime.get("snapshot")
-        token = self.runtime.get("token")
         if not isinstance(snapshot, Mapping):
             return {"restore_required": False, "reason": "snapshot_not_captured"}
-        if token is None:
-            raise RuntimeError("G0_RESTORE_AUTHORITY_MISSING")
+        token = self._current_token()
         current = await self.config.get(G0_MODULE, timeout=self.command_timeout)
         if ConfigFrameworkExecutor.payload_matches_readback(snapshot, current):
             return {"restore_required": False, "already_restored": True}
@@ -187,15 +229,24 @@ class GoldenCfgConfigGate:
         if not isinstance(snapshot, Mapping):
             return True, {"mutation_not_started": True}
         current = await self.config.get(G0_MODULE, timeout=self.command_timeout)
-        return ConfigFrameworkExecutor.payload_matches_readback(snapshot, current), {
+        restored = ConfigFrameworkExecutor.payload_matches_readback(snapshot, current)
+        if restored and self.recovery_store is not None:
+            self.recovery_store.remove(run_id=self.run_id)
+        return restored, {
             "restore_readback_success": current.success,
             "module": G0_MODULE,
+            "recovery_marker_retained": bool(
+                self.recovery_store is not None
+                and self.recovery_store.retained(run_id=self.run_id)
+            ),
         }
 
     async def _release_action(self) -> dict[str, Any]:
         token = self.runtime.get("token")
         if token is None:
             return {"authority_acquired": False}
+        await self.keepalive.stop()
+        token = self._current_token()
         self.authority.release(token)
         return {"authority_acquired": True, "lease_epoch": token.lease_epoch}
 
@@ -240,9 +291,18 @@ class GoldenCfgConfigGate:
             hooks=RuntimeHooks(precheck=self._precheck, reserve=self._reserve, snapshot=self._snapshot),
             recorder=SqlAlchemyRuntimeRecorder(self.session_factory),
         )
-        return await runtime.run(
-            self.case,
-            run_id=self.run_id,
-            worker_id=self.worker_id,
-            intent=RunIntent.VERIFY,
-        )
+        try:
+            return await runtime.run(
+                self.case,
+                run_id=self.run_id,
+                worker_id=self.worker_id,
+                intent=RunIntent.VERIFY,
+            )
+        finally:
+            # If cleanup failed before the release step, stop renewing and let the
+            # unresolved lease fence expire naturally. Never reacquire/take over.
+            if self.keepalive.error is None:
+                try:
+                    await self.keepalive.stop()
+                except RuntimeError:
+                    pass
