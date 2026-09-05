@@ -108,12 +108,16 @@ async def _run(args) -> tuple[int, dict[str, Any]]:
 
     await adapter.connect()
     try:
-        identity = await adapter.execute_shell("whoami", timeout=args.command_timeout, retries=1)
+        identity = await adapter.execute_shell(
+            "whoami 2>/dev/null || id -un 2>/dev/null || (test -n \"${USER:-}\" && printf '%s\\n' \"$USER\")",
+            timeout=args.command_timeout,
+            retries=1,
+        )
         if identity.exit_status != 0:
-            raise RuntimeError(f"G0_RECOVERY_WHOAMI_FAILED:{identity.exit_status}")
+            raise RuntimeError(f"G0_RECOVERY_REMOTE_IDENTITY_FAILED:{identity.exit_status}")
         remote_whoami = str(identity.stdout or "").strip().splitlines()[0] if str(identity.stdout or "").strip() else ""
         if not remote_whoami:
-            raise RuntimeError("G0_RECOVERY_WHOAMI_EMPTY")
+            raise RuntimeError("G0_RECOVERY_REMOTE_IDENTITY_EMPTY")
 
         token = authority.acquire(
             device_id=args.device_id,
