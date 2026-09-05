@@ -28,7 +28,7 @@ concurrency:
 
 jobs:
   verify-full-acceptance-evidence:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, voip-controlled-linux]
     timeout-minutes: 20
     env:
       EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
