@@ -1,0 +1,145 @@
+name: G0 Recovery Read-Only Observe
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - "tools/observe_g0_recovery_state.py"
+      - "backend/tests/test_g0_recovery_contract.py"
+      - ".github/workflows/g0-recovery-observe.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  exact-source-bundle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
+    steps:
+      - name: Checkout exact PR head on GitHub-hosted transport
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.EXPECTED_SHA }}
+          fetch-depth: 0
+      - name: Build immutable exact source bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          git branch -f bundle-head "$EXPECTED_SHA"
+          git bundle create "$RUNNER_TEMP/source.bundle" refs/heads/bundle-head
+          printf '%s\n' "$EXPECTED_SHA" > "$RUNNER_TEMP/source.sha"
+          git bundle verify "$RUNNER_TEMP/source.bundle"
+      - name: Upload exact source bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: g0-recovery-exact-source-${{ env.EXPECTED_SHA }}
+          path: |
+            ${{ runner.temp }}/source.bundle
+            ${{ runner.temp }}/source.sha
+          if-no-files-found: error
+          retention-days: 1
+
+  observe:
+    needs: exact-source-bundle
+    runs-on: [self-hosted, linux, x64, voip-controlled-linux]
+    timeout-minutes: 15
+    env:
+      EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
+      G0_ENV_FILE: /home/github-runner/.config/voip-ai/.env
+      OBS_VENV: /tmp/voip-ai-g0-observe-${{ github.run_id }}-${{ github.run_attempt }}
+      OBS_RUNTIME_ROOT: /tmp/voip-ai-g0-observe-runtime-${{ github.run_id }}-${{ github.run_attempt }}
+      OBS_SOURCE_ROOT: /tmp/voip-ai-g0-observe-src-${{ github.run_id }}-${{ github.run_attempt }}
+      OBS_OUTPUT: /tmp/voip-ai-g0-observe-output-${{ github.run_id }}-${{ github.run_attempt }}.json
+    steps:
+      - name: Download immutable exact source bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: g0-recovery-exact-source-${{ env.EXPECTED_SHA }}
+          path: ${{ runner.temp }}/g0-recovery-exact-source
+      - name: Materialize exact PR head outside runner workspace
+        shell: bash
+        run: |
+          set -euo pipefail
+          bundle="$RUNNER_TEMP/g0-recovery-exact-source/source.bundle"
+          sha_file="$RUNNER_TEMP/g0-recovery-exact-source/source.sha"
+          test -s "$bundle"
+          test "$(cat "$sha_file")" = "$EXPECTED_SHA"
+          rm -rf "$OBS_SOURCE_ROOT"
+          cd "$RUNNER_TEMP"
+          git clone -q -b bundle-head "$bundle" "$OBS_SOURCE_ROOT"
+          git -C "$OBS_SOURCE_ROOT" checkout -q --detach "$EXPECTED_SHA"
+          test "$(git -C "$OBS_SOURCE_ROOT" rev-parse HEAD)" = "$EXPECTED_SHA"
+          test -z "$(git -C "$OBS_SOURCE_ROOT" status --porcelain --untracked-files=no)"
+          echo "G0_RECOVERY_EXACT_SOURCE=PASS revision=$EXPECTED_SHA"
+      - name: Prepare isolated read-only runtime and resolve DUT
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -r "$G0_ENV_FILE"
+          rm -rf "$OBS_VENV" "$OBS_RUNTIME_ROOT"
+          mkdir -p "$OBS_RUNTIME_ROOT"
+          chmod 0700 "$OBS_RUNTIME_ROOT"
+          python3 -m venv "$OBS_VENV"
+          "$OBS_VENV/bin/pip" install --disable-pip-version-check -q -r "$OBS_SOURCE_ROOT/backend/requirements.txt"
+          set -a
+          source "$G0_ENV_FILE"
+          set +a
+          export PYTHONPATH="$OBS_SOURCE_ROOT/backend"
+          cd "$OBS_SOURCE_ROOT"
+          "$OBS_VENV/bin/python" tools/resolve_real_sip_aba_database_env.py > "$OBS_RUNTIME_ROOT/production_db.env"
+          chmod 0600 "$OBS_RUNTIME_ROOT/production_db.env"
+          set -a
+          source "$OBS_RUNTIME_ROOT/production_db.env"
+          set +a
+          "$OBS_VENV/bin/python" tools/resolve_real_sip_aba_context.py --output-root "$OBS_RUNTIME_ROOT/context-evidence" --runtime-root "$OBS_RUNTIME_ROOT"
+          set -a
+          source "$OBS_RUNTIME_ROOT/db_runtime.env"
+          source "$OBS_RUNTIME_ROOT/resolved_dut.env"
+          set +a
+          "$OBS_VENV/bin/python" tools/resolve_real_sip_aba_credential_env.py \
+            --container "$SIP_ABA_PRODUCTION_CREDENTIAL_CONTAINER" \
+            --expected-provider "$SIP_ABA_PRODUCTION_CREDENTIAL_PROVIDER" \
+            --sn "$DEVICE_SN" --ip "$DEVICE_HOST" --product "$DEVICE_MODEL" \
+            --fallback-user "$DEVICE_USER" --output "$OBS_RUNTIME_ROOT/credential.env"
+          chmod 0600 "$OBS_RUNTIME_ROOT/credential.env"
+      - name: Observe current G0 state and sanitized history without mutation
+        shell: bash
+        run: |
+          set -euo pipefail
+          set -a
+          source "$OBS_RUNTIME_ROOT/resolved_dut.env"
+          source "$OBS_RUNTIME_ROOT/credential.env"
+          set +a
+          export PYTHONPATH="$OBS_SOURCE_ROOT/backend:$OBS_SOURCE_ROOT"
+          cd "$OBS_SOURCE_ROOT"
+          "$OBS_VENV/bin/python" tools/observe_g0_recovery_state.py \
+            --device-id "$DEVICE_ID" --model "$DEVICE_MODEL" --host "$DEVICE_HOST" \
+            --port "$DEVICE_PORT" --username "$SIP_ABA_SSH_USERNAME" \
+            --password-env 'ENV:SIP_ABA_SSH_PASSWORD' --platform-id "$DEVICE_PLATFORM" \
+            --failed-probe-marker G0 --output "$OBS_OUTPUT"
+          python3 - <<'PY'
+          import json, os
+          p=json.load(open(os.environ['OBS_OUTPUT'], encoding='utf-8'))
+          assert p.get('read_only') is True, p
+          assert p.get('mutation_executed') is False, p
+          assert p.get('credential_value_persisted') is False, p
+          assert p.get('raw_log_lines_persisted') is False, p
+          print('G0_RECOVERY_READ_ONLY_OBSERVE=PASS')
+          PY
+      - name: Upload sanitized recovery observation
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: g0-recovery-observe-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.OBS_OUTPUT }}
+          if-no-files-found: error
+          retention-days: 30
+      - name: Remove runtime credentials and source materialization
+        if: always()
+        shell: bash
+        run: |
+          rm -rf "$OBS_RUNTIME_ROOT" "$OBS_VENV" "$OBS_SOURCE_ROOT"
+          rm -f "$OBS_OUTPUT"
