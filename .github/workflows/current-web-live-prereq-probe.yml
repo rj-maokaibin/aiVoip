@@ -74,6 +74,7 @@ jobs:
         run: |
           set -euo pipefail
           test -r "$PREREQ_ENV_FILE"
+          test "$(stat -c '%a' "$PREREQ_ENV_FILE")" = "600"
           rm -rf "$PREREQ_VENV" "$PREREQ_RUNTIME_ROOT"
           mkdir -p "$PREREQ_RUNTIME_ROOT" "$PREREQ_EVIDENCE_ROOT"
           chmod 0700 "$PREREQ_RUNTIME_ROOT"
@@ -131,14 +132,17 @@ jobs:
           chmod 0600 "$PREREQ_RUNTIME_ROOT/device_credential.env"
           echo 'WEB_PREREQ_DEVICE_CONTEXT=PASS mutation=false'
 
-      - name: Prove exactly one existing credential and bind WEB endpoint to selected DUT read-only
+      - name: Prove runtime WEB credential and bind WEB endpoint to selected DUT read-only
         shell: bash
         run: |
           set -euo pipefail
           set -a
+          source "$PREREQ_ENV_FILE"
           source "$PREREQ_RUNTIME_ROOT/resolved_dut.env"
           source "$PREREQ_RUNTIME_ROOT/device_credential.env"
           set +a
+          : "${WEB_USERNAME:?WEB_USERNAME_RUNTIME_REQUIRED}"
+          : "${WEB_PASSWORD:?WEB_PASSWORD_RUNTIME_REQUIRED}"
           export PYTHONPATH="$GITHUB_WORKSPACE/backend"
           args=(
             tools/resolve_current_web_credential_env.py
@@ -150,6 +154,9 @@ jobs:
             --ssh-username "$SIP_ABA_SSH_USERNAME"
             --ssh-password-env 'ENV:SIP_ABA_SSH_PASSWORD'
             --profile-path "$GITHUB_WORKSPACE/profiles/web_api/apf3260m_reyeeos_2_421_voip_v1.yaml"
+            --secret-file "$PREREQ_RUNTIME_ROOT/no-automatic-secret-source.yaml"
+            --username-env WEB_USERNAME
+            --password-env WEB_PASSWORD
             --output "$PREREQ_RUNTIME_ROOT/web_credential.env"
             --evidence-output "$PREREQ_EVIDENCE_ROOT/web-credential-resolution.json"
             --insecure-tls
@@ -160,7 +167,7 @@ jobs:
           "$PREREQ_VENV/bin/python" "${args[@]}"
           test -s "$PREREQ_RUNTIME_ROOT/web_credential.env"
           test "$(stat -c '%a' "$PREREQ_RUNTIME_ROOT/web_credential.env")" = "600"
-          echo 'WEB_PREREQ_CREDENTIAL_AND_TARGET_BINDING=PASS mutation=false secret_values_emitted=false'
+          echo 'WEB_PREREQ_CREDENTIAL_AND_TARGET_BINDING=PASS source=WEB_USERNAME_WEB_PASSWORD read_only=true mutation=false secret_values_emitted=false'
 
       - name: Verify PBX registration observer is available read-only
         shell: bash
