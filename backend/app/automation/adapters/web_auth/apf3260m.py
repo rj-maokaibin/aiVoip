@@ -13,6 +13,7 @@ from app.automation.adapters.web_auth.legacy_luci import (
     PasswordEncoder,
     current_luci_protocol_success,
 )
+from app.infrastructure.transport.http import HttpResponse
 
 
 TimestampProvider = Callable[[], str]
@@ -103,6 +104,37 @@ class Apf3260mLuciLoginPayloadBuilder:
         }
 
 
+def apf3260m_luci_sid_extractor(response: HttpResponse) -> str | None:
+    """Extract the current-product LuCI session id from its JSON-RPC envelope.
+
+    Current DUT source binding proves that ``noauth.login`` returns the value of
+    ``dispatcher.writeSid("admin")``. This product's JSON-RPC ``reply`` wrapper
+    places the called method's return value in top-level ``data``. The live
+    read-only login diagnostic independently proved protocol success while the
+    generic ``sid``/``data.sid`` extractor reported ``SID_MISSING``. Therefore
+    scalar ``data`` is a product-specific session-id carrier, not a generic LuCI
+    convention.
+    """
+
+    value = response.json_body
+    if not isinstance(value, Mapping):
+        return None
+
+    direct = value.get("sid")
+    if isinstance(direct, str) and direct.strip():
+        return direct
+
+    data = value.get("data")
+    if isinstance(data, Mapping):
+        nested = data.get("sid")
+        if isinstance(nested, str) and nested.strip():
+            return nested
+    elif isinstance(data, str) and data.strip():
+        return data
+
+    return None
+
+
 def build_apf3260m_luci_auth_provider(
     *,
     timestamp_provider: TimestampProvider,
@@ -113,5 +145,6 @@ def build_apf3260m_luci_auth_provider(
     return LegacyLuciAuthProvider(
         password_encoder=password_encoder or Apf3260mGibberishAesPasswordEncoder(),
         login_payload_builder=Apf3260mLuciLoginPayloadBuilder(timestamp_provider),
+        sid_extractor=apf3260m_luci_sid_extractor,
         protocol_success=current_luci_protocol_success,
     )

@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import base64
+from types import SimpleNamespace
 
 from app.automation.adapters.web_auth.apf3260m import (
     APF3260M_DEFAULT_AES_PASSPHRASE,
     Apf3260mGibberishAesPasswordEncoder,
     Apf3260mLuciLoginPayloadBuilder,
+    apf3260m_luci_sid_extractor,
     build_apf3260m_luci_auth_provider,
 )
 
@@ -48,7 +50,27 @@ def test_apf3260m_current_login_payload_uses_har_pwd_field_not_legacy_password()
     assert "password" not in payload["params"]
 
 
-def test_apf3260m_auth_provider_uses_source_bound_encoder_by_default() -> None:
+def test_apf3260m_sid_extractor_accepts_source_bound_scalar_data_session() -> None:
+    response = SimpleNamespace(json_body={"code": 0, "error": None, "data": "session-value"})
+
+    assert apf3260m_luci_sid_extractor(response) == "session-value"
+
+
+def test_apf3260m_sid_extractor_keeps_structured_sid_compatibility() -> None:
+    top_level = SimpleNamespace(json_body={"sid": "top-level"})
+    nested = SimpleNamespace(json_body={"data": {"sid": "nested"}})
+
+    assert apf3260m_luci_sid_extractor(top_level) == "top-level"
+    assert apf3260m_luci_sid_extractor(nested) == "nested"
+
+
+def test_apf3260m_sid_extractor_does_not_treat_non_string_data_as_session() -> None:
+    assert apf3260m_luci_sid_extractor(SimpleNamespace(json_body={"data": True})) is None
+    assert apf3260m_luci_sid_extractor(SimpleNamespace(json_body={"data": ""})) is None
+
+
+def test_apf3260m_auth_provider_uses_source_bound_encoder_and_sid_extractor() -> None:
     provider = build_apf3260m_luci_auth_provider(timestamp_provider=lambda: "1770000000")
 
     assert isinstance(provider.password_encoder, Apf3260mGibberishAesPasswordEncoder)
+    assert provider.sid_extractor is apf3260m_luci_sid_extractor
