@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -12,7 +13,7 @@ from app.automation.adapters.pbx.base import (
     PbxResourceKind,
     PbxVerification,
 )
-from app.automation.contracts import parse_test_case
+from app.automation.contracts import TestContractStatus, parse_test_case
 from app.automation.gates.golden_web_nonnum import GoldenWebNonnumGate
 from app.automation.orchestrator import AutomationRunContext
 from app.automation.product_contracts.extension_identifier import load_extension_identifier_contract
@@ -58,9 +59,12 @@ class FakePbx:
         return PbxVerification(matched=True, details={"absent": True})
 
 
-def _definition() -> TestDefinition:
+def _definition(*, executable: bool = True) -> TestDefinition:
     raw = yaml.safe_load(CASE_PATH.read_text(encoding="utf-8"))
-    return TestDefinition(case=parse_test_case(raw), checksum="test", source_path=str(CASE_PATH))
+    case = parse_test_case(raw)
+    if executable:
+        case = replace(case, contract_status=TestContractStatus.ACTIVE)
+    return TestDefinition(case=case, checksum="test", source_path=str(CASE_PATH))
 
 
 def _request() -> PbxIdentityRequest:
@@ -73,10 +77,15 @@ def _request() -> PbxIdentityRequest:
     )
 
 
-def _gate(*, capability_present: bool = True, pbx: FakePbx | None = None) -> GoldenWebNonnumGate:
+def _gate(
+    *,
+    capability_present: bool = True,
+    pbx: FakePbx | None = None,
+    executable: bool = True,
+) -> GoldenWebNonnumGate:
     contract, _ = load_extension_identifier_contract(CONTRACT_PATH)
     return GoldenWebNonnumGate(
-        definition=_definition(),
+        definition=_definition(executable=executable),
         run_id="run-nonnum-1",
         device_id="dut-1",
         worker_id="worker-1",
@@ -90,6 +99,21 @@ def _gate(*, capability_present: bool = True, pbx: FakePbx | None = None) -> Gol
         authority=SimpleNamespace(),
         session_factory=lambda: None,
     )
+
+
+@pytest.mark.asyncio
+async def test_nonnum_runtime_blocks_reserved_contract_before_reserve_or_pbx_provision() -> None:
+    pbx = FakePbx()
+    gate = _gate(pbx=pbx, executable=False)
+    context = AutomationRunContext(
+        run_id=gate.run_id,
+        case=gate.case,
+        worker_id=gate.worker_id,
+    )
+    result = await gate._precheck(context)
+    assert result.ok is False
+    assert result.reason == "WEB_NONNUM_CONTRACT_NOT_EXECUTABLE:RESERVED"
+    assert pbx.calls == []
 
 
 @pytest.mark.asyncio
