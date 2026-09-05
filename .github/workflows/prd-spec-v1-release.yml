@@ -27,7 +27,7 @@ concurrency:
 jobs:
   resolve-shared-source:
     if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, voip-controlled-linux]
     timeout-minutes: 15
     env:
       EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -73,12 +73,20 @@ jobs:
 
   manual-source-bundle:
     if: github.event_name != 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, voip-controlled-linux]
     timeout-minutes: 10
     env:
       EXPECTED_SHA: ${{ github.sha }}
     steps:
-      - name: Checkout exact source on GitHub-hosted transport
+      - name: Reset controlled workspace
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker image inspect python:3.12-slim >/dev/null
+          docker run --rm -v "$GITHUB_WORKSPACE:/workspace" python:3.12-slim \
+            sh -lc 'find /workspace -mindepth 1 -maxdepth 1 -exec rm -rf {} +'
+
+      - name: Checkout exact source on controlled transport
         uses: actions/checkout@v4
         with:
           ref: ${{ env.EXPECTED_SHA }}
@@ -110,7 +118,7 @@ jobs:
 
   resolve-reusable-full-acceptance:
     if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, voip-controlled-linux]
     timeout-minutes: 5
     env:
       EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
@@ -158,12 +166,20 @@ jobs:
             core.info(`No reusable Full Acceptance artifact found for ${sha}`);
 
   frontend-acceptance:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
+    runs-on: [self-hosted, linux, x64, voip-controlled-linux]
+    timeout-minutes: 15
     env:
       EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
       CICD_PERFORMANCE_V3_EVIDENCE: validation/frontend_cicd_performance_v3.json
     steps:
+      - name: Reset controlled workspace
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker image inspect python:3.12-slim >/dev/null
+          docker run --rm -v "$GITHUB_WORKSPACE:/workspace" python:3.12-slim \
+            sh -lc 'find /workspace -mindepth 1 -maxdepth 1 -exec rm -rf {} +'
+
       - name: Checkout exact frontend source
         uses: actions/checkout@v4
         with:
@@ -200,7 +216,7 @@ jobs:
               "package_lock_sha256": lock_sha,
               "npm_audit_passed": True,
               "production_build_passed": True,
-              "execution_source": "GITHUB_HOSTED",
+              "execution_source": "CONTROLLED_SELF_HOSTED",
               "performance": {
                   "status": perf.get("status"),
                   "total_duration_ms": perf.get("total_duration_ms"),
@@ -235,11 +251,19 @@ jobs:
       needs.resolve-shared-source.result == 'success' &&
       needs.frontend-acceptance.result == 'success' &&
       needs.resolve-reusable-full-acceptance.outputs.reusable == 'true'
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, voip-controlled-linux]
     timeout-minutes: 10
     env:
       EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
     steps:
+      - name: Reset controlled workspace
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker image inspect python:3.12-slim >/dev/null
+          docker run --rm -v "$GITHUB_WORKSPACE:/workspace" python:3.12-slim \
+            sh -lc 'find /workspace -mindepth 1 -maxdepth 1 -exec rm -rf {} +'
+
       - name: Checkout exact validator source
         uses: actions/checkout@v4
         with:
@@ -520,7 +544,7 @@ jobs:
               },
           }
           assert evidence["frontend_acceptance"]["passed"] is True, evidence
-          assert evidence["frontend_acceptance"]["source"] == "GITHUB_HOSTED", evidence
+          assert evidence["frontend_acceptance"]["source"] == "CONTROLLED_SELF_HOSTED", evidence
           assert evidence["golden_001"] == {
               "passed": True,
               "checks_passed": 142,
@@ -540,7 +564,7 @@ jobs:
           set -euo pipefail
           printf 'PRD_SPEC_V1_FROZEN_CONTRACTS=PASS\n'
           printf 'VOIP_AI_SOFTWARE_RELEASE_GATE=PASS\n'
-          printf 'FRONTEND_ACCEPTANCE_EVIDENCE=PASS source=GITHUB_HOSTED\n'
+          printf 'FRONTEND_ACCEPTANCE_EVIDENCE=PASS source=CONTROLLED_SELF_HOSTED\n'
           printf 'REAL_OFFLINE_GOLDEN_001=PASS 142/142\n'
           printf 'HUMAN_REAL_OFFLINE_GOLDEN_001=PASS\n'
           printf 'CICD_PERFORMANCE_V3=PASS\n'
@@ -616,7 +640,7 @@ jobs:
     if: >-
       always() &&
       (needs.reuse-full-acceptance.result == 'success' || needs.full-software-acceptance.result == 'success')
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, voip-controlled-linux]
     steps:
       - name: Authoritative Full Acceptance result
         shell: bash
