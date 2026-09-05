@@ -13,12 +13,12 @@ permissions:
 jobs:
   read-only-auth-key-flow:
     runs-on: [self-hosted, linux, x64, voip-controlled-linux]
-    timeout-minutes: 15
+    timeout-minutes: 12
     env:
       EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
       PROBE_ENV_FILE: /home/github-runner/.config/voip-ai/.env
       PROBE_VENV: /tmp/voip-web-auth-key-flow-${{ github.run_id }}-${{ github.run_attempt }}
-      RUNTIME_ROOT: /tmp/voip-web-auth-key-flow-runtime-${{ github.run_id }}-${{ github.run_attempt }}
+      WEB_BASE_URL: https://10.48.8.74:10003
 
     steps:
       - name: Repair workspace
@@ -28,9 +28,7 @@ jobs:
           docker image inspect python:3.12-slim >/dev/null
           docker run --rm -v "$GITHUB_WORKSPACE:/workspace" python:3.12-slim \
             sh -lc 'find /workspace -mindepth 1 -maxdepth 1 -exec rm -rf {} +'
-          rm -rf "$PROBE_VENV" "$RUNTIME_ROOT"
-          mkdir -p "$RUNTIME_ROOT"
-          chmod 0700 "$RUNTIME_ROOT"
+          rm -rf "$PROBE_VENV"
 
       - name: Materialize exact diagnostic head
         shell: bash
@@ -47,7 +45,7 @@ jobs:
           tar -xzf "$archive" -C "$GITHUB_WORKSPACE" --strip-components=1
           echo "WEB_AUTH_KEY_FLOW_EXACT_HEAD=PASS revision=$EXPECTED_SHA"
 
-      - name: Prepare isolated runtime and resolve DUT read-only
+      - name: Prepare isolated runtime
         shell: bash
         run: |
           set -euo pipefail
@@ -55,136 +53,102 @@ jobs:
           test "$(stat -c '%a' "$PROBE_ENV_FILE")" = '600'
           python3 -m venv "$PROBE_VENV"
           "$PROBE_VENV/bin/pip" install --disable-pip-version-check -q -r backend/requirements.txt
-          set -a; source "$PROBE_ENV_FILE"; set +a
-          export PYTHONPATH="$GITHUB_WORKSPACE/backend"
-          "$PROBE_VENV/bin/python" tools/resolve_real_sip_aba_database_env.py > "$RUNTIME_ROOT/production_db.env"
-          chmod 0600 "$RUNTIME_ROOT/production_db.env"
-          set -a; source "$RUNTIME_ROOT/production_db.env"; set +a
-          "$PROBE_VENV/bin/python" tools/resolve_real_sip_aba_context.py --output-root "$RUNTIME_ROOT/context" --runtime-root "$RUNTIME_ROOT"
-          set -a
-          source "$RUNTIME_ROOT/db_runtime.env"
-          source "$RUNTIME_ROOT/resolved_dut.env"
-          set +a
-          "$PROBE_VENV/bin/python" tools/resolve_real_sip_aba_credential_env.py \
-            --container "$SIP_ABA_PRODUCTION_CREDENTIAL_CONTAINER" \
-            --expected-provider "$SIP_ABA_PRODUCTION_CREDENTIAL_PROVIDER" \
-            --sn "$DEVICE_SN" --ip "$DEVICE_HOST" --product "$DEVICE_MODEL" \
-            --fallback-user "$DEVICE_USER" --output "$RUNTIME_ROOT/device_credential.env"
-          chmod 0600 "$RUNTIME_ROOT/device_credential.env"
 
-      - name: Trace key variable chain without source text or values
+      - name: Compare rendered encryption key and perform one read-only login
         shell: bash
         run: |
           set -euo pipefail
-          set -a
-          source "$RUNTIME_ROOT/resolved_dut.env"
-          source "$RUNTIME_ROOT/device_credential.env"
-          set +a
+          set -a; source "$PROBE_ENV_FILE"; set +a
+          : "${WEB_USERNAME:?WEB_USERNAME_RUNTIME_REQUIRED}"
+          : "${WEB_PASSWORD:?WEB_PASSWORD_RUNTIME_REQUIRED}"
           export PYTHONPATH="$GITHUB_WORKSPACE/backend"
           "$PROBE_VENV/bin/python" - <<'PY'
-          import asyncio, json, os, re
-          from app.capture_v2.gate.context import build_asyncssh_adapter
-          from app.capture_v2.gate.models import GateDeviceSpec
+          import asyncio
+          import json
+          import os
+          import re
+          import time
+          from collections.abc import Mapping
 
-          PATHS={
-              'login':'/usr/lib/lua/luci/view/login.htm',
-              'logfile':'/usr/lib/lua/luci/utils/logFile.lua',
-              'noauth':'/usr/lib/lua/luci/modules/noauth.lua',
-              'dispatcher':'/usr/lib/lua/luci/dispatcher.lua',
-          }
-          KEYWORDS={'if','then','else','elseif','end','local','return','true','false','nil','and','or','not','function','do','for','while','in','var','let','const','new'}
+          import httpx
 
-          def strip_literals(text:str)->str:
-              text=re.sub(r'--\[\[[\s\S]*?\]\]',' ',text)
-              text=re.sub(r'--[^\n]*',' ',text)
-              text=re.sub(r'//[^\n]*',' ',text)
-              text=re.sub(r'/\*[\s\S]*?\*/',' ',text)
-              text=re.sub(r'(["\'])(?:\\.|(?!\1).)*\1',' <STR> ',text)
-              return text
+          from app.automation.adapters.web_auth.apf3260m import (
+              APF3260M_DEFAULT_AES_PASSPHRASE,
+              Apf3260mGibberishAesPasswordEncoder,
+              build_apf3260m_luci_auth_provider,
+          )
+          from app.infrastructure.transport.http import HttpApiTransport, HttpRequest, HttpRetryPolicy
 
-          def ids(text:str):
-              out=[]
-              for x in re.findall(r'[A-Za-z_][A-Za-z0-9_.:]*',strip_literals(text)):
-                  if x in KEYWORDS or x=='STR' or x in out: continue
-                  out.append(x)
-              return out[:100]
-
-          def calls(text:str):
-              out=[]
-              for x in re.findall(r'([A-Za-z_][A-Za-z0-9_.:]*)\s*\(',strip_literals(text)):
-                  if x in KEYWORDS or x in out: continue
-                  out.append(x)
-              return out[:80]
-
-          def assignment_facts(text:str):
-              out=[]
-              for m in re.finditer(r'(?m)^\s*(?:var|let|const|local)?\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*([^;\r\n]+)',text):
-                  lhs,rhs=m.group(1),m.group(2)
-                  combined=(lhs+' '+rhs)
-                  if not re.search(r'key|auth|pwd|pass|crypt|encrypt|aes|login|user',combined,re.I): continue
-                  out.append({'lhs':lhs,'rhs_identifiers':ids(rhs),'rhs_calls':calls(rhs),'rhs_emitted':False})
-              return out[:100]
-
-          def function_region(source:str,name:str)->str:
-              patterns=(
-                  rf'(?m)^\s*(?:local\s+)?function\s+(?:[A-Za-z_][A-Za-z0-9_.:]*[.:])?{re.escape(name)}\s*\([^\n]*\)',
-                  rf'(?m)^\s*(?:[A-Za-z_][A-Za-z0-9_.:]*[.:])?{re.escape(name)}\s*=\s*function\s*\([^\n]*\)',
+          def extract_key(text: str):
+              patterns = (
+                  r'GibberishAES\.enc\s*\(\s*[^,\n]+,\s*(["\'])([^"\']+)\1',
+                  r'GibberishAES\.enc\s*\(\s*[^,\n]+,\s*`([^`]+)`',
               )
               for p in patterns:
-                  m=re.search(p,source)
-                  if not m: continue
-                  tail=source[m.start():]
-                  n=re.search(r'(?m)^\s*(?:local\s+)?function\s+[A-Za-z_][A-Za-z0-9_.:]*\s*\(',tail[1:])
-                  return tail[:1+n.start()] if n else tail
-              return ''
-
-          def crypto_contexts(text:str):
-              out=[]
-              for m in re.finditer(r'GibberishAES\.(?:enc|dec)',text,re.I):
-                  frag=text[max(0,m.start()-500):m.end()+700]
-                  out.append({'identifiers':ids(frag),'calls':calls(frag),'source_text_emitted':False})
-              return out[:20]
-
-          def function_facts(source:str,name:str):
-              region=function_region(source,name)
-              returns=[]
-              for m in re.finditer(r'(?m)^\s*return\s+([^\r\n]+)',region):
-                  rhs=m.group(1)
-                  returns.append({'identifiers':ids(rhs),'calls':calls(rhs),'value_emitted':False})
-              return {
-                  'present':bool(region),
-                  'calls':calls(region),
-                  'assignments':assignment_facts(region),
-                  'returns':returns[:30],
-                  'source_text_emitted':False,
-              }
+                  m = re.search(p, text, re.I)
+                  if m:
+                      return m.group(2) if m.lastindex and m.lastindex >= 2 else m.group(1)
+              return None
 
           async def main():
-              spec=GateDeviceSpec(device_id=os.environ['DEVICE_ID'],model=os.environ['DEVICE_MODEL'],host=os.environ['DEVICE_HOST'],port=int(os.environ.get('DEVICE_PORT') or '22'),username=os.environ['SIP_ABA_SSH_USERNAME'],platform_id=os.environ.get('DEVICE_PLATFORM') or None)
-              ssh=build_asyncssh_adapter(spec,password_env='ENV:SIP_ABA_SSH_PASSWORD')
-              await ssh.connect(); sources={}
-              try:
-                  for key,path in PATHS.items():
-                      cp=await ssh.execute_shell("cat '"+path+"' 2>/dev/null",timeout=30,retries=1)
-                      sources[key]=(cp.stdout or '') if cp.exit_status==0 else ''
-              finally:
-                  await ssh.disconnect()
-              login=sources['login']; logfile=sources['logfile']; noauth=sources['noauth']; dispatcher=sources['dispatcher']
-              result={
-                  'schema':'current-web-auth-key-flow-v2',
-                  'mutation_executed':False,
-                  'secret_values_emitted':False,
-                  'login_source_present':bool(login),
-                  'login_crypto_contexts':crypto_contexts(login),
-                  'login_key_assignments':assignment_facts(login),
-                  'getUserKey':function_facts(logfile,'getUserKey'),
-                  'getUser':function_facts(logfile,'getUser'),
-                  'login_backend':function_facts(noauth,'login'),
-                  'writeSid':function_facts(dispatcher,'writeSid'),
-                  'source_text_emitted':False,
+              base = os.environ['WEB_BASE_URL']
+              async with httpx.AsyncClient(base_url=base, verify=False, timeout=15.0) as page_client:
+                  page = await page_client.get('/cgi-bin/luci/')
+                  page_text = page.text[:1_000_000]
+              rendered_key = extract_key(page_text)
+              result = {
+                  'schema': 'current-web-auth-rendered-key-v1',
+                  'mutation_executed': False,
+                  'secret_values_emitted': False,
+                  'page_status': page.status_code,
+                  'gibberish_aes_present': bool(re.search(r'GibberishAES\.enc', page_text, re.I)),
+                  'rendered_key_found': bool(rendered_key),
+                  'rendered_key_length': len(rendered_key) if rendered_key else 0,
+                  'rendered_key_equals_current_default': bool(rendered_key and rendered_key == APF3260M_DEFAULT_AES_PASSPHRASE),
               }
-              print(json.dumps(result,sort_keys=True))
-              sources.clear(); login=logfile=noauth=dispatcher=''
+              if not rendered_key:
+                  result['login_attempted'] = False
+                  print(json.dumps(result, sort_keys=True))
+                  return
+
+              provider = build_apf3260m_luci_auth_provider(
+                  timestamp_provider=lambda: str(int(time.time())),
+                  password_encoder=Apf3260mGibberishAesPasswordEncoder(passphrase=rendered_key),
+              )
+              client = httpx.AsyncClient(base_url=base, verify=False, timeout=15.0)
+              transport = HttpApiTransport(base, client=client)
+              password = os.environ['WEB_PASSWORD']
+              encoded = provider.password_encoder(password)
+              payload = dict(provider.login_payload_builder(os.environ['WEB_USERNAME'], encoded))
+              try:
+                  response = await transport.request(
+                      HttpRequest(
+                          method='POST', path=provider.login_endpoint, json_body=payload,
+                          mutation=False, sensitive_values=(password, encoded, rendered_key),
+                      ),
+                      retry_policy=HttpRetryPolicy(max_attempts=1),
+                  )
+                  body = response.json_body
+                  data = body.get('data') if isinstance(body, Mapping) else None
+                  result.update({
+                      'login_attempted': True,
+                      'http_success': response.success,
+                      'protocol_success': provider.protocol_success(response),
+                      'sid_extracted': bool(provider.sid_extractor(response)),
+                      'data_type': type(data).__name__,
+                      'data_key_names': sorted(str(k) for k in data.keys()) if isinstance(data, Mapping) else [],
+                      'msg_empty': (str(data.get('msg') or '') == '') if isinstance(data, Mapping) and 'msg' in data else None,
+                      'reload_value': bool(data.get('reload')) if isinstance(data, Mapping) and isinstance(data.get('reload'), bool) else None,
+                  })
+              finally:
+                  password = ''
+                  encoded = ''
+                  payload = {}
+                  rendered_key = ''
+                  page_text = ''
+                  await client.aclose()
+              print(json.dumps(result, sort_keys=True))
+
           asyncio.run(main())
           PY
 
@@ -192,4 +156,4 @@ jobs:
         if: always()
         shell: bash
         run: |
-          rm -rf "$RUNTIME_ROOT" "$PROBE_VENV"
+          rm -rf "$PROBE_VENV"
