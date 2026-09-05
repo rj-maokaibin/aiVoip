@@ -35,7 +35,7 @@ concurrency:
 jobs:
   exact-source-bundle:
     runs-on: [self-hosted, linux, x64, voip-controlled-linux]
-    timeout-minutes: 10
+    timeout-minutes: 15
     env:
       EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
@@ -51,7 +51,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ env.EXPECTED_SHA }}
-          fetch-depth: 1
+          fetch-depth: 0
 
       - name: Build immutable source bundle and derived manifest
         shell: bash
