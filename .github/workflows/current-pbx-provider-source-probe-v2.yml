@@ -11,6 +11,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: current-pbx-create-contract-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 jobs:
   source-contract:
     runs-on: [self-hosted, linux, x64, voip-controlled-linux]
@@ -19,15 +23,41 @@ jobs:
       EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
       FUSIONPBX_ROOT: /var/www/fusionpbx
     steps:
-      - name: Checkout exact PR head
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ env.EXPECTED_SHA }}
+      - name: Repair self-hosted workspace
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker image inspect python:3.12-slim >/dev/null
+          docker run --rm -v "$GITHUB_WORKSPACE:/workspace" python:3.12-slim \
+            sh -lc 'find /workspace -mindepth 1 -maxdepth 1 -exec rm -rf {} +'
+
+      - name: Materialize exact PR head from GitHub archive read-only
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          api="https://api.github.com/repos/${GITHUB_REPOSITORY}"
+          actual="$(curl -fsSL \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H 'Accept: application/vnd.github+json' \
+            -H 'X-GitHub-Api-Version: 2022-11-28' \
+            "${api}/commits/${EXPECTED_SHA}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["sha"])')"
+          test "$actual" = "$EXPECTED_SHA"
+          archive="$RUNNER_TEMP/pbx-create-${EXPECTED_SHA}.tar.gz"
+          curl -fsSL \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H 'Accept: application/vnd.github+json' \
+            -H 'X-GitHub-Api-Version: 2022-11-28' \
+            "${api}/tarball/${EXPECTED_SHA}" -o "$archive"
+          test -s "$archive"
+          tar -xzf "$archive" -C "$GITHUB_WORKSPACE" --strip-components=1
+          echo "PBX_CREATE_EXACT_HEAD=PASS transport=GITHUB_EXACT_SHA_ARCHIVE revision=$EXPECTED_SHA"
+
       - name: Inspect installed FusionPBX create path read-only
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
           mkdir -p pbx-create-contract-evidence
           python3 - <<'PY'
           import hashlib, json, re, shutil, subprocess
@@ -120,6 +150,7 @@ jobs:
           out.write_text(json.dumps(facts, sort_keys=True, indent=2) + '\n', encoding='utf-8')
           print(json.dumps({'PBX_CREATE_SOURCE_CONTRACT':'PASS','mutation':False,'secret_values_emitted':False}, sort_keys=True))
           PY
+
       - name: Upload immutable source contract evidence
         uses: actions/upload-artifact@v4
         with:
