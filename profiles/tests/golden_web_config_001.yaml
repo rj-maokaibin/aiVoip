@@ -1,0 +1,40 @@
+id: Golden-WEB-CONFIG-001
+version: 1
+name: Current WEB numeric VOIP configuration and SIP registration Golden
+suite_id: web_voip
+entry: web
+contract_status: ACTIVE
+environment:
+  profile: real_controlled
+parameters:
+  target_number: "7900"
+snapshot:
+  - web_voip_writable_bundle
+steps:
+  - action: voip.account.configure
+    purpose: test
+    args: {}
+assertions:
+  - id: web_number_readback
+    source: entry
+    path: number
+    op: eq
+    value: ${target_number}
+  - id: web_display_name_readback
+    source: entry
+    path: disName
+    op: eq
+    value: ${target_number}
+  - id: sip_registration_observed
+    source: sip
+    path: registered
+    op: eq
+    value: true
+  - id: sip_registration_identity
+    source: sip
+    path: number
+    op: eq
+    value: ${target_number}
+cleanup:
+  strategy: restore_snapshot
+  verify: true
