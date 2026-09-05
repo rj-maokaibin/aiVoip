@@ -10,6 +10,7 @@ from app.automation.actions.dispatcher import (
 )
 from app.automation.assertions.engine import AssertionEngine, AssertionEvaluation
 from app.automation.assertions.resolver import EvidenceEnvelope, NormalizedEvidenceStore
+from app.automation.best_effort_recorder import BestEffortRuntimeRecorder, RuntimeRecorderFailure
 from app.automation.cleanup import AutomationCleanupError, PersistedCleanupCoordinator
 from app.automation.contracts import ActionStepSpec, TestCaseSpec, TestVerdict, WaitForSpec
 from app.automation.event_wait import EventWaitTimeout, InMemoryEventBus
@@ -77,6 +78,7 @@ class OrchestrationResult:
     assertions: AssertionEvaluation
     state_history: tuple[AutomationRunState, ...]
     terminal_reason: str | None
+    recorder_failures: tuple[RuntimeRecorderFailure, ...] = ()
 
 
 class AutomationOrchestrator:
@@ -97,7 +99,12 @@ class AutomationOrchestrator:
         self.assertions = assertions
         self.cleanup = cleanup
         self.hooks = hooks or RuntimeHooks()
-        self.recorder = recorder or NullRuntimeRecorder()
+        raw_recorder = recorder or NullRuntimeRecorder()
+        self.recorder = (
+            raw_recorder
+            if isinstance(raw_recorder, BestEffortRuntimeRecorder)
+            else BestEffortRuntimeRecorder(raw_recorder)
+        )
 
     def _transition(
         self,
@@ -312,4 +319,5 @@ class AutomationOrchestrator:
             assertions=evaluation,
             state_history=tuple(machine.history),
             terminal_reason=evaluation.reason,
+            recorder_failures=self.recorder.failures_for(run_id),
         )
