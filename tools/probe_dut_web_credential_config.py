@@ -181,10 +181,10 @@ async def _probe(args) -> tuple[int, dict, _Candidate | None]:
             insecure_tls=args.insecure_tls,
         )
 
-    user_like = [key for key in keys if _leaf_tokens(key) & _USER_TOKENS]
-    pass_like = [key for key in keys if _leaf_tokens(key) & _PASS_TOKENS]
+    user_like = sorted(key for key in keys if _leaf_tokens(key) & _USER_TOKENS)
+    pass_like = sorted(key for key in keys if _leaf_tokens(key) & _PASS_TOKENS)
     evidence = {
-        "schema": "dut-web-credential-config-probe-v1",
+        "schema": "dut-web-credential-config-probe-v2",
         "read_only": True,
         "mutation_executed": False,
         "secret_values_emitted": False,
@@ -192,6 +192,8 @@ async def _probe(args) -> tuple[int, dict, _Candidate | None]:
         "uci_key_count": len(keys),
         "username_like_key_count": len(user_like),
         "password_like_key_count": len(pass_like),
+        "username_like_key_paths": user_like[:50],
+        "password_like_key_paths": pass_like[:50],
         "candidate_pair_count": len(pairs),
         "candidate_pair_key_paths": [
             {"username_key": user_key, "password_key": password_key}
