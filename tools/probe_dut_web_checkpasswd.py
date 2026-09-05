@@ -27,8 +27,13 @@ _INTERESTING = re.compile(
 )
 _SAFE_LITERALS = (
     "admin", "root", "username", "user", "password", "passwd", "pwd",
-    "luci", "flash_keep", "auth", "login", "encry",
+    "luci", "flash_keep", "auth", "login", "encry", "isCheckReadAgreement",
 )
+_LUA_KEYWORDS = {
+    "and", "break", "do", "else", "elseif", "end", "false", "for", "function",
+    "goto", "if", "in", "local", "nil", "not", "or", "repeat", "return", "then",
+    "true", "until", "while",
+}
 
 
 def _env_password(ref: str) -> None:
@@ -63,6 +68,15 @@ def _call_identifiers(source: str) -> list[str]:
         if _SAFE_IDENTIFIER.fullmatch(name) and _INTERESTING.search(name):
             found.add(name)
     return sorted(found)[:100]
+
+
+def _all_call_identifiers(source: str) -> list[str]:
+    found = set()
+    for match in re.finditer(r"([A-Za-z_][A-Za-z0-9_.:]*)\s*\(", source):
+        name = match.group(1)
+        if _SAFE_IDENTIFIER.fullmatch(name):
+            found.add(name)
+    return sorted(found)[:150]
 
 
 def _modules(source: str) -> list[str]:
@@ -105,6 +119,38 @@ def _classify_call_args(source: str) -> list[dict]:
                 row = {"index": index, "kind": "call", "identifier": name if _SAFE_IDENTIFIER.fullmatch(name) else "<redacted>"}
         rows.append(row)
     return rows
+
+
+def _assignment_provenance(source: str, variable: str) -> list[dict]:
+    if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", variable):
+        return []
+    rows: list[dict] = []
+    pattern = re.compile(r"(?:^|[;\n])\s*(?:local\s+)?" + re.escape(variable) + r"\s*=\s*([^\r\n;]+)")
+    for match in pattern.finditer(source):
+        rhs = match.group(1)
+        calls = []
+        for call in re.finditer(r"([A-Za-z_][A-Za-z0-9_.:]*)\s*\(", rhs):
+            name = call.group(1)
+            if _SAFE_IDENTIFIER.fullmatch(name):
+                calls.append(name)
+        identifiers = []
+        for token in re.findall(r"[A-Za-z_][A-Za-z0-9_.:]*", rhs):
+            if token in _LUA_KEYWORDS or not _SAFE_IDENTIFIER.fullmatch(token):
+                continue
+            if token not in identifiers:
+                identifiers.append(token)
+        rows.append({
+            "call_identifiers": sorted(set(calls))[:30],
+            "identifier_tokens": identifiers[:50],
+            "safe_literal_flags": {
+                value: bool(re.search(r"['\"]" + re.escape(value) + r"['\"]", rhs))
+                for value in _SAFE_LITERALS
+            },
+            "contains_concat": ".." in rhs,
+            "contains_table_index": "[" in rhs and "]" in rhs,
+            "rhs_source_emitted": False,
+        })
+    return rows[:20]
 
 
 def _structure(source: str) -> dict:
@@ -166,7 +212,7 @@ async def _probe(args) -> dict:
 
     structure = _structure(tool_source)
     return {
-        "schema": "dut-web-checkpasswd-source-v1",
+        "schema": "dut-web-checkpasswd-source-v2",
         "read_only": True,
         "mutation_executed": False,
         "secret_values_emitted": False,
@@ -176,6 +222,13 @@ async def _probe(args) -> dict:
         "noauth_call": {
             "tool_checkpasswd_called": bool(re.search(r"tool\.checkPasswd\s*\(", noauth_source)),
             "argument_classes": _classify_call_args(noauth_source),
+            "checkstat_assignment_provenance": _assignment_provenance(noauth_source, "checkStat"),
+            "interesting_call_identifiers": _call_identifiers(noauth_source),
+            "all_call_identifiers": _all_call_identifiers(noauth_source),
+            "safe_literal_flags": {
+                value: bool(re.search(r"['\"]" + re.escape(value) + r"['\"]", noauth_source))
+                for value in _SAFE_LITERALS
+            },
             "source_sha256": hashlib.sha256(noauth_source.encode("utf-8", errors="ignore")).hexdigest(),
             "source_lines_emitted": False,
         },
@@ -205,6 +258,7 @@ def main() -> int:
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(payload, sort_keys=True, indent=2) + "\n", encoding="utf-8")
     structure = payload["tool_structure"]
+    provenance = payload["noauth_call"]["checkstat_assignment_provenance"]
     print(json.dumps({
         "DUT_WEB_CHECKPASSWD_SOURCE_PROBE": "PASS",
         "checkpasswd_found": structure["checkpasswd_found"],
@@ -212,6 +266,7 @@ def main() -> int:
         "call_count": len(structure["interesting_call_identifiers"]),
         "flash_keep_passwd_literal": structure["flash_keep_passwd_literal"],
         "noauth_call_arg_count": len(payload["noauth_call"]["argument_classes"]),
+        "checkstat_assignment_count": len(provenance),
         "root_present": payload["system_accounts"]["root_present"],
         "admin_present": payload["system_accounts"]["admin_present"],
         "mutation": False,
