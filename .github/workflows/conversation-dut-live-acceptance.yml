@@ -5,6 +5,7 @@ on:
     branches: [master]
     paths:
       - 'tools/conversation_dut_live_acceptance.py'
+      - 'tools/conversation_dut_case_resolver.py'
       - 'backend/tests/test_conversation_dut_live_acceptance_v1.py'
       - 'tools/m7_acceptance_strict_audit.py'
       - 'backend/app/conversation/**'
@@ -54,7 +55,7 @@ jobs:
         run: |
           set -Eeuo pipefail
           source "$CONVERSATION_DUT_VENV/bin/activate"
-          python -m py_compile tools/conversation_dut_live_acceptance.py
+          python -m py_compile tools/conversation_dut_live_acceptance.py tools/conversation_dut_case_resolver.py
           PYTHONPATH=backend:. pytest -q backend/tests/test_conversation_dut_live_acceptance_v1.py
           PYTHONPATH=backend:. python tools/github_actions_context_gate.py
           printf 'CONVERSATION_DUT_LIVE_CONTRACT=PASS\n'
@@ -71,10 +72,11 @@ jobs:
       - linux
       - x64
       - voip-controlled-linux
-    timeout-minutes: 50
+    timeout-minutes: 70
     env:
       LIVE_CONTEXT: /tmp/voip-conversation-dut-live-context-${{ github.run_id }}-${{ github.run_attempt }}.json
       LIVE_PREFLIGHT: validation/conversation_dut_live_preflight_v2.json
+      LIVE_RESOLUTION: validation/conversation_dut_case_resolution_v1.json
       LIVE_RESULT: validation/conversation_dut_live_acceptance_v1.json
     steps:
       - uses: actions/checkout@v4
@@ -83,7 +85,7 @@ jobs:
           ref: master
           fetch-depth: 1
 
-      - name: Authorize exact master and dedicated acceptance Case
+      - name: Authorize exact master and dedicated acceptance tag
         shell: bash
         env:
           TRIGGER_BODY: ${{ github.event.comment.body }}
@@ -98,17 +100,14 @@ jobs:
           if '\n' in body or '\r' in body:
               raise SystemExit('multiline trigger forbidden')
           parts=shlex.split(body)
-          if len(parts) != 4 or parts[0] != '/run-conversation-dut-e2e':
-              raise SystemExit('expected: /run-conversation-dut-e2e <master-sha> <case-no> <acceptance-tag>')
-          sha, case_no, tag = parts[1:]
+          if len(parts) != 3 or parts[0] != '/run-conversation-dut-e2e':
+              raise SystemExit('expected: /run-conversation-dut-e2e <master-sha> <acceptance-tag>')
+          sha, tag = parts[1:]
           if not re.fullmatch(r'[0-9a-f]{40}', sha):
               raise SystemExit('invalid master sha')
-          if not re.fullmatch(r'VOIP-[A-Za-z0-9-]{6,80}', case_no):
-              raise SystemExit('invalid case number')
           if not re.fullmatch(r'CONV-DUT-E2E-[A-Z0-9_-]{8,64}', tag):
               raise SystemExit('invalid acceptance tag')
           print(f'LIVE_EXPECTED_SHA={sha}')
-          print(f'LIVE_CASE_NO={case_no}')
           print(f'LIVE_ACCEPTANCE_TAG={tag}')
           PY
           source /tmp/conversation-dut-trigger.env
@@ -116,14 +115,12 @@ jobs:
           test -r /home/github-runner/.config/voip-ai/.env
           test -r /home/github-runner/.config/voip-ai/feishu_app_secret
           mkdir -p validation
-          rm -f "$LIVE_PREFLIGHT" "$LIVE_RESULT"
+          rm -f "$LIVE_PREFLIGHT" "$LIVE_RESOLUTION" "$LIVE_RESULT"
           {
             echo "LIVE_EXPECTED_SHA=$LIVE_EXPECTED_SHA"
-            echo "LIVE_CASE_NO=$LIVE_CASE_NO"
             echo "LIVE_ACCEPTANCE_TAG=$LIVE_ACCEPTANCE_TAG"
           } >> "$GITHUB_ENV"
           printf 'LIVE_GATE_MASTER_SHA=%s\n' "$LIVE_EXPECTED_SHA"
-          printf 'LIVE_GATE_CASE_NO=%s\n' "$LIVE_CASE_NO"
           printf 'LIVE_GATE_ACCEPTANCE_TAG_SHA256=%s\n' "$(printf '%s' "$LIVE_ACCEPTANCE_TAG" | sha256sum | awk '{print $1}')"
           rm -f /tmp/conversation-dut-trigger.env
 
@@ -155,6 +152,34 @@ jobs:
           print('CONVERSATION_DUT_PREFLIGHT=PASS')
           PY
 
+      - name: Resolve dedicated acceptance Case from real Feishu tag
+        run: |
+          set -Eeuo pipefail
+          python3 deploy/live_acceptance/runtime_v2.py run \
+            --context "$LIVE_CONTEXT" \
+            --env-file /home/github-runner/.config/voip-ai/.env \
+            --workspace "$GITHUB_WORKSPACE" \
+            -- python tools/conversation_dut_case_resolver.py \
+                 --acceptance-tag "$LIVE_ACCEPTANCE_TAG" \
+                 --wait-seconds 900 \
+                 --poll-seconds 5 \
+                 --out "$LIVE_RESOLUTION" \
+                 --strict
+          case_no="$(python3 - <<'PY'
+          import json, os, re
+          p=json.load(open(os.environ['LIVE_RESOLUTION'], encoding='utf-8'))
+          assert p.get('contract') == 'conversation-dut-case-resolution-v1', p
+          assert p.get('status') == 'PASS', p
+          assert (p.get('safety') or {}).get('read_only') is True, p
+          assert (p.get('safety') or {}).get('fallback_to_recent_case') is False, p
+          case_no=str(p.get('case_no') or '')
+          assert re.fullmatch(r'VOIP-[A-Za-z0-9-]{6,80}', case_no), p
+          print(case_no)
+          PY
+          )"
+          echo "LIVE_CASE_NO=$case_no" >> "$GITHUB_ENV"
+          printf 'LIVE_GATE_CASE_NO=%s\n' "$case_no"
+
       - name: Observe real Feishu to DUT product flow
         run: |
           set -Eeuo pipefail
@@ -183,6 +208,7 @@ jobs:
           p=json.loads(raw)
           if p.get('status') == 'PASS':
               assert p.get('contract') == 'conversation-dut-live-acceptance-v1', p
+              assert ((p.get('case') or {}).get('case_no')) == os.environ['LIVE_CASE_NO'], p
               assert all((p.get('checks') or {}).values()), p
               safety=p.get('safety') or {}
               assert safety.get('auditor_read_only') is True, p
@@ -204,6 +230,7 @@ jobs:
           name: conversation-dut-live-acceptance-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             validation/conversation_dut_live_preflight_v2.json
+            validation/conversation_dut_case_resolution_v1.json
             validation/conversation_dut_live_acceptance_v1.json
           if-no-files-found: warn
           retention-days: 90
