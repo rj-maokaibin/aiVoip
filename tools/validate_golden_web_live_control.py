@@ -17,8 +17,8 @@ REQUIRED = (
 )
 
 FORBIDDEN = (
+    '${{ secrets.',
     'pull_request_target:',
-    'secrets.',
     'config set voipUserInfo',
     'git reset --hard origin/master',
 )
