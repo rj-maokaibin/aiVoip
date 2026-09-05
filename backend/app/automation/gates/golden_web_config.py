@@ -18,6 +18,7 @@ from app.capture_v2.enums import CaptureLeaseState
 from app.infrastructure.action_route import ActionBackend, ActionEntry, ActionPurpose, ActionRoute, ActionTransport, RunIntent
 from app.infrastructure.config_framework.executor import ConfigFrameworkExecutor
 from app.infrastructure.device_authority.capture_lease_adapter import CaptureLeaseCompatibilityAdapter
+from app.infrastructure.device_authority.keepalive import AuthorityKeepalive
 
 GOLDEN_WEB_CONFIG_CASE_ID = "Golden-WEB-CONFIG-001"
 WEB_CONFIG_ACTION = "voip.account.configure"
@@ -143,6 +144,7 @@ class GoldenWebConfigGate:
         authority: CaptureLeaseCompatibilityAdapter,
         session_factory,
         registration_timeout_seconds: float = 60.0,
+        authority_keepalive_interval: float = 30.0,
     ) -> None:
         if definition.case.case_id != GOLDEN_WEB_CONFIG_CASE_ID:
             raise ValueError("WEB_GOLDEN_CASE_ID_MISMATCH")
@@ -160,6 +162,10 @@ class GoldenWebConfigGate:
         self.authority = authority
         self.session_factory = session_factory
         self.registration_timeout_seconds = float(registration_timeout_seconds)
+        self.keepalive = AuthorityKeepalive(
+            authority,
+            interval_seconds=authority_keepalive_interval,
+        )
         self.runtime: dict[str, Any] = {"token": None, "snapshot": None, "probe": None}
 
     async def _precheck(self, context: AutomationRunContext) -> PrecheckResult:
@@ -178,6 +184,25 @@ class GoldenWebConfigGate:
             owner_worker_id=self.worker_id,
         )
         self.runtime["token"] = token
+        self.keepalive.start(token)
+        return token
+
+    def _current_token(self):
+        token = self.runtime.get("token")
+        if token is None:
+            raise RuntimeError("WEB_GOLDEN_AUTHORITY_MISSING")
+        if self.keepalive.error is not None:
+            self.keepalive.raise_if_failed()
+        try:
+            token = self.keepalive.token
+        except RuntimeError:
+            pass
+        self.runtime["token"] = token
+        return token
+
+    def _validate_mutation_authority(self):
+        token = self._current_token()
+        self.authority.validate(token)
         return token
 
     async def _snapshot(self, context: AutomationRunContext) -> None:
@@ -191,6 +216,7 @@ class GoldenWebConfigGate:
         probe = self.runtime.get("probe")
         if not isinstance(probe, Mapping):
             raise RuntimeError("WEB_GOLDEN_PROBE_NOT_PREPARED")
+        self._validate_mutation_authority()
         mutation = await self.web.configure_voip_bundle(probe, context)
         evidence: list[ActionEvidence] = []
         if mutation.unknown_result:
@@ -248,11 +274,8 @@ class GoldenWebConfigGate:
 
     async def _restore_action(self) -> dict[str, Any]:
         snapshot = self.runtime.get("snapshot")
-        token = self.runtime.get("token")
         if not isinstance(snapshot, Mapping):
             return {"restore_required": False, "snapshot_not_captured": True}
-        if token is None:
-            raise RuntimeError("WEB_GOLDEN_RESTORE_AUTHORITY_MISSING")
         current = await self.web.execute(WEB_READ_ACTION, {})
         try:
             current_bundle = snapshot_writable_bundle(current)
@@ -260,6 +283,7 @@ class GoldenWebConfigGate:
             current_bundle = None
         if current_bundle == snapshot:
             return {"restore_required": False, "already_restored": True}
+        self._validate_mutation_authority()
         restored = await self.web.configure_voip_bundle(snapshot)
         if restored.unknown_result:
             raise RuntimeError("WEB_GOLDEN_RESTORE_RESULT_UNKNOWN")
@@ -301,6 +325,8 @@ class GoldenWebConfigGate:
         token = self.runtime.get("token")
         if token is None:
             return {"authority_acquired": False}
+        await self.keepalive.stop()
+        token = self._current_token()
         self.authority.release(token)
         return {"authority_acquired": True, "lease_epoch": token.lease_epoch}
 
@@ -346,9 +372,16 @@ class GoldenWebConfigGate:
             hooks=RuntimeHooks(precheck=self._precheck, reserve=self._reserve, snapshot=self._snapshot),
             recorder=SqlAlchemyRuntimeRecorder(self.session_factory),
         )
-        return await runtime.run(
-            self.case,
-            run_id=self.run_id,
-            worker_id=self.worker_id,
-            intent=RunIntent.VERIFY,
-        )
+        try:
+            return await runtime.run(
+                self.case,
+                run_id=self.run_id,
+                worker_id=self.worker_id,
+                intent=RunIntent.VERIFY,
+            )
+        finally:
+            try:
+                await self.keepalive.stop()
+            except RuntimeError:
+                # A renewal failure is already fenced and must not trigger reacquire.
+                pass
