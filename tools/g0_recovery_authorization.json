@@ -1,0 +1,15 @@
+{
+  "schema": "g0-evidence-backed-recovery-v1",
+  "enabled": true,
+  "pr_number": 153,
+  "device_id": "e5bb3f33-dc41-40a4-85ad-6233466e0800",
+  "expected_current_disname": "G0",
+  "restore_disname": "7102",
+  "evidence": {
+    "har_filename": "10.48.8.74.har",
+    "har_sha256": "f00aa36822869b4e391b51f873076429c74ea054440b9a73b0fc87601a9a4411",
+    "baseline_filename": "VOIP_Automation_Framework_V1_真实环境输入基线_V1.3.md",
+    "baseline_sha256": "6d243e44ce30dcaabdffdc0a04d8bdfbc212ded5b62c1f26f8387a5f0e9cf6de",
+    "documented_sequence": "GET 7102 -> SET 710222 -> restore 7102 -> GET 7102"
+  }
+}
