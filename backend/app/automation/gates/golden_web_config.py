@@ -1,12 +1,20 @@
 from __future__ import annotations
 
+import asyncio
 import copy
-from dataclasses import dataclass, replace
+import secrets
+import uuid
+from dataclasses import replace
 from datetime import datetime, timezone
-from typing import Any, Mapping, Protocol
+from typing import Any, Mapping
 
 from app.automation.actions.dispatcher import ActionDispatcher, ActionEvidence, ActionHandlerResult
 from app.automation.adapters.entries.web import EntryResult, WebEntryAdapter
+from app.automation.adapters.pbx.base import (
+    SipRegistrationProbe,
+    TemporaryExtensionProvider,
+    TemporaryExtensionSpec,
+)
 from app.automation.assertions.engine import AssertionEngine
 from app.automation.cleanup import CleanupStepSpec, PersistedCleanupCoordinator, SqlAlchemyCleanupStepStore
 from app.automation.event_wait import InMemoryEventBus
@@ -47,19 +55,6 @@ def _is_ascii_digits(value: str) -> bool:
     return bool(value) and value.isascii() and value.isdigit()
 
 
-@dataclass(frozen=True)
-class SipRegistrationEvidence:
-    registered: bool
-    number: str
-    evidence_refs: tuple[str, ...] = ()
-    source_timestamp: datetime | None = None
-    details: Mapping[str, Any] | None = None
-
-
-class SipRegistrationProbe(Protocol):
-    async def wait_registered(self, *, number: str, timeout_seconds: float) -> SipRegistrationEvidence: ...
-
-
 def _entry_modules(result: EntryResult, *, runtime: bool = False) -> Mapping[str, Any]:
     if not result.accepted:
         raise RuntimeBlocked(f"WEB_READ_REJECTED:{result.error or result.status_code}")
@@ -97,7 +92,12 @@ def _account_rows(value: Any) -> list[dict[str, Any]]:
     raise RuntimeBlocked("WEB_VOIP_USER_ACCOUNT_REQUIRED")
 
 
-def build_numeric_probe(snapshot: Mapping[str, Any], target_number: str) -> dict[str, Any]:
+def build_numeric_probe(
+    snapshot: Mapping[str, Any],
+    target_number: str,
+    *,
+    temporary_password: str,
+) -> dict[str, Any]:
     target = str(target_number).strip()
     if not _is_ascii_digits(target):
         raise RuntimeBlocked("WEB_NUMERIC_TARGET_REQUIRED")
@@ -107,8 +107,12 @@ def build_numeric_probe(snapshot: Mapping[str, Any], target_number: str) -> dict
         if missing:
             raise RuntimeBlocked(f"WEB_WRITABLE_SNAPSHOT_INCOMPLETE:{','.join(missing)}")
     rows = _account_rows(probe["voipUserInfo"])
+    if not temporary_password:
+        raise RuntimeBlocked("WEB_TEMPORARY_PASSWORD_REQUIRED")
     rows[0]["number"] = target
     rows[0]["disName"] = target
+    rows[0]["authId"] = target
+    rows[0]["passwd"] = temporary_password
     return probe
 
 
@@ -146,6 +150,7 @@ class GoldenWebConfigGate:
         web: WebEntryAdapter,
         config: ConfigFrameworkExecutor,
         registration_probe: SipRegistrationProbe,
+        pbx_extension_provider: TemporaryExtensionProvider,
         authority: CaptureLeaseCompatibilityAdapter,
         session_factory,
         registration_timeout_seconds: float = 60.0,
@@ -164,6 +169,7 @@ class GoldenWebConfigGate:
         self.web = web
         self.config = config
         self.registration_probe = registration_probe
+        self.pbx_extension_provider = pbx_extension_provider
         self.authority = authority
         self.session_factory = session_factory
         self.registration_timeout_seconds = float(registration_timeout_seconds)
@@ -171,7 +177,13 @@ class GoldenWebConfigGate:
             authority,
             interval_seconds=authority_keepalive_interval,
         )
-        self.runtime: dict[str, Any] = {"token": None, "snapshot": None, "probe": None}
+        self.runtime: dict[str, Any] = {
+            "token": None,
+            "snapshot": None,
+            "probe": None,
+            "pbx_spec": None,
+            "pbx_prepared": False,
+        }
 
     async def _precheck(self, context: AutomationRunContext) -> PrecheckResult:
         if context.case.case_id != GOLDEN_WEB_CONFIG_CASE_ID:
@@ -213,17 +225,47 @@ class GoldenWebConfigGate:
     async def _snapshot(self, context: AutomationRunContext) -> None:
         read = await self.web.execute(WEB_READ_ACTION, {}, context)
         snapshot = snapshot_writable_bundle(read)
-        probe = build_numeric_probe(snapshot, self.target_number)
-        self.runtime.update(snapshot=snapshot, probe=probe)
+        self.runtime.update(snapshot=snapshot, probe=None)
         self.case.parameters["target_number"] = self.target_number
 
     async def _configure(self, context, _args) -> ActionHandlerResult:
-        probe = self.runtime.get("probe")
-        if not isinstance(probe, Mapping):
-            raise RuntimeError("WEB_GOLDEN_PROBE_NOT_PREPARED")
+        snapshot = self.runtime.get("snapshot")
+        if not isinstance(snapshot, Mapping):
+            raise RuntimeError("WEB_GOLDEN_SNAPSHOT_NOT_PREPARED")
+
+        # Install the cleanup identity before the PBX mutation. If the create
+        # transport becomes UNKNOWN, cleanup can observe this exact UUID and
+        # remove only the resource owned by this run; there is no blind retry.
+        spec = TemporaryExtensionSpec(
+            extension_uuid=str(uuid.uuid4()),
+            extension=self.target_number,
+            password=secrets.token_hex(16),
+        )
+        self.runtime["pbx_spec"] = spec
+        self._validate_mutation_authority()
+        await asyncio.to_thread(self.pbx_extension_provider.create, spec)
+        self.runtime["pbx_prepared"] = True
+
+        probe = build_numeric_probe(
+            snapshot,
+            self.target_number,
+            temporary_password=spec.password,
+        )
+        self.runtime["probe"] = probe
         self._validate_mutation_authority()
         mutation = await self.web.configure_voip_bundle(probe, context)
-        evidence: list[ActionEvidence] = []
+        evidence: list[ActionEvidence] = [
+            ActionEvidence(
+                source="pbx",
+                data={
+                    "temporary_extension": self.target_number,
+                    "prepared": True,
+                    "secret_values_emitted": False,
+                },
+                evidence_refs=("fusionpbx://temporary-extension/prepared",),
+                source_timestamp=utcnow(),
+            )
+        ]
         if mutation.unknown_result:
             if isinstance(mutation.readback, Mapping):
                 evidence.append(ActionEvidence(
@@ -326,6 +368,35 @@ class GoldenWebConfigGate:
             "mutation": False,
         }
 
+    async def _pbx_cleanup_action(self) -> dict[str, Any]:
+        spec = self.runtime.get("pbx_spec")
+        if not isinstance(spec, TemporaryExtensionSpec):
+            return {"pbx_cleanup_required": False, "secret_values_emitted": False}
+        result = await asyncio.to_thread(self.pbx_extension_provider.delete, spec)
+        return {
+            "pbx_cleanup_required": True,
+            "temporary_extension": spec.extension,
+            "secret_values_emitted": False,
+            "provider_already_absent": bool(result.get("already_absent")) if isinstance(result, Mapping) else False,
+        }
+
+    async def _pbx_cleanup_verify(self):
+        spec = self.runtime.get("pbx_spec")
+        if not isinstance(spec, TemporaryExtensionSpec):
+            return True, {"pbx_cleanup_required": False, "secret_values_emitted": False}
+        ok, details = await asyncio.to_thread(self.pbx_extension_provider.verify_absent, spec)
+        safe = {
+            "pbx_reverse_verify": bool(ok),
+            "temporary_extension": spec.extension,
+            "secret_values_emitted": False,
+        }
+        if isinstance(details, Mapping):
+            safe.update({
+                key: value for key, value in details.items()
+                if key not in {"password", "passwd", "pwd", "auth", "token", "sid"}
+            })
+        return bool(ok), safe
+
     async def _release_action(self) -> dict[str, Any]:
         token = self.runtime.get("token")
         if token is None:
@@ -361,6 +432,7 @@ class GoldenWebConfigGate:
             steps=(
                 CleanupStepSpec("restore_web_voip_bundle", self._restore_action, self._restore_verify),
                 CleanupStepSpec("ssh_config_readback_crosscheck", self._crosscheck_action, self._crosscheck_verify),
+                CleanupStepSpec("cleanup_pbx_temporary_extension", self._pbx_cleanup_action, self._pbx_cleanup_verify),
                 CleanupStepSpec(
                     "release_device_authority",
                     self._release_action,

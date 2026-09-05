@@ -53,7 +53,7 @@ def test_pr_d_route_is_real_web_http_config_framework_test_path() -> None:
 
 def test_numeric_probe_mutates_only_target_identity_fields_inside_full_five_module_snapshot() -> None:
     snapshot = _snapshot()
-    probe = build_numeric_probe(snapshot, "7900")
+    probe = build_numeric_probe(snapshot, "7900", temporary_password="temporary-runtime-secret")
     assert tuple(probe) == WEB_WRITABLE_MODULES
     assert probe["voice_vlan"] == snapshot["voice_vlan"]
     assert probe["voipServInfo"] == snapshot["voipServInfo"]
@@ -62,8 +62,8 @@ def test_numeric_probe_mutates_only_target_identity_fields_inside_full_five_modu
     account = probe["voipUserInfo"]["data"][0]
     assert account["number"] == "7900"
     assert account["disName"] == "7900"
-    assert account["authId"] == "auth-separate"
-    assert account["passwd"] == "secret-not-to-be-rewritten"
+    assert account["authId"] == "7900"
+    assert account["passwd"] == "temporary-runtime-secret"
     assert snapshot["voipUserInfo"]["data"][0]["number"] == "7102"
 
 
@@ -86,7 +86,7 @@ def test_web_restore_snapshot_uses_runtime_raw_bundle_while_public_output_stays_
 
 def test_numeric_probe_rejects_non_ascii_digit_characters() -> None:
     with pytest.raises(RuntimeBlocked, match="WEB_NUMERIC_TARGET_REQUIRED"):
-        build_numeric_probe(_snapshot(), "٧٩٠٠")
+        build_numeric_probe(_snapshot(), "٧٩٠٠", temporary_password="temporary-runtime-secret")
 
 
 def test_web_snapshot_maps_to_read_only_config_framework_crosscheck_payload() -> None:
@@ -133,3 +133,23 @@ def test_pr_d_stops_keepalive_before_release_and_never_reacquires_in_cleanup() -
     release_source = inspect.getsource(GoldenWebConfigGate._release_action)
     assert release_source.index("await self.keepalive.stop()") < release_source.index("self.authority.release(token)")
     assert "self.authority.acquire(" not in release_source
+
+
+def test_pr_d_temporary_pbx_identity_matches_target_and_secret_stays_runtime_only() -> None:
+    source = inspect.getsource(GoldenWebConfigGate._configure)
+    assert 'extension=self.target_number' in source
+    assert 'password=secrets.token_hex(16)' in source
+    assert 'rows[0]["authId"] = target' in inspect.getsource(build_numeric_probe)
+    assert 'rows[0]["passwd"] = temporary_password' in inspect.getsource(build_numeric_probe)
+    assert 'number != authId' not in source
+
+
+def test_pr_d_pbx_cleanup_precedes_device_authority_release() -> None:
+    source = inspect.getsource(GoldenWebConfigGate.run)
+    pbx = source.index('cleanup_pbx_temporary_extension')
+    release = source.index('release_device_authority')
+    assert pbx < release
+    cleanup_source = inspect.getsource(GoldenWebConfigGate._pbx_cleanup_action)
+    assert 'pbx_extension_provider.delete' in cleanup_source
+    verify_source = inspect.getsource(GoldenWebConfigGate._pbx_cleanup_verify)
+    assert 'pbx_extension_provider.verify_absent' in verify_source
