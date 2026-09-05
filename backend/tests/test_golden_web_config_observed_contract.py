@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import inspect
 
+from app.automation.adapters.entries.web import WebEntryAdapter
 from app.automation.gates.golden_web_config_observed import (
     ObservedGoldenWebConfigGate,
     observed_unknown_target,
@@ -55,6 +56,14 @@ def test_observed_unknown_gate_never_retries_web_mutation() -> None:
     assert source.count("configure_voip_bundle") == 1
     assert '"retry_executed": False' in source
     assert "observed_unknown_target" in source
+
+
+def test_unknown_readback_forces_fresh_web_session_without_retrying_mutation() -> None:
+    source = inspect.getsource(WebEntryAdapter._readback_after_unknown)
+
+    assert "ensure_session(force=True)" in source
+    assert "_request_operation(readback_op" in source
+    assert "configure_voip_bundle" not in source
 
 
 def test_observed_unknown_gate_continues_registration_only_after_target_observation() -> None:
