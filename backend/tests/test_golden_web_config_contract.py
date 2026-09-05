@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 import yaml
 
+from app.automation.adapters.entries.web import EntryResult
 from app.automation.contracts import parse_test_case
 from app.automation.gates.golden_web_config import (
     GOLDEN_WEB_CONFIG_CASE_ID,
@@ -14,6 +15,7 @@ from app.automation.gates.golden_web_config import (
     GoldenWebConfigGate,
     build_numeric_probe,
     config_payload_from_web_module,
+    snapshot_writable_bundle,
 )
 from app.automation.orchestrator import RuntimeBlocked
 from app.infrastructure.action_route import ActionBackend, ActionEntry, ActionPurpose, ActionRoute, ActionTransport
@@ -63,6 +65,23 @@ def test_numeric_probe_mutates_only_target_identity_fields_inside_full_five_modu
     assert account["authId"] == "auth-separate"
     assert account["passwd"] == "secret-not-to-be-rewritten"
     assert snapshot["voipUserInfo"]["data"][0]["number"] == "7102"
+
+
+def test_web_restore_snapshot_uses_runtime_raw_bundle_while_public_output_stays_masked() -> None:
+    raw = _snapshot()
+    masked = _snapshot()
+    masked["voipUserInfo"]["data"][0]["passwd"] = "***"
+    result = EntryResult(
+        accepted=True,
+        output={"modules": masked},
+        runtime_output={"modules": raw},
+    )
+
+    snapshot = snapshot_writable_bundle(result)
+
+    assert result.output["modules"]["voipUserInfo"]["data"][0]["passwd"] == "***"
+    assert snapshot["voipUserInfo"]["data"][0]["passwd"] == "secret-not-to-be-rewritten"
+    assert "secret-not-to-be-rewritten" not in repr(result)
 
 
 def test_numeric_probe_rejects_non_ascii_digit_characters() -> None:
