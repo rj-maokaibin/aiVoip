@@ -122,7 +122,15 @@ class CleanupExecution:
 
 
 class PersistedCleanupCoordinator:
-    """Crash-resumable cleanup with reverse verification and authority release last."""
+    """Crash-resumable cleanup with reverse verification and authority release last.
+
+    Cleanup persistence is audit/recovery metadata, not a physical cleanup fence.
+    A store read/write failure is retained as a sanitized persistence error for the
+    orchestrator to downgrade the run, but it must never prevent a verified restore
+    or the final DeviceAuthority release from being attempted in the same run.
+    """
+
+    _MAX_PERSISTENCE_ERRORS = 8
 
     def __init__(
         self,
@@ -137,9 +145,49 @@ class PersistedCleanupCoordinator:
             raise ValueError("AUTHORITY_RELEASE_MUST_BE_LAST")
         self.store = store
         self.steps = steps
+        self.persistence_errors: list[str] = []
+
+    def _note_persistence_error(self, code: str) -> None:
+        if code in self.persistence_errors:
+            return
+        if len(self.persistence_errors) < self._MAX_PERSISTENCE_ERRORS:
+            self.persistence_errors.append(code)
+
+    def _record_safe(
+        self,
+        run_id: str,
+        *,
+        ordinal: int,
+        step_name: str,
+        status: str,
+        details: dict[str, Any],
+    ) -> None:
+        try:
+            self.store.record(
+                run_id,
+                ordinal=ordinal,
+                step_name=step_name,
+                status=status,
+                details=details,
+            )
+        except Exception as exc:
+            self._note_persistence_error(
+                f"CLEANUP_STORE_RECORD_FAILED:{type(exc).__name__}"
+            )
 
     async def run(self, *, run_id: str) -> tuple[CleanupExecution, ...]:
-        verified = self.store.verified(run_id)
+        self.persistence_errors = []
+        try:
+            verified = self.store.verified(run_id)
+        except Exception as exc:
+            self._note_persistence_error(
+                f"CLEANUP_STORE_READ_FAILED:{type(exc).__name__}"
+            )
+            # Physical cleanup remains authoritative. Cleanup actions are required
+            # to observe current state and reverse-verify; persistence failure alone
+            # cannot justify skipping restore or authority release.
+            verified = set()
+
         executions: list[CleanupExecution] = []
         for ordinal, step in enumerate(self.steps, start=1):
             if step.name in verified:
@@ -158,7 +206,7 @@ class PersistedCleanupCoordinator:
                 details = {**action_details, **verify_details}
             except Exception as exc:
                 details = {"exception": type(exc).__name__}
-                self.store.record(
+                self._record_safe(
                     run_id,
                     ordinal=ordinal,
                     step_name=step.name,
@@ -169,7 +217,7 @@ class PersistedCleanupCoordinator:
                     f"CLEANUP_STEP_EXCEPTION:{step.name}:{type(exc).__name__}"
                 ) from exc
             if not ok:
-                self.store.record(
+                self._record_safe(
                     run_id,
                     ordinal=ordinal,
                     step_name=step.name,
@@ -179,7 +227,7 @@ class PersistedCleanupCoordinator:
                 raise AutomationCleanupError(
                     f"CLEANUP_REVERSE_VERIFY_FAILED:{step.name}"
                 )
-            self.store.record(
+            self._record_safe(
                 run_id,
                 ordinal=ordinal,
                 step_name=step.name,
