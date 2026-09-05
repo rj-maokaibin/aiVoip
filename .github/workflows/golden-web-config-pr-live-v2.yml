@@ -29,10 +29,9 @@ jobs:
       LIVE_RUNTIME_ROOT: /tmp/voip-golden-web-config-runtime-${{ github.run_id }}-${{ github.run_attempt }}
       LIVE_OUTPUT_ROOT: /tmp/voip-golden-web-config-evidence-${{ github.run_id }}-${{ github.run_attempt }}
       WEB_BASE_URL: https://10.48.8.74:10003
-      CREDENTIAL_TRANSFER_KEY: /home/github-runner/.config/voip-ai/web-golden-credential-transfer.pem
 
     steps:
-      - name: Authorize exact current PR-D head and encrypted credential envelope
+      - name: Authorize exact current PR-D head
         id: authorize
         shell: bash
         env:
@@ -42,11 +41,10 @@ jobs:
         run: |
           set -euo pipefail
           test "$TRIGGER_ACTOR" = "$GITHUB_REPOSITORY_OWNER"
-          read -r command requested envelope extra <<< "$TRIGGER_BODY"
+          read -r command requested extra <<< "$TRIGGER_BODY"
           test "$command" = '/run-golden-web-config'
           test -z "${extra:-}"
           printf '%s' "$requested" | grep -Eq '^[0-9a-f]{40}$'
-          printf '%s' "$envelope" | grep -Eq '^[A-Za-z0-9+/=]{256,2048}$'
           pr_json="$(curl -fsSL -H "Authorization: Bearer $GH_TOKEN" -H 'Accept: application/vnd.github+json' "https://api.github.com/repos/${GITHUB_REPOSITORY}/pulls/151")"
           facts="$(PR_JSON="$pr_json" python3 - <<'PY'
           import json, os
@@ -62,10 +60,8 @@ jobs:
           test "${lines[1]:-}" = 'feat/generic-voip-automation-v1-pr-d-web-golden'
           test "${lines[2]:-}" = 'master'
           test "${lines[3]:-}" = 'open'
-          printf '%s' "$envelope" > "$RUNNER_TEMP/web-golden-credential-envelope.b64"
-          chmod 0600 "$RUNNER_TEMP/web-golden-credential-envelope.b64"
           printf 'TARGET_SHA=%s\n' "$requested" >> "$GITHUB_ENV"
-          printf 'PR_D_LIVE_AUTHORIZATION=PASS sha=%s credential_transport=RSA_OAEP_SHA256\n' "$requested" >> "$GITHUB_STEP_SUMMARY"
+          printf 'PR_D_LIVE_AUTHORIZATION=PASS sha=%s credential_transport=RUNNER_RUNTIME_ENV\n' "$requested" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Checkout exact control-plane revision
         uses: actions/checkout@v4
@@ -116,13 +112,17 @@ jobs:
           fi
           echo "GOLDEN_WEB_EXACT_SOURCE=PASS revision=$TARGET_SHA"
 
-      - name: Prepare isolated runtime
+      - name: Prepare isolated runtime and validate secret provider
         shell: bash
         run: |
           set -euo pipefail
           test -r "$LIVE_ENV_FILE"
-          test -s "$CREDENTIAL_TRANSFER_KEY"
-          test "$(stat -c '%a' "$CREDENTIAL_TRANSFER_KEY")" = '600'
+          test "$(stat -c '%a' "$LIVE_ENV_FILE")" = '600'
+          set -a
+          source "$LIVE_ENV_FILE"
+          set +a
+          : "${WEB_USERNAME:?WEB_USERNAME_RUNTIME_REQUIRED}"
+          : "${WEB_PASSWORD:?WEB_PASSWORD_RUNTIME_REQUIRED}"
           rm -rf "$LIVE_VENV" "$LIVE_RUNTIME_ROOT" "$LIVE_OUTPUT_ROOT"
           mkdir -p "$LIVE_RUNTIME_ROOT" "$LIVE_OUTPUT_ROOT"
           chmod 0700 "$LIVE_RUNTIME_ROOT"
@@ -130,45 +130,7 @@ jobs:
           "$LIVE_VENV/bin/pip" install --disable-pip-version-check -q -r backend/requirements.txt
           export PYTHONPATH="$GITHUB_WORKSPACE/backend"
           "$LIVE_VENV/bin/python" -m py_compile tools/run_golden_web_config.py tools/resolve_current_web_credential_env.py backend/app/automation/gates/golden_web_config.py backend/app/automation/adapters/pbx/registration.py
-
-      - name: Decrypt user-provided WEB credential inside controlled runner only
-        shell: bash
-        run: |
-          set -euo pipefail
-          envelope="$RUNNER_TEMP/web-golden-credential-envelope.b64"
-          plaintext="$LIVE_RUNTIME_ROOT/user-web-credential.json"
-          envfile="$LIVE_RUNTIME_ROOT/user-web-credential.env"
-          test -s "$envelope"
-          umask 077
-          base64 -d "$envelope" | openssl pkeyutl -decrypt \
-            -inkey "$CREDENTIAL_TRANSFER_KEY" \
-            -pkeyopt rsa_padding_mode:oaep \
-            -pkeyopt rsa_oaep_md:sha256 > "$plaintext"
-          chmod 0600 "$plaintext"
-          python3 - "$plaintext" "$envfile" "$WEB_BASE_URL" <<'PY'
-          import json, shlex, sys
-          from pathlib import Path
-          src, out, expected_url = map(Path, sys.argv[1:3]) + [None] if False else (Path(sys.argv[1]), Path(sys.argv[2]), sys.argv[3])
-          payload = json.loads(src.read_text(encoding='utf-8'))
-          if payload.get('schema') != 'web-golden-user-credential-v1':
-              raise SystemExit('WEB_CREDENTIAL_ENVELOPE_SCHEMA_INVALID')
-          if payload.get('base_url') != expected_url:
-              raise SystemExit('WEB_CREDENTIAL_ENVELOPE_ENDPOINT_MISMATCH')
-          username = payload.get('username')
-          password = payload.get('password')
-          if not isinstance(username, str) or not username or not isinstance(password, str) or not password:
-              raise SystemExit('WEB_CREDENTIAL_ENVELOPE_VALUE_INVALID')
-          out.write_text(
-              'USER_WEB_USERNAME=' + shlex.quote(username) + '\n' +
-              'USER_WEB_PASSWORD=' + shlex.quote(password) + '\n',
-              encoding='utf-8',
-          )
-          out.chmod(0o600)
-          PY
-          rm -f "$plaintext" "$envelope"
-          test -s "$envfile"
-          test "$(stat -c '%a' "$envfile")" = '600'
-          echo 'WEB_CREDENTIAL_DECRYPT=PASS source=USER_PROVIDED_ENCRYPTED_ENVELOPE secret_values_emitted=false'
+          echo 'WEB_CREDENTIAL_RUNTIME_PROVIDER=PASS source=WEB_USERNAME_WEB_PASSWORD secret_values_emitted=false'
 
       - name: Resolve production DB and exactly one eligible DUT
         shell: bash
@@ -195,15 +157,17 @@ jobs:
           test -s "$LIVE_RUNTIME_ROOT/device_credential.env"
           test "$(stat -c '%a' "$LIVE_RUNTIME_ROOT/device_credential.env")" = '600'
 
-      - name: Prove user-provided WEB credential read-only and bind to exact DUT
+      - name: Prove runtime WEB credential read-only and bind to exact DUT
         shell: bash
         run: |
           set -euo pipefail
           set -a
+          source "$LIVE_ENV_FILE"
           source "$LIVE_RUNTIME_ROOT/resolved_dut.env"
           source "$LIVE_RUNTIME_ROOT/device_credential.env"
-          source "$LIVE_RUNTIME_ROOT/user-web-credential.env"
           set +a
+          : "${WEB_USERNAME:?WEB_USERNAME_RUNTIME_REQUIRED}"
+          : "${WEB_PASSWORD:?WEB_PASSWORD_RUNTIME_REQUIRED}"
           export PYTHONPATH="$GITHUB_WORKSPACE/backend"
           args=(
             tools/resolve_current_web_credential_env.py
@@ -215,8 +179,8 @@ jobs:
             --ssh-username "$SIP_ABA_SSH_USERNAME"
             --ssh-password-env 'ENV:SIP_ABA_SSH_PASSWORD'
             --secret-file "$LIVE_RUNTIME_ROOT/no-automatic-secret-source.yaml"
-            --username-env USER_WEB_USERNAME
-            --password-env USER_WEB_PASSWORD
+            --username-env WEB_USERNAME
+            --password-env WEB_PASSWORD
             --output "$LIVE_RUNTIME_ROOT/web_credential.env"
             --evidence-output "$LIVE_OUTPUT_ROOT/web-credential-resolution.json"
             --insecure-tls
@@ -225,7 +189,7 @@ jobs:
           "$LIVE_VENV/bin/python" "${args[@]}"
           test -s "$LIVE_RUNTIME_ROOT/web_credential.env"
           test "$(stat -c '%a' "$LIVE_RUNTIME_ROOT/web_credential.env")" = '600'
-          echo 'WEB_CREDENTIAL_USER_PROVIDED_BINDING=PASS read_only=true'
+          echo 'WEB_CREDENTIAL_RUNTIME_BINDING=PASS source=WEB_USERNAME_WEB_PASSWORD read_only=true secret_values_emitted=false'
 
       - name: Execute real Golden-WEB-CONFIG-001 with mandatory cleanup
         shell: bash
@@ -255,12 +219,17 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          set -a
+          source "$LIVE_ENV_FILE"
+          set +a
           export LIVE_OUTPUT_ROOT LIVE_RUNTIME_ROOT
           python3 - <<'PY'
           import json, os, shlex
           from pathlib import Path
           output=Path(os.environ['LIVE_OUTPUT_ROOT']); runtime=Path(os.environ['LIVE_RUNTIME_ROOT']); secrets=set()
-          for env_file in (runtime/'device_credential.env', runtime/'user-web-credential.env', runtime/'web_credential.env'):
+          web_password=os.environ.get('WEB_PASSWORD','')
+          if web_password: secrets.add(web_password)
+          for env_file in (runtime/'device_credential.env', runtime/'web_credential.env'):
               if not env_file.is_file(): continue
               for line in env_file.read_text(encoding='utf-8', errors='ignore').splitlines():
                   try: parts=shlex.split(line)
@@ -298,4 +267,3 @@ jobs:
         shell: bash
         run: |
           rm -rf "$LIVE_RUNTIME_ROOT" "$LIVE_VENV"
-          rm -f "$RUNNER_TEMP/web-golden-credential-envelope.b64"
