@@ -1,7 +1,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Callable, Mapping, Any
+from typing import Any, Callable, Mapping
+
+from app.automation.adapters.web_auth.legacy_luci import (
+    LegacyLuciAuthProvider,
+    PasswordEncoder,
+    current_luci_protocol_success,
+)
 
 
 TimestampProvider = Callable[[], str]
@@ -35,3 +41,17 @@ class Apf3260mLuciLoginPayloadBuilder:
                 "isCheckReadAgreement": "true",
             },
         }
+
+
+def build_apf3260m_luci_auth_provider(
+    *,
+    password_encoder: PasswordEncoder,
+    timestamp_provider: TimestampProvider,
+) -> LegacyLuciAuthProvider:
+    """Build the current-product LuCI auth adapter with strict HAR semantics."""
+
+    return LegacyLuciAuthProvider(
+        password_encoder=password_encoder,
+        login_payload_builder=Apf3260mLuciLoginPayloadBuilder(timestamp_provider),
+        protocol_success=current_luci_protocol_success,
+    )
