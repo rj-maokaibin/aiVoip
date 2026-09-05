@@ -88,6 +88,7 @@ class WebApiProfile:
     profile_id: str
     auth_provider: str
     operations: Mapping[str, WebOperationProfile]
+    source_evidence: tuple[str, ...] = ()
 
     def operation(self, semantic_action: str) -> WebOperationProfile:
         try:
@@ -97,14 +98,19 @@ class WebApiProfile:
 
     @classmethod
     def from_mapping(cls, raw: Mapping[str, Any]) -> "WebApiProfile":
-        extra = set(raw) - {"id", "auth_provider", "operations"}
+        extra = set(raw) - {"id", "auth_provider", "operations", "source_evidence"}
         if extra:
             raise WebApiProfileError(f"WEB_PROFILE_UNKNOWN_FIELDS:{','.join(sorted(extra))}")
         profile_id = str(raw.get("id") or "").strip()
         auth_provider = str(raw.get("auth_provider") or "").strip()
         operation_raw = raw.get("operations")
+        evidence_raw = raw.get("source_evidence", [])
         if not profile_id or not auth_provider or not isinstance(operation_raw, Mapping):
             raise WebApiProfileError("WEB_PROFILE_REQUIRED_FIELDS_MISSING")
+        if not isinstance(evidence_raw, list) or not all(
+            isinstance(item, str) and item.strip() for item in evidence_raw
+        ):
+            raise WebApiProfileError("WEB_PROFILE_SOURCE_EVIDENCE_INVALID")
 
         operations: dict[str, WebOperationProfile] = {}
         allowed_op = {
@@ -151,7 +157,12 @@ class WebApiProfile:
                 rpc_items=tuple(rpc_items),
                 writable_modules=tuple(writable),
             )
-        return cls(profile_id=profile_id, auth_provider=auth_provider, operations=operations)
+        return cls(
+            profile_id=profile_id,
+            auth_provider=auth_provider,
+            operations=operations,
+            source_evidence=tuple(item.strip() for item in evidence_raw),
+        )
 
     @classmethod
     def load_yaml(cls, path: str | Path) -> "WebApiProfile":
