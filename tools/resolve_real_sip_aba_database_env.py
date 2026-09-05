@@ -6,7 +6,9 @@ import shlex
 import subprocess
 
 
-PRODUCTION_PROJECT = "voip-ai"
+# Production Deploy verifies every live service under this exact Compose project.
+# Keep Real Gate credential discovery source-bound to the same deployment identity.
+PRODUCTION_PROJECT = "aivoip"
 PRODUCTION_CREDENTIAL_SERVICE = "reproduction-worker"
 
 
@@ -59,6 +61,7 @@ def main() -> int:
     if len(credential_workers) != 1:
         raise SystemExit(
             "SIP_ABA_PRODUCTION_CREDENTIAL_RUNTIME_NOT_UNIQUE "
+            f"project={PRODUCTION_PROJECT} service={PRODUCTION_CREDENTIAL_SERVICE} "
             f"count={len(credential_workers)}"
         )
 
