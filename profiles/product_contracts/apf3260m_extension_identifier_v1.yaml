@@ -1,0 +1,45 @@
+id: apf3260m-extension-identifier-v1
+capability_missing_fallback: digits_only
+extension_identifier:
+  digits_0_9: true
+  upper_A_Z: true
+  lower_a_z: true
+  dot:
+    supported: true
+    allow_leading: true
+    allow_trailing: true
+    allow_consecutive: true
+  plus:
+    supported: true
+    position: anywhere
+  case_sensitive: true
+  min_length: 6
+  max_length: 13
+  pure_alpha_allowed: true
+  pure_special_char_allowed: true
+  whitespace_allowed: false
+voip_identity_fields:
+  disName_same_rule: true
+  authId_same_rule: true
+  number_authId_must_equal: false
+acceptance:
+  positive:
+    - Abc123
+    - abcdef
+    - ABCDEF
+    - "......"
+    - "++++++"
+    - .abc12
+    - abc12.
+    - ab..12
+    - ab+12c
+    - Abcdef1234567
+  negative:
+    - value: "abc 12"
+      reason: WHITESPACE_FORBIDDEN
+    - value: Abc12
+      reason: IDENTIFIER_TOO_SHORT
+    - value: Abcdef12345678
+      reason: IDENTIFIER_TOO_LONG
+    - value: Abc@12
+      reason: CHARACTER_UNSUPPORTED:@
