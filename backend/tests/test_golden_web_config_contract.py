@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 from pathlib import Path
 
 import pytest
@@ -10,6 +11,7 @@ from app.automation.gates.golden_web_config import (
     GOLDEN_WEB_CONFIG_CASE_ID,
     WEB_CONFIG_ROUTE,
     WEB_WRITABLE_MODULES,
+    GoldenWebConfigGate,
     build_numeric_probe,
     config_payload_from_web_module,
 )
@@ -91,3 +93,24 @@ def test_pr_d_ssh_is_crosscheck_only_not_web_mutation_fallback() -> None:
     assert "self.config.set(" not in source
     assert 'entry=ActionEntry.WEB' in source
     assert 'transport=ActionTransport.HTTP_API' in source
+
+
+def test_pr_d_renews_one_authority_term_and_validates_each_web_mutation() -> None:
+    source = inspect.getsource(GoldenWebConfigGate)
+    configure_source = inspect.getsource(GoldenWebConfigGate._configure)
+    restore_source = inspect.getsource(GoldenWebConfigGate._restore_action)
+    validator_source = inspect.getsource(GoldenWebConfigGate._validate_mutation_authority)
+
+    assert "AuthorityKeepalive" in source
+    assert "self.keepalive.start(token)" in source
+    assert "self.authority.validate(token)" in validator_source
+    assert "self._validate_mutation_authority()" in configure_source
+    assert "self._validate_mutation_authority()" in restore_source
+    assert "keepalive.stop" not in restore_source
+    assert "self.authority.acquire(" not in validator_source
+
+
+def test_pr_d_stops_keepalive_before_release_and_never_reacquires_in_cleanup() -> None:
+    release_source = inspect.getsource(GoldenWebConfigGate._release_action)
+    assert release_source.index("await self.keepalive.stop()") < release_source.index("self.authority.release(token)")
+    assert "self.authority.acquire(" not in release_source
