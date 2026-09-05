@@ -29,11 +29,11 @@ concurrency:
 jobs:
   verify-full-acceptance-evidence:
     runs-on: [self-hosted, linux, x64, voip-controlled-linux]
-    timeout-minutes: 20
+    timeout-minutes: 10
     env:
       EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
-      - name: Resolve exact-SHA Full Acceptance run
+      - name: Resolve completed exact-SHA Full Acceptance run without blocking runner
         id: resolve
         uses: actions/github-script@v7
         with:
@@ -41,33 +41,31 @@ jobs:
             const owner = context.repo.owner;
             const repo = context.repo.repo;
             const sha = process.env.EXPECTED_SHA;
-            const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-            for (let i = 0; i < 180; i++) {
-              const response = await github.rest.actions.listWorkflowRuns({
-                owner,
-                repo,
-                workflow_id: 'prd-spec-v1-release.yml',
-                head_sha: sha,
-                per_page: 20,
-              });
-              const runs = response.data.workflow_runs
-                .filter((run) => run.head_sha === sha)
-                .sort((a, b) => b.id - a.id);
-              if (runs.length > 0) {
-                const run = runs[0];
-                core.info(`Full Acceptance run ${run.id}: ${run.status}/${run.conclusion || 'pending'}`);
-                if (run.status === 'completed') {
-                  if (run.conclusion !== 'success') {
-                    core.setFailed(`Full Acceptance failed for ${sha}: ${run.conclusion}`);
-                    return;
-                  }
-                  core.setOutput('run_id', String(run.id));
-                  return;
-                }
-              }
-              await sleep(5000);
+            const response = await github.rest.actions.listWorkflowRuns({
+              owner,
+              repo,
+              workflow_id: 'prd-spec-v1-release.yml',
+              head_sha: sha,
+              per_page: 20,
+            });
+            const runs = response.data.workflow_runs
+              .filter((run) => run.head_sha === sha)
+              .sort((a, b) => b.id - a.id);
+            if (runs.length === 0) {
+              core.setFailed(`Full Acceptance has not started for ${sha}; rerun Preliminary after Full Acceptance completes`);
+              return;
             }
-            core.setFailed(`Timed out waiting for Full Acceptance for ${sha}`);
+            const run = runs[0];
+            core.info(`Full Acceptance run ${run.id}: ${run.status}/${run.conclusion || 'pending'}`);
+            if (run.status !== 'completed') {
+              core.setFailed(`Full Acceptance still ${run.status} for ${sha}; rerun Preliminary after completion`);
+              return;
+            }
+            if (run.conclusion !== 'success') {
+              core.setFailed(`Full Acceptance failed for ${sha}: ${run.conclusion}`);
+              return;
+            }
+            core.setOutput('run_id', String(run.id));
 
       - name: Download exact-SHA Full Acceptance evidence
         uses: actions/download-artifact@v4
