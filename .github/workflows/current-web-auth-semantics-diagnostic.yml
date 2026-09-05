@@ -1,0 +1,221 @@
+name: Current WEB Auth Semantics Diagnostic
+
+on:
+  pull_request:
+    branches:
+      - feat/generic-voip-automation-v1-pr-d-web-golden
+    paths:
+      - ".github/workflows/current-web-auth-semantics-diagnostic.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  read-only-auth-semantics:
+    runs-on: [self-hosted, linux, x64, voip-controlled-linux]
+    timeout-minutes: 15
+    env:
+      EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
+      PROBE_ENV_FILE: /home/github-runner/.config/voip-ai/.env
+      PROBE_VENV: /tmp/voip-web-auth-semantics-${{ github.run_id }}-${{ github.run_attempt }}
+      RUNTIME_ROOT: /tmp/voip-web-auth-semantics-runtime-${{ github.run_id }}-${{ github.run_attempt }}
+      WEB_BASE_URL: https://10.48.8.74:10003
+
+    steps:
+      - name: Repair workspace
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker image inspect python:3.12-slim >/dev/null
+          docker run --rm -v "$GITHUB_WORKSPACE:/workspace" python:3.12-slim \
+            sh -lc 'find /workspace -mindepth 1 -maxdepth 1 -exec rm -rf {} +'
+          rm -rf "$PROBE_VENV" "$RUNTIME_ROOT"
+          mkdir -p "$RUNTIME_ROOT"
+          chmod 0700 "$RUNTIME_ROOT"
+
+      - name: Materialize exact diagnostic head
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          api="https://api.github.com/repos/${GITHUB_REPOSITORY}"
+          actual="$(curl -fsSL -H "Authorization: Bearer ${GH_TOKEN}" -H 'Accept: application/vnd.github+json' "${api}/commits/${EXPECTED_SHA}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["sha"])')"
+          test "$actual" = "$EXPECTED_SHA"
+          archive="$RUNNER_TEMP/web-auth-semantics-${EXPECTED_SHA}.tar.gz"
+          curl -fsSL -H "Authorization: Bearer ${GH_TOKEN}" -H 'Accept: application/vnd.github+json' "${api}/tarball/${EXPECTED_SHA}" -o "$archive"
+          test -s "$archive"
+          tar -xzf "$archive" -C "$GITHUB_WORKSPACE" --strip-components=1
+          echo "WEB_AUTH_SEMANTICS_EXACT_HEAD=PASS revision=$EXPECTED_SHA"
+
+      - name: Prepare isolated runtime and resolve DUT read-only
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -r "$PROBE_ENV_FILE"
+          test "$(stat -c '%a' "$PROBE_ENV_FILE")" = '600'
+          python3 -m venv "$PROBE_VENV"
+          "$PROBE_VENV/bin/pip" install --disable-pip-version-check -q -r backend/requirements.txt
+          set -a
+          source "$PROBE_ENV_FILE"
+          set +a
+          : "${WEB_USERNAME:?WEB_USERNAME_RUNTIME_REQUIRED}"
+          : "${WEB_PASSWORD:?WEB_PASSWORD_RUNTIME_REQUIRED}"
+          export PYTHONPATH="$GITHUB_WORKSPACE/backend"
+          "$PROBE_VENV/bin/python" tools/resolve_real_sip_aba_database_env.py > "$RUNTIME_ROOT/production_db.env"
+          chmod 0600 "$RUNTIME_ROOT/production_db.env"
+          set -a; source "$RUNTIME_ROOT/production_db.env"; set +a
+          "$PROBE_VENV/bin/python" tools/resolve_real_sip_aba_context.py --output-root "$RUNTIME_ROOT/context" --runtime-root "$RUNTIME_ROOT"
+          set -a
+          source "$RUNTIME_ROOT/db_runtime.env"
+          source "$RUNTIME_ROOT/resolved_dut.env"
+          set +a
+          "$PROBE_VENV/bin/python" tools/resolve_real_sip_aba_credential_env.py \
+            --container "$SIP_ABA_PRODUCTION_CREDENTIAL_CONTAINER" \
+            --expected-provider "$SIP_ABA_PRODUCTION_CREDENTIAL_PROVIDER" \
+            --sn "$DEVICE_SN" --ip "$DEVICE_HOST" --product "$DEVICE_MODEL" \
+            --fallback-user "$DEVICE_USER" --output "$RUNTIME_ROOT/device_credential.env"
+          chmod 0600 "$RUNTIME_ROOT/device_credential.env"
+
+      - name: Classify runtime result and source branch without values
+        shell: bash
+        run: |
+          set -euo pipefail
+          set -a
+          source "$PROBE_ENV_FILE"
+          source "$RUNTIME_ROOT/resolved_dut.env"
+          source "$RUNTIME_ROOT/device_credential.env"
+          set +a
+          export PYTHONPATH="$GITHUB_WORKSPACE/backend"
+          "$PROBE_VENV/bin/python" - <<'PY'
+          import asyncio
+          import json
+          import os
+          import re
+          import time
+          from collections.abc import Mapping
+
+          import httpx
+
+          from app.automation.adapters.web_auth.apf3260m import build_apf3260m_luci_auth_provider
+          from app.capture_v2.gate.context import build_asyncssh_adapter
+          from app.capture_v2.gate.models import GateDeviceSpec
+          from app.infrastructure.transport.http import HttpApiTransport, HttpRequest, HttpRetryPolicy
+
+          NOAUTH = '/usr/lib/lua/luci/modules/noauth.lua'
+
+          def login_region(source: str) -> str:
+              m = re.search(r'(?m)^\s*(?:local\s+)?function\s+login\s*\([^\n]*\)', source)
+              if not m:
+                  m = re.search(r'(?m)^\s*login\s*=\s*function\s*\([^\n]*\)', source)
+              if not m:
+                  raise RuntimeError('LOGIN_FUNCTION_NOT_FOUND')
+              tail = source[m.start():]
+              n = re.search(r'(?m)^\s*(?:local\s+)?function\s+(?!login\b)[A-Za-z_][A-Za-z0-9_.:]*\s*\(', tail[1:])
+              return tail[:1+n.start()] if n else tail
+
+          def identifiers(text: str) -> list[str]:
+              keywords = {'if','then','else','elseif','end','local','return','true','false','nil','and','or','not','function','do','for','while','in'}
+              out=[]
+              for token in re.findall(r'[A-Za-z_][A-Za-z0-9_.:]*', text):
+                  if token in keywords or token in out:
+                      continue
+                  out.append(token)
+              return out[:40]
+
+          def authres_branch_facts(region: str) -> dict:
+              lines = region.splitlines()
+              start = None
+              for i,line in enumerate(lines):
+                  if re.match(r'^\s*if\s+authres\s+then\s*$', line):
+                      start=i; break
+              if start is None:
+                  return {'authres_if_present':False,'msg_reload_occurrences':[]}
+              depth=0; else_at=None; end_at=None
+              for i in range(start, len(lines)):
+                  s=lines[i].strip()
+                  if re.match(r'^if\b.*\bthen\s*$',s) or re.match(r'^(?:for|while)\b.*\bdo\s*$',s) or re.match(r'^(?:local\s+)?function\b',s):
+                      depth += 1
+                  if i>start and s=='else' and depth==1:
+                      else_at=i
+                  if s=='end':
+                      depth -= 1
+                      if depth==0:
+                          end_at=i; break
+              occurrences=[]
+              limit=end_at if end_at is not None else len(lines)
+              for i,line in enumerate(lines[:limit+1]):
+                  toks=set(re.findall(r'[A-Za-z_][A-Za-z0-9_]*',line))
+                  if 'msg' not in toks and 'reload' not in toks:
+                      continue
+                  if i <= start:
+                      relation='BEFORE_AUTHRES_IF'
+                  elif else_at is not None and i > else_at:
+                      relation='AUTHRES_ELSE_BRANCH'
+                  elif i < limit:
+                      relation='AUTHRES_THEN_BRANCH'
+                  else:
+                      relation='AFTER_AUTHRES_IF'
+                  occurrences.append({
+                      'relation':relation,
+                      'has_msg_identifier':'msg' in toks,
+                      'has_reload_identifier':'reload' in toks,
+                      'identifier_tokens':identifiers(line),
+                      'source_line_emitted':False,
+                  })
+              return {
+                  'authres_if_present':True,
+                  'authres_else_present':else_at is not None,
+                  'msg_reload_occurrences':occurrences,
+                  'source_line_emitted':False,
+              }
+
+          async def main():
+              spec=GateDeviceSpec(
+                  device_id=os.environ['DEVICE_ID'], model=os.environ['DEVICE_MODEL'],
+                  host=os.environ['DEVICE_HOST'], port=int(os.environ.get('DEVICE_PORT') or '22'),
+                  username=os.environ['SIP_ABA_SSH_USERNAME'], platform_id=os.environ.get('DEVICE_PLATFORM') or None,
+              )
+              ssh=build_asyncssh_adapter(spec,password_env='ENV:SIP_ABA_SSH_PASSWORD')
+              await ssh.connect()
+              try:
+                  cp=await ssh.execute_shell("cat '"+NOAUTH+"' 2>/dev/null",timeout=30,retries=1)
+                  if cp.exit_status != 0 or not (cp.stdout or ''):
+                      raise RuntimeError('NOAUTH_SOURCE_READ_FAILED')
+                  source=cp.stdout or ''
+              finally:
+                  await ssh.disconnect()
+
+              client=httpx.AsyncClient(base_url=os.environ['WEB_BASE_URL'],verify=False,timeout=15.0)
+              transport=HttpApiTransport(os.environ['WEB_BASE_URL'],client=client)
+              provider=build_apf3260m_luci_auth_provider(timestamp_provider=lambda:str(int(time.time())))
+              password=os.environ['WEB_PASSWORD']; encoded=provider.password_encoder(password)
+              payload=dict(provider.login_payload_builder(os.environ['WEB_USERNAME'],encoded))
+              try:
+                  response=await transport.request(HttpRequest(method='POST',path=provider.login_endpoint,json_body=payload,mutation=False,sensitive_values=(password,encoded)),retry_policy=HttpRetryPolicy(max_attempts=1))
+                  body=response.json_body; data=body.get('data') if isinstance(body,Mapping) else None
+                  result={
+                      'schema':'current-web-auth-semantics-v1',
+                      'mutation_executed':False,
+                      'secret_values_emitted':False,
+                      'http_success':response.success,
+                      'protocol_success':provider.protocol_success(response),
+                      'data_is_mapping':isinstance(data,Mapping),
+                      'data_key_names':sorted(str(k) for k in data.keys()) if isinstance(data,Mapping) else [],
+                      'msg_empty':(str(data.get('msg') or '') == '') if isinstance(data,Mapping) and 'msg' in data else None,
+                      'reload_value':bool(data.get('reload')) if isinstance(data,Mapping) and isinstance(data.get('reload'),bool) else None,
+                      'source_branch_facts':authres_branch_facts(login_region(source)),
+                  }
+                  print(json.dumps(result,sort_keys=True))
+              finally:
+                  password=''; encoded=''; payload={}; source=''
+                  await client.aclose()
+
+          asyncio.run(main())
+          PY
+
+      - name: Remove isolated runtime
+        if: always()
+        shell: bash
+        run: |
+          rm -rf "$RUNTIME_ROOT" "$PROBE_VENV"
