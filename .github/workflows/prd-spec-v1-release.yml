@@ -27,14 +27,14 @@ concurrency:
 jobs:
   resolve-shared-source:
     if: github.event_name == 'pull_request'
-    runs-on: [self-hosted, linux, x64, voip-controlled-linux]
-    timeout-minutes: 5
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
     env:
       EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     outputs:
       run_id: ${{ steps.resolve.outputs.run_id }}
     steps:
-      - name: Resolve completed Source Manifest Gate exact-SHA bundle without blocking runner
+      - name: Wait for Source Manifest Gate exact-SHA bundle
         id: resolve
         uses: actions/github-script@v7
         with:
@@ -42,49 +42,43 @@ jobs:
             const owner = context.repo.owner;
             const repo = context.repo.repo;
             const sha = process.env.EXPECTED_SHA;
-            const response = await github.rest.actions.listWorkflowRuns({
-              owner,
-              repo,
-              workflow_id: 'source-manifest-gate.yml',
-              event: 'pull_request',
-              head_sha: sha,
-              per_page: 20,
-            });
-            const runs = response.data.workflow_runs
-              .filter((run) => run.head_sha === sha)
-              .sort((a, b) => b.id - a.id);
-            if (runs.length === 0) {
-              core.setFailed(`Source Manifest Gate has not started for ${sha}; rerun Full Acceptance after Source Manifest completes`);
-              return;
+            const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+            for (let i = 0; i < 120; i++) {
+              const response = await github.rest.actions.listWorkflowRuns({
+                owner,
+                repo,
+                workflow_id: 'source-manifest-gate.yml',
+                event: 'pull_request',
+                head_sha: sha,
+                per_page: 20,
+              });
+              const runs = response.data.workflow_runs
+                .filter((run) => run.head_sha === sha)
+                .sort((a, b) => b.id - a.id);
+              if (runs.length > 0) {
+                const run = runs[0];
+                core.info(`Source Manifest run ${run.id}: ${run.status}/${run.conclusion || 'pending'}`);
+                if (run.status === 'completed') {
+                  if (run.conclusion !== 'success') {
+                    core.setFailed(`Source Manifest Gate failed for ${sha}: ${run.conclusion}`);
+                    return;
+                  }
+                  core.setOutput('run_id', String(run.id));
+                  return;
+                }
+              }
+              await sleep(5000);
             }
-            const run = runs[0];
-            core.info(`Source Manifest run ${run.id}: ${run.status}/${run.conclusion || 'pending'}`);
-            if (run.status !== 'completed') {
-              core.setFailed(`Source Manifest Gate still ${run.status} for ${sha}; rerun Full Acceptance after completion`);
-              return;
-            }
-            if (run.conclusion !== 'success') {
-              core.setFailed(`Source Manifest Gate failed for ${sha}: ${run.conclusion}`);
-              return;
-            }
-            core.setOutput('run_id', String(run.id));
+            core.setFailed(`Timed out waiting for Source Manifest Gate for ${sha}`);
 
   manual-source-bundle:
     if: github.event_name != 'pull_request'
-    runs-on: [self-hosted, linux, x64, voip-controlled-linux]
+    runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
       EXPECTED_SHA: ${{ github.sha }}
     steps:
-      - name: Reset controlled workspace
-        shell: bash
-        run: |
-          set -euo pipefail
-          docker image inspect python:3.12-slim >/dev/null
-          docker run --rm -v "$GITHUB_WORKSPACE:/workspace" python:3.12-slim \
-            sh -lc 'find /workspace -mindepth 1 -maxdepth 1 -exec rm -rf {} +'
-
-      - name: Checkout exact source on controlled transport
+      - name: Checkout exact source on GitHub-hosted transport
         uses: actions/checkout@v4
         with:
           ref: ${{ env.EXPECTED_SHA }}
@@ -116,7 +110,7 @@ jobs:
 
   resolve-reusable-full-acceptance:
     if: github.event_name == 'pull_request'
-    runs-on: [self-hosted, linux, x64, voip-controlled-linux]
+    runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
       EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
@@ -164,20 +158,12 @@ jobs:
             core.info(`No reusable Full Acceptance artifact found for ${sha}`);
 
   frontend-acceptance:
-    runs-on: [self-hosted, linux, x64, voip-controlled-linux]
-    timeout-minutes: 15
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
     env:
       EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
       CICD_PERFORMANCE_V3_EVIDENCE: validation/frontend_cicd_performance_v3.json
     steps:
-      - name: Reset controlled workspace
-        shell: bash
-        run: |
-          set -euo pipefail
-          docker image inspect python:3.12-slim >/dev/null
-          docker run --rm -v "$GITHUB_WORKSPACE:/workspace" python:3.12-slim \
-            sh -lc 'find /workspace -mindepth 1 -maxdepth 1 -exec rm -rf {} +'
-
       - name: Checkout exact frontend source
         uses: actions/checkout@v4
         with:
@@ -214,7 +200,7 @@ jobs:
               "package_lock_sha256": lock_sha,
               "npm_audit_passed": True,
               "production_build_passed": True,
-              "execution_source": "CONTROLLED_SELF_HOSTED",
+              "execution_source": "GITHUB_HOSTED",
               "performance": {
                   "status": perf.get("status"),
                   "total_duration_ms": perf.get("total_duration_ms"),
@@ -249,19 +235,11 @@ jobs:
       needs.resolve-shared-source.result == 'success' &&
       needs.frontend-acceptance.result == 'success' &&
       needs.resolve-reusable-full-acceptance.outputs.reusable == 'true'
-    runs-on: [self-hosted, linux, x64, voip-controlled-linux]
+    runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
       EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
     steps:
-      - name: Reset controlled workspace
-        shell: bash
-        run: |
-          set -euo pipefail
-          docker image inspect python:3.12-slim >/dev/null
-          docker run --rm -v "$GITHUB_WORKSPACE:/workspace" python:3.12-slim \
-            sh -lc 'find /workspace -mindepth 1 -maxdepth 1 -exec rm -rf {} +'
-
       - name: Checkout exact validator source
         uses: actions/checkout@v4
         with:
@@ -542,7 +520,7 @@ jobs:
               },
           }
           assert evidence["frontend_acceptance"]["passed"] is True, evidence
-          assert evidence["frontend_acceptance"]["source"] == "CONTROLLED_SELF_HOSTED", evidence
+          assert evidence["frontend_acceptance"]["source"] == "GITHUB_HOSTED", evidence
           assert evidence["golden_001"] == {
               "passed": True,
               "checks_passed": 142,
@@ -562,7 +540,7 @@ jobs:
           set -euo pipefail
           printf 'PRD_SPEC_V1_FROZEN_CONTRACTS=PASS\n'
           printf 'VOIP_AI_SOFTWARE_RELEASE_GATE=PASS\n'
-          printf 'FRONTEND_ACCEPTANCE_EVIDENCE=PASS source=CONTROLLED_SELF_HOSTED\n'
+          printf 'FRONTEND_ACCEPTANCE_EVIDENCE=PASS source=GITHUB_HOSTED\n'
           printf 'REAL_OFFLINE_GOLDEN_001=PASS 142/142\n'
           printf 'HUMAN_REAL_OFFLINE_GOLDEN_001=PASS\n'
           printf 'CICD_PERFORMANCE_V3=PASS\n'
@@ -638,7 +616,7 @@ jobs:
     if: >-
       always() &&
       (needs.reuse-full-acceptance.result == 'success' || needs.full-software-acceptance.result == 'success')
-    runs-on: [self-hosted, linux, x64, voip-controlled-linux]
+    runs-on: ubuntu-latest
     steps:
       - name: Authoritative Full Acceptance result
         shell: bash
