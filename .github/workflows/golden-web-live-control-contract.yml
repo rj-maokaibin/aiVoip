@@ -31,7 +31,7 @@ jobs:
           docker run --rm -v "$GITHUB_WORKSPACE:/workspace" python:3.12-slim \
             sh -lc 'find /workspace -mindepth 1 -maxdepth 1 -exec rm -rf {} +'
           rm -rf "$CONTRACT_ROOT"
-          mkdir -p "$CONTRACT_ROOT/diagnostics"
+          mkdir -p "$CONTRACT_ROOT"
 
       - name: Materialize exact PR head read-only
         shell: bash
@@ -54,34 +54,13 @@ jobs:
           tar -xzf "$archive" -C "$GITHUB_WORKSPACE" --strip-components=1
           echo "GOLDEN_WEB_LIVE_CONTROL_EXACT_SOURCE=PASS revision=$EXPECTED_SHA"
 
-      - name: Capture fail-closed validator result safely
-        shell: bash
-        run: |
-          set -uo pipefail
-          test -s tools/validate_golden_web_live_control.py
-          test -s .github/workflows/golden-web-config-pr-live-v2.yml
-          set +e
-          python3 tools/validate_golden_web_live_control.py > "$CONTRACT_ROOT/diagnostics/validator.txt" 2>&1
-          rc=$?
-          set -e
-          printf '%s\n' "$rc" > "$CONTRACT_ROOT/diagnostics/validator.rc"
-          printf '%s\n' "$EXPECTED_SHA" > "$CONTRACT_ROOT/diagnostics/exact-source.sha"
-          echo "GOLDEN_WEB_LIVE_CONTROL_VALIDATOR_CAPTURED rc=$rc mutation=false secret_access=false"
-
-      - name: Upload safe validator diagnostics
-        uses: actions/upload-artifact@v4
-        with:
-          name: golden-web-live-control-diagnostics-${{ env.EXPECTED_SHA }}
-          path: ${{ env.CONTRACT_ROOT }}/diagnostics
-          if-no-files-found: error
-          retention-days: 1
-
-      - name: Enforce validator result
+      - name: Validate fail-closed live control contract
         shell: bash
         run: |
           set -euo pipefail
-          rc="$(cat "$CONTRACT_ROOT/diagnostics/validator.rc")"
-          test "$rc" = '0'
+          test -s tools/validate_golden_web_live_control.py
+          test -s .github/workflows/golden-web-config-pr-live-v2.yml
+          python3 tools/validate_golden_web_live_control.py
           echo 'GOLDEN_WEB_LIVE_CONTROL_CONTRACT_GATE=PASS mutation=false secret_access=false'
 
       - name: Remove transient source archive
