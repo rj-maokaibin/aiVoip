@@ -26,6 +26,7 @@ from app.infrastructure.transport.ssh import SharedSshTransport
 
 
 _SAFE_UCI_KEY = re.compile(r"^[A-Za-z0-9_@.\[\]-]+$")
+_SAFE_SOURCE_PATH = re.compile(r"^/(?:www|rom/www|usr/lib/lua|usr/lib|lib)(?:/|$)")
 _USER_TOKENS = {"username", "user", "login", "account", "admin"}
 _PASS_TOKENS = {"password", "passwd", "pwd", "pass"}
 
@@ -129,6 +130,7 @@ async def _probe(args) -> tuple[int, dict, _Candidate | None]:
     keys: list[str] = []
     pairs: list[tuple[str, str]] = []
     value_read = False
+    luci_source_paths: list[str] = []
     try:
         ssh_voip_user = await config.get("voipUserInfo", timeout=args.timeout)
         if not ssh_voip_user.success:
@@ -146,6 +148,22 @@ async def _probe(args) -> tuple[int, dict, _Candidate | None]:
             if line.strip() and _SAFE_UCI_KEY.fullmatch(line.strip())
         ]
         pairs = _credential_pairs(keys)
+
+        source_result = await adapter.execute_shell(
+            "for root in /www /rom/www /usr/lib/lua /usr/lib /lib; do "
+            "[ -e \"$root\" ] || continue; "
+            "grep -R -l -a -E 'luci\\.flash_keep\\.passwd|flash_keep\\.passwd|flash_keep' \"$root\" 2>/dev/null; "
+            "done | head -n 100",
+            timeout=args.timeout,
+            retries=1,
+        )
+        if source_result.exit_status in (0, 1):
+            luci_source_paths = sorted({
+                line.strip()
+                for line in (source_result.stdout or "").splitlines()
+                if line.strip() and _SAFE_SOURCE_PATH.match(line.strip())
+            })[:100]
+
         # Fail closed: never spray multiple credentials at the login endpoint.
         if len(pairs) == 1:
             user_key, password_key = pairs[0]
@@ -183,8 +201,9 @@ async def _probe(args) -> tuple[int, dict, _Candidate | None]:
 
     user_like = sorted(key for key in keys if _leaf_tokens(key) & _USER_TOKENS)
     pass_like = sorted(key for key in keys if _leaf_tokens(key) & _PASS_TOKENS)
+    luci_keys = sorted(key for key in keys if key == "luci" or key.startswith("luci."))
     evidence = {
-        "schema": "dut-web-credential-config-probe-v2",
+        "schema": "dut-web-credential-config-probe-v3",
         "read_only": True,
         "mutation_executed": False,
         "secret_values_emitted": False,
@@ -194,6 +213,8 @@ async def _probe(args) -> tuple[int, dict, _Candidate | None]:
         "password_like_key_count": len(pass_like),
         "username_like_key_paths": user_like[:50],
         "password_like_key_paths": pass_like[:50],
+        "luci_key_paths": luci_keys[:100],
+        "luci_flash_keep_source_reference_paths": luci_source_paths,
         "candidate_pair_count": len(pairs),
         "candidate_pair_key_paths": [
             {"username_key": user_key, "password_key": password_key}
@@ -247,6 +268,7 @@ def main() -> int:
         "login_attempt_count": evidence["login_attempt_count"],
         "authenticated": evidence["authenticated"],
         "cross_entry_identity_match": evidence["cross_entry_identity_match"],
+        "source_reference_count": len(evidence["luci_flash_keep_source_reference_paths"]),
         "mutation": False,
         "secret_values_emitted": False,
     }, sort_keys=True))
