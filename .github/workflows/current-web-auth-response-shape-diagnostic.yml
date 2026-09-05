@@ -1,0 +1,142 @@
+name: Current WEB Auth Response Shape Diagnostic
+
+on:
+  pull_request:
+    branches:
+      - feat/generic-voip-automation-v1-pr-d-web-golden
+    paths:
+      - ".github/workflows/current-web-auth-response-shape-diagnostic.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  read-only-auth-response-shape:
+    runs-on: [self-hosted, linux, x64, voip-controlled-linux]
+    timeout-minutes: 15
+    env:
+      EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
+      PROBE_ENV_FILE: /home/github-runner/.config/voip-ai/.env
+      PROBE_VENV: /tmp/voip-web-auth-shape-${{ github.run_id }}-${{ github.run_attempt }}
+      WEB_BASE_URL: https://10.48.8.74:10003
+
+    steps:
+      - name: Repair workspace
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker image inspect python:3.12-slim >/dev/null
+          docker run --rm -v "$GITHUB_WORKSPACE:/workspace" python:3.12-slim \
+            sh -lc 'find /workspace -mindepth 1 -maxdepth 1 -exec rm -rf {} +'
+          rm -rf "$PROBE_VENV"
+
+      - name: Materialize exact diagnostic head
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          api="https://api.github.com/repos/${GITHUB_REPOSITORY}"
+          actual="$(curl -fsSL -H "Authorization: Bearer ${GH_TOKEN}" -H 'Accept: application/vnd.github+json' "${api}/commits/${EXPECTED_SHA}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["sha"])')"
+          test "$actual" = "$EXPECTED_SHA"
+          archive="$RUNNER_TEMP/web-auth-shape-${EXPECTED_SHA}.tar.gz"
+          curl -fsSL -H "Authorization: Bearer ${GH_TOKEN}" -H 'Accept: application/vnd.github+json' "${api}/tarball/${EXPECTED_SHA}" -o "$archive"
+          test -s "$archive"
+          tar -xzf "$archive" -C "$GITHUB_WORKSPACE" --strip-components=1
+          echo "WEB_AUTH_SHAPE_EXACT_HEAD=PASS revision=$EXPECTED_SHA"
+
+      - name: Prepare isolated runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -r "$PROBE_ENV_FILE"
+          test "$(stat -c '%a' "$PROBE_ENV_FILE")" = '600'
+          python3 -m venv "$PROBE_VENV"
+          "$PROBE_VENV/bin/pip" install --disable-pip-version-check -q -r backend/requirements.txt
+
+      - name: Observe one WEB login response shape without values
+        shell: bash
+        run: |
+          set -euo pipefail
+          set -a
+          source "$PROBE_ENV_FILE"
+          set +a
+          : "${WEB_USERNAME:?WEB_USERNAME_RUNTIME_REQUIRED}"
+          : "${WEB_PASSWORD:?WEB_PASSWORD_RUNTIME_REQUIRED}"
+          export PYTHONPATH="$GITHUB_WORKSPACE/backend"
+          "$PROBE_VENV/bin/python" - <<'PY'
+          import asyncio
+          import json
+          import os
+          import time
+          from collections.abc import Mapping
+
+          import httpx
+
+          from app.automation.adapters.web_auth.apf3260m import (
+              apf3260m_luci_sid_extractor,
+              build_apf3260m_luci_auth_provider,
+          )
+          from app.infrastructure.transport.http import HttpApiTransport, HttpRequest, HttpRetryPolicy
+
+          async def main() -> None:
+              client = httpx.AsyncClient(base_url=os.environ['WEB_BASE_URL'], verify=False, timeout=15.0)
+              transport = HttpApiTransport(os.environ['WEB_BASE_URL'], client=client)
+              provider = build_apf3260m_luci_auth_provider(
+                  timestamp_provider=lambda: str(int(time.time()))
+              )
+              password = os.environ['WEB_PASSWORD']
+              encoded = provider.password_encoder(password)
+              payload = dict(provider.login_payload_builder(os.environ['WEB_USERNAME'], encoded))
+              try:
+                  response = await transport.request(
+                      HttpRequest(
+                          method='POST',
+                          path=provider.login_endpoint,
+                          json_body=payload,
+                          mutation=False,
+                          sensitive_values=(password, encoded),
+                      ),
+                      retry_policy=HttpRetryPolicy(max_attempts=1),
+                  )
+                  body = response.json_body
+                  data = body.get('data') if isinstance(body, Mapping) else None
+                  data_keys = {str(k).lower() for k in data.keys()} if isinstance(data, Mapping) else set()
+                  headers = {str(k).lower() for k in response.headers.keys()}
+                  result = {
+                      'schema': 'current-web-auth-response-shape-v1',
+                      'mutation_executed': False,
+                      'secret_values_emitted': False,
+                      'http_success': response.success,
+                      'status_code': response.status_code,
+                      'protocol_success': provider.protocol_success(response),
+                      'body_is_mapping': isinstance(body, Mapping),
+                      'data_type': type(data).__name__,
+                      'data_is_nonempty_string': isinstance(data, str) and bool(data.strip()),
+                      'data_is_mapping': isinstance(data, Mapping),
+                      'data_mapping_key_count': len(data_keys),
+                      'data_has_locktime': 'locktime' in data_keys,
+                      'data_has_count': 'count' in data_keys,
+                      'data_has_sid': 'sid' in data_keys,
+                      'data_has_stok': 'stok' in data_keys,
+                      'data_has_auth': 'auth' in data_keys,
+                      'data_has_token': 'token' in data_keys,
+                      'set_cookie_header_present': 'set-cookie' in headers,
+                      'location_header_present': 'location' in headers,
+                      'sid_extractor_match': bool(apf3260m_luci_sid_extractor(response)),
+                  }
+                  print(json.dumps(result, sort_keys=True))
+              finally:
+                  password = ''
+                  encoded = ''
+                  payload = {}
+                  await client.aclose()
+
+          asyncio.run(main())
+          PY
+
+      - name: Remove isolated runtime
+        if: always()
+        shell: bash
+        run: |
+          rm -rf "$PROBE_VENV"
