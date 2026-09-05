@@ -30,7 +30,7 @@ jobs:
           test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
           mkdir -p pbx-create-contract-evidence
           python3 - <<'PY'
-          import hashlib, json, re
+          import hashlib, json, re, shutil, subprocess
           from pathlib import Path
 
           root = Path('/var/www/fusionpbx')
@@ -48,6 +48,48 @@ jobs:
 
           copy = paths['copy'].read_text(encoding='utf-8', errors='ignore')
           ext = paths['extension'].read_text(encoding='utf-8', errors='ignore')
+          copy_scalar_fields = [
+              'accountcode', 'effective_caller_id_name', 'effective_caller_id_number',
+              'outbound_caller_id_name', 'outbound_caller_id_number',
+              'emergency_caller_id_name', 'emergency_caller_id_number',
+              'directory_visible', 'directory_exten_visible', 'limit_max',
+              'limit_destination', 'user_context', 'missed_call_app', 'missed_call_data',
+              'toll_allow', 'call_timeout', 'call_group', 'user_record', 'hold_music',
+              'auth_acl', 'cidr', 'sip_force_contact', 'nibble_account',
+              'sip_force_expires', 'mwi_account', 'sip_bypass_media', 'dial_string',
+              'extension_type', 'enabled',
+          ]
+          copy_selects_scalar_fields = all(
+              re.search(r'\bsql\s*\.?=\s*["\']' + re.escape(field), copy)
+              or (field + ',') in copy
+              or (field + ' ') in copy
+              for field in copy_scalar_fields
+          )
+
+          fs_cli = shutil.which('fs_cli')
+          registration_probes = {}
+          if fs_cli:
+              for probe_name, command in {
+                  'show_registrations': 'show registrations',
+                  'sofia_internal_reg': 'sofia status profile internal reg',
+              }.items():
+                  try:
+                      cp = subprocess.run(
+                          [fs_cli, '-x', command],
+                          stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                          text=True, timeout=8, check=False,
+                      )
+                      text = cp.stdout or ''
+                      registration_probes[probe_name] = {
+                          'rc': cp.returncode,
+                          'current_7102_observed': bool(re.search(r'(?<![0-9A-Za-z_.+])7102(?![0-9A-Za-z_.+])', text)),
+                          'nonempty': bool(text.strip()),
+                      }
+                  except Exception:
+                      registration_probes[probe_name] = {
+                          'rc': None, 'current_7102_observed': False, 'nonempty': False
+                      }
+
           facts = {
               'mutation_executed': False,
               'secret_values_emitted': False,
@@ -62,7 +104,9 @@ jobs:
                   'sets_accountcode': "['accountcode']" in copy,
                   'sets_enabled': "['enabled']" in copy,
                   'database_save_array': bool(re.search(r'\$database->save\s*\(\$array\)', copy)),
+                  'copy_scalar_fields_source_bound': copy_selects_scalar_fields,
               },
+              'registration_probe_contract': registration_probes,
               'class_contract': {
                   'exists': bool(re.search(r'public\s+function\s+exists\s*\(', ext)),
                   'delete': bool(re.search(r'public\s+function\s+delete\s*\(', ext)),
