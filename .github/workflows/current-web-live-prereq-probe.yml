@@ -65,6 +65,7 @@ jobs:
           test -s "$archive"
           tar -xzf "$archive" -C "$GITHUB_WORKSPACE" --strip-components=1
           test -s "$GITHUB_WORKSPACE/tools/run_golden_web_config.py"
+          mkdir -p "$PREREQ_EVIDENCE_ROOT"
           printf '%s\n' "$EXPECTED_SHA" > "$PREREQ_EVIDENCE_ROOT/exact-source.sha"
           echo "WEB_PREREQ_EXACT_HEAD=PASS transport=GITHUB_EXACT_SHA_ARCHIVE revision=$EXPECTED_SHA"
 
