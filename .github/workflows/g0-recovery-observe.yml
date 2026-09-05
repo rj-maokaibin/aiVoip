@@ -110,6 +110,8 @@ jobs:
         run: |
           set -euo pipefail
           set -a
+          source "$OBS_RUNTIME_ROOT/production_db.env"
+          source "$OBS_RUNTIME_ROOT/db_runtime.env"
           source "$OBS_RUNTIME_ROOT/resolved_dut.env"
           source "$OBS_RUNTIME_ROOT/credential.env"
           set +a
