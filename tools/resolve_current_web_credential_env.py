@@ -27,23 +27,88 @@ class _Candidate:
     sources: tuple[str, ...] = ()
 
 
-def _read_secret_text(path: Path) -> tuple[str, str]:
-    if not path.is_file():
-        return "", "absent"
+def _read_secret_from_mounted_container(path: Path) -> tuple[str, str]:
+    """Read an already-mounted production secret without copying or logging it."""
     try:
-        return path.read_text(encoding="utf-8", errors="ignore"), "runner"
-    except PermissionError:
-        completed = subprocess.run(
-            ["sudo", "-n", "cat", str(path)],
+        listed = subprocess.run(
+            ["docker", "ps", "--format", "{{.Names}}"],
             check=False,
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
             text=True,
             timeout=5,
         )
-        if completed.returncode != 0:
-            return "", "unreadable"
-        return completed.stdout, "sudo_pipe"
+    except (OSError, subprocess.TimeoutExpired):
+        return "", "unreadable"
+    if listed.returncode != 0:
+        return "", "unreadable"
+
+    destination = str(path)
+    for name in listed.stdout.splitlines():
+        name = name.strip()
+        if not name:
+            continue
+        try:
+            inspected = subprocess.run(
+                ["docker", "inspect", name],
+                check=False,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                text=True,
+                timeout=5,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            continue
+        if inspected.returncode != 0:
+            continue
+        try:
+            item = json.loads(inspected.stdout)[0]
+        except Exception:
+            continue
+        labels = dict(((item.get("Config") or {}).get("Labels") or {}))
+        if labels.get("com.docker.compose.project") != "aivoip":
+            continue
+        mounted = any(
+            str(mount.get("Destination") or "") == destination
+            for mount in (item.get("Mounts") or [])
+        )
+        if not mounted:
+            continue
+        try:
+            completed = subprocess.run(
+                ["docker", "exec", "-u", "0", name, "cat", destination],
+                check=False,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                text=True,
+                timeout=5,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            continue
+        if completed.returncode == 0 and completed.stdout:
+            return completed.stdout, "docker_mounted_secret"
+    return "", "unreadable"
+
+
+def _read_secret_text(path: Path) -> tuple[str, str]:
+    if path.is_file():
+        try:
+            return path.read_text(encoding="utf-8", errors="ignore"), "runner"
+        except PermissionError:
+            try:
+                completed = subprocess.run(
+                    ["sudo", "-n", "cat", str(path)],
+                    check=False,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.DEVNULL,
+                    text=True,
+                    timeout=5,
+                )
+            except (OSError, subprocess.TimeoutExpired):
+                completed = None
+            if completed is not None and completed.returncode == 0 and completed.stdout:
+                return completed.stdout, "sudo_pipe"
+    return _read_secret_from_mounted_container(path)
 
 
 def _matching_secret_candidates(secret_text: str, *, device_host: str) -> list[_Candidate]:
