@@ -96,17 +96,21 @@ class ConfigFrameworkExecutor:
         return cls._subset(payload, result.raw)
 
     @staticmethod
-    def _parse_command_result(result: CommandResult) -> ConfigResult:
+    def _parse_command_result(
+        result: CommandResult,
+        *,
+        allow_data_only: bool = False,
+    ) -> ConfigResult:
         if result.exit_status != 0:
             raise ConfigFrameworkError(f"CONFIG_FRAMEWORK_COMMAND_EXIT:{result.exit_status}")
-        return parse_config_result(result.stdout)
+        return parse_config_result(result.stdout, allow_data_only=allow_data_only)
 
     async def get(self, module: str, *, timeout: float | None = None) -> ConfigResult:
         command = self.build_get_command(module)
 
         async def _read_once() -> ConfigResult:
             result = await self._transport.execute(command, timeout=timeout, retries=0)
-            return self._parse_command_result(result)
+            return self._parse_command_result(result, allow_data_only=True)
 
         parsed = await self._read_policy.execute(_read_once, retry_if=self._transport_unknown)
         return parsed
