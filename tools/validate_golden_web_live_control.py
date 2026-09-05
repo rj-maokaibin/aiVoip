@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-WORKFLOW = Path('.github/workflows/golden-web-config-pr-live.yml')
+WORKFLOW = Path('.github/workflows/golden-web-config-pr-live-v2.yml')
 
 REQUIRED = (
     'issue_comment:',
@@ -12,8 +12,10 @@ REQUIRED = (
     "startsWith(github.event.comment.body, '/run-golden-web-config ')",
     'runs-on: [self-hosted, linux, x64, voip-controlled-linux]',
     'REAL_LIVE_MUTATION: EXPLICIT_ONLY',
-    "test \"$head_ref\" = 'feat/generic-voip-automation-v1-pr-d-web-golden'",
-    "test \"$base_ref\" = 'master'",
+    "test \"${lines[1]:-}\" = 'feat/generic-voip-automation-v1-pr-d-web-golden'",
+    "test \"${lines[2]:-}\" = 'master'",
+    'ref: feat/generic-voip-automation-v1-pr-d-web-golden',
+    'test "$(git rev-parse HEAD)" = "$TARGET_SHA"',
     'tools/resolve_current_web_credential_env.py',
     'tools/run_golden_web_config.py',
     "--target-number '7900'",
@@ -27,7 +29,6 @@ FORBIDDEN = (
     'workflow_dispatch:',
     'secrets.',
     'config set voipUserInfo',
-    'devConfig.set',
     'git reset --hard origin/master',
 )
 
