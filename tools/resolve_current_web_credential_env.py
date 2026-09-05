@@ -240,10 +240,13 @@ async def _resolve(args) -> tuple[_Candidate | None, dict[str, Any]]:
     if env_username and env_password:
         candidates.append(_Candidate(env_username, env_password, ("resolved_device_credential",)))
 
-    web_host = (urlsplit(args.base_url).hostname or "").strip()
+    device_host = str(args.device_host or "").strip().lower()
+    web_host = (urlsplit(args.base_url).hostname or "").strip().lower()
+    exact_target_binding = bool(device_host and web_host and device_host == web_host)
+
     allowed_hosts: dict[str, str] = {}
-    if args.device_host:
-        allowed_hosts[args.device_host] = "device_host"
+    if device_host:
+        allowed_hosts[device_host] = "device_host"
     if web_host:
         allowed_hosts.setdefault(web_host, "web_endpoint_host")
 
@@ -254,7 +257,7 @@ async def _resolve(args) -> tuple[_Candidate | None, dict[str, Any]]:
             secret_root, allowed_hosts=allowed_hosts
         )
         schema_metadata = _safe_secret_schema_metadata(
-            secret_root, device_host=args.device_host, web_host=web_host
+            secret_root, device_host=device_host, web_host=web_host
         )
         candidates.extend(secret_candidates)
     finally:
@@ -270,12 +273,14 @@ async def _resolve(args) -> tuple[_Candidate | None, dict[str, Any]]:
         ):
             successes.append(candidate)
 
+    selected = successes[0] if exact_target_binding and len(successes) == 1 else None
     evidence = {
-        "schema": "current-web-credential-resolution-v3",
+        "schema": "current-web-credential-resolution-v4",
         "mutation_executed": False,
         "secret_values_emitted": False,
-        "device_host_bound": True,
+        "device_host_bound": exact_target_binding,
         "web_endpoint_host_bound": bool(web_host),
+        "web_endpoint_matches_selected_dut": exact_target_binding,
         "credential_candidates": len(candidates),
         "successful_candidates": len(successes),
         "secret_metadata_mode": metadata_mode,
@@ -283,10 +288,10 @@ async def _resolve(args) -> tuple[_Candidate | None, dict[str, Any]]:
         "secret_allowed_host_candidate_count": len(secret_candidates),
         "candidate_source_paths": [list(item.sources) for item in candidates],
         "secret_schema_metadata": schema_metadata,
-        "selection": "EXACTLY_ONE_AUTHENTICATED_CANDIDATE",
-        "selected_source_paths": list(successes[0].sources) if len(successes) == 1 else [],
+        "selection": "EXACT_TARGET_BINDING_AND_EXACTLY_ONE_AUTHENTICATED_CANDIDATE",
+        "selected_source_paths": list(selected.sources) if selected is not None else [],
     }
-    return (successes[0] if len(successes) == 1 else None), evidence
+    return selected, evidence
 
 
 def _write_env(path: Path, candidate: _Candidate) -> None:
@@ -319,6 +324,7 @@ def main() -> int:
         "WEB_CREDENTIAL_RESOLUTION": "PASS" if selected is not None else "BLOCKED",
         "mutation": False,
         "secret_values_emitted": False,
+        "target_binding": evidence["web_endpoint_matches_selected_dut"],
         "candidate_count": evidence["credential_candidates"],
         "success_count": evidence["successful_candidates"],
     }, sort_keys=True))
