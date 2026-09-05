@@ -105,6 +105,11 @@ class GoldenWebNonnumGate:
     async def _precheck(self, context: AutomationRunContext) -> PrecheckResult:
         if context.case.case_id != GOLDEN_WEB_NONNUM_CASE_ID:
             return PrecheckResult(False, "WEB_NONNUM_GOLDEN_CASE_ID_MISMATCH")
+        if not context.case.executable:
+            return PrecheckResult(
+                False,
+                f"WEB_NONNUM_CONTRACT_NOT_EXECUTABLE:{context.case.contract_status.value}",
+            )
         if not self.capability_present:
             return PrecheckResult(False, "NONNUM_EXTENSION_CAPABILITY_REQUIRED")
         target = self.target_number
