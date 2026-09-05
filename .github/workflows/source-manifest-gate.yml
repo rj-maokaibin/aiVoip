@@ -142,7 +142,7 @@ jobs:
       OBS_RUNTIME_ROOT: /tmp/voip-ai-g0-observe-runtime-${{ github.run_id }}-${{ github.run_attempt }}
       OBS_OUTPUT: validation/g0_recovery_observe.json
     steps:
-      - name: Repair self-hosted workspace before checkout
+      - name: Repair self-hosted workspace before offline materialization
         shell: bash
         run: |
           set -euo pipefail
@@ -152,12 +152,26 @@ jobs:
             sh -lc 'find /workspace -mindepth 1 -maxdepth 1 -exec rm -rf {} +'
           test -z "$(find "$GITHUB_WORKSPACE" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null)"
 
-      - name: Checkout exact PR head
-        uses: actions/checkout@v4
-        timeout-minutes: 5
+      - name: Download exact source bundle
+        uses: actions/download-artifact@v4
         with:
-          ref: ${{ env.EXPECTED_SHA }}
-          fetch-depth: 1
+          name: exact-source-${{ env.EXPECTED_SHA }}
+          path: ${{ runner.temp }}/g0-recovery-exact-source
+
+      - name: Materialize exact PR head offline
+        shell: bash
+        run: |
+          set -euo pipefail
+          bundle="$RUNNER_TEMP/g0-recovery-exact-source/source.bundle"
+          sha_file="$RUNNER_TEMP/g0-recovery-exact-source/source.sha"
+          test -s "$bundle"
+          test "$(cat "$sha_file")" = "$EXPECTED_SHA"
+          rm -rf "$GITHUB_WORKSPACE"
+          git clone -q -b bundle-head "$bundle" "$GITHUB_WORKSPACE"
+          git -C "$GITHUB_WORKSPACE" checkout -q --detach "$EXPECTED_SHA"
+          test "$(git -C "$GITHUB_WORKSPACE" rev-parse HEAD)" = "$EXPECTED_SHA"
+          test -z "$(git -C "$GITHUB_WORKSPACE" status --porcelain --untracked-files=no)"
+          echo "G0_RECOVERY_EXACT_SOURCE=PASS revision=$EXPECTED_SHA"
 
       - name: Prepare read-only runtime and resolve DUT
         shell: bash
