@@ -211,6 +211,13 @@ class WebEntryAdapter:
         readback_op = self.profile.operation(operation.readback_operation)
         if readback_op.mutation:
             raise WebApiProfileError("WEB_READBACK_OPERATION_MUST_BE_READ_ONLY")
+        # A mutation transport UNKNOWN can leave the LuCI SID stale even when
+        # the endpoint still answers HTTP 200 with an application-level auth
+        # envelope. SessionManager only auto-refreshes on explicit HTTP 401/403,
+        # so the observe-before-retry readback must start from a fresh session.
+        # This is authentication + read-only observation only; the mutation is
+        # never re-issued here.
+        await self.session_manager.ensure_session(force=True)
         return self._to_result(await self._request_operation(readback_op, args), readback_op)
 
     async def execute(
