@@ -11,6 +11,7 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 import httpx
 import yaml
@@ -120,7 +121,9 @@ def _parse_secret(secret_text: str) -> Any:
         return {}
 
 
-def _matching_secret_candidates_from_root(root: Any, *, device_host: str) -> list[_Candidate]:
+def _matching_secret_candidates_from_root(
+    root: Any, *, allowed_hosts: dict[str, str]
+) -> list[_Candidate]:
     found: list[_Candidate] = []
 
     def walk(value: Any, path: str = "") -> None:
@@ -133,8 +136,12 @@ def _matching_secret_candidates_from_root(root: Any, *, device_host: str) -> lis
                 host = str(value.get(host_key) or "").strip()
                 username = str(value.get(username_key) or "").strip()
                 password = str(value.get(password_key) or "")
-                if host == device_host and username and password:
-                    found.append(_Candidate(username, password, (path or "<root>",)))
+                binding = allowed_hosts.get(host)
+                if binding and username and password:
+                    source_path = path or "<root>"
+                    found.append(
+                        _Candidate(username, password, (f"{source_path}#host={binding}",))
+                    )
             for key, child in value.items():
                 key_text = str(key)
                 walk(child, f"{path}.{key_text}" if path else key_text)
@@ -146,8 +153,10 @@ def _matching_secret_candidates_from_root(root: Any, *, device_host: str) -> lis
     return found
 
 
-def _safe_secret_schema_metadata(root: Any, *, device_host: str, limit: int = 100) -> list[dict[str, Any]]:
-    """Expose key-path/type metadata only; never expose any scalar secret value."""
+def _safe_secret_schema_metadata(
+    root: Any, *, device_host: str, web_host: str, limit: int = 100
+) -> list[dict[str, Any]]:
+    """Expose key-path/type/match metadata only; never expose scalar secret values."""
     rows: list[dict[str, Any]] = []
     interesting = {
         "username", "user", "admin", "account", "login",
@@ -163,14 +172,13 @@ def _safe_secret_schema_metadata(root: Any, *, device_host: str, limit: int = 10
             matched = sorted(set(lowered) & interesting)
             if matched:
                 host_key = lowered.get("host") or lowered.get("ip")
+                host = str(value.get(host_key) or "").strip() if host_key is not None else ""
                 rows.append({
                     "path": path or "<root>",
                     "matching_key_names": matched,
                     "host_key_present": host_key is not None,
-                    "host_matches_device": bool(
-                        host_key is not None
-                        and str(value.get(host_key) or "").strip() == device_host
-                    ),
+                    "host_matches_device": bool(host and host == device_host),
+                    "host_matches_web_endpoint": bool(host and web_host and host == web_host),
                     "username_like_key_present": bool(
                         set(lowered) & {"username", "user", "admin", "account", "login"}
                     ),
@@ -232,14 +240,21 @@ async def _resolve(args) -> tuple[_Candidate | None, dict[str, Any]]:
     if env_username and env_password:
         candidates.append(_Candidate(env_username, env_password, ("resolved_device_credential",)))
 
+    web_host = (urlsplit(args.base_url).hostname or "").strip()
+    allowed_hosts: dict[str, str] = {}
+    if args.device_host:
+        allowed_hosts[args.device_host] = "device_host"
+    if web_host:
+        allowed_hosts.setdefault(web_host, "web_endpoint_host")
+
     secret_text, metadata_mode = _read_secret_text(Path(args.secret_file))
     try:
         secret_root = _parse_secret(secret_text)
         secret_candidates = _matching_secret_candidates_from_root(
-            secret_root, device_host=args.device_host
+            secret_root, allowed_hosts=allowed_hosts
         )
         schema_metadata = _safe_secret_schema_metadata(
-            secret_root, device_host=args.device_host
+            secret_root, device_host=args.device_host, web_host=web_host
         )
         candidates.extend(secret_candidates)
     finally:
@@ -256,15 +271,16 @@ async def _resolve(args) -> tuple[_Candidate | None, dict[str, Any]]:
             successes.append(candidate)
 
     evidence = {
-        "schema": "current-web-credential-resolution-v2",
+        "schema": "current-web-credential-resolution-v3",
         "mutation_executed": False,
         "secret_values_emitted": False,
         "device_host_bound": True,
+        "web_endpoint_host_bound": bool(web_host),
         "credential_candidates": len(candidates),
         "successful_candidates": len(successes),
         "secret_metadata_mode": metadata_mode,
         "resolved_device_credential_candidate_present": bool(env_username and env_password),
-        "secret_host_bound_candidate_count": len(secret_candidates),
+        "secret_allowed_host_candidate_count": len(secret_candidates),
         "candidate_source_paths": [list(item.sources) for item in candidates],
         "secret_schema_metadata": schema_metadata,
         "selection": "EXACTLY_ONE_AUTHENTICATED_CANDIDATE",
