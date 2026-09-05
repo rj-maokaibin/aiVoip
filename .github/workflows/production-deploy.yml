@@ -131,7 +131,7 @@ jobs:
           ref: ${{ env.EXPECTED_SHA }}
           fetch-depth: 0
 
-      - name: Build immutable production Git bundle and derived manifest
+      - name: Build immutable production exact-tree transport and derived manifest
         shell: bash
         run: |
           set -euo pipefail
@@ -139,21 +139,29 @@ jobs:
           test -z "$(git status --porcelain --untracked-files=no)"
           python3 tools/source_manifest_gate.py --write "$RUNNER_TEMP/source_manifest_expected.json"
           python3 tools/source_manifest_gate.py --expected "$RUNNER_TEMP/source_manifest_expected.json"
+          python3 tools/exact_tree_transport.py build \
+            --repo "$GITHUB_WORKSPACE" \
+            --revision "$EXPECTED_SHA" \
+            --manifest "$RUNNER_TEMP/source_manifest_expected.json" \
+            --pack "$RUNNER_TEMP/source.pack" \
+            --sparse-paths "$RUNNER_TEMP/source.paths" \
+            --identity "$RUNNER_TEMP/source.identity.json"
+          cp tools/exact_tree_transport.py "$RUNNER_TEMP/transport_tool.py"
+          printf '%s\n' "$EXPECTED_SHA" > "$RUNNER_TEMP/source.sha"
           test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
           test -z "$(git status --porcelain --untracked-files=no)"
-          git branch -f bundle-head "$EXPECTED_SHA"
-          git bundle create "$RUNNER_TEMP/source.bundle" refs/heads/bundle-head
-          printf '%s\n' "$EXPECTED_SHA" > "$RUNNER_TEMP/source.sha"
-          git bundle verify "$RUNNER_TEMP/source.bundle"
           echo "SOURCE_MANIFEST_DERIVED_ARTIFACT=PASS mutation=false revision=$EXPECTED_SHA"
-          echo "PRODUCTION_IMMUTABLE_SOURCE=PASS revision=$EXPECTED_SHA"
+          echo "PRODUCTION_IMMUTABLE_SOURCE=PASS revision=$EXPECTED_SHA transport=EXACT_COMMIT_SPARSE_OBJECT_PACK"
 
       - name: Upload immutable production source
         uses: actions/upload-artifact@v4
         with:
           name: production-exact-source-${{ github.run_id }}
           path: |
-            ${{ runner.temp }}/source.bundle
+            ${{ runner.temp }}/source.pack
+            ${{ runner.temp }}/source.paths
+            ${{ runner.temp }}/source.identity.json
+            ${{ runner.temp }}/transport_tool.py
             ${{ runner.temp }}/source.sha
             ${{ runner.temp }}/source_manifest_expected.json
           if-no-files-found: error
@@ -193,15 +201,26 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          bundle="$RUNNER_TEMP/production-exact-source/source.bundle"
-          sha_file="$RUNNER_TEMP/production-exact-source/source.sha"
-          manifest="$RUNNER_TEMP/production-exact-source/source_manifest_expected.json"
-          test -s "$bundle"
+          root="$RUNNER_TEMP/production-exact-source"
+          pack="$root/source.pack"
+          sparse_paths="$root/source.paths"
+          identity="$root/source.identity.json"
+          tool="$root/transport_tool.py"
+          sha_file="$root/source.sha"
+          manifest="$root/source_manifest_expected.json"
+          test -s "$pack"
+          test -s "$sparse_paths"
+          test -s "$identity"
+          test -s "$tool"
           test -s "$manifest"
           test "$(cat "$sha_file")" = "$EXPECTED_SHA"
-          git clone -q -b bundle-head "$bundle" "$GITHUB_WORKSPACE"
-          git -C "$GITHUB_WORKSPACE" checkout -q --detach "$EXPECTED_SHA"
-          git -C "$GITHUB_WORKSPACE" update-ref refs/remotes/origin/master "$EXPECTED_SHA"
+          python3 "$tool" materialize \
+            --revision "$EXPECTED_SHA" \
+            --manifest "$manifest" \
+            --pack "$pack" \
+            --sparse-paths "$sparse_paths" \
+            --identity "$identity" \
+            --dest "$GITHUB_WORKSPACE"
           test "$(git -C "$GITHUB_WORKSPACE" rev-parse HEAD)" = "$EXPECTED_SHA"
           test "$(git -C "$GITHUB_WORKSPACE" rev-parse refs/remotes/origin/master)" = "$EXPECTED_SHA"
           test -z "$(git -C "$GITHUB_WORKSPACE" status --porcelain --untracked-files=no)"
@@ -212,7 +231,7 @@ jobs:
           printf 'TARGET_SHA=%s\n' "$EXPECTED_SHA" >> "$GITHUB_ENV"
           printf 'TARGET_SHA=%s\n' "$EXPECTED_SHA"
           printf 'ORIGIN_MASTER=%s\n' "$EXPECTED_SHA"
-          echo "PRODUCTION_TARGET_RESOLUTION=PASS source=IMMUTABLE_BUNDLE"
+          echo "PRODUCTION_TARGET_RESOLUTION=PASS source=EXACT_COMMIT_SPARSE_OBJECT_PACK"
           echo "PRODUCTION_SOURCE_MANIFEST_BINDING=PASS mode=DERIVED_ARTIFACT"
 
       - name: Source manifest release gate
@@ -343,7 +362,7 @@ jobs:
           echo "PRODUCTION_PERSISTENT_ENV_UNCHANGED=PASS"
           echo "RUNTIME_BUILD_REVISION_INJECTION=PASS"
           echo "EXACT_SOURCE_BINDING=PASS"
-          echo "PRODUCTION_SOURCE_TRANSPORT=IMMUTABLE_BUNDLE"
+          echo "PRODUCTION_SOURCE_TRANSPORT=EXACT_COMMIT_SPARSE_OBJECT_PACK"
           echo "PRODUCTION_SOURCE_MANIFEST=DERIVED_ARTIFACT"
 
       - name: Upload production release evidence

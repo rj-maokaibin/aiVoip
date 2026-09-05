@@ -88,6 +88,7 @@ def test_offline_build_has_no_external_dockerfile_frontend_dependency():
 
 def test_v2_2_production_repairs_workspace_then_materializes_immutable_source_offline():
     text = (ROOT / ".github/workflows/production-deploy.yml").read_text(encoding="utf-8")
+    transport = (ROOT / "tools/exact_tree_transport.py").read_text(encoding="utf-8")
     repair = text.index("Repair self-hosted workspace before materialization")
     download = text.index("Download immutable production source")
     materialize = text.index("Materialize exact master offline")
@@ -102,9 +103,15 @@ def test_v2_2_production_repairs_workspace_then_materializes_immutable_source_of
     assert "Require exact accepted PR head gates" in text
     assert "PRODUCTION_PR_AUTHORITY=PASS" in text
     assert "needs: release-authority" in text
-    assert "git -C \"$GITHUB_WORKSPACE\" update-ref refs/remotes/origin/master \"$EXPECTED_SHA\"" in text
-    assert "PRODUCTION_TARGET_RESOLUTION=PASS source=IMMUTABLE_BUNDLE" in text
-    assert "PRODUCTION_SOURCE_TRANSPORT=IMMUTABLE_BUNDLE" in text
+    assert "tools/exact_tree_transport.py build" in text
+    assert 'python3 "$tool" materialize' in text
+    assert 'run(["git", "update-ref", "refs/remotes/origin/master", revision]' in transport
+    assert 'run(["git", "rev-parse", "refs/remotes/origin/master"]' in transport
+    assert 'run(["git", "status", "--porcelain", "--untracked-files=no"]' in transport
+    assert "history_commits_transported" in transport
+    assert '"history_commits_transported": 0' in transport
+    assert "PRODUCTION_TARGET_RESOLUTION=PASS source=EXACT_COMMIT_SPARSE_OBJECT_PACK" in text
+    assert "PRODUCTION_SOURCE_TRANSPORT=EXACT_COMMIT_SPARSE_OBJECT_PACK" in text
     assert "PRODUCTION_RUNNER_WORKSPACE_REPAIR=PASS" in text
 
 
