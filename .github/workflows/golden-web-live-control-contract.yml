@@ -1,0 +1,70 @@
+name: Golden WEB Live Control Contract Gate
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - '.github/workflows/golden-web-config-pr-live-v2.yml'
+      - '.github/workflows/golden-web-live-control-contract.yml'
+      - 'tools/validate_golden_web_live_control.py'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: golden-web-live-control-contract-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  exact-head-control-contract:
+    runs-on: [self-hosted, linux, x64, voip-controlled-linux]
+    timeout-minutes: 10
+    env:
+      EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
+      CONTRACT_ROOT: /tmp/voip-golden-web-control-contract-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - name: Repair controlled workspace
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker image inspect python:3.12-slim >/dev/null
+          docker run --rm -v "$GITHUB_WORKSPACE:/workspace" python:3.12-slim \
+            sh -lc 'find /workspace -mindepth 1 -maxdepth 1 -exec rm -rf {} +'
+          rm -rf "$CONTRACT_ROOT"
+          mkdir -p "$CONTRACT_ROOT"
+
+      - name: Materialize exact PR head read-only
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          api="https://api.github.com/repos/${GITHUB_REPOSITORY}"
+          actual="$(curl -fsSL \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H 'Accept: application/vnd.github+json' \
+            "${api}/commits/${EXPECTED_SHA}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["sha"])')"
+          test "$actual" = "$EXPECTED_SHA"
+          archive="$CONTRACT_ROOT/source.tar.gz"
+          curl -fsSL \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H 'Accept: application/vnd.github+json' \
+            "${api}/tarball/${EXPECTED_SHA}" -o "$archive"
+          test -s "$archive"
+          tar -xzf "$archive" -C "$GITHUB_WORKSPACE" --strip-components=1
+          echo "GOLDEN_WEB_LIVE_CONTROL_EXACT_SOURCE=PASS revision=$EXPECTED_SHA"
+
+      - name: Validate fail-closed live control contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s tools/validate_golden_web_live_control.py
+          test -s .github/workflows/golden-web-config-pr-live-v2.yml
+          python3 tools/validate_golden_web_live_control.py
+          echo 'GOLDEN_WEB_LIVE_CONTROL_CONTRACT_GATE=PASS mutation=false secret_access=false'
+
+      - name: Remove transient source archive
+        if: always()
+        shell: bash
+        run: |
+          rm -rf "$CONTRACT_ROOT"
