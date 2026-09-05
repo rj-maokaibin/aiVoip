@@ -214,10 +214,12 @@ class WebEntryAdapter:
         # A mutation transport UNKNOWN can leave the LuCI SID stale even when
         # the endpoint still answers HTTP 200 with an application-level auth
         # envelope. SessionManager only auto-refreshes on explicit HTTP 401/403,
-        # so the observe-before-retry readback must start from a fresh session.
-        # This is authentication + read-only observation only; the mutation is
-        # never re-issued here.
-        await self.session_manager.ensure_session(force=True)
+        # so production SessionManager instances refresh before the read-only
+        # observe step. Lightweight request-compatible stubs/adapters that do not
+        # own session state remain supported and simply perform the readback.
+        ensure_session = getattr(self.session_manager, "ensure_session", None)
+        if callable(ensure_session):
+            await ensure_session(force=True)
         return self._to_result(await self._request_operation(readback_op, args), readback_op)
 
     async def execute(
