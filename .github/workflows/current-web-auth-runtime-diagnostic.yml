@@ -1,0 +1,131 @@
+name: Current WEB Auth Runtime Diagnostic
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - ".github/workflows/current-web-auth-runtime-diagnostic.yml"
+      - "backend/app/automation/adapters/web_auth/**"
+      - "backend/app/infrastructure/transport/http.py"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: current-web-auth-runtime-diagnostic-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  read-only-web-auth-runtime-diagnostic:
+    runs-on: [self-hosted, linux, x64, voip-controlled-linux]
+    timeout-minutes: 15
+    env:
+      EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
+      PROBE_ENV_FILE: /home/github-runner/.config/voip-ai/.env
+      PROBE_VENV: /tmp/voip-web-auth-runtime-${{ github.run_id }}-${{ github.run_attempt }}
+      WEB_BASE_URL: https://10.48.8.74:10003
+
+    steps:
+      - name: Repair workspace
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker image inspect python:3.12-slim >/dev/null
+          docker run --rm -v "$GITHUB_WORKSPACE:/workspace" python:3.12-slim \
+            sh -lc 'find /workspace -mindepth 1 -maxdepth 1 -exec rm -rf {} +'
+          rm -rf "$PROBE_VENV"
+
+      - name: Materialize exact PR head from GitHub archive
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          api="https://api.github.com/repos/${GITHUB_REPOSITORY}"
+          actual="$(curl -fsSL -H "Authorization: Bearer ${GH_TOKEN}" -H 'Accept: application/vnd.github+json' "${api}/commits/${EXPECTED_SHA}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["sha"])')"
+          test "$actual" = "$EXPECTED_SHA"
+          archive="$RUNNER_TEMP/web-auth-runtime-${EXPECTED_SHA}.tar.gz"
+          curl -fsSL -H "Authorization: Bearer ${GH_TOKEN}" -H 'Accept: application/vnd.github+json' "${api}/tarball/${EXPECTED_SHA}" -o "$archive"
+          test -s "$archive"
+          tar -xzf "$archive" -C "$GITHUB_WORKSPACE" --strip-components=1
+          echo "WEB_AUTH_RUNTIME_EXACT_HEAD=PASS revision=$EXPECTED_SHA"
+
+      - name: Prepare isolated runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -r "$PROBE_ENV_FILE"
+          test "$(stat -c '%a' "$PROBE_ENV_FILE")" = '600'
+          python3 -m venv "$PROBE_VENV"
+          "$PROBE_VENV/bin/pip" install --disable-pip-version-check -q -r backend/requirements.txt
+
+      - name: Diagnose one real WEB login without exposing secret values
+        shell: bash
+        run: |
+          set -euo pipefail
+          set -a
+          source "$PROBE_ENV_FILE"
+          set +a
+          : "${WEB_USERNAME:?WEB_USERNAME_RUNTIME_REQUIRED}"
+          : "${WEB_PASSWORD:?WEB_PASSWORD_RUNTIME_REQUIRED}"
+          export PYTHONPATH="$GITHUB_WORKSPACE/backend"
+          "$PROBE_VENV/bin/python" - <<'PY'
+          import asyncio
+          import json
+          import os
+          import time
+
+          import httpx
+
+          from app.automation.adapters.web_auth.apf3260m import build_apf3260m_luci_auth_provider
+          from app.automation.adapters.web_auth.base import WebCredential
+          from app.automation.adapters.web_auth.legacy_luci import LegacyLuciAuthError
+          from app.infrastructure.transport.http import HttpApiTransport
+
+          async def main() -> int:
+              client = httpx.AsyncClient(base_url=os.environ['WEB_BASE_URL'], verify=False, timeout=15.0)
+              transport = HttpApiTransport(os.environ['WEB_BASE_URL'], client=client)
+              provider = build_apf3260m_luci_auth_provider(
+                  timestamp_provider=lambda: str(int(time.time()))
+              )
+              credential = WebCredential(
+                  username=os.environ['WEB_USERNAME'],
+                  password=os.environ['WEB_PASSWORD'],
+              )
+              result = {
+                  'schema': 'current-web-auth-runtime-diagnostic-v1',
+                  'mutation_executed': False,
+                  'secret_values_emitted': False,
+                  'credential_present': True,
+                  'username_is_admin': os.environ['WEB_USERNAME'].strip() == 'admin',
+              }
+              try:
+                  session = await provider.authenticate(transport, credential)
+                  result.update({
+                      'auth': 'PASS',
+                      'reason': 'AUTHENTICATED_WITH_SID',
+                      'sid_present': bool(session.query.get('auth')),
+                  })
+                  print(json.dumps(result, sort_keys=True))
+                  return 0
+              except LegacyLuciAuthError as exc:
+                  result.update({'auth': 'FAIL', 'reason': str(exc)})
+              except httpx.TimeoutException:
+                  result.update({'auth': 'FAIL', 'reason': 'HTTP_TIMEOUT'})
+              except httpx.HTTPError:
+                  result.update({'auth': 'FAIL', 'reason': 'HTTP_TRANSPORT_ERROR'})
+              except Exception as exc:
+                  result.update({'auth': 'FAIL', 'reason': f'UNEXPECTED:{type(exc).__name__}'})
+              finally:
+                  await client.aclose()
+              print(json.dumps(result, sort_keys=True))
+              return 3
+
+          raise SystemExit(asyncio.run(main()))
+          PY
+
+      - name: Remove isolated runtime
+        if: always()
+        shell: bash
+        run: |
+          rm -rf "$PROBE_VENV"
