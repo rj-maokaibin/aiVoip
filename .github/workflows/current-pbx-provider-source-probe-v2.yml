@@ -1,0 +1,85 @@
+name: Current PBX Create Contract Probe
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - ".github/workflows/current-pbx-provider-source-probe-v2.yml"
+      - "backend/app/automation/adapters/pbx/**"
+      - "backend/app/automation/gates/golden_web_config.py"
+
+permissions:
+  contents: read
+
+jobs:
+  source-contract:
+    runs-on: [self-hosted, linux, x64, voip-controlled-linux]
+    timeout-minutes: 10
+    env:
+      EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
+      FUSIONPBX_ROOT: /var/www/fusionpbx
+    steps:
+      - name: Checkout exact PR head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.EXPECTED_SHA }}
+      - name: Inspect installed FusionPBX create path read-only
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          mkdir -p pbx-create-contract-evidence
+          python3 - <<'PY'
+          import hashlib, json, re
+          from pathlib import Path
+
+          root = Path('/var/www/fusionpbx')
+          paths = {
+              'copy': root / 'app/extensions/extension_copy.php',
+              'extension': root / 'app/extensions/resources/classes/extension.php',
+              'database': root / 'resources/classes/database.php',
+              'require': root / 'resources/require.php',
+          }
+          if not all(p.is_file() for p in paths.values()):
+              raise SystemExit('FUSIONPBX_CREATE_SOURCE_NOT_FOUND')
+
+          def sha256(p):
+              return hashlib.sha256(p.read_bytes()).hexdigest()
+
+          copy = paths['copy'].read_text(encoding='utf-8', errors='ignore')
+          ext = paths['extension'].read_text(encoding='utf-8', errors='ignore')
+          facts = {
+              'mutation_executed': False,
+              'secret_values_emitted': False,
+              'source_sha256': {k: sha256(v) for k, v in paths.items()},
+              'copy_contract': {
+                  'array_root_extensions': "['extensions'][0]" in copy,
+                  'sets_domain_uuid': "['domain_uuid']" in copy,
+                  'sets_extension_uuid': "['extension_uuid']" in copy,
+                  'sets_extension': "['extension']" in copy,
+                  'sets_number_alias': "['number_alias']" in copy,
+                  'sets_password': "['password']" in copy,
+                  'sets_accountcode': "['accountcode']" in copy,
+                  'sets_enabled': "['enabled']" in copy,
+                  'database_save_array': bool(re.search(r'\$database->save\s*\(\$array\)', copy)),
+              },
+              'class_contract': {
+                  'exists': bool(re.search(r'public\s+function\s+exists\s*\(', ext)),
+                  'delete': bool(re.search(r'public\s+function\s+delete\s*\(', ext)),
+                  'exists_checks_number_alias': 'number_alias = :extension' in ext,
+              },
+          }
+          required = list(facts['copy_contract'].values()) + list(facts['class_contract'].values())
+          if not all(required):
+              raise SystemExit('FUSIONPBX_CREATE_CONTRACT_INCOMPLETE')
+          out = Path('pbx-create-contract-evidence/fusionpbx-create-contract.json')
+          out.write_text(json.dumps(facts, sort_keys=True, indent=2) + '\n', encoding='utf-8')
+          print(json.dumps({'PBX_CREATE_SOURCE_CONTRACT':'PASS','mutation':False,'secret_values_emitted':False}, sort_keys=True))
+          PY
+      - name: Upload immutable source contract evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: current-pbx-create-contract-${{ env.EXPECTED_SHA }}
+          path: pbx-create-contract-evidence/*.json
+          if-no-files-found: error
+          retention-days: 7
