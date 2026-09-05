@@ -19,6 +19,7 @@ from app.infrastructure.action_route import ActionBackend, ActionEntry, ActionPu
 from app.infrastructure.config_framework.executor import ConfigFrameworkExecutor
 from app.infrastructure.config_framework.schema import ConfigResult, mask_secrets
 from app.infrastructure.device_authority.capture_lease_adapter import CaptureLeaseCompatibilityAdapter
+from app.infrastructure.device_authority.keepalive import AuthorityKeepalive
 from app.infrastructure.mutation.contract import MutationStatus
 
 GOLDEN_CFG_CONFIG_CASE_ID = "Golden-CFG-CONFIG-001"
@@ -80,6 +81,7 @@ class GoldenCfgConfigGate:
         authority: CaptureLeaseCompatibilityAdapter,
         session_factory,
         command_timeout: float = 20.0,
+        authority_keepalive_interval: float = 30.0,
     ) -> None:
         if definition.case.case_id != GOLDEN_CFG_CONFIG_CASE_ID:
             raise ValueError("G0_CASE_ID_MISMATCH")
@@ -94,6 +96,10 @@ class GoldenCfgConfigGate:
         self.authority = authority
         self.session_factory = session_factory
         self.command_timeout = command_timeout
+        self.keepalive = AuthorityKeepalive(
+            authority,
+            interval_seconds=authority_keepalive_interval,
+        )
         self.runtime: dict[str, Any] = {"token": None, "snapshot": None, "probe": None, "marker": None}
 
     async def _precheck(self, context: AutomationRunContext) -> PrecheckResult:
@@ -105,6 +111,20 @@ class GoldenCfgConfigGate:
             run_id=context.run_id,
             owner_worker_id=self.worker_id,
         )
+        self.runtime["token"] = token
+        self.keepalive.start(token)
+        return token
+
+    def _current_token(self):
+        token = self.runtime.get("token")
+        if token is None:
+            raise RuntimeError("G0_AUTHORITY_MISSING")
+        if self.keepalive.error is not None:
+            self.keepalive.raise_if_failed()
+        try:
+            token = self.keepalive.token
+        except RuntimeError:
+            pass
         self.runtime["token"] = token
         return token
 
@@ -136,10 +156,11 @@ class GoldenCfgConfigGate:
         probe = self.runtime.get("probe")
         if not isinstance(probe, Mapping):
             raise RuntimeError("G0_PROBE_NOT_PREPARED")
+        token = self._current_token()
         mutation = await self.config.set(
             G0_MODULE,
             probe,
-            authority_token=context.authority_token,
+            authority_token=token,
             timeout=self.command_timeout,
         )
         readback = await self.config.get(G0_MODULE, timeout=self.command_timeout)
@@ -162,11 +183,9 @@ class GoldenCfgConfigGate:
 
     async def _restore_action(self) -> dict[str, Any]:
         snapshot = self.runtime.get("snapshot")
-        token = self.runtime.get("token")
         if not isinstance(snapshot, Mapping):
             return {"restore_required": False, "reason": "snapshot_not_captured"}
-        if token is None:
-            raise RuntimeError("G0_RESTORE_AUTHORITY_MISSING")
+        token = self._current_token()
         current = await self.config.get(G0_MODULE, timeout=self.command_timeout)
         if ConfigFrameworkExecutor.payload_matches_readback(snapshot, current):
             return {"restore_required": False, "already_restored": True}
@@ -196,6 +215,8 @@ class GoldenCfgConfigGate:
         token = self.runtime.get("token")
         if token is None:
             return {"authority_acquired": False}
+        await self.keepalive.stop()
+        token = self._current_token()
         self.authority.release(token)
         return {"authority_acquired": True, "lease_epoch": token.lease_epoch}
 
@@ -240,9 +261,18 @@ class GoldenCfgConfigGate:
             hooks=RuntimeHooks(precheck=self._precheck, reserve=self._reserve, snapshot=self._snapshot),
             recorder=SqlAlchemyRuntimeRecorder(self.session_factory),
         )
-        return await runtime.run(
-            self.case,
-            run_id=self.run_id,
-            worker_id=self.worker_id,
-            intent=RunIntent.VERIFY,
-        )
+        try:
+            return await runtime.run(
+                self.case,
+                run_id=self.run_id,
+                worker_id=self.worker_id,
+                intent=RunIntent.VERIFY,
+            )
+        finally:
+            # If cleanup failed before the release step, stop renewing and let the
+            # unresolved lease fence expire naturally. Never reacquire/take over.
+            if self.keepalive.error is None:
+                try:
+                    await self.keepalive.stop()
+                except RuntimeError:
+                    pass
