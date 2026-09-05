@@ -1,0 +1,178 @@
+name: Current PBX DB Read Probe
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - ".github/workflows/current-pbx-db-read-probe.yml"
+      - ".github/workflows/current-pbx-provider-source-probe.yml"
+      - "backend/app/automation/adapters/pbx/**"
+      - "backend/app/automation/gates/golden_web_config.py"
+
+permissions:
+  contents: read
+
+jobs:
+  exact-source-bundle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
+    steps:
+      - name: Checkout exact PR head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.EXPECTED_SHA }}
+          fetch-depth: 0
+      - name: Build immutable source bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          git branch -f bundle-head "$EXPECTED_SHA"
+          git bundle create "$RUNNER_TEMP/source.bundle" refs/heads/bundle-head
+          printf '%s\n' "$EXPECTED_SHA" > "$RUNNER_TEMP/source.sha"
+          git bundle verify "$RUNNER_TEMP/source.bundle"
+      - name: Upload exact source bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: pbx-db-read-exact-source-${{ env.EXPECTED_SHA }}
+          path: |
+            ${{ runner.temp }}/source.bundle
+            ${{ runner.temp }}/source.sha
+          if-no-files-found: error
+          retention-days: 1
+
+  authoritative-db-read:
+    needs: exact-source-bundle
+    runs-on: [self-hosted, linux, x64, voip-controlled-linux]
+    timeout-minutes: 10
+    env:
+      EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
+      FUSIONPBX_ROOT: /var/www/fusionpbx
+      EXPECTED_REQUIRE_SHA256: 2d29ea99b786c5c111df4cfcc06319138f1544b30300f6aea70635f1100fd761
+      EXPECTED_DATABASE_SHA256: 6a0b95eb29d1c27b24d4dcc4a8582b959c627a9173b973b19b2435e1e399dbbb
+      EXPECTED_EXTENSION_SHA256: 842c070880ebe82cca676d8b04cda8377ca931180c91f72a499e813c3f3eaed9
+    steps:
+      - name: Repair self-hosted workspace
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker image inspect python:3.12-slim >/dev/null
+          docker run --rm -v "$GITHUB_WORKSPACE:/workspace" python:3.12-slim \
+            sh -lc 'find /workspace -mindepth 1 -maxdepth 1 -exec rm -rf {} +'
+      - name: Download exact source bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: pbx-db-read-exact-source-${{ env.EXPECTED_SHA }}
+          path: ${{ runner.temp }}/pbx-db-read-exact-source
+      - name: Materialize exact PR head offline
+        shell: bash
+        run: |
+          set -euo pipefail
+          bundle="$RUNNER_TEMP/pbx-db-read-exact-source/source.bundle"
+          test "$(cat "$RUNNER_TEMP/pbx-db-read-exact-source/source.sha")" = "$EXPECTED_SHA"
+          cd "$RUNNER_TEMP"
+          rm -rf "$GITHUB_WORKSPACE"
+          git clone -q -b bundle-head "$bundle" "$GITHUB_WORKSPACE"
+          git -C "$GITHUB_WORKSPACE" checkout -q --detach "$EXPECTED_SHA"
+          test "$(git -C "$GITHUB_WORKSPACE" rev-parse HEAD)" = "$EXPECTED_SHA"
+          echo "PBX_DB_READ_EXACT_SOURCE=PASS revision=$EXPECTED_SHA"
+      - name: Fence installed FusionPBX source identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(sha256sum "$FUSIONPBX_ROOT/resources/require.php" | awk '{print $1}')" = "$EXPECTED_REQUIRE_SHA256"
+          test "$(sha256sum "$FUSIONPBX_ROOT/resources/classes/database.php" | awk '{print $1}')" = "$EXPECTED_DATABASE_SHA256"
+          test "$(sha256sum "$FUSIONPBX_ROOT/app/extensions/resources/classes/extension.php" | awk '{print $1}')" = "$EXPECTED_EXTENSION_SHA256"
+          echo 'FUSIONPBX_INSTALLED_SOURCE_FENCE=PASS mutation=false'
+      - name: Query authoritative FusionPBX extension pool read-only
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p pbx-db-read-evidence
+          cat > "$RUNNER_TEMP/pbx_db_read_probe.php" <<'PHP'
+          <?php
+          declare(strict_types=1);
+          $root = getenv('FUSIONPBX_ROOT');
+          if (!$root) { fwrite(STDERR, "FUSIONPBX_ROOT_REQUIRED\n"); exit(2); }
+          require_once $root . '/resources/require.php';
+          require_once $root . '/app/extensions/resources/classes/extension.php';
+          global $database;
+          if (!$database) { fwrite(STDERR, "FUSIONPBX_DATABASE_UNAVAILABLE\n"); exit(3); }
+
+          $domains = $database->select(
+              "select domain_uuid, domain_name from v_domains where enabled = 'true' order by domain_name asc",
+              null,
+              'all'
+          );
+          if (!is_array($domains) || count($domains) === 0) {
+              fwrite(STDERR, "FUSIONPBX_ACTIVE_DOMAIN_REQUIRED\n");
+              exit(4);
+          }
+
+          $result = [
+              'mutation_executed' => false,
+              'secret_values_emitted' => false,
+              'active_domain_count' => count($domains),
+              'domains' => [],
+          ];
+          foreach ($domains as $row) {
+              $domain_uuid = strval($row['domain_uuid'] ?? '');
+              $domain_name = strval($row['domain_name'] ?? '');
+              if ($domain_uuid === '' || $domain_name === '') { continue; }
+              $extension = new extension([
+                  'database' => $database,
+                  'domain_uuid' => $domain_uuid,
+                  'domain_name' => $domain_name,
+                  'user_uuid' => '',
+              ]);
+              $occupied = [];
+              for ($candidate = 7900; $candidate <= 7999; $candidate++) {
+                  if ($extension->exists($domain_uuid, strval($candidate))) {
+                      $occupied[] = $candidate;
+                  }
+              }
+              $first_available = null;
+              for ($candidate = 7900; $candidate <= 7999; $candidate++) {
+                  if (!in_array($candidate, $occupied, true)) {
+                      $first_available = $candidate;
+                      break;
+                  }
+              }
+              $result['domains'][] = [
+                  'domain_identity_sha256' => hash('sha256', $domain_uuid . '|' . $domain_name),
+                  'pool_occupied_count' => count($occupied),
+                  'first_available' => $first_available,
+                  'extension_or_alias_7102_exists' => $extension->exists($domain_uuid, '7102'),
+              ];
+          }
+          echo json_encode($result, JSON_UNESCAPED_SLASHES) . PHP_EOL;
+          PHP
+          php "$RUNNER_TEMP/pbx_db_read_probe.php" > pbx-db-read-evidence/fusionpbx-db-read.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          path = Path('pbx-db-read-evidence/fusionpbx-db-read.json')
+          data = json.loads(path.read_text(encoding='utf-8'))
+          assert data.get('mutation_executed') is False
+          assert data.get('secret_values_emitted') is False
+          assert int(data.get('active_domain_count', 0)) >= 1
+          assert len(data.get('domains') or []) >= 1
+          print(json.dumps({
+              'PBX_DB_READ_PROBE': 'PASS',
+              'mutation': False,
+              'secret_values_emitted': False,
+              'active_domain_count': data['active_domain_count'],
+              'domain_candidate_count': len(data['domains']),
+          }, sort_keys=True))
+          PY
+          rm -f "$RUNNER_TEMP/pbx_db_read_probe.php"
+      - name: Upload immutable authoritative PBX read evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: current-pbx-db-read-${{ env.EXPECTED_SHA }}
+          path: pbx-db-read-evidence/*.json
+          if-no-files-found: error
+          retention-days: 7
