@@ -26,14 +26,9 @@ def main() -> int:
         "ssh_fallback",
         "release_last",
         "Remove runtime secrets",
-        # The live workflow must retain its own exact-source scan for forbidden
-        # alternate mutation implementations. Requiring those probe strings here
-        # prevents this validator from falsely flagging the probes themselves.
-        "TemporaryExtensionProvider|database->save|self\\.config\\.set\\(|devConfig\\.set",
+        "Forbidden alternate mutation path in observed PR-D runner",
     )
     missing = [item for item in required if item not in text]
-    # Only patterns whose mere presence is forbidden belong here. Strings used by
-    # runtime negative checks must not be listed as static forbidden tokens.
     forbidden = (
         '${{ secrets.',
         '/run-golden-web-config ',
