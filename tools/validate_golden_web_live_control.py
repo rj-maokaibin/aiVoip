@@ -14,8 +14,11 @@ REQUIRED = (
     'REAL_LIVE_MUTATION: EXPLICIT_ONLY',
     "test \"${lines[1]:-}\" = 'feat/generic-voip-automation-v1-pr-d-web-golden'",
     "test \"${lines[2]:-}\" = 'master'",
-    'ref: feat/generic-voip-automation-v1-pr-d-web-golden',
-    'test "$(git rev-parse HEAD)" = "$TARGET_SHA"',
+    'Materialize exact authorized PR-D SHA',
+    '"${api}/commits/${TARGET_SHA}"',
+    '"${api}/tarball/${TARGET_SHA}"',
+    'test "$actual" = "$TARGET_SHA"',
+    'GOLDEN_WEB_EXACT_SOURCE_TRANSPORT=GITHUB_EXACT_SHA_ARCHIVE',
     'tools/resolve_current_web_credential_env.py',
     'tools/run_golden_web_config.py',
     "--target-number '7900'",
@@ -30,6 +33,7 @@ FORBIDDEN = (
     'secrets.',
     'config set voipUserInfo',
     'git reset --hard origin/master',
+    'ref: feat/generic-voip-automation-v1-pr-d-web-golden',
 )
 
 
