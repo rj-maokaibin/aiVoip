@@ -1,0 +1,25 @@
+id: Golden-CFG-CONFIG-001
+version: 1
+name: Config Framework effective readback and restore
+suite_id: backend_config
+entry: none
+contract_status: ACTIVE
+environment:
+  profile: real_controlled
+parameters:
+  probe_disname: G0
+snapshot:
+  - voipUserInfo
+steps:
+  - action: voip.account.configure
+    purpose: test
+    args: {}
+assertions:
+  - id: effective_disname
+    source: config_framework
+    path: data[0].disName
+    op: eq
+    value: ${probe_disname}
+cleanup:
+  strategy: restore_snapshot
+  verify: true
