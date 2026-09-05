@@ -5,6 +5,7 @@ import argparse
 import asyncio
 import json
 import os
+import re
 import time
 from pathlib import Path
 
@@ -14,6 +15,7 @@ from app.automation.adapters.entries.web import WebEntryAdapter
 from app.automation.adapters.pbx.registration import FusionPbxRegistrationProbe
 from app.automation.adapters.web_auth.apf3260m import build_apf3260m_luci_auth_provider
 from app.automation.adapters.web_auth.base import SessionManager, WebCredential
+from app.automation.adapters.web_auth.legacy_luci import LegacyLuciAuthError
 from app.automation.adapters.web_profiles.schema import WebApiProfile
 from app.automation.gates.golden_web_config import (
     GOLDEN_WEB_CONFIG_CASE_ID,
@@ -34,6 +36,20 @@ from app.infrastructure.config_framework.executor import ConfigFrameworkExecutor
 from app.infrastructure.device_authority.capture_lease_adapter import CaptureLeaseCompatibilityAdapter
 from app.infrastructure.transport.http import HttpApiTransport
 from app.infrastructure.transport.ssh import SharedSshTransport
+
+
+_SAFE_AUTH_ERROR_CODE = re.compile(r"^[A-Z0-9_]+(?::[0-9]{3})?$")
+
+
+def _safe_exception_code(exc: Exception) -> str | None:
+    """Retain only an allowlisted non-secret auth reason for live diagnostics."""
+
+    if not isinstance(exc, LegacyLuciAuthError):
+        return None
+    value = str(exc).strip()
+    if not _SAFE_AUTH_ERROR_CODE.fullmatch(value):
+        return None
+    return value
 
 
 def _summary(result, gate: GoldenWebConfigGate, *, device_id: str, model: str) -> dict:
@@ -212,6 +228,9 @@ def main() -> int:
             "route": WEB_CONFIG_ROUTE.as_dict(),
             "secret_values_emitted": False,
         }
+        error_code = _safe_exception_code(exc)
+        if error_code is not None:
+            payload["error_code"] = error_code
     output = output_root / "golden-web-config-001.json"
     output.write_text(json.dumps(payload, ensure_ascii=False, sort_keys=True, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(payload, ensure_ascii=False, sort_keys=True))
