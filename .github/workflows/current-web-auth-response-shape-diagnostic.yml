@@ -101,10 +101,14 @@ jobs:
                   )
                   body = response.json_body
                   data = body.get('data') if isinstance(body, Mapping) else None
-                  data_keys = {str(k).lower() for k in data.keys()} if isinstance(data, Mapping) else set()
+                  data_key_names = sorted(str(k) for k in data.keys()) if isinstance(data, Mapping) else []
+                  data_keys = {name.lower() for name in data_key_names}
+                  data_value_types = {
+                      str(k): type(v).__name__ for k, v in data.items()
+                  } if isinstance(data, Mapping) else {}
                   headers = {str(k).lower() for k in response.headers.keys()}
                   result = {
-                      'schema': 'current-web-auth-response-shape-v1',
+                      'schema': 'current-web-auth-response-shape-v2',
                       'mutation_executed': False,
                       'secret_values_emitted': False,
                       'http_success': response.success,
@@ -115,6 +119,8 @@ jobs:
                       'data_is_nonempty_string': isinstance(data, str) and bool(data.strip()),
                       'data_is_mapping': isinstance(data, Mapping),
                       'data_mapping_key_count': len(data_keys),
+                      'data_key_names': data_key_names,
+                      'data_value_types': data_value_types,
                       'data_has_locktime': 'locktime' in data_keys,
                       'data_has_count': 'count' in data_keys,
                       'data_has_sid': 'sid' in data_keys,
