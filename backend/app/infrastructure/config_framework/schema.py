@@ -88,22 +88,49 @@ def _json_candidates(stdout: str) -> list[str]:
     return candidates
 
 
-def parse_config_result(stdout: str) -> ConfigResult:
+def parse_config_result(stdout: str, *, allow_data_only: bool = False) -> ConfigResult:
+    """Parse unified-framework output without weakening mutation acknowledgement.
+
+    Current VOIP `dev_config get` may return a data-only JSON object such as
+    ``{"data": [...]}``.  That shape is accepted only when the caller explicitly
+    opts into read-mode via ``allow_data_only``.  Mutation responses must still
+    carry the framework's authoritative ``rcode``/``rmsg`` acknowledgement.
+    """
+
     payload: Any = None
     last_error: Exception | None = None
     for candidate in _json_candidates(stdout):
         try:
-            payload = json.loads(candidate)
-            if isinstance(payload, dict) and "rcode" in payload and "rmsg" in payload:
-                break
+            decoded = json.loads(candidate)
         except (TypeError, ValueError) as exc:
             last_error = exc
             continue
-    if not isinstance(payload, dict) or "rcode" not in payload or "rmsg" not in payload:
+        if not isinstance(decoded, dict):
+            continue
+        if "rcode" in decoded and "rmsg" in decoded:
+            payload = decoded
+            break
+        if allow_data_only and "data" in decoded:
+            payload = decoded
+            break
+
+    if not isinstance(payload, dict):
         raise ConfigFrameworkParseError("CONFIG_FRAMEWORK_RESPONSE_INVALID") from last_error
-    return ConfigResult(
-        rcode=str(payload["rcode"]),
-        rmsg=str(payload["rmsg"]),
-        data=payload.get("data"),
-        raw=payload,
-    )
+
+    if "rcode" in payload and "rmsg" in payload:
+        return ConfigResult(
+            rcode=str(payload["rcode"]),
+            rmsg=str(payload["rmsg"]),
+            data=payload.get("data"),
+            raw=payload,
+        )
+
+    if allow_data_only and "data" in payload:
+        return ConfigResult(
+            rcode="00000000",
+            rmsg="success",
+            data=payload.get("data"),
+            raw=payload,
+        )
+
+    raise ConfigFrameworkParseError("CONFIG_FRAMEWORK_RESPONSE_INVALID") from last_error
