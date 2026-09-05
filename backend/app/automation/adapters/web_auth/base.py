@@ -11,7 +11,7 @@ from app.infrastructure.transport.http import HttpApiTransport, HttpRequest, Htt
 class WebCredential:
     """Runtime-injected credential. Callers must never persist this object."""
     username: str
-    password: str
+    password: str = field(repr=False, compare=False)
 
 
 @dataclass(frozen=True)
