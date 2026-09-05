@@ -1,0 +1,41 @@
+name: GitHub Hosted Runner Entitlement Diagnostic
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - '.github/workflows/hosted-runner-entitlement-diagnostic.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  ubuntu-latest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Prove hosted runner assignment
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo 'HOSTED_RUNNER_DIAGNOSTIC=PASS label=ubuntu-latest'
+
+  ubuntu-24-04:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - name: Prove hosted runner assignment
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo 'HOSTED_RUNNER_DIAGNOSTIC=PASS label=ubuntu-24.04'
+
+  ubuntu-22-04:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 3
+    steps:
+      - name: Prove hosted runner assignment
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo 'HOSTED_RUNNER_DIAGNOSTIC=PASS label=ubuntu-22.04'
