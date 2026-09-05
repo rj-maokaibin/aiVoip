@@ -85,18 +85,27 @@ jobs:
           docker image inspect python:3.12-slim >/dev/null
           docker run --rm -v "$GITHUB_WORKSPACE:/workspace" python:3.12-slim sh -lc 'find /workspace -mindepth 1 -maxdepth 1 -exec rm -rf {} +'
 
-      - name: Checkout current PR-D branch
-        uses: actions/checkout@v4
-        with:
-          ref: feat/generic-voip-automation-v1-pr-d-web-golden
-          fetch-depth: 1
+      - name: Materialize exact authorized PR-D SHA
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          api="https://api.github.com/repos/${GITHUB_REPOSITORY}"
+          actual="$(curl -fsSL -H "Authorization: Bearer ${GH_TOKEN}" -H 'Accept: application/vnd.github+json' "${api}/commits/${TARGET_SHA}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["sha"])')"
+          test "$actual" = "$TARGET_SHA"
+          archive="$RUNNER_TEMP/golden-web-pr-d-${TARGET_SHA}.tar.gz"
+          curl -fsSL -H "Authorization: Bearer ${GH_TOKEN}" -H 'Accept: application/vnd.github+json' "${api}/tarball/${TARGET_SHA}" -o "$archive"
+          test -s "$archive"
+          tar -xzf "$archive" -C "$GITHUB_WORKSPACE" --strip-components=1
+          test -s tools/run_golden_web_config.py
+          test -s tools/resolve_current_web_credential_env.py
+          printf 'GOLDEN_WEB_EXACT_SOURCE_TRANSPORT=GITHUB_EXACT_SHA_ARCHIVE sha=%s\n' "$TARGET_SHA" >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Verify checkout still equals authorized SHA
+      - name: Verify materialized source contract
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = "$TARGET_SHA"
-          test -z "$(git status --porcelain --untracked-files=no)"
           grep -Fq 'id: Golden-WEB-CONFIG-001' profiles/tests/golden_web_config_001.yaml
           grep -Fq 'target_number: "7900"' profiles/tests/golden_web_config_001.yaml
           if grep -Eq 'TemporaryExtensionProvider|database->save|devConfig\.set' tools/run_golden_web_config.py; then
