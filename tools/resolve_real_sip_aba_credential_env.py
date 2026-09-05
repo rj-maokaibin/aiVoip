@@ -10,6 +10,9 @@ import subprocess
 from pathlib import Path
 
 
+PRODUCTION_PROJECT = "aivoip"
+PRODUCTION_CREDENTIAL_SERVICE = "reproduction-worker"
+
 _CONTAINER_SCRIPT = r'''
 import asyncio
 import json
@@ -56,9 +59,9 @@ def _inspect_container(name: str, expected_provider: str) -> None:
         raise SystemExit("SIP_ABA_CREDENTIAL_RUNTIME_NOT_PRODUCTION")
     if str(env.get("REPRODUCTION_PLATFORM_MODE") or "").strip().lower() != "real":
         raise SystemExit("SIP_ABA_CREDENTIAL_RUNTIME_NOT_REAL_MODE")
-    if str(labels.get("com.docker.compose.project") or "") != "voip-ai":
+    if str(labels.get("com.docker.compose.project") or "") != PRODUCTION_PROJECT:
         raise SystemExit("SIP_ABA_CREDENTIAL_RUNTIME_PROJECT_MISMATCH")
-    if str(labels.get("com.docker.compose.service") or "") != "reproduction-worker":
+    if str(labels.get("com.docker.compose.service") or "") != PRODUCTION_CREDENTIAL_SERVICE:
         raise SystemExit("SIP_ABA_CREDENTIAL_RUNTIME_SERVICE_MISMATCH")
     observed_provider = str(env.get("CREDENTIAL_PROVIDER") or "").strip().lower()
     if not observed_provider or observed_provider != expected_provider.strip().lower():
