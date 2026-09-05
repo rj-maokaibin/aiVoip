@@ -102,7 +102,7 @@ jobs:
           if (!$database) { fwrite(STDERR, "FUSIONPBX_DATABASE_UNAVAILABLE\n"); exit(3); }
 
           $domains = $database->select(
-              "select domain_uuid, domain_name from v_domains where enabled = 'true' order by domain_name asc",
+              "select domain_uuid, domain_name from v_domains where domain_enabled = true order by domain_name asc",
               null,
               'all'
           );
