@@ -1,16 +1,28 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timezone
 from typing import Any, Mapping
 
+import httpx
+
 from app.automation.actions.dispatcher import ActionEvidence, ActionHandlerResult
 from app.automation.adapters.entries.web import EntryResult
+from app.automation.adapters.web_auth.legacy_luci import LegacyLuciAuthError
 from app.automation.gates.golden_web_config import (
     WEB_READ_ACTION,
     GoldenWebConfigGate,
     observed_account,
 )
 from app.automation.orchestrator import RuntimeBlocked
+
+_UNKNOWN_TARGET_OBSERVE_BACKOFF_SECONDS = (1.0, 1.0, 2.0, 2.0, 4.0)
+_UNKNOWN_TARGET_OBSERVE_RETRYABLE = (
+    LegacyLuciAuthError,
+    httpx.TransportError,
+    asyncio.TimeoutError,
+    TimeoutError,
+)
 
 
 def utcnow() -> datetime:
@@ -46,11 +58,43 @@ def observed_unknown_target(
 class ObservedGoldenWebConfigGate(GoldenWebConfigGate):
     """PR-D Golden with observe-before-retry semantics for mutation UNKNOWN.
 
-    No retry is performed here. If the transport result is UNKNOWN, only the
-    automatic read-only observation can resolve it. A proven target readback is
-    sufficient to continue to SIP registration; any other observation remains
+    No mutation retry is performed here. If the transport result is UNKNOWN,
+    only bounded read-only observations can resolve it. A proven target readback
+    is sufficient to continue to SIP registration; any other observation remains
     INCONCLUSIVE and cleanup runs from the original five-module snapshot.
     """
+
+    async def _observe_unknown_target(
+        self,
+        context,
+        initial_readback: Any,
+    ) -> dict[str, Any] | None:
+        account = observed_unknown_target(
+            initial_readback,
+            target_number=self.target_number,
+        )
+        if account is not None:
+            return account
+
+        # Save can return transport UNKNOWN while the DUT is still committing
+        # the configuration. Poll only the read action for a short bounded
+        # window. Authentication/transport failures are observations too and
+        # never authorize another configure call.
+        for delay in _UNKNOWN_TARGET_OBSERVE_BACKOFF_SECONDS:
+            await asyncio.sleep(delay)
+            try:
+                readback = await self.web.execute(WEB_READ_ACTION, {}, context)
+            except _UNKNOWN_TARGET_OBSERVE_RETRYABLE:
+                continue
+            if not readback.accepted:
+                continue
+            account = observed_unknown_target(
+                readback.output,
+                target_number=self.target_number,
+            )
+            if account is not None:
+                return account
+        return None
 
     async def _finish_from_account(
         self,
@@ -98,10 +142,7 @@ class ObservedGoldenWebConfigGate(GoldenWebConfigGate):
         evidence: list[ActionEvidence] = []
 
         if mutation.unknown_result:
-            account = observed_unknown_target(
-                mutation.readback,
-                target_number=self.target_number,
-            )
+            account = await self._observe_unknown_target(context, mutation.readback)
             if account is None:
                 if isinstance(mutation.readback, Mapping):
                     evidence.append(
