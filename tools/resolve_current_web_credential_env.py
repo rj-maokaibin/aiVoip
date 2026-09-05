@@ -111,13 +111,16 @@ def _read_secret_text(path: Path) -> tuple[str, str]:
     return _read_secret_from_mounted_container(path)
 
 
-def _matching_secret_candidates(secret_text: str, *, device_host: str) -> list[_Candidate]:
+def _parse_secret(secret_text: str) -> Any:
     if not secret_text:
-        return []
+        return {}
     try:
-        root = yaml.safe_load(secret_text) or {}
+        return yaml.safe_load(secret_text) or {}
     except Exception:
-        return []
+        return {}
+
+
+def _matching_secret_candidates_from_root(root: Any, *, device_host: str) -> list[_Candidate]:
     found: list[_Candidate] = []
 
     def walk(value: Any, path: str = "") -> None:
@@ -141,6 +144,54 @@ def _matching_secret_candidates(secret_text: str, *, device_host: str) -> list[_
 
     walk(root)
     return found
+
+
+def _safe_secret_schema_metadata(root: Any, *, device_host: str, limit: int = 100) -> list[dict[str, Any]]:
+    """Expose key-path/type metadata only; never expose any scalar secret value."""
+    rows: list[dict[str, Any]] = []
+    interesting = {
+        "username", "user", "admin", "account", "login",
+        "password", "passwd", "pwd", "pass",
+        "host", "ip", "url", "web", "luci", "http", "https",
+    }
+
+    def walk(value: Any, path: str = "") -> None:
+        if len(rows) >= limit:
+            return
+        if isinstance(value, dict):
+            lowered = {str(key).lower(): key for key in value}
+            matched = sorted(set(lowered) & interesting)
+            if matched:
+                host_key = lowered.get("host") or lowered.get("ip")
+                rows.append({
+                    "path": path or "<root>",
+                    "matching_key_names": matched,
+                    "host_key_present": host_key is not None,
+                    "host_matches_device": bool(
+                        host_key is not None
+                        and str(value.get(host_key) or "").strip() == device_host
+                    ),
+                    "username_like_key_present": bool(
+                        set(lowered) & {"username", "user", "admin", "account", "login"}
+                    ),
+                    "password_like_key_present": bool(
+                        set(lowered) & {"password", "passwd", "pwd", "pass"}
+                    ),
+                    "value_types": {
+                        str(key): type(value.get(original_key)).__name__
+                        for key, original_key in sorted(lowered.items())
+                        if key in interesting
+                    },
+                })
+            for key, child in value.items():
+                key_text = str(key)
+                walk(child, f"{path}.{key_text}" if path else key_text)
+        elif isinstance(value, list):
+            for index, child in enumerate(value):
+                walk(child, f"{path}[{index}]" if path else f"[{index}]")
+
+    walk(root)
+    return rows
 
 
 def _dedupe(candidates: list[_Candidate]) -> list[_Candidate]:
@@ -183,9 +234,14 @@ async def _resolve(args) -> tuple[_Candidate | None, dict[str, Any]]:
 
     secret_text, metadata_mode = _read_secret_text(Path(args.secret_file))
     try:
-        candidates.extend(
-            _matching_secret_candidates(secret_text, device_host=args.device_host)
+        secret_root = _parse_secret(secret_text)
+        secret_candidates = _matching_secret_candidates_from_root(
+            secret_root, device_host=args.device_host
         )
+        schema_metadata = _safe_secret_schema_metadata(
+            secret_root, device_host=args.device_host
+        )
+        candidates.extend(secret_candidates)
     finally:
         secret_text = ""
 
@@ -200,13 +256,17 @@ async def _resolve(args) -> tuple[_Candidate | None, dict[str, Any]]:
             successes.append(candidate)
 
     evidence = {
-        "schema": "current-web-credential-resolution-v1",
+        "schema": "current-web-credential-resolution-v2",
         "mutation_executed": False,
         "secret_values_emitted": False,
         "device_host_bound": True,
         "credential_candidates": len(candidates),
         "successful_candidates": len(successes),
         "secret_metadata_mode": metadata_mode,
+        "resolved_device_credential_candidate_present": bool(env_username and env_password),
+        "secret_host_bound_candidate_count": len(secret_candidates),
+        "candidate_source_paths": [list(item.sources) for item in candidates],
+        "secret_schema_metadata": schema_metadata,
         "selection": "EXACTLY_ONE_AUTHENTICATED_CANDIDATE",
         "selected_source_paths": list(successes[0].sources) if len(successes) == 1 else [],
     }
