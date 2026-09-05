@@ -60,10 +60,12 @@ class SipRegistrationProbe(Protocol):
     async def wait_registered(self, *, number: str, timeout_seconds: float) -> SipRegistrationEvidence: ...
 
 
-def _entry_modules(result: EntryResult) -> Mapping[str, Any]:
-    output = result.output
-    if not result.accepted or not isinstance(output, Mapping):
+def _entry_modules(result: EntryResult, *, runtime: bool = False) -> Mapping[str, Any]:
+    if not result.accepted:
         raise RuntimeBlocked(f"WEB_READ_REJECTED:{result.error or result.status_code}")
+    output = result.runtime_output if runtime and isinstance(result.runtime_output, Mapping) else result.output
+    if not isinstance(output, Mapping):
+        raise RuntimeBlocked("WEB_READ_OUTPUT_MISSING")
     modules = output.get("modules")
     if not isinstance(modules, Mapping):
         raise RuntimeBlocked("WEB_READ_MODULE_MAP_MISSING")
@@ -71,7 +73,10 @@ def _entry_modules(result: EntryResult) -> Mapping[str, Any]:
 
 
 def snapshot_writable_bundle(result: EntryResult) -> dict[str, Any]:
-    modules = _entry_modules(result)
+    # Restore snapshots must use the process-private raw WEB response. Public
+    # output/evidence remains redacted, so passwd/auth secrets are never
+    # persisted while reverse restore still uses the exact original values.
+    modules = _entry_modules(result, runtime=True)
     missing = [module for module in WEB_WRITABLE_MODULES if module not in modules]
     if missing:
         raise RuntimeBlocked(f"WEB_WRITABLE_SNAPSHOT_INCOMPLETE:{','.join(missing)}")
