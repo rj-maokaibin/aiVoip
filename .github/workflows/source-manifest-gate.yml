@@ -34,16 +34,24 @@ concurrency:
 
 jobs:
   exact-source-bundle:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, voip-controlled-linux]
     timeout-minutes: 10
     env:
       EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
-      - name: Checkout exact source on GitHub-hosted transport
+      - name: Repair self-hosted workspace before exact checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker image inspect python:3.12-slim >/dev/null
+          docker run --rm -v "$GITHUB_WORKSPACE:/workspace" python:3.12-slim \
+            sh -lc 'find /workspace -mindepth 1 -maxdepth 1 -exec rm -rf {} +'
+
+      - name: Checkout exact source on controlled transport
         uses: actions/checkout@v4
         with:
           ref: ${{ env.EXPECTED_SHA }}
-          fetch-depth: 0
+          fetch-depth: 1
 
       - name: Build immutable source bundle and derived manifest
         shell: bash
@@ -77,11 +85,19 @@ jobs:
 
   source-manifest:
     needs: exact-source-bundle
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, voip-controlled-linux]
     timeout-minutes: 10
     env:
       EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
+      - name: Repair self-hosted workspace before offline materialization
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker image inspect python:3.12-slim >/dev/null
+          docker run --rm -v "$GITHUB_WORKSPACE:/workspace" python:3.12-slim \
+            sh -lc 'find /workspace -mindepth 1 -maxdepth 1 -exec rm -rf {} +'
+
       - name: Download shared immutable source bundle
         uses: actions/download-artifact@v4
         with:
