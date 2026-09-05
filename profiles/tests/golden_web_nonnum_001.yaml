@@ -16,6 +16,11 @@ steps:
     purpose: test
     args: {}
 assertions:
+  - id: pbx_nonnum_identity_provisioned
+    source: pbx
+    path: provisioned
+    op: eq
+    value: true
   - id: web_nonnum_number_readback
     source: entry
     path: number
