@@ -1,0 +1,14 @@
+id: legacy_luci_v1
+auth_provider: legacy_luci_aes_sid
+operations:
+  voip.account.read:
+    endpoint: /cgi-bin/luci/api/cmd
+    method: POST
+    rpc_method: TBD_CURRENT_PRODUCT
+    mutation: false
+  voip.account.configure:
+    endpoint: /cgi-bin/luci/api/cmd
+    method: POST
+    rpc_method: TBD_CURRENT_PRODUCT
+    mutation: true
+    readback_operation: voip.account.read
