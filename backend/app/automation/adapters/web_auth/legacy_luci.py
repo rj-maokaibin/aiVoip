@@ -13,6 +13,7 @@ class LegacyLuciAuthError(RuntimeError):
 PasswordEncoder = Callable[[str], str]
 LoginPayloadBuilder = Callable[[str, str], Mapping[str, Any]]
 SidExtractor = Callable[[HttpResponse], str | None]
+ProtocolSuccess = Callable[[HttpResponse], bool]
 
 
 def _default_sid_extractor(response: HttpResponse) -> str | None:
@@ -27,32 +28,69 @@ def _default_sid_extractor(response: HttpResponse) -> str | None:
     return None
 
 
-class LegacyLuciAuthProvider:
-    """Reference adapter for the proven legacy LuCI AES-password + sid flow.
+def current_luci_protocol_success(response: HttpResponse) -> bool:
+    """Current APF3260-M HAR application-level success contract."""
+    value = response.json_body
+    return bool(
+        response.success
+        and isinstance(value, Mapping)
+        and value.get("code") == 0
+        and value.get("error") is None
+    )
 
-    The historical source does not freeze the AES algorithm or exact login field
-    names for the current product, so both are injected rather than guessed.
+
+# Compatibility alias retained for existing C2 tests/imports.
+_protocol_success = current_luci_protocol_success
+
+
+class LegacyLuciAuthProvider:
+    """LuCI login adapter with injected product-specific contracts.
+
+    Historical LuCI implementations are not required to expose the current
+    APF3260-M ``code/error`` envelope.  Application-level response acceptance is
+    therefore injected.  Current APF3260-M binding passes
+    ``current_luci_protocol_success``; legacy/reference callers keep HTTP-success
+    compatibility while still requiring a SID.
     """
 
     login_endpoint = "/cgi-bin/luci/api/auth"
 
-    def __init__(self, *, password_encoder: PasswordEncoder, login_payload_builder: LoginPayloadBuilder,
-                 sid_extractor: SidExtractor | None = None, auth_expired_statuses: tuple[int, ...] = (401, 403)) -> None:
+    def __init__(
+        self,
+        *,
+        password_encoder: PasswordEncoder,
+        login_payload_builder: LoginPayloadBuilder,
+        sid_extractor: SidExtractor | None = None,
+        protocol_success: ProtocolSuccess | None = None,
+        auth_expired_statuses: tuple[int, ...] = (401, 403),
+    ) -> None:
         self.password_encoder = password_encoder
         self.login_payload_builder = login_payload_builder
         self.sid_extractor = sid_extractor or _default_sid_extractor
+        self.protocol_success = protocol_success or (lambda response: response.success)
         self.auth_expired_statuses = auth_expired_statuses
 
-    async def authenticate(self, transport: HttpApiTransport, credential: WebCredential) -> WebSession:
+    async def authenticate(
+        self,
+        transport: HttpApiTransport,
+        credential: WebCredential,
+    ) -> WebSession:
         encoded_password = self.password_encoder(credential.password)
         payload = dict(self.login_payload_builder(credential.username, encoded_password))
         response = await transport.request(
-            HttpRequest(method="POST", path=self.login_endpoint, json_body=payload, mutation=False,
-                        sensitive_values=(credential.password, encoded_password)),
+            HttpRequest(
+                method="POST",
+                path=self.login_endpoint,
+                json_body=payload,
+                mutation=False,
+                sensitive_values=(credential.password, encoded_password),
+            ),
             retry_policy=HttpRetryPolicy(max_attempts=2),
         )
         if not response.success:
             raise LegacyLuciAuthError(f"LEGACY_LUCI_AUTH_HTTP:{response.status_code}")
+        if not self.protocol_success(response):
+            raise LegacyLuciAuthError("LEGACY_LUCI_AUTH_PROTOCOL_REJECTED")
         sid = self.sid_extractor(response)
         if not sid:
             raise LegacyLuciAuthError("LEGACY_LUCI_AUTH_SID_MISSING")

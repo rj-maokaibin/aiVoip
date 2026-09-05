@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass, field
 import json
+import re
 import time
 from typing import Any, Mapping, Protocol
 from urllib.parse import urlsplit
@@ -10,17 +11,40 @@ from uuid import uuid4
 
 import httpx
 
-_SECRET_KEYS = {"auth", "authorization", "cookie", "csrf", "passwd", "password", "password_ref", "encrypted_password", "secret", "set-cookie", "sid", "token"}
+_SECRET_KEYS = {
+    "auth", "authorization", "cookie", "csrf", "passwd", "password",
+    "password_ref", "encrypted_password", "pwd", "secret", "set-cookie",
+    "sid", "stok", "token",
+}
 _MASK = "***"
+_EMBEDDED_SECRET_PATTERNS = (
+    re.compile(r"(?i)([?&]auth=)([^&#;\s]+)"),
+    re.compile(r"(?i)(;stok=)([^/?#;&\s]+)"),
+)
+
+
+def _mask_embedded_text(text: str) -> str:
+    value = text
+    for pattern in _EMBEDDED_SECRET_PATTERNS:
+        value = pattern.sub(lambda match: f"{match.group(1)}{_MASK}", value)
+    return value
 
 
 def mask_http_secrets(value: Any) -> Any:
     if isinstance(value, Mapping):
-        return {str(k): (_MASK if str(k).lower() in _SECRET_KEYS else mask_http_secrets(v)) for k, v in value.items()}
+        return {
+            str(k): (
+                _MASK if str(k).lower() in _SECRET_KEYS
+                else mask_http_secrets(v)
+            )
+            for k, v in value.items()
+        }
     if isinstance(value, list):
         return [mask_http_secrets(v) for v in value]
     if isinstance(value, tuple):
         return tuple(mask_http_secrets(v) for v in value)
+    if isinstance(value, str):
+        return _mask_embedded_text(value)
     return value
 
 
@@ -41,7 +65,7 @@ def _secret_values(value: Any, *, key: str | None = None) -> set[str]:
 def _redact_text(text: str, secrets: set[str]) -> str:
     for secret in sorted(secrets, key=len, reverse=True):
         text = text.replace(secret, _MASK)
-    return text
+    return _mask_embedded_text(text)
 
 
 @dataclass(frozen=True)
@@ -143,7 +167,13 @@ class HttpClientProtocol(Protocol):
 class HttpApiTransport:
     """Business-agnostic HTTP transport with masked evidence and no blind mutation retry."""
 
-    def __init__(self, base_url: str, *, client: HttpClientProtocol | None = None, default_retry_policy: HttpRetryPolicy | None = None) -> None:
+    def __init__(
+        self,
+        base_url: str,
+        *,
+        client: HttpClientProtocol | None = None,
+        default_retry_policy: HttpRetryPolicy | None = None,
+    ) -> None:
         parsed = urlsplit(base_url)
         if parsed.scheme not in {"http", "https"} or not parsed.netloc:
             raise ValueError("HTTP_BASE_URL_INVALID")
@@ -158,7 +188,10 @@ class HttpApiTransport:
 
     @staticmethod
     def _transient(exc: Exception) -> bool:
-        return isinstance(exc, (TimeoutError, asyncio.TimeoutError, httpx.TimeoutException, httpx.TransportError))
+        return isinstance(
+            exc,
+            (TimeoutError, asyncio.TimeoutError, httpx.TimeoutException, httpx.TransportError),
+        )
 
     @staticmethod
     def _response_json(response: Any) -> Any | None:
@@ -168,7 +201,13 @@ class HttpApiTransport:
             return None
 
     def _request_evidence(self, req: HttpRequest) -> tuple[dict[str, Any], set[str]]:
-        raw = {"headers": dict(req.headers), "query": dict(req.query), "cookies": dict(req.cookies), "json": req.json_body, "data": req.data}
+        raw = {
+            "headers": dict(req.headers),
+            "query": dict(req.query),
+            "cookies": dict(req.cookies),
+            "json": req.json_body,
+            "data": req.data,
+        }
         secrets = _secret_values(raw) | {str(v) for v in req.sensitive_values if v}
         masked = mask_http_secrets(raw)
 
@@ -179,17 +218,38 @@ class HttpApiTransport:
                 return [scrub(v) for v in value]
             if isinstance(value, tuple):
                 return tuple(scrub(v) for v in value)
-            return _MASK if str(value) in secrets else value
+            if isinstance(value, str):
+                if value in secrets:
+                    return _MASK
+                return _mask_embedded_text(value)
+            return value
 
         return scrub(masked), secrets
 
     @staticmethod
-    def _response_evidence(response: Any, json_body: Any | None, secrets: set[str]) -> dict[str, Any]:
+    def _response_evidence(
+        response: Any,
+        json_body: Any | None,
+        secrets: set[str],
+    ) -> dict[str, Any]:
         headers = mask_http_secrets(dict(response.headers))
-        body = mask_http_secrets(json_body) if json_body is not None else _redact_text(str(response.text), secrets)
-        return {"status_code": int(response.status_code), "headers": headers, "body": body}
+        body = (
+            mask_http_secrets(json_body)
+            if json_body is not None
+            else _redact_text(str(response.text), secrets)
+        )
+        return {
+            "status_code": int(response.status_code),
+            "headers": headers,
+            "body": body,
+        }
 
-    async def request(self, req: HttpRequest, *, retry_policy: HttpRetryPolicy | None = None) -> HttpResponse:
+    async def request(
+        self,
+        req: HttpRequest,
+        *,
+        retry_policy: HttpRetryPolicy | None = None,
+    ) -> HttpResponse:
         policy = retry_policy or self.default_retry_policy
         attempts = 1 if req.mutation else policy.max_attempts
         request_id = req.request_id or str(uuid4())
@@ -201,33 +261,68 @@ class HttpApiTransport:
             try:
                 headers = dict(req.headers)
                 headers.setdefault("X-Request-ID", request_id)
-                timeout = httpx.Timeout(connect=req.connect_timeout, read=req.read_timeout, write=req.read_timeout, pool=req.connect_timeout)
+                timeout = httpx.Timeout(
+                    connect=req.connect_timeout,
+                    read=req.read_timeout,
+                    write=req.read_timeout,
+                    pool=req.connect_timeout,
+                )
                 response = await self._client.request(
-                    req.method.upper(), req.path, headers=headers, params=dict(req.query), cookies=dict(req.cookies),
-                    json=req.json_body, content=req.data, timeout=timeout,
+                    req.method.upper(),
+                    req.path,
+                    headers=headers,
+                    params=dict(req.query),
+                    cookies=dict(req.cookies),
+                    json=req.json_body,
+                    content=req.data,
+                    timeout=timeout,
                 )
                 elapsed_ms = (time.monotonic() - started) * 1000.0
                 json_body = self._response_json(response)
                 evidence = HttpEvidence(
-                    request_id=request_id, attempt=attempt, method=req.method.upper(), path=req.path,
-                    request=request_evidence, response=self._response_evidence(response, json_body, secret_values), elapsed_ms=elapsed_ms,
+                    request_id=request_id,
+                    attempt=attempt,
+                    method=req.method.upper(),
+                    path=req.path,
+                    request=request_evidence,
+                    response=self._response_evidence(response, json_body, secret_values),
+                    elapsed_ms=elapsed_ms,
                 )
-                if not req.mutation and int(response.status_code) in policy.retry_statuses and attempt < attempts:
+                if (
+                    not req.mutation
+                    and int(response.status_code) in policy.retry_statuses
+                    and attempt < attempts
+                ):
                     if policy.backoff_seconds:
                         await asyncio.sleep(policy.backoff_seconds * attempt)
                     continue
                 return HttpResponse(
-                    status_code=int(response.status_code), headers=dict(response.headers), json_body=json_body,
-                    text=str(response.text), request_id=request_id, elapsed_ms=elapsed_ms, evidence=evidence,
+                    status_code=int(response.status_code),
+                    headers=dict(response.headers),
+                    json_body=json_body,
+                    text=str(response.text),
+                    request_id=request_id,
+                    elapsed_ms=elapsed_ms,
+                    evidence=evidence,
                 )
             except Exception as exc:
                 elapsed_ms = (time.monotonic() - started) * 1000.0
                 evidence = HttpEvidence(
-                    request_id=request_id, attempt=attempt, method=req.method.upper(), path=req.path,
-                    request=request_evidence, response=None, elapsed_ms=elapsed_ms, error=type(exc).__name__,
+                    request_id=request_id,
+                    attempt=attempt,
+                    method=req.method.upper(),
+                    path=req.path,
+                    request=request_evidence,
+                    response=None,
+                    elapsed_ms=elapsed_ms,
+                    error=type(exc).__name__,
                 )
                 if req.mutation and self._transient(exc):
-                    raise HttpMutationResultUnknown(request_id=request_id, evidence=evidence, cause=exc) from exc
+                    raise HttpMutationResultUnknown(
+                        request_id=request_id,
+                        evidence=evidence,
+                        cause=exc,
+                    ) from exc
                 if not self._transient(exc) or attempt >= attempts:
                     raise
                 last_exc = exc

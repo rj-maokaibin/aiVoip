@@ -1,0 +1,54 @@
+id: apf3260m-reyeeos-2.421-voip-v1
+auth_provider: legacy_luci
+source_evidence:
+  - "HAR:10.48.8.74.har"
+  - "VOIP_Automation_Framework_V1_真实环境输入基线_V1.3.md"
+
+operations:
+  voip.account.read:
+    endpoint: /cgi-bin/luci/api/cmd
+    method: POST
+    rpc_method: cmdArr
+    rpc_style: cmd_array
+    mutation: false
+    rpc_items:
+      - method: devConfig.get
+        module: voice_vlan
+      - method: devConfig.get
+        module: voipServInfo
+      - method: devConfig.get
+        module: voipUserInfo
+      - method: devConfig.get
+        module: voipFxsTbl
+      - method: devSta.get
+        module: voipRegState
+      - method: devConfig.get
+        module: voipZoneInfo
+      - method: devConfig.get
+        module: voipAdvanced
+
+  voip.account.configure:
+    endpoint: /cgi-bin/luci/api/cmd
+    method: POST
+    rpc_method: cmdArr
+    rpc_style: cmd_array
+    mutation: true
+    readback_operation: voip.account.read
+    rpc_items:
+      - method: devConfig.set
+        module: voice_vlan
+      - method: devConfig.set
+        module: voipServInfo
+      - method: devConfig.set
+        module: voipUserInfo
+      - method: devConfig.set
+        module: voipFxsTbl
+      - method: devConfig.set
+        module: voipAdvanced
+    side_effects:
+      writable_modules:
+        - voice_vlan
+        - voipServInfo
+        - voipUserInfo
+        - voipFxsTbl
+        - voipAdvanced
