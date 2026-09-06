@@ -1,15 +1,7 @@
 name: Current WEB Auth Source Probe
 
 on:
-  pull_request:
-    branches: [master]
-    paths:
-      - "tools/probe_current_web_auth_source.py"
-      - "tools/probe_dut_web_auth_source_ssh.py"
-      - ".github/workflows/current-web-auth-source-probe.yml"
-      - "backend/app/automation/adapters/web_auth/**"
-      - "backend/app/automation/gates/golden_web_config.py"
-      - "profiles/web_api/**"
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -19,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
-      EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
+      EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - name: Checkout exact PR head on GitHub-hosted transport
         uses: actions/checkout@v4
@@ -52,7 +44,7 @@ jobs:
     runs-on: [self-hosted, linux, x64, voip-controlled-linux]
     timeout-minutes: 15
     env:
-      EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
+      EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
       AUTH_ENV_FILE: /home/github-runner/.config/voip-ai/.env
       AUTH_PROBE_VENV: /tmp/voip-web-auth-source-${{ github.run_id }}-${{ github.run_attempt }}
       AUTH_RUNTIME_ROOT: /tmp/voip-web-auth-source-runtime-${{ github.run_id }}-${{ github.run_attempt }}

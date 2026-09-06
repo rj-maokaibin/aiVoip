@@ -1,19 +1,7 @@
 name: Current WEB Live Prereq Probe
 
 on:
-  pull_request:
-    branches: [master]
-    paths:
-      - ".github/workflows/current-web-live-prereq-probe.yml"
-      - "tools/resolve_current_web_credential_env.py"
-      - "tools/run_golden_web_config.py"
-      - "backend/app/automation/adapters/entries/web.py"
-      - "backend/app/automation/adapters/pbx/**"
-      - "backend/app/automation/adapters/web_auth/**"
-      - "backend/app/automation/gates/golden_web_config.py"
-      - "backend/app/infrastructure/transport/http.py"
-      - "profiles/web_api/**"
-      - "profiles/tests/golden_web_config_001.yaml"
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -27,7 +15,7 @@ jobs:
     runs-on: [self-hosted, linux, x64, voip-controlled-linux]
     timeout-minutes: 20
     env:
-      EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
+      EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
       PREREQ_ENV_FILE: /home/github-runner/.config/voip-ai/.env
       PREREQ_VENV: /tmp/voip-web-prereq-${{ github.run_id }}-${{ github.run_attempt }}
       PREREQ_RUNTIME_ROOT: /tmp/voip-web-prereq-runtime-${{ github.run_id }}-${{ github.run_attempt }}

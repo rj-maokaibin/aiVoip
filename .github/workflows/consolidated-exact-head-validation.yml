@@ -1,0 +1,430 @@
+name: Consolidated Exact-Head Validation
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - "backend/**"
+      - "frontend/**"
+      - "tools/**"
+      - "golden_cases/**"
+      - "profiles/**"
+      - "rules/**"
+      - "knowledge/**"
+      - "contracts/**"
+      - "deploy/**"
+      - "docs/02_Core_Documents/Preliminary_Evidence_Report_V1.0/**"
+      - "Makefile"
+      - ".env.example"
+      - "docker-compose*.yml"
+      - "release/release_policy.yaml"
+      - ".github/workflows/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: consolidated-exact-head-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  source-and-frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      CICD_PERFORMANCE_V3_EVIDENCE: validation/frontend_cicd_performance_v3.json
+    steps:
+      - name: Checkout exact source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.EXPECTED_SHA }}
+          fetch-depth: 0
+
+      - name: Derive Source Manifest and production Compose gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          test -z "$(git status --porcelain --untracked-files=no)"
+          python3 tools/source_manifest_gate.py --write "$RUNNER_TEMP/source_manifest_expected.json"
+          python3 tools/source_manifest_gate.py --expected "$RUNNER_TEMP/source_manifest_expected.json"
+          bash tools/production_compose_config_gate.sh
+
+      - name: Build one immutable source bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          git branch -f bundle-head "$EXPECTED_SHA"
+          git bundle create "$RUNNER_TEMP/source.bundle" refs/heads/bundle-head
+          printf '%s\n' "$EXPECTED_SHA" > "$RUNNER_TEMP/source.sha"
+          git bundle verify "$RUNNER_TEMP/source.bundle"
+          echo "CONSOLIDATED_EXACT_SOURCE=PASS revision=$EXPECTED_SHA"
+
+      - name: Upload shared exact source
+        uses: actions/upload-artifact@v4
+        with:
+          name: consolidated-exact-source-${{ env.EXPECTED_SHA }}
+          path: |
+            ${{ runner.temp }}/source.bundle
+            ${{ runner.temp }}/source.sha
+            ${{ runner.temp }}/source_manifest_expected.json
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Exact-SHA frontend dependency audit and production build
+        shell: bash
+        run: |
+          set -euo pipefail
+          source tools/ci_dependency_runtime.sh
+          pushd frontend >/dev/null
+          ci_npm_ci
+          ci_npm_audit
+          ci_run_timed frontend_build npm run build
+          test -s dist/index.html
+          test -s dist/evidence-report.html
+          popd >/dev/null
+          python3 tools/cicd_performance_v3.py --out "$CICD_PERFORMANCE_V3_EVIDENCE" summary
+          python3 - "$EXPECTED_SHA" <<'PY'
+          import hashlib, json, sys
+          from pathlib import Path
+          revision = sys.argv[1]
+          lock_sha = hashlib.sha256(Path('frontend/package-lock.json').read_bytes()).hexdigest()
+          perf = json.loads(Path('validation/frontend_cicd_performance_v3.json').read_text())
+          payload = {
+              'schema_version': 'frontend-acceptance-v1', 'revision': revision, 'passed': True,
+              'package_lock_sha256': lock_sha, 'npm_audit_passed': True,
+              'production_build_passed': True, 'execution_source': 'GITHUB_HOSTED',
+              'performance': {'status': perf.get('status'), 'total_duration_ms': perf.get('total_duration_ms')},
+          }
+          assert payload['performance']['status'] == 'PASS', payload
+          Path('validation/frontend_acceptance_result.json').write_text(json.dumps(payload, indent=2) + '\n')
+          print(f'FRONTEND_ACCEPTANCE=PASS revision={revision}')
+          PY
+
+      - name: Upload frontend acceptance evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-acceptance-${{ env.EXPECTED_SHA }}
+          path: |
+            validation/frontend_acceptance_result.json
+            validation/frontend_cicd_performance_v3.json
+          if-no-files-found: error
+          retention-days: 1
+
+  self-hosted-validation:
+    needs: source-and-frontend
+    runs-on: [self-hosted, linux, x64, voip-controlled-linux]
+    timeout-minutes: 120
+    env:
+      EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      PROD_ENV_FILE: /home/github-runner/.config/voip-ai/.env
+      CONSOLIDATED_RUNTIME_ROOT: /tmp/voip-consolidated-runtime-${{ github.run_id }}-${{ github.run_attempt }}
+      VOIP_AI_GATE_VENV: /tmp/voip-consolidated-venv-${{ github.run_id }}-${{ github.run_attempt }}
+      PRELIMINARY_EVIDENCE_V1_VENV: /tmp/voip-consolidated-venv-${{ github.run_id }}-${{ github.run_attempt }}
+      FUSIONPBX_ROOT: /var/www/fusionpbx
+      WEB_BASE_URL: https://10.48.8.74:10003
+      EXPECTED_REQUIRE_SHA256: 2d29ea99b786c5c111df4cfcc06319138f1544b30300f6aea70635f1100fd761
+      EXPECTED_DATABASE_SHA256: 6a0b95eb29d1c27b24d4dcc4a8582b959c627a9173b973b19b2435e1e399dbbb
+      EXPECTED_EXTENSION_SHA256: 842c070880ebe82cca676d8b04cda8377ca931180c91f72a499e813c3f3eaed9
+      OFFLINE_GOLDEN_PCAP: /tmp/tcpdump-2026-08-14.pcap
+      OFFLINE_GOLDEN_SHA256: b038aa7c9a0644581f2815f654fcdee4620860796382265b178823fccba2e3f0
+      CICD_PERFORMANCE_V3_EVIDENCE: validation/cicd_performance_v3.json
+    steps:
+      - name: Repair self-hosted workspace once
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker info >/dev/null
+          docker image inspect python:3.12-slim >/dev/null
+          docker run --rm -v "$GITHUB_WORKSPACE:/workspace" python:3.12-slim sh -lc 'find /workspace -mindepth 1 -maxdepth 1 -exec rm -rf {} +'
+
+      - name: Download shared exact source
+        uses: actions/download-artifact@v4
+        with:
+          name: consolidated-exact-source-${{ env.EXPECTED_SHA }}
+          path: ${{ runner.temp }}/consolidated-exact-source
+
+      - name: Materialize exact source once
+        shell: bash
+        run: |
+          set -euo pipefail
+          bundle="$RUNNER_TEMP/consolidated-exact-source/source.bundle"
+          test "$(cat "$RUNNER_TEMP/consolidated-exact-source/source.sha")" = "$EXPECTED_SHA"
+          rm -rf "$GITHUB_WORKSPACE"
+          git clone -q -b bundle-head "$bundle" "$GITHUB_WORKSPACE"
+          git -C "$GITHUB_WORKSPACE" checkout -q --detach "$EXPECTED_SHA"
+          test "$(git -C "$GITHUB_WORKSPACE" rev-parse HEAD)" = "$EXPECTED_SHA"
+          test -z "$(git -C "$GITHUB_WORKSPACE" status --porcelain --untracked-files=no)"
+          mkdir -p "$GITHUB_WORKSPACE/validation"
+          cp "$RUNNER_TEMP/consolidated-exact-source/source_manifest_expected.json" "$GITHUB_WORKSPACE/validation/source_manifest_expected.json"
+          cd "$GITHUB_WORKSPACE"
+          python3 tools/source_manifest_gate.py --expected validation/source_manifest_expected.json
+          echo "CONSOLIDATED_EXACT_SOURCE_MATERIALIZATION=PASS revision=$EXPECTED_SHA"
+
+      - name: Download frontend acceptance evidence
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-acceptance-${{ env.EXPECTED_SHA }}
+          path: validation
+
+      - name: Prepare shared Python runtime and DUT context once
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -r "$PROD_ENV_FILE"
+          test "$(stat -c '%a' "$PROD_ENV_FILE")" = '600'
+          rm -rf "$VOIP_AI_GATE_VENV" "$CONSOLIDATED_RUNTIME_ROOT"
+          mkdir -p "$CONSOLIDATED_RUNTIME_ROOT"
+          chmod 0700 "$CONSOLIDATED_RUNTIME_ROOT"
+          source tools/ci_dependency_runtime.sh
+          ci_prepare_python_runtime "$VOIP_AI_GATE_VENV" backend/requirements.txt
+          export PYTHONPATH="$GITHUB_WORKSPACE/backend:$GITHUB_WORKSPACE"
+          set -a; source "$PROD_ENV_FILE"; set +a
+          "$VOIP_AI_GATE_VENV/bin/python" tools/resolve_real_sip_aba_database_env.py > "$CONSOLIDATED_RUNTIME_ROOT/production_db.env"
+          chmod 0600 "$CONSOLIDATED_RUNTIME_ROOT/production_db.env"
+          set -a; source "$CONSOLIDATED_RUNTIME_ROOT/production_db.env"; set +a
+          "$VOIP_AI_GATE_VENV/bin/python" tools/resolve_real_sip_aba_context.py --output-root "$CONSOLIDATED_RUNTIME_ROOT/context-evidence" --runtime-root "$CONSOLIDATED_RUNTIME_ROOT"
+          set -a; source "$CONSOLIDATED_RUNTIME_ROOT/db_runtime.env"; source "$CONSOLIDATED_RUNTIME_ROOT/resolved_dut.env"; set +a
+          "$VOIP_AI_GATE_VENV/bin/python" tools/resolve_real_sip_aba_credential_env.py \
+            --container "$SIP_ABA_PRODUCTION_CREDENTIAL_CONTAINER" \
+            --expected-provider "$SIP_ABA_PRODUCTION_CREDENTIAL_PROVIDER" \
+            --sn "$DEVICE_SN" --ip "$DEVICE_HOST" --product "$DEVICE_MODEL" --fallback-user "$DEVICE_USER" \
+            --output "$CONSOLIDATED_RUNTIME_ROOT/credential.env"
+          chmod 0600 "$CONSOLIDATED_RUNTIME_ROOT/credential.env"
+          echo 'CONSOLIDATED_DUT_CONTEXT=PASS mutation=false secret_values_emitted=false'
+
+      - name: Run all exact-head read-only probes in one runner reservation
+        shell: bash
+        run: |
+          set -euo pipefail
+          set -a
+          source "$PROD_ENV_FILE"
+          source "$CONSOLIDATED_RUNTIME_ROOT/db_runtime.env"
+          source "$CONSOLIDATED_RUNTIME_ROOT/resolved_dut.env"
+          source "$CONSOLIDATED_RUNTIME_ROOT/credential.env"
+          set +a
+          export PYTHONPATH="$GITHUB_WORKSPACE/backend:$GITHUB_WORKSPACE"
+          "$VOIP_AI_GATE_VENV/bin/pytest" -q \
+            backend/tests/test_web_secret_repr_contract.py \
+            backend/tests/test_apf3260m_web_auth_encoder.py \
+            backend/tests/test_fusionpbx_registration_probe.py \
+            backend/tests/test_golden_web_config_contract.py \
+            backend/tests/test_golden_web_config_observed_contract.py \
+            backend/tests/test_cleanup_fail_safe_release.py
+          "$VOIP_AI_GATE_VENV/bin/python" tools/consolidated_exact_head_probes.py \
+            --evidence-root consolidated-probe-evidence \
+            --runtime-root "$CONSOLIDATED_RUNTIME_ROOT" \
+            --env-file "$PROD_ENV_FILE"
+
+      - name: Upload consolidated immutable read-only evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: consolidated-read-only-probes-${{ env.EXPECTED_SHA }}
+          path: consolidated-probe-evidence/*.json
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Prepared-PCAP identity and TShark fence
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          fixture="$OFFLINE_GOLDEN_PCAP"
+          if [ ! -r "$fixture" ]; then
+            staged="$RUNNER_TEMP/offline-e2e-prepared.pcap"
+            rm -f "$staged"
+            docker run --rm -v /tmp:/source:ro -v "$RUNNER_TEMP":/output --entrypoint sh postgres:16 \
+              -c "cp /source/tcpdump-2026-08-14.pcap /output/offline-e2e-prepared.pcap && chmod 0644 /output/offline-e2e-prepared.pcap"
+            fixture="$staged"
+          fi
+          test -r "$fixture"
+          test "$(sha256sum "$fixture" | awk '{print $1}')" = "$OFFLINE_GOLDEN_SHA256"
+          tshark_bin="$(command -v tshark)"
+          test -n "$tshark_bin"
+          "$tshark_bin" -v | head -n1 | grep -F '4.2.2'
+          echo "OFFLINE_GOLDEN_PCAP=$fixture" >> "$GITHUB_ENV"
+          echo "TSHARK_BINARY=$tshark_bin" >> "$GITHUB_ENV"
+          echo "PREPARED_PCAP_IDENTITY=PASS sha256=$OFFLINE_GOLDEN_SHA256"
+
+      - name: Frozen PRD/SPEC contracts
+        shell: bash
+        run: bash tools/preliminary_evidence_v1_gate.sh
+
+      - name: Full VOIP AI software release gate
+        shell: bash
+        run: bash tools/voip_ai_release_gate.sh
+
+      - name: Prepared-PCAP Real Offline Golden 001
+        shell: bash
+        run: |
+          set -euo pipefail
+          source "$VOIP_AI_GATE_VENV/bin/activate"
+          rm -rf offline-golden-artifacts offline-golden-result.json
+          TSHARK_BINARY="$TSHARK_BINARY" python tools/offline_analysis_golden_replay.py \
+            --pcap "$OFFLINE_GOLDEN_PCAP" \
+            --require-fixture \
+            --artifacts offline-golden-artifacts \
+            --result offline-golden-result.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p = json.loads(Path('offline-golden-result.json').read_text(encoding='utf-8'))
+          assert p['status'] == 'PASS', p
+          assert p['passed'] is True, p
+          assert p['checks_passed'] == 142, p
+          assert p['checks_total'] == 142, p
+          print('REAL_OFFLINE_GOLDEN_001=PASS 142/142')
+          PY
+
+      - name: Real Offline Golden 001 Human Evidence Gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          source "$VOIP_AI_GATE_VENV/bin/activate"
+          rm -rf offline-golden-human-artifacts
+          python tools/human_evidence_real_golden_gate.py \
+            --artifacts offline-golden-artifacts \
+            --output offline-golden-human-artifacts
+          test -s offline-golden-human-artifacts/human-golden-result.json
+          echo 'HUMAN_REAL_OFFLINE_GOLDEN_001=PASS'
+
+      - name: Build machine-readable Full Acceptance evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - "$EXPECTED_SHA" "$OFFLINE_GOLDEN_SHA256" <<'PY'
+          import json, sys
+          from pathlib import Path
+          revision, golden_sha256 = sys.argv[1:]
+          golden = json.loads(Path('offline-golden-result.json').read_text(encoding='utf-8'))
+          human = json.loads(Path('offline-golden-human-artifacts/human-golden-result.json').read_text(encoding='utf-8'))
+          perf = json.loads(Path('validation/cicd_performance_v3.json').read_text(encoding='utf-8'))
+          frontend = json.loads(Path('validation/frontend_acceptance_result.json').read_text(encoding='utf-8'))
+          evidence = {
+              'schema_version': 'full-software-acceptance-v2',
+              'revision': revision,
+              'passed': True,
+              'artifact_profile': 'COMPACT_SUCCESS_V1',
+              'diagnostics': {
+                  'full_raw_artifacts_uploaded_on_success': False,
+                  'reproducible_from_golden_sha256': golden_sha256,
+                  'full_raw_artifacts_uploaded_on_failure': True,
+              },
+              'frozen_contracts': {'passed': True},
+              'full_release_gate': {'passed': True},
+              'frontend_acceptance': {
+                  'passed': frontend.get('passed') is True,
+                  'source': frontend.get('execution_source'),
+                  'package_lock_sha256': frontend.get('package_lock_sha256'),
+              },
+              'golden_001': {
+                  'passed': golden.get('passed') is True,
+                  'checks_passed': golden.get('checks_passed'),
+                  'checks_total': golden.get('checks_total'),
+              },
+              'human_evidence': {
+                  'passed': human.get('status') == 'PASS',
+                  'schema_version': human.get('schema_version'),
+              },
+              'performance_v3': {
+                  'status': perf.get('status'),
+                  'total_duration_ms': perf.get('total_duration_ms'),
+              },
+          }
+          assert evidence['frontend_acceptance']['passed'] is True, evidence
+          assert evidence['frontend_acceptance']['source'] == 'GITHUB_HOSTED', evidence
+          assert evidence['golden_001'] == {'passed': True, 'checks_passed': 142, 'checks_total': 142}, evidence
+          assert evidence['human_evidence']['passed'] is True, evidence
+          assert evidence['performance_v3']['status'] == 'PASS', evidence
+          Path('full-acceptance-result.json').write_text(json.dumps(evidence, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+          print('FULL_ACCEPTANCE_EVIDENCE=PASS profile=COMPACT_SUCCESS_V1')
+          PY
+
+      - name: Full Acceptance summary
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo 'PRD_SPEC_V1_FROZEN_CONTRACTS=PASS'
+          echo 'VOIP_AI_SOFTWARE_RELEASE_GATE=PASS'
+          echo 'REAL_OFFLINE_GOLDEN_001=PASS 142/142'
+          echo 'HUMAN_REAL_OFFLINE_GOLDEN_001=PASS'
+          echo "ACCEPTANCE_COMMIT=$(git rev-parse HEAD)"
+
+      - name: Upload compact Full Acceptance evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: full-acceptance-${{ env.EXPECTED_SHA }}
+          path: |
+            full-acceptance-result.json
+            validation/cicd_performance_v3.json
+            validation/frontend_acceptance_result.json
+            validation/frontend_cicd_performance_v3.json
+            validation/source_manifest_expected.json
+            offline-golden-result.json
+            offline-golden-human-artifacts/human-golden-result.json
+            offline-golden-human-artifacts/pcm_rx_periodic_spectrum_human_v2.png
+            offline-golden-human-artifacts/pcm_rx_periodic_spectrogram_human_v2.png
+            offline-golden-human-artifacts/pcm_rx_dtmf_first_digit_inspector_human_v2.png
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Upload failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: consolidated-failure-diagnostics-${{ env.EXPECTED_SHA }}-${{ github.run_attempt }}
+          path: |
+            consolidated-probe-evidence
+            validation
+            offline-golden-result.json
+            offline-golden-artifacts
+            offline-golden-human-artifacts
+          if-no-files-found: ignore
+          retention-days: 1
+
+      - name: Remove consolidated private runtime
+        if: always()
+        shell: bash
+        run: |
+          rm -rf "$CONSOLIDATED_RUNTIME_ROOT" "$VOIP_AI_GATE_VENV"
+
+  preliminary-authority:
+    needs: self-hosted-validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - name: Checkout exact validator source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.EXPECTED_SHA }}
+          fetch-depth: 0
+
+      - name: Download same-run Full Acceptance evidence
+        uses: actions/download-artifact@v4
+        with:
+          name: full-acceptance-${{ env.EXPECTED_SHA }}
+          path: ${{ runner.temp }}/full-acceptance
+
+      - name: Re-derive current source manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          python3 tools/source_manifest_gate.py --write "$RUNNER_TEMP/current_manifest.json"
+          python3 tools/source_manifest_gate.py --expected "$RUNNER_TEMP/current_manifest.json"
+
+      - name: Verify exact-SHA Full Acceptance evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/full_acceptance_evidence_gate.py \
+            --root "$RUNNER_TEMP/full-acceptance" \
+            --revision "$EXPECTED_SHA" \
+            --current-manifest "$RUNNER_TEMP/current_manifest.json"
+          echo 'PRELIMINARY_EVIDENCE_ACCEPTANCE=PASS'
+          echo "ACCEPTANCE_COMMIT=$EXPECTED_SHA"

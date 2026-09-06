@@ -1,12 +1,7 @@
 name: Current PBX Create Contract Probe
 
 on:
-  pull_request:
-    branches: [master]
-    paths:
-      - ".github/workflows/current-pbx-provider-source-probe-v2.yml"
-      - "backend/app/automation/adapters/pbx/**"
-      - "backend/app/automation/gates/golden_web_config.py"
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -20,7 +15,7 @@ jobs:
     runs-on: [self-hosted, linux, x64, voip-controlled-linux]
     timeout-minutes: 10
     env:
-      EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
+      EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
       FUSIONPBX_ROOT: /var/www/fusionpbx
     steps:
       - name: Repair self-hosted workspace

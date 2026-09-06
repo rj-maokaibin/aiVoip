@@ -1,11 +1,7 @@
 name: Current DUT WEB Auth Symbol Probe
 
 on:
-  pull_request:
-    branches: [master]
-    paths:
-      - "tools/probe_dut_web_auth_symbols.py"
-      - ".github/workflows/current-dut-web-auth-symbol-probe.yml"
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -19,7 +15,7 @@ jobs:
     runs-on: [self-hosted, linux, x64, voip-controlled-linux]
     timeout-minutes: 15
     env:
-      EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
+      EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
       PROBE_ENV_FILE: /home/github-runner/.config/voip-ai/.env
       PROBE_VENV: /tmp/voip-auth-symbol-${{ github.run_id }}-${{ github.run_attempt }}
       PROBE_RUNTIME_ROOT: /tmp/voip-auth-symbol-runtime-${{ github.run_id }}-${{ github.run_attempt }}

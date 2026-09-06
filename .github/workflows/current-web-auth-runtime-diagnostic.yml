@@ -1,12 +1,7 @@
 name: Current WEB Auth Runtime Diagnostic
 
 on:
-  pull_request:
-    branches: [master]
-    paths:
-      - ".github/workflows/current-web-auth-runtime-diagnostic.yml"
-      - "backend/app/automation/adapters/web_auth/**"
-      - "backend/app/infrastructure/transport/http.py"
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -20,7 +15,7 @@ jobs:
     runs-on: [self-hosted, linux, x64, voip-controlled-linux]
     timeout-minutes: 15
     env:
-      EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
+      EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
       PROBE_ENV_FILE: /home/github-runner/.config/voip-ai/.env
       PROBE_VENV: /tmp/voip-web-auth-runtime-${{ github.run_id }}-${{ github.run_attempt }}
       WEB_BASE_URL: https://10.48.8.74:10003

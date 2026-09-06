@@ -1,13 +1,7 @@
 name: Current PBX DB Read Probe
 
 on:
-  pull_request:
-    branches: [master]
-    paths:
-      - ".github/workflows/current-pbx-db-read-probe.yml"
-      - ".github/workflows/current-pbx-provider-source-probe.yml"
-      - "backend/app/automation/adapters/pbx/**"
-      - "backend/app/automation/gates/golden_web_config.py"
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -17,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
-      EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
+      EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - name: Checkout exact PR head
         uses: actions/checkout@v4
@@ -48,7 +42,7 @@ jobs:
     runs-on: [self-hosted, linux, x64, voip-controlled-linux]
     timeout-minutes: 10
     env:
-      EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
+      EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
       FUSIONPBX_ROOT: /var/www/fusionpbx
       EXPECTED_REQUIRE_SHA256: 2d29ea99b786c5c111df4cfcc06319138f1544b30300f6aea70635f1100fd761
       EXPECTED_DATABASE_SHA256: 6a0b95eb29d1c27b24d4dcc4a8582b959c627a9173b973b19b2435e1e399dbbb

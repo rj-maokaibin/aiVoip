@@ -1,11 +1,7 @@
 name: Current DUT WEB Authres Flow Probe
 
 on:
-  pull_request:
-    branches: [master]
-    paths:
-      - "tools/probe_dut_web_authres_flow.py"
-      - ".github/workflows/current-dut-web-authres-flow-probe.yml"
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -19,7 +15,7 @@ jobs:
     runs-on: [self-hosted, linux, x64, voip-controlled-linux]
     timeout-minutes: 20
     env:
-      EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
+      EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
       PROBE_ENV_FILE: /home/github-runner/.config/voip-ai/.env
       PROBE_VENV: /tmp/voip-authres-flow-${{ github.run_id }}-${{ github.run_attempt }}
       PROBE_RUNTIME_ROOT: /tmp/voip-authres-flow-runtime-${{ github.run_id }}-${{ github.run_attempt }}

@@ -1,21 +1,6 @@
 name: Preliminary Evidence Report V1 Acceptance
 
 on:
-  pull_request:
-    paths:
-      - 'backend/**'
-      - 'frontend/**'
-      - 'tools/**'
-      - 'golden_cases/**'
-      - 'profiles/**'
-      - 'deploy/**'
-      - 'deploy/live_acceptance/**'
-      - 'docs/LIVE_ACCEPTANCE_RUNTIME_V1.md'
-      - 'docs/02_Core_Documents/Preliminary_Evidence_Report_V1.0/**'
-      - '.github/workflows/source-manifest-gate.yml'
-      - '.github/workflows/prd-spec-v1-release.yml'
-      - '.github/workflows/preliminary-evidence-v1.yml'
-      - '.github/workflows/production-deploy.yml'
   workflow_dispatch:
 
 permissions:
