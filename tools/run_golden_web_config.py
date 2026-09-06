@@ -68,11 +68,26 @@ def _safe_transport_diagnostics(gate: GoldenWebConfigGate) -> dict:
         for item in items:
             if isinstance(item, dict):
                 mutation.append({key: item.get(key) for key in allowed})
+    observation_allowed = (
+        "attempt",
+        "phase",
+        "elapsed_ms",
+        "status_code",
+        "accepted",
+        "error",
+    )
+    observation_items = gate.runtime.get("sanitized_unknown_observation_diagnostics") or ()
+    observation = []
+    if isinstance(observation_items, (list, tuple)):
+        for item in observation_items:
+            if isinstance(item, dict):
+                observation.append({key: item.get(key) for key in observation_allowed})
     return {
         "mutation": mutation,
         "initial_readback_available": bool(
             gate.runtime.get("unknown_initial_readback_available", False)
         ),
+        "observation": observation,
     }
 
 

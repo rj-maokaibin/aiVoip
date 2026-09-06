@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from dataclasses import dataclass, field
 from typing import Any, Mapping, Protocol, runtime_checkable
 
@@ -50,6 +51,7 @@ class EntryResult:
     unknown_result: bool = False
     readback: Any | None = None
     error: str | None = None
+    observation_diagnostics: tuple[Mapping[str, Any], ...] = ()
     # Process-private raw output. Evidence/persistence must use only ``output``.
     # Keep this field last so existing positional construction remains compatible.
     # It exists so reversible WEB mutation can restore exact secret-bearing
@@ -218,9 +220,10 @@ class WebEntryAdapter:
         self,
         operation: WebOperationProfile,
         args: Mapping[str, Any],
-    ) -> EntryResult | None:
+    ) -> tuple[EntryResult | None, tuple[Mapping[str, Any], ...]]:
+        diagnostics: list[Mapping[str, Any]] = []
         if not operation.readback_operation:
-            return None
+            return None, tuple(diagnostics)
         readback_op = self.profile.operation(operation.readback_operation)
         if readback_op.mutation:
             raise WebApiProfileError("WEB_READBACK_OPERATION_MUST_BE_READ_ONLY")
@@ -229,10 +232,31 @@ class WebEntryAdapter:
         if not callable(ensure_session):
             # Request-compatible unit-test/future adapter doubles do not own a
             # WEB session. They still get exactly one read-only observation.
-            return self._to_result(
-                await self._request_operation(readback_op, args),
-                readback_op,
-            )
+            started = time.monotonic()
+            try:
+                result = self._to_result(
+                    await self._request_operation(readback_op, args),
+                    readback_op,
+                )
+            except _UNKNOWN_OBSERVE_RETRYABLE as exc:
+                diagnostics.append({
+                    "attempt": 1,
+                    "phase": "readback",
+                    "elapsed_ms": round((time.monotonic() - started) * 1000.0, 3),
+                    "status_code": None,
+                    "accepted": False,
+                    "error": type(exc).__name__,
+                })
+                return None, tuple(diagnostics)
+            diagnostics.append({
+                "attempt": 1,
+                "phase": "readback",
+                "elapsed_ms": round((time.monotonic() - started) * 1000.0, 3),
+                "status_code": result.status_code,
+                "accepted": result.accepted,
+                "error": result.error,
+            })
+            return result, tuple(diagnostics)
 
         invalidate = getattr(self.session_manager, "invalidate", None)
         if callable(invalidate):
@@ -253,23 +277,40 @@ class WebEntryAdapter:
         # into minutes of runner occupancy. A still-unavailable WEB session
         # degrades to UNKNOWN so mandatory cleanup/reverse verification proceeds.
         last_result: EntryResult | None = None
-        for delay in _UNKNOWN_OBSERVE_BACKOFF_SECONDS:
+        for attempt, delay in enumerate(_UNKNOWN_OBSERVE_BACKOFF_SECONDS, start=1):
             if delay:
                 await asyncio.sleep(delay)
+            started = time.monotonic()
             try:
                 last_result = await asyncio.wait_for(
                     observe_once(),
                     timeout=_UNKNOWN_OBSERVE_ATTEMPT_TIMEOUT_SECONDS,
                 )
-            except _UNKNOWN_OBSERVE_RETRYABLE:
+            except _UNKNOWN_OBSERVE_RETRYABLE as exc:
+                diagnostics.append({
+                    "attempt": attempt,
+                    "phase": "reauth_readback",
+                    "elapsed_ms": round((time.monotonic() - started) * 1000.0, 3),
+                    "status_code": None,
+                    "accepted": False,
+                    "error": type(exc).__name__,
+                })
                 if callable(invalidate):
                     invalidate()
                 continue
+            diagnostics.append({
+                "attempt": attempt,
+                "phase": "reauth_readback",
+                "elapsed_ms": round((time.monotonic() - started) * 1000.0, 3),
+                "status_code": last_result.status_code,
+                "accepted": last_result.accepted,
+                "error": last_result.error,
+            })
             if last_result.accepted:
-                return last_result
+                return last_result, tuple(diagnostics)
             if callable(invalidate):
                 invalidate()
-        return last_result
+        return last_result, tuple(diagnostics)
 
     async def execute(
         self,
@@ -285,7 +326,7 @@ class WebEntryAdapter:
                 operation,
             )
         except HttpMutationResultUnknown as exc:
-            readback = await self._readback_after_unknown(operation, args)
+            readback, observation_diagnostics = await self._readback_after_unknown(operation, args)
             evidence = [exc.evidence]
             if readback is not None:
                 evidence.extend(readback.evidence)
@@ -299,6 +340,7 @@ class WebEntryAdapter:
                     if readback is not None and readback.accepted
                     else "HTTP_MUTATION_RESULT_UNKNOWN_OBSERVE_UNAVAILABLE"
                 ),
+                observation_diagnostics=observation_diagnostics,
             )
 
     async def configure_voip_account(

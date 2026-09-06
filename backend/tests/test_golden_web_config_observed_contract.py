@@ -167,6 +167,15 @@ def test_live_summary_transport_diagnostics_are_allowlisted_only() -> None:
                 "response": {"set-cookie": "must-not-escape"},
             }],
             "unknown_initial_readback_available": False,
+            "sanitized_unknown_observation_diagnostics": [{
+                "attempt": 1,
+                "phase": "reauth_readback",
+                "elapsed_ms": 20001.0,
+                "status_code": None,
+                "accepted": False,
+                "error": "TimeoutError",
+                "cookie": "must-not-escape",
+            }],
         }
 
     diagnostics = safe_transport_diagnostics(Gate())
@@ -182,8 +191,17 @@ def test_live_summary_transport_diagnostics_are_allowlisted_only() -> None:
             "error": "ReadTimeout",
         }],
         "initial_readback_available": False,
+        "observation": [{
+            "attempt": 1,
+            "phase": "reauth_readback",
+            "elapsed_ms": 20001.0,
+            "status_code": None,
+            "accepted": False,
+            "error": "TimeoutError",
+        }],
     }
     assert "request" not in diagnostics["mutation"][0]
+    assert "cookie" not in diagnostics["observation"][0]
     assert "response" not in diagnostics["mutation"][0]
 
 
@@ -194,3 +212,11 @@ def test_live_runner_uses_fresh_http_connection_without_mutation_retry() -> None
     assert "max_keepalive_connections=0" in source
     assert "This does NOT add a mutation retry" in source
     assert source.count("HttpApiTransport(args.web_base_url, client=client)") == 1
+
+
+def test_unknown_observation_diagnostics_are_bounded_and_non_mutating() -> None:
+    source = inspect.getsource(WebEntryAdapter._readback_after_unknown)
+    assert '"phase": "reauth_readback"' in source
+    assert '"error": type(exc).__name__' in source
+    assert "time.monotonic" in source
+    assert "configure_voip_user_info" not in source

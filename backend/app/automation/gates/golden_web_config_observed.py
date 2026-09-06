@@ -271,6 +271,18 @@ class ObservedGoldenWebConfigGate(GoldenWebConfigGate):
             self.runtime["unknown_initial_readback_available"] = isinstance(
                 mutation.readback, Mapping
             )
+            self.runtime["sanitized_unknown_observation_diagnostics"] = [
+                {
+                    "attempt": item.get("attempt"),
+                    "phase": item.get("phase"),
+                    "elapsed_ms": item.get("elapsed_ms"),
+                    "status_code": item.get("status_code"),
+                    "accepted": item.get("accepted"),
+                    "error": item.get("error"),
+                }
+                for item in mutation.observation_diagnostics
+                if isinstance(item, Mapping)
+            ]
             account = await self._observe_unknown_target(context, mutation.readback)
             if account is None:
                 evidence.append(
