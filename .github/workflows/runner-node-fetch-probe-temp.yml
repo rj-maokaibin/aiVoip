@@ -1,0 +1,59 @@
+name: Runner Node Fetch Probe Temp
+
+on:
+  push:
+    branches:
+      - chore/runner-egress-probe-20260906
+
+jobs:
+  probe:
+    runs-on: [self-hosted, linux, x64, voip-controlled-linux]
+    timeout-minutes: 5
+    steps:
+      - name: Probe Node fetch and proxy behavior only
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "RUNNER=${RUNNER_NAME:-unknown}"
+          echo "NODE_VERSION=$(node --version)"
+          for key in HTTP_PROXY HTTPS_PROXY ALL_PROXY NO_PROXY http_proxy https_proxy all_proxy no_proxy; do
+            if [ -n "${!key:-}" ]; then echo "${key}_PRESENT=true"; else echo "${key}_PRESENT=false"; fi
+          done
+          echo 'NODE_PROXY_HELP_BEGIN'
+          node --help 2>&1 | grep -i -E 'proxy|env-proxy' || true
+          echo 'NODE_PROXY_HELP_END'
+          node - <<'NODE'
+          const url='https://mcp.desktopcommander.app';
+          const timer=setTimeout(()=>{ console.log('DEFAULT_FETCH_TIMEOUT=true'); process.exit(2); },15000);
+          fetch(url).then(async r=>{
+            clearTimeout(timer);
+            console.log(`DEFAULT_FETCH_OK=true STATUS=${r.status}`);
+          }).catch(e=>{
+            clearTimeout(timer);
+            console.log('DEFAULT_FETCH_OK=false');
+            console.log(`DEFAULT_FETCH_ERROR_NAME=${e?.name || 'unknown'}`);
+            console.log(`DEFAULT_FETCH_ERROR_CODE=${e?.cause?.code || e?.code || 'none'}`);
+            console.log(`DEFAULT_FETCH_ERROR_ERRNO=${e?.cause?.errno || 'none'}`);
+            process.exitCode=3;
+          });
+          NODE
+          rc=$?
+          echo "DEFAULT_FETCH_RC=$rc"
+          set +e
+          NODE_USE_ENV_PROXY=1 node - <<'NODE'
+          const url='https://mcp.desktopcommander.app';
+          const timer=setTimeout(()=>{ console.log('ENV_PROXY_FETCH_TIMEOUT=true'); process.exit(2); },15000);
+          fetch(url).then(async r=>{
+            clearTimeout(timer);
+            console.log(`ENV_PROXY_FETCH_OK=true STATUS=${r.status}`);
+          }).catch(e=>{
+            clearTimeout(timer);
+            console.log('ENV_PROXY_FETCH_OK=false');
+            console.log(`ENV_PROXY_FETCH_ERROR_NAME=${e?.name || 'unknown'}`);
+            console.log(`ENV_PROXY_FETCH_ERROR_CODE=${e?.cause?.code || e?.code || 'none'}`);
+            console.log(`ENV_PROXY_FETCH_ERROR_ERRNO=${e?.cause?.errno || 'none'}`);
+            process.exitCode=3;
+          });
+          NODE
+          echo "ENV_PROXY_FETCH_RC=$?"
+          set -e
