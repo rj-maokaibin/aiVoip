@@ -16,6 +16,7 @@ from app.automation.gates.golden_web_config import (
     snapshot_writable_bundle,
 )
 from app.automation.orchestrator import RuntimeBlocked
+from app.infrastructure.transport.http import HttpEvidence
 
 _UNKNOWN_TARGET_OBSERVE_BACKOFF_SECONDS = (2.0, 5.0)
 _UNKNOWN_TARGET_OBSERVE_ATTEMPT_TIMEOUT_SECONDS = 8.0
@@ -32,6 +33,22 @@ _CLEANUP_WEB_READ_ATTEMPT_TIMEOUT_SECONDS = 8.0
 
 def utcnow() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _http_evidence_summary(evidence: HttpEvidence) -> dict[str, Any]:
+    """Return only sanitized transport completion metadata for persisted evidence."""
+
+    response = evidence.response if isinstance(evidence.response, Mapping) else None
+    status_code = response.get("status_code") if response is not None else None
+    return {
+        "request_id": evidence.request_id,
+        "attempt": evidence.attempt,
+        "method": evidence.method,
+        "path": evidence.path,
+        "elapsed_ms": round(float(evidence.elapsed_ms), 3),
+        "status_code": status_code,
+        "error": evidence.error,
+    }
 
 
 def observed_unknown_target(
@@ -219,20 +236,22 @@ class ObservedGoldenWebConfigGate(GoldenWebConfigGate):
         evidence: list[ActionEvidence] = []
 
         if mutation.unknown_result:
+            transport_evidence = [_http_evidence_summary(item) for item in mutation.evidence]
             account = await self._observe_unknown_target(context, mutation.readback)
             if account is None:
-                if isinstance(mutation.readback, Mapping):
-                    evidence.append(
-                        ActionEvidence(
-                            source="entry",
-                            data={
-                                "mutation_result_unknown": True,
-                                "mutation_effect_observed": False,
-                            },
-                            evidence_refs=("web-golden://unknown-readback",),
-                            source_timestamp=utcnow(),
-                        )
+                evidence.append(
+                    ActionEvidence(
+                        source="entry",
+                        data={
+                            "mutation_result_unknown": True,
+                            "mutation_effect_observed": False,
+                            "transport_evidence": transport_evidence,
+                            "initial_readback_available": isinstance(mutation.readback, Mapping),
+                        },
+                        evidence_refs=("web-golden://unknown-transport",),
+                        source_timestamp=utcnow(),
                     )
+                )
                 return ActionHandlerResult(
                     success=False,
                     output={
@@ -240,6 +259,8 @@ class ObservedGoldenWebConfigGate(GoldenWebConfigGate):
                         "error": mutation.error,
                         "observe_before_retry": True,
                         "retry_executed": False,
+                        "transport_evidence": transport_evidence,
+                        "initial_readback_available": isinstance(mutation.readback, Mapping),
                     },
                     evidence=tuple(evidence),
                     unknown_result=True,
@@ -254,6 +275,7 @@ class ObservedGoldenWebConfigGate(GoldenWebConfigGate):
                         "mutation_result_unknown": True,
                         "mutation_effect_observed": True,
                         "readback_accepted": True,
+                        "transport_evidence": transport_evidence,
                     },
                     evidence_refs=("web-golden://unknown-target-observed",),
                     source_timestamp=utcnow(),
