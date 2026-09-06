@@ -185,3 +185,12 @@ def test_live_summary_transport_diagnostics_are_allowlisted_only() -> None:
     }
     assert "request" not in diagnostics["mutation"][0]
     assert "response" not in diagnostics["mutation"][0]
+
+
+def test_live_runner_uses_fresh_http_connection_without_mutation_retry() -> None:
+    runner_path = Path(__file__).resolve().parents[2] / "tools" / "run_golden_web_config.py"
+    source = runner_path.read_text(encoding="utf-8")
+
+    assert "max_keepalive_connections=0" in source
+    assert "This does NOT add a mutation retry" in source
+    assert source.count("HttpApiTransport(args.web_base_url, client=client)") == 1

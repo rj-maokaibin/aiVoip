@@ -145,7 +145,16 @@ async def _run(args) -> tuple[int, dict]:
     if not target_number:
         raise RuntimeError("WEB_GOLDEN_TARGET_NUMBER_REQUIRED")
 
-    client = httpx.AsyncClient(base_url=args.web_base_url, verify=not args.web_insecure_tls)
+    # The DUT WEB service can close an idle HTTP/1.1 keep-alive connection without
+    # advertising that closure. A later Save on that stale pooled socket then fails
+    # immediately with RemoteProtocolError and its result is necessarily UNKNOWN.
+    # Disable keep-alive reuse for this real-device runner so the one authorized
+    # mutation is sent on a fresh connection. This does NOT add a mutation retry.
+    client = httpx.AsyncClient(
+        base_url=args.web_base_url,
+        verify=not args.web_insecure_tls,
+        limits=httpx.Limits(max_keepalive_connections=0),
+    )
     http_transport = HttpApiTransport(args.web_base_url, client=client)
     credential = WebCredential(username=username, password=password)
     auth = build_apf3260m_luci_auth_provider(
