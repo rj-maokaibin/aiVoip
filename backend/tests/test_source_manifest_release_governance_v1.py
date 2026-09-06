@@ -15,6 +15,7 @@ def test_release_governance_workflows_are_source_manifest_inputs():
     required = {
         ".github/workflows/production-deploy.yml",
         ".github/workflows/source-manifest-gate.yml",
+        ".github/workflows/consolidated-exact-head-validation.yml",
     }
     assert required.issubset(set(module.INCLUDE_FILES))
 
@@ -28,3 +29,4 @@ def test_release_source_manifest_excludes_only_manifest_itself():
     assert "release/source_manifest.json" in module.EXCLUDE_FILES
     assert ".github/workflows/production-deploy.yml" not in module.EXCLUDE_FILES
     assert ".github/workflows/source-manifest-gate.yml" not in module.EXCLUDE_FILES
+    assert ".github/workflows/consolidated-exact-head-validation.yml" not in module.EXCLUDE_FILES

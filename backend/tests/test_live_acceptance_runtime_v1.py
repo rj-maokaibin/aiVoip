@@ -139,28 +139,26 @@ def test_golden_identity_uses_bound_case_exact_evidence_sha_and_successful_analy
 
 
 def test_preliminary_workflow_is_non_mutating_and_reuses_authoritative_acceptance():
-    preliminary = (ROOT / ".github/workflows/preliminary-evidence-v1.yml").read_text(encoding="utf-8")
-    full = (ROOT / ".github/workflows/prd-spec-v1-release.yml").read_text(encoding="utf-8")
+    consolidated = (ROOT / ".github/workflows/consolidated-exact-head-validation.yml").read_text(encoding="utf-8")
+    legacy_preliminary = (ROOT / ".github/workflows/preliminary-evidence-v1.yml").read_text(encoding="utf-8")
     helper = (ROOT / "tools/human_evidence_feishu_live_acceptance.py").read_text(encoding="utf-8")
 
-    assert "live-feishu-acceptance:" not in preliminary
-    assert "tools/human_evidence_feishu_live_acceptance.py" not in preliminary
-    assert "CONTROLLED_ENV_FILE" not in preliminary
-    assert "FEISHU_SECRET_FILE" not in preliminary
-    assert "deploy/live_acceptance/**" in preliminary
-    assert "docs/LIVE_ACCEPTANCE_RUNTIME_V1.md" in preliminary
+    assert "live-feishu-acceptance:" not in consolidated
+    assert "tools/human_evidence_feishu_live_acceptance.py" not in consolidated
+    assert "CONTROLLED_ENV_FILE" not in consolidated
+    assert "FEISHU_SECRET_FILE" not in consolidated
+    assert '"deploy/**"' in consolidated
+    assert "docs/02_Core_Documents/Preliminary_Evidence_Report_V1.0/**" in consolidated
 
-    assert "verify-full-acceptance-evidence:" in preliminary
-    assert "PRELIMINARY_REUSED_FULL_ACCEPTANCE=PASS" in preliminary
-    assert "source=REUSED_FULL_ACCEPTANCE" in preliminary
-    assert "bash tools/voip_ai_release_gate.sh" not in preliminary
-    assert "offline_analysis_golden_replay.py" not in preliminary
-    assert "human_evidence_real_golden_gate.py" not in preliminary
+    assert "preliminary-authority:" in consolidated
+    assert "full_acceptance_evidence_gate.py" in consolidated
+    assert "PRELIMINARY_EVIDENCE_ACCEPTANCE=PASS" in consolidated
+    assert "Full VOIP AI software release gate" in consolidated
+    assert "Prepared-PCAP Real Offline Golden 001" in consolidated
+    assert "Real Offline Golden 001 Human Evidence Gate" in consolidated
+    assert "full-acceptance-result.json" in consolidated
 
-    assert "Full VOIP AI software release gate" in full
-    assert "Prepared-PCAP Real Offline Golden 001" in full
-    assert "Real Offline Golden 001 Human Evidence Gate" in full
-    assert "full-acceptance-result.json" in full
-
+    assert "pull_request:" not in legacy_preliminary
+    assert "workflow_dispatch:" in legacy_preliminary
     assert "--preflight-result" in helper
     assert "mutation_allowed" in helper

@@ -1,0 +1,235 @@
+name: Current PBX Provider Source Probe
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  exact-source-bundle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - name: Checkout exact PR head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.EXPECTED_SHA }}
+          fetch-depth: 0
+
+      - name: Build immutable source bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          git branch -f bundle-head "$EXPECTED_SHA"
+          git bundle create "$RUNNER_TEMP/source.bundle" refs/heads/bundle-head
+          printf '%s\n' "$EXPECTED_SHA" > "$RUNNER_TEMP/source.sha"
+          git bundle verify "$RUNNER_TEMP/source.bundle"
+
+      - name: Upload exact source bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: pbx-provider-exact-source-${{ env.EXPECTED_SHA }}
+          path: |
+            ${{ runner.temp }}/source.bundle
+            ${{ runner.temp }}/source.sha
+          if-no-files-found: error
+          retention-days: 1
+
+  read-only-provider-source:
+    needs: exact-source-bundle
+    runs-on: [self-hosted, linux, x64, voip-controlled-linux]
+    timeout-minutes: 10
+    env:
+      EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - name: Repair self-hosted workspace before offline materialization
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker image inspect python:3.12-slim >/dev/null
+          docker run --rm -v "$GITHUB_WORKSPACE:/workspace" python:3.12-slim \
+            sh -lc 'find /workspace -mindepth 1 -maxdepth 1 -exec rm -rf {} +'
+
+      - name: Download exact source bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: pbx-provider-exact-source-${{ env.EXPECTED_SHA }}
+          path: ${{ runner.temp }}/pbx-provider-exact-source
+
+      - name: Materialize exact PR head offline
+        shell: bash
+        run: |
+          set -euo pipefail
+          bundle="$RUNNER_TEMP/pbx-provider-exact-source/source.bundle"
+          sha_file="$RUNNER_TEMP/pbx-provider-exact-source/source.sha"
+          test -s "$bundle"
+          test "$(cat "$sha_file")" = "$EXPECTED_SHA"
+          cd "$RUNNER_TEMP"
+          rm -rf "$GITHUB_WORKSPACE"
+          git clone -q -b bundle-head "$bundle" "$GITHUB_WORKSPACE"
+          git -C "$GITHUB_WORKSPACE" checkout -q --detach "$EXPECTED_SHA"
+          test "$(git -C "$GITHUB_WORKSPACE" rev-parse HEAD)" = "$EXPECTED_SHA"
+          test -z "$(git -C "$GITHUB_WORKSPACE" status --porcelain --untracked-files=no)"
+          echo "PBX_PROVIDER_EXACT_SOURCE=PASS revision=$EXPECTED_SHA"
+
+      - name: Inspect installed FusionPBX and FreeSWITCH source/runtime read-only
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p pbx-provider-source-evidence
+          python3 - <<'PY'
+          from __future__ import annotations
+
+          import hashlib
+          import json
+          from pathlib import Path
+          import re
+          import shutil
+          import subprocess
+
+          def sha256(path: Path) -> str | None:
+              if not path.is_file():
+                  return None
+              h = hashlib.sha256()
+              with path.open("rb") as fh:
+                  for chunk in iter(lambda: fh.read(1024 * 1024), b""):
+                      h.update(chunk)
+              return h.hexdigest()
+
+          def run(argv: list[str], timeout: int = 5) -> tuple[int | None, str]:
+              try:
+                  cp = subprocess.run(
+                      argv,
+                      check=False,
+                      stdout=subprocess.PIPE,
+                      stderr=subprocess.DEVNULL,
+                      text=True,
+                      timeout=timeout,
+                  )
+              except Exception:
+                  return None, ""
+              return cp.returncode, cp.stdout or ""
+
+          roots = [Path("/var/www/fusionpbx"), Path("/usr/share/fusionpbx"), Path("/opt/fusionpbx")]
+          root = next((item for item in roots if (item / "app/extensions").is_dir()), None)
+          if root is None:
+              raise SystemExit("FUSIONPBX_EXTENSION_SOURCE_NOT_FOUND")
+
+          relpaths = [
+              "app/extensions/resources/classes/extension.php",
+              "app/extensions/extension_edit.php",
+              "app/extensions/extension_imports.php",
+              "resources/require.php",
+              "resources/classes/database.php",
+          ]
+          source = {}
+          text_by_rel = {}
+          for rel in relpaths:
+              path = root / rel
+              text = path.read_text(encoding="utf-8", errors="ignore") if path.is_file() else ""
+              text_by_rel[rel] = text
+              source[rel] = {
+                  "present": path.is_file(),
+                  "sha256": sha256(path),
+                  "size": path.stat().st_size if path.is_file() else None,
+              }
+
+          class_text = text_by_rel["app/extensions/resources/classes/extension.php"]
+          edit_text = text_by_rel["app/extensions/extension_edit.php"]
+          import_text = text_by_rel["app/extensions/extension_imports.php"]
+          methods = sorted(set(re.findall(r"public\s+function\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(", class_text)))
+
+          fs_cli = shutil.which("fs_cli")
+          fs_rc, fs_users = (None, "")
+          if fs_cli:
+              fs_rc, fs_users = run([fs_cli, "-x", "list_users"], timeout=8)
+          pool = set()
+          current_7102 = False
+          if fs_rc == 0:
+              for raw in fs_users.splitlines():
+                  line = raw.strip()
+                  if not line or line.startswith("-"):
+                      continue
+                  first = re.split(r"[|,\s]", line, maxsplit=1)[0].strip()
+                  if first == "7102":
+                      current_7102 = True
+                  if re.fullmatch(r"79\d\d", first):
+                      pool.add(int(first))
+          free_pool = [value for value in range(7900, 8000) if value not in pool]
+
+          php_path = shutil.which("php")
+          php_rc, php_version = (None, "")
+          if php_path:
+              php_rc, php_version = run([php_path, "-r", "echo PHP_VERSION;"], timeout=5)
+
+          sudo_rc, _ = run(["sudo", "-n", "-u", "www-data", "true"], timeout=3) if shutil.which("sudo") else (None, "")
+          service_rc, service_state = run(["systemctl", "is-active", "freeswitch"], timeout=5)
+
+          config_candidates = [Path("/etc/fusionpbx/config.conf"), Path("/etc/fusionpbx/config.php")]
+          config_metadata = [
+              {
+                  "path": str(path),
+                  "present": path.exists(),
+                  "runner_readable": path.is_file() and path.stat().st_mode is not None and __import__("os").access(path, __import__("os").R_OK),
+              }
+              for path in config_candidates
+          ]
+
+          payload = {
+              "mutation_executed": False,
+              "secret_values_emitted": False,
+              "fusionpbx_root": str(root),
+              "source_files": source,
+              "extension_class_public_methods": methods,
+              "extension_contract_facts": {
+                  "exists_method_present": "exists" in methods,
+                  "delete_method_present": "delete" in methods,
+                  "exists_checks_number_alias": "number_alias = :extension" in class_text,
+                  "web_add_permission_guard_present": "permission_exists('extension_add')" in edit_text,
+                  "web_edit_permission_guard_present": "permission_exists('extension_edit')" in edit_text,
+                  "web_extension_field_present": '$_POST["extension"]' in edit_text,
+                  "web_number_alias_field_present": '$_POST["number_alias"]' in edit_text,
+                  "web_password_field_present": '$_POST["password"]' in edit_text,
+                  "database_save_call_present": bool(re.search(r"(?:database|\$database).*?->save\s*\(", edit_text, re.S)),
+                  "extension_import_path_present": bool(import_text),
+              },
+              "runtime": {
+                  "freeswitch_service_state": service_state.strip() if service_rc == 0 else None,
+                  "fs_cli_path": fs_cli,
+                  "fs_cli_list_users_rc": fs_rc,
+                  "php_path": php_path,
+                  "php_version": php_version.strip() if php_rc == 0 else None,
+                  "sudo_noninteractive_www_data": sudo_rc == 0,
+              },
+              "numeric_pool_7900_7999": {
+                  "runtime_observable": fs_rc == 0,
+                  "occupied_count": len(pool) if fs_rc == 0 else None,
+                  "first_available": free_pool[0] if fs_rc == 0 and free_pool else None,
+                  "existing_7102_observed": current_7102 if fs_rc == 0 else None,
+              },
+              "fusionpbx_config_metadata": config_metadata,
+          }
+          out = Path("pbx-provider-source-evidence/fusionpbx-provider-source.json")
+          out.write_text(json.dumps(payload, ensure_ascii=False, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+          print(json.dumps({
+              "PBX_PROVIDER_SOURCE_BINDING": "PASS",
+              "mutation": False,
+              "secret_values_emitted": False,
+              "extension_exists_method": payload["extension_contract_facts"]["exists_method_present"],
+              "extension_delete_method": payload["extension_contract_facts"]["delete_method_present"],
+              "fs_cli_list_users_rc": fs_rc,
+              "numeric_pool_observable": payload["numeric_pool_7900_7999"]["runtime_observable"],
+          }, sort_keys=True))
+          PY
+
+      - name: Upload immutable PBX provider source evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: current-pbx-provider-source-${{ env.EXPECTED_SHA }}
+          path: pbx-provider-source-evidence/*.json
+          if-no-files-found: error
+          retention-days: 7

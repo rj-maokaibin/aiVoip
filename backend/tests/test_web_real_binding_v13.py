@@ -26,6 +26,7 @@ WRITE_MODULES = (
     "voipFxsTbl",
     "voipAdvanced",
 )
+SINGLE_WRITE_MODULES = ("voipUserInfo",)
 
 
 def _response(body, status=200):
@@ -68,6 +69,25 @@ def test_real_profile_is_source_bound_and_preserves_har_order_and_side_effects()
     assert tuple(item.method for item in write.rpc_items) == ("devConfig.set",) * 5
     assert write.writable_modules == WRITE_MODULES
     assert "HAR:10.48.8.74.har" in profile.source_evidence
+
+
+
+def test_pr_d_single_module_write_is_source_bound_to_voip_user_info_only():
+    profile = WebApiProfile.load_yaml(PROFILE)
+    write = profile.operation("voip.account.configure_user_info")
+    value = {"data": [{"number": "7900", "disName": "7900", "authId": "7102", "passwd": "secret"}]}
+    payload = WebEntryAdapter._payload(write, {"bundle": {"voipUserInfo": value}})
+
+    assert write.source_bound is True
+    assert write.mutation is True
+    assert write.readback_operation == "voip.account.read"
+    assert tuple(item.module for item in write.rpc_items) == SINGLE_WRITE_MODULES
+    assert tuple(item.method for item in write.rpc_items) == ("devConfig.set",)
+    assert write.writable_modules == SINGLE_WRITE_MODULES
+    requests = payload["params"]["params"]
+    assert len(requests) == 1
+    assert requests[0]["params"]["module"] == "voipUserInfo"
+    assert requests[0]["params"]["data"] == value
 
 
 def test_cmd_array_read_payload_has_explicit_request_index_mapping_contract():

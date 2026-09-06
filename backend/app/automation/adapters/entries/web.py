@@ -1,9 +1,15 @@
 from __future__ import annotations
 
+import asyncio
+import re
+import time
 from dataclasses import dataclass, field
 from typing import Any, Mapping, Protocol, runtime_checkable
 
+import httpx
+
 from app.automation.adapters.web_auth.base import SessionManager
+from app.automation.adapters.web_auth.legacy_luci import LegacyLuciAuthError
 from app.automation.adapters.web_profiles.schema import (
     TBD_CURRENT_PRODUCT,
     WebApiProfile,
@@ -17,6 +23,25 @@ from app.infrastructure.transport.http import (
     HttpResponse,
     HttpRetryPolicy,
     mask_http_secrets,
+)
+
+_UNKNOWN_OBSERVE_BACKOFF_SECONDS = (0.0, 1.0, 2.0, 4.0)
+_UNKNOWN_OBSERVE_ATTEMPT_TIMEOUT_SECONDS = 20.0
+_SAFE_OBSERVATION_ERROR_CODE = re.compile(r"^[A-Z0-9_:-]{1,96}$")
+
+
+def _safe_observation_error_detail(exc: Exception) -> str | None:
+    if not isinstance(exc, LegacyLuciAuthError):
+        return None
+    value = str(exc).strip()
+    return value if _SAFE_OBSERVATION_ERROR_CODE.fullmatch(value) else None
+
+
+_UNKNOWN_OBSERVE_RETRYABLE = (
+    LegacyLuciAuthError,
+    httpx.TransportError,
+    asyncio.TimeoutError,
+    TimeoutError,
 )
 
 
@@ -37,6 +62,12 @@ class EntryResult:
     unknown_result: bool = False
     readback: Any | None = None
     error: str | None = None
+    observation_diagnostics: tuple[Mapping[str, Any], ...] = ()
+    # Process-private raw output. Evidence/persistence must use only ``output``.
+    # Keep this field last so existing positional construction remains compatible.
+    # It exists so reversible WEB mutation can restore exact secret-bearing
+    # configuration instead of accidentally writing redaction masks.
+    runtime_output: Any | None = field(default=None, repr=False, compare=False)
 
 
 @runtime_checkable
@@ -134,6 +165,7 @@ class WebEntryAdapter:
         )
         raw_data = body.get("data") if isinstance(body, Mapping) else None
         modules: dict[str, Any] = {}
+        runtime_modules: dict[str, Any] = {}
         if isinstance(raw_data, list):
             for index, item in enumerate(operation.rpc_items):
                 if index >= len(raw_data):
@@ -141,6 +173,7 @@ class WebEntryAdapter:
                 value = raw_data[index]
                 if isinstance(value, Mapping) and "data" in value:
                     value = value.get("data")
+                runtime_modules[item.module] = value
                 modules[item.module] = mask_http_secrets(value)
 
         accepted = protocol_ok
@@ -177,6 +210,7 @@ class WebEntryAdapter:
             output=output,
             evidence=(response.evidence,),
             error=error,
+            runtime_output={"modules": runtime_modules},
         )
 
     @staticmethod
@@ -197,13 +231,99 @@ class WebEntryAdapter:
         self,
         operation: WebOperationProfile,
         args: Mapping[str, Any],
-    ) -> EntryResult | None:
+    ) -> tuple[EntryResult | None, tuple[Mapping[str, Any], ...]]:
+        diagnostics: list[Mapping[str, Any]] = []
         if not operation.readback_operation:
-            return None
+            return None, tuple(diagnostics)
         readback_op = self.profile.operation(operation.readback_operation)
         if readback_op.mutation:
             raise WebApiProfileError("WEB_READBACK_OPERATION_MUST_BE_READ_ONLY")
-        return self._to_result(await self._request_operation(readback_op, args), readback_op)
+
+        ensure_session = getattr(self.session_manager, "ensure_session", None)
+        if not callable(ensure_session):
+            # Request-compatible unit-test/future adapter doubles do not own a
+            # WEB session. They still get exactly one read-only observation.
+            started = time.monotonic()
+            try:
+                result = self._to_result(
+                    await self._request_operation(readback_op, args),
+                    readback_op,
+                )
+            except _UNKNOWN_OBSERVE_RETRYABLE as exc:
+                diagnostics.append({
+                    "attempt": 1,
+                    "phase": "readback",
+                    "elapsed_ms": round((time.monotonic() - started) * 1000.0, 3),
+                    "status_code": None,
+                    "accepted": False,
+                    "error": type(exc).__name__,
+                    "detail": _safe_observation_error_detail(exc),
+                })
+                return None, tuple(diagnostics)
+            diagnostics.append({
+                "attempt": 1,
+                "phase": "readback",
+                "elapsed_ms": round((time.monotonic() - started) * 1000.0, 3),
+                "status_code": result.status_code,
+                "accepted": result.accepted,
+                "error": result.error,
+            })
+            return result, tuple(diagnostics)
+
+        invalidate = getattr(self.session_manager, "invalidate", None)
+        if callable(invalidate):
+            invalidate()
+
+        async def observe_once() -> EntryResult:
+            await ensure_session(force=True)
+            return self._to_result(
+                await self._request_operation(readback_op, args),
+                readback_op,
+            )
+
+        # A transport-UNKNOWN Save can temporarily invalidate LuCI/auth while
+        # the DUT applies configuration. The mutation itself is NEVER retried.
+        # Only authentication plus the profile-bound read-only observation may
+        # retry. Each observation attempt has an explicit wall-clock budget so
+        # nested auth/HTTP retry policies cannot turn a bounded observe window
+        # into minutes of runner occupancy. A still-unavailable WEB session
+        # degrades to UNKNOWN so mandatory cleanup/reverse verification proceeds.
+        last_result: EntryResult | None = None
+        for attempt, delay in enumerate(_UNKNOWN_OBSERVE_BACKOFF_SECONDS, start=1):
+            if delay:
+                await asyncio.sleep(delay)
+            started = time.monotonic()
+            try:
+                last_result = await asyncio.wait_for(
+                    observe_once(),
+                    timeout=_UNKNOWN_OBSERVE_ATTEMPT_TIMEOUT_SECONDS,
+                )
+            except _UNKNOWN_OBSERVE_RETRYABLE as exc:
+                diagnostics.append({
+                    "attempt": attempt,
+                    "phase": "reauth_readback",
+                    "elapsed_ms": round((time.monotonic() - started) * 1000.0, 3),
+                    "status_code": None,
+                    "accepted": False,
+                    "error": type(exc).__name__,
+                    "detail": _safe_observation_error_detail(exc),
+                })
+                if callable(invalidate):
+                    invalidate()
+                continue
+            diagnostics.append({
+                "attempt": attempt,
+                "phase": "reauth_readback",
+                "elapsed_ms": round((time.monotonic() - started) * 1000.0, 3),
+                "status_code": last_result.status_code,
+                "accepted": last_result.accepted,
+                "error": last_result.error,
+            })
+            if last_result.accepted:
+                return last_result, tuple(diagnostics)
+            if callable(invalidate):
+                invalidate()
+        return last_result, tuple(diagnostics)
 
     async def execute(
         self,
@@ -219,7 +339,7 @@ class WebEntryAdapter:
                 operation,
             )
         except HttpMutationResultUnknown as exc:
-            readback = await self._readback_after_unknown(operation, args)
+            readback, observation_diagnostics = await self._readback_after_unknown(operation, args)
             evidence = [exc.evidence]
             if readback is not None:
                 evidence.extend(readback.evidence)
@@ -228,7 +348,12 @@ class WebEntryAdapter:
                 unknown_result=True,
                 evidence=tuple(evidence),
                 readback=(readback.output if readback is not None else None),
-                error="HTTP_MUTATION_RESULT_UNKNOWN",
+                error=(
+                    "HTTP_MUTATION_RESULT_UNKNOWN"
+                    if readback is not None and readback.accepted
+                    else "HTTP_MUTATION_RESULT_UNKNOWN_OBSERVE_UNAVAILABLE"
+                ),
+                observation_diagnostics=observation_diagnostics,
             )
 
     async def configure_voip_account(
@@ -248,6 +373,17 @@ class WebEntryAdapter:
         ctx: Any = None,
     ) -> EntryResult:
         return await self.execute("voip.account.configure", {"bundle": dict(bundle)}, ctx)
+
+    async def configure_voip_user_info(
+        self,
+        value: Any,
+        ctx: Any = None,
+    ) -> EntryResult:
+        return await self.execute(
+            "voip.account.configure_user_info",
+            {"bundle": {"voipUserInfo": value}},
+            ctx,
+        )
 
     async def read_voip_account(self, line: int, ctx: Any = None) -> EntryResult:
         return await self.execute("voip.account.read", {"line": line}, ctx)
