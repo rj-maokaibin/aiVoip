@@ -5,8 +5,10 @@ import inspect
 from app.automation.adapters.entries.web import WebEntryAdapter
 from app.automation.gates.golden_web_config_observed import (
     ObservedGoldenWebConfigGate,
+    _http_evidence_summary,
     observed_unknown_target,
 )
+from app.infrastructure.transport.http import HttpEvidence
 
 
 def _readback(number: str, dis_name: str) -> dict:
@@ -83,6 +85,7 @@ def test_observed_unknown_gate_continues_registration_only_after_target_observat
     assert "wait_registered" in finish_source
     assert "mutation_effect_observed" in finish_source
 
+
 def test_cleanup_restore_unknown_is_observed_without_mutation_retry() -> None:
     restore_source = inspect.getsource(ObservedGoldenWebConfigGate._restore_action)
     cleanup_read_source = inspect.getsource(ObservedGoldenWebConfigGate._cleanup_read)
@@ -97,3 +100,30 @@ def test_cleanup_restore_unknown_is_observed_without_mutation_retry() -> None:
     assert "WEB_READ_ACTION" in cleanup_read_source
     assert "asyncio.wait_for" in cleanup_read_source
     assert "invalidate" in cleanup_read_source
+
+
+def test_unknown_transport_evidence_summary_is_sanitized_and_actionable() -> None:
+    evidence = HttpEvidence(
+        request_id="req-123",
+        attempt=1,
+        method="POST",
+        path="/cgi-bin/luci/api/xqsystem/login",
+        request={"headers": {"Authorization": "***"}},
+        response=None,
+        elapsed_ms=15001.23456,
+        error="ReadTimeout",
+    )
+
+    summary = _http_evidence_summary(evidence)
+
+    assert summary == {
+        "request_id": "req-123",
+        "attempt": 1,
+        "method": "POST",
+        "path": "/cgi-bin/luci/api/xqsystem/login",
+        "elapsed_ms": 15001.235,
+        "status_code": None,
+        "error": "ReadTimeout",
+    }
+    assert "request" not in summary
+    assert "response" not in summary
