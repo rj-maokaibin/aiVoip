@@ -2,13 +2,18 @@ from __future__ import annotations
 
 import inspect
 
-from app.automation.adapters.entries.web import WebEntryAdapter
+from app.automation.adapters.entries.web import (
+    WebEntryAdapter,
+    _UNKNOWN_OBSERVE_ATTEMPT_TIMEOUT_SECONDS,
+)
 from app.automation.gates.golden_web_config_observed import (
     ObservedGoldenWebConfigGate,
+    _CLEANUP_WEB_READ_ATTEMPT_TIMEOUT_SECONDS,
+    _UNKNOWN_TARGET_OBSERVE_ATTEMPT_TIMEOUT_SECONDS,
     _http_evidence_summary,
     observed_unknown_target,
 )
-from app.infrastructure.transport.http import HttpEvidence
+from app.infrastructure.transport.http import HttpEvidence, HttpRequest
 
 
 def _readback(number: str, dis_name: str) -> dict:
@@ -127,3 +132,48 @@ def test_unknown_transport_evidence_summary_is_sanitized_and_actionable() -> Non
     }
     assert "request" not in summary
     assert "response" not in summary
+
+
+def test_unknown_observation_budgets_do_not_cancel_before_one_http_read_timeout() -> None:
+    request = HttpRequest(method="GET", path="/health")
+
+    assert _UNKNOWN_OBSERVE_ATTEMPT_TIMEOUT_SECONDS > request.read_timeout
+    assert _UNKNOWN_TARGET_OBSERVE_ATTEMPT_TIMEOUT_SECONDS > request.read_timeout
+    assert _CLEANUP_WEB_READ_ATTEMPT_TIMEOUT_SECONDS > request.read_timeout
+
+
+def test_live_summary_transport_diagnostics_are_allowlisted_only() -> None:
+    from tools.run_golden_web_config import _safe_transport_diagnostics
+
+    class Gate:
+        runtime = {
+            "sanitized_mutation_transport_evidence": [{
+                "request_id": "req-1",
+                "attempt": 1,
+                "method": "POST",
+                "path": "/cgi-bin/luci/api/cmd",
+                "elapsed_ms": 15001.0,
+                "status_code": None,
+                "error": "ReadTimeout",
+                "request": {"pwd": "must-not-escape"},
+                "response": {"set-cookie": "must-not-escape"},
+            }],
+            "unknown_initial_readback_available": False,
+        }
+
+    diagnostics = _safe_transport_diagnostics(Gate())
+
+    assert diagnostics == {
+        "mutation": [{
+            "request_id": "req-1",
+            "attempt": 1,
+            "method": "POST",
+            "path": "/cgi-bin/luci/api/cmd",
+            "elapsed_ms": 15001.0,
+            "status_code": None,
+            "error": "ReadTimeout",
+        }],
+        "initial_readback_available": False,
+    }
+    assert "request" not in diagnostics["mutation"][0]
+    assert "response" not in diagnostics["mutation"][0]

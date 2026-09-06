@@ -24,7 +24,7 @@ from app.infrastructure.transport.http import (
 )
 
 _UNKNOWN_OBSERVE_BACKOFF_SECONDS = (0.0, 1.0, 2.0, 4.0)
-_UNKNOWN_OBSERVE_ATTEMPT_TIMEOUT_SECONDS = 8.0
+_UNKNOWN_OBSERVE_ATTEMPT_TIMEOUT_SECONDS = 20.0
 _UNKNOWN_OBSERVE_RETRYABLE = (
     LegacyLuciAuthError,
     httpx.TransportError,

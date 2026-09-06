@@ -52,6 +52,30 @@ def _safe_exception_code(exc: Exception) -> str | None:
     return value
 
 
+def _safe_transport_diagnostics(gate: GoldenWebConfigGate) -> dict:
+    allowed = (
+        "request_id",
+        "attempt",
+        "method",
+        "path",
+        "elapsed_ms",
+        "status_code",
+        "error",
+    )
+    items = gate.runtime.get("sanitized_mutation_transport_evidence") or ()
+    mutation = []
+    if isinstance(items, (list, tuple)):
+        for item in items:
+            if isinstance(item, dict):
+                mutation.append({key: item.get(key) for key in allowed})
+    return {
+        "mutation": mutation,
+        "initial_readback_available": bool(
+            gate.runtime.get("unknown_initial_readback_available", False)
+        ),
+    }
+
+
 def _summary(result, gate: GoldenWebConfigGate, *, device_id: str, model: str) -> dict:
     token = gate.runtime.get("token")
     return {
@@ -86,6 +110,7 @@ def _summary(result, gate: GoldenWebConfigGate, *, device_id: str, model: str) -
             "release_last": True,
         },
         "secret_values_emitted": False,
+        "transport_diagnostics": _safe_transport_diagnostics(gate),
         "assertions": [
             {
                 "id": item.assertion_id,

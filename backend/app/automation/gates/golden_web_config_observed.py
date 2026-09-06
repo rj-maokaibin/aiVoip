@@ -19,7 +19,7 @@ from app.automation.orchestrator import RuntimeBlocked
 from app.infrastructure.transport.http import HttpEvidence
 
 _UNKNOWN_TARGET_OBSERVE_BACKOFF_SECONDS = (2.0, 5.0)
-_UNKNOWN_TARGET_OBSERVE_ATTEMPT_TIMEOUT_SECONDS = 8.0
+_UNKNOWN_TARGET_OBSERVE_ATTEMPT_TIMEOUT_SECONDS = 20.0
 _UNKNOWN_TARGET_OBSERVE_RETRYABLE = (
     LegacyLuciAuthError,
     httpx.TransportError,
@@ -28,7 +28,7 @@ _UNKNOWN_TARGET_OBSERVE_RETRYABLE = (
 )
 
 _CLEANUP_WEB_READ_BACKOFF_SECONDS = (0.0, 1.0, 2.0, 4.0)
-_CLEANUP_WEB_READ_ATTEMPT_TIMEOUT_SECONDS = 8.0
+_CLEANUP_WEB_READ_ATTEMPT_TIMEOUT_SECONDS = 20.0
 
 
 def utcnow() -> datetime:
@@ -263,6 +263,14 @@ class ObservedGoldenWebConfigGate(GoldenWebConfigGate):
 
         if mutation.unknown_result:
             transport_evidence = [_http_evidence_summary(item) for item in mutation.evidence]
+            # Keep only the already-sanitized completion metadata in process-local
+            # runtime so the live runner can persist an actionable UNKNOWN reason.
+            # Request/response payloads, headers, cookies and credentials are never
+            # copied into this diagnostic channel.
+            self.runtime["sanitized_mutation_transport_evidence"] = list(transport_evidence)
+            self.runtime["unknown_initial_readback_available"] = isinstance(
+                mutation.readback, Mapping
+            )
             account = await self._observe_unknown_target(context, mutation.readback)
             if account is None:
                 evidence.append(
