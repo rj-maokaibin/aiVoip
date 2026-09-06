@@ -150,10 +150,17 @@ async def _run(args) -> tuple[int, dict]:
     # immediately with RemoteProtocolError and its result is necessarily UNKNOWN.
     # Disable keep-alive reuse for this real-device runner so the one authorized
     # mutation is sent on a fresh connection. This does NOT add a mutation retry.
+    # Force HTTP/1.1 connection-close semantics for the legacy LuCI CGI.
+    # The APF3260-M CGI has been observed to close the socket immediately after
+    # accepting a Save, before emitting a parseable HTTP response. Keeping the
+    # request on a fresh non-persistent HTTP/1.1 connection avoids stale-pool
+    # reuse while preserving the strict single-mutation/no-retry contract.
     client = httpx.AsyncClient(
         base_url=args.web_base_url,
         verify=not args.web_insecure_tls,
+        http2=False,
         limits=httpx.Limits(max_keepalive_connections=0),
+        headers={"Connection": "close"},
     )
     http_transport = HttpApiTransport(args.web_base_url, client=client)
     credential = WebCredential(username=username, password=password)
