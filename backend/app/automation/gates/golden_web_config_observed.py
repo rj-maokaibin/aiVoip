@@ -279,6 +279,7 @@ class ObservedGoldenWebConfigGate(GoldenWebConfigGate):
                     "status_code": item.get("status_code"),
                     "accepted": item.get("accepted"),
                     "error": item.get("error"),
+                    "detail": item.get("detail"),
                 }
                 for item in mutation.observation_diagnostics
                 if isinstance(item, Mapping)

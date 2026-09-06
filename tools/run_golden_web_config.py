@@ -75,6 +75,7 @@ def _safe_transport_diagnostics(gate: GoldenWebConfigGate) -> dict:
         "status_code",
         "accepted",
         "error",
+        "detail",
     )
     observation_items = gate.runtime.get("sanitized_unknown_observation_diagnostics") or ()
     observation = []

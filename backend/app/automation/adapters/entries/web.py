@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 import time
 from dataclasses import dataclass, field
 from typing import Any, Mapping, Protocol, runtime_checkable
@@ -26,6 +27,16 @@ from app.infrastructure.transport.http import (
 
 _UNKNOWN_OBSERVE_BACKOFF_SECONDS = (0.0, 1.0, 2.0, 4.0)
 _UNKNOWN_OBSERVE_ATTEMPT_TIMEOUT_SECONDS = 20.0
+_SAFE_OBSERVATION_ERROR_CODE = re.compile(r"^[A-Z0-9_:-]{1,96}$")
+
+
+def _safe_observation_error_detail(exc: Exception) -> str | None:
+    if not isinstance(exc, LegacyLuciAuthError):
+        return None
+    value = str(exc).strip()
+    return value if _SAFE_OBSERVATION_ERROR_CODE.fullmatch(value) else None
+
+
 _UNKNOWN_OBSERVE_RETRYABLE = (
     LegacyLuciAuthError,
     httpx.TransportError,
@@ -246,6 +257,7 @@ class WebEntryAdapter:
                     "status_code": None,
                     "accepted": False,
                     "error": type(exc).__name__,
+                    "detail": _safe_observation_error_detail(exc),
                 })
                 return None, tuple(diagnostics)
             diagnostics.append({
@@ -294,6 +306,7 @@ class WebEntryAdapter:
                     "status_code": None,
                     "accepted": False,
                     "error": type(exc).__name__,
+                    "detail": _safe_observation_error_detail(exc),
                 })
                 if callable(invalidate):
                     invalidate()

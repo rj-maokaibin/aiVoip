@@ -173,7 +173,8 @@ def test_live_summary_transport_diagnostics_are_allowlisted_only() -> None:
                 "elapsed_ms": 20001.0,
                 "status_code": None,
                 "accepted": False,
-                "error": "TimeoutError",
+                "error": "LegacyLuciAuthError",
+                "detail": "LEGACY_LUCI_AUTH_PROTOCOL_REJECTED",
                 "cookie": "must-not-escape",
             }],
         }
@@ -197,7 +198,8 @@ def test_live_summary_transport_diagnostics_are_allowlisted_only() -> None:
             "elapsed_ms": 20001.0,
             "status_code": None,
             "accepted": False,
-            "error": "TimeoutError",
+            "error": "LegacyLuciAuthError",
+            "detail": "LEGACY_LUCI_AUTH_PROTOCOL_REJECTED",
         }],
     }
     assert "request" not in diagnostics["mutation"][0]
@@ -220,3 +222,15 @@ def test_unknown_observation_diagnostics_are_bounded_and_non_mutating() -> None:
     assert '"error": type(exc).__name__' in source
     assert "time.monotonic" in source
     assert "configure_voip_user_info" not in source
+
+
+def test_observation_auth_detail_is_strictly_allowlisted() -> None:
+    from app.automation.adapters.entries.web import _safe_observation_error_detail
+    from app.automation.adapters.web_auth.legacy_luci import LegacyLuciAuthError
+
+    assert _safe_observation_error_detail(
+        LegacyLuciAuthError("LEGACY_LUCI_AUTH_PROTOCOL_REJECTED")
+    ) == "LEGACY_LUCI_AUTH_PROTOCOL_REJECTED"
+    assert _safe_observation_error_detail(
+        LegacyLuciAuthError("bad value with spaces password=secret")
+    ) is None
