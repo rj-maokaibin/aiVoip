@@ -59,6 +59,8 @@ def test_observed_unknown_gate_never_retries_web_mutation() -> None:
     assert "_observe_unknown_target" in configure_source
     assert "observed_unknown_target" in observe_source
     assert "WEB_READ_ACTION" in observe_source
+    assert "asyncio.wait_for" in observe_source
+    assert "_UNKNOWN_TARGET_OBSERVE_ATTEMPT_TIMEOUT_SECONDS" in observe_source
     assert "configure_voip_bundle" not in observe_source
 
 
@@ -67,6 +69,8 @@ def test_unknown_readback_forces_fresh_web_session_without_retrying_mutation() -
 
     assert "invalidate" in source
     assert "_request_operation(readback_op" in source
+    assert "asyncio.wait_for" in source
+    assert "_UNKNOWN_OBSERVE_ATTEMPT_TIMEOUT_SECONDS" in source
     assert "configure_voip_bundle" not in source
 
 

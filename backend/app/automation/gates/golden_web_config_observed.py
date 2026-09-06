@@ -16,7 +16,8 @@ from app.automation.gates.golden_web_config import (
 )
 from app.automation.orchestrator import RuntimeBlocked
 
-_UNKNOWN_TARGET_OBSERVE_BACKOFF_SECONDS = (1.0, 1.0, 2.0, 2.0, 4.0)
+_UNKNOWN_TARGET_OBSERVE_BACKOFF_SECONDS = (2.0, 5.0)
+_UNKNOWN_TARGET_OBSERVE_ATTEMPT_TIMEOUT_SECONDS = 8.0
 _UNKNOWN_TARGET_OBSERVE_RETRYABLE = (
     LegacyLuciAuthError,
     httpx.TransportError,
@@ -76,14 +77,18 @@ class ObservedGoldenWebConfigGate(GoldenWebConfigGate):
         if account is not None:
             return account
 
-        # Save can return transport UNKNOWN while the DUT is still committing
-        # the configuration. Poll only the read action for a short bounded
-        # window. Authentication/transport failures are observations too and
-        # never authorize another configure call.
+        # The adapter already owns the first bounded fresh-session observation.
+        # Keep only a very small outer read-only grace window for a DUT that is
+        # still committing after that observation. Each call has its own hard
+        # wall-clock budget so normal read/auth retry policies cannot multiply
+        # into several minutes. Mutation is never reissued here.
         for delay in _UNKNOWN_TARGET_OBSERVE_BACKOFF_SECONDS:
             await asyncio.sleep(delay)
             try:
-                readback = await self.web.execute(WEB_READ_ACTION, {}, context)
+                readback = await asyncio.wait_for(
+                    self.web.execute(WEB_READ_ACTION, {}, context),
+                    timeout=_UNKNOWN_TARGET_OBSERVE_ATTEMPT_TIMEOUT_SECONDS,
+                )
             except _UNKNOWN_TARGET_OBSERVE_RETRYABLE:
                 continue
             if not readback.accepted:

@@ -23,7 +23,8 @@ from app.infrastructure.transport.http import (
     mask_http_secrets,
 )
 
-_UNKNOWN_OBSERVE_BACKOFF_SECONDS = (0.0, 1.0, 2.0, 4.0, 8.0)
+_UNKNOWN_OBSERVE_BACKOFF_SECONDS = (0.0, 1.0, 2.0, 4.0)
+_UNKNOWN_OBSERVE_ATTEMPT_TIMEOUT_SECONDS = 8.0
 _UNKNOWN_OBSERVE_RETRYABLE = (
     LegacyLuciAuthError,
     httpx.TransportError,
@@ -237,21 +238,28 @@ class WebEntryAdapter:
         if callable(invalidate):
             invalidate()
 
+        async def observe_once() -> EntryResult:
+            await ensure_session(force=True)
+            return self._to_result(
+                await self._request_operation(readback_op, args),
+                readback_op,
+            )
+
         # A transport-UNKNOWN Save can temporarily invalidate LuCI/auth while
         # the DUT applies configuration. The mutation itself is NEVER retried.
         # Only authentication plus the profile-bound read-only observation may
-        # retry, with a finite backoff window. A still-unavailable WEB session
-        # degrades to UNKNOWN instead of escaping as a runtime exception, so the
-        # orchestrator can continue mandatory cleanup/reverse verification.
+        # retry. Each observation attempt has an explicit wall-clock budget so
+        # nested auth/HTTP retry policies cannot turn a bounded observe window
+        # into minutes of runner occupancy. A still-unavailable WEB session
+        # degrades to UNKNOWN so mandatory cleanup/reverse verification proceeds.
         last_result: EntryResult | None = None
         for delay in _UNKNOWN_OBSERVE_BACKOFF_SECONDS:
             if delay:
                 await asyncio.sleep(delay)
             try:
-                await ensure_session(force=True)
-                last_result = self._to_result(
-                    await self._request_operation(readback_op, args),
-                    readback_op,
+                last_result = await asyncio.wait_for(
+                    observe_once(),
+                    timeout=_UNKNOWN_OBSERVE_ATTEMPT_TIMEOUT_SECONDS,
                 )
             except _UNKNOWN_OBSERVE_RETRYABLE:
                 if callable(invalidate):
