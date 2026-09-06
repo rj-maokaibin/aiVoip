@@ -12,17 +12,17 @@ jobs:
     runs-on: [self-hosted, linux, x64, voip-controlled-linux]
     timeout-minutes: 10
     env:
-      EXPECTED_HEAD: da2af31dd51508efde53485055ff2b0aae018e47
+      EXPECTED_HEAD: f2217e395f71be9fec857cf0e6a9e0faa0b11664
       TARGET_BRANCH: feat/generic-voip-automation-v1-pr-d-web-golden
-      STAGE_BRANCH: stage-consolidated-pr151-fix1-20260906
-      PATCH_PATH: /tmp/consolidated-fix1.patch
-      PATCH_SHA256: 3d2c886d41810affd696375b0cd28afdf81f9a2c399c99414d048f67b8e78a65
+      STAGE_BRANCH: stage-consolidated-pr151-fix2-20260906
+      PATCH_PATH: /tmp/consolidated-fix2.patch
+      PATCH_SHA256: d60c8e12afbabcc0f5df976ccb2f27225ce8381d57d56c445cdfd58d5ba565f1
     steps:
       - name: Checkout exact target branch
         uses: actions/checkout@v4
         with:
           ref: ${{ env.TARGET_BRANCH }}
-          fetch-depth: 0
+          fetch-depth: 1
       - name: Verify exact head and patch identity
         shell: bash
         run: |
