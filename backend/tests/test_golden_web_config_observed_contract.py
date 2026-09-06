@@ -49,19 +49,23 @@ def test_unknown_readback_does_not_guess_success_from_original_or_partial_identi
 
 
 def test_observed_unknown_gate_never_retries_web_mutation() -> None:
-    source = inspect.getsource(ObservedGoldenWebConfigGate._configure)
+    configure_source = inspect.getsource(ObservedGoldenWebConfigGate._configure)
+    observe_source = inspect.getsource(ObservedGoldenWebConfigGate._observe_unknown_target)
 
     # There is exactly one mutation call in the handler. UNKNOWN is resolved by
-    # readback observation or remains INCONCLUSIVE; a second Save is forbidden.
-    assert source.count("configure_voip_bundle") == 1
-    assert '"retry_executed": False' in source
-    assert "observed_unknown_target" in source
+    # bounded read-only observation or remains INCONCLUSIVE; a second Save is forbidden.
+    assert configure_source.count("configure_voip_bundle") == 1
+    assert '"retry_executed": False' in configure_source
+    assert "_observe_unknown_target" in configure_source
+    assert "observed_unknown_target" in observe_source
+    assert "WEB_READ_ACTION" in observe_source
+    assert "configure_voip_bundle" not in observe_source
 
 
 def test_unknown_readback_forces_fresh_web_session_without_retrying_mutation() -> None:
     source = inspect.getsource(WebEntryAdapter._readback_after_unknown)
 
-    assert "ensure_session(force=True)" in source
+    assert "invalidate" in source
     assert "_request_operation(readback_op" in source
     assert "configure_voip_bundle" not in source
 
