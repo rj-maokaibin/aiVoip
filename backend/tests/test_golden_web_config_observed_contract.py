@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import inspect
+from pathlib import Path
 
 from app.automation.adapters.entries.web import (
     WebEntryAdapter,
@@ -143,7 +144,14 @@ def test_unknown_observation_budgets_do_not_cancel_before_one_http_read_timeout(
 
 
 def test_live_summary_transport_diagnostics_are_allowlisted_only() -> None:
-    from tools.run_golden_web_config import _safe_transport_diagnostics
+    import importlib.util
+
+    runner_path = Path(__file__).resolve().parents[2] / "tools" / "run_golden_web_config.py"
+    spec = importlib.util.spec_from_file_location("golden_web_runner_contract", runner_path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    safe_transport_diagnostics = module._safe_transport_diagnostics
 
     class Gate:
         runtime = {
@@ -161,7 +169,7 @@ def test_live_summary_transport_diagnostics_are_allowlisted_only() -> None:
             "unknown_initial_readback_available": False,
         }
 
-    diagnostics = _safe_transport_diagnostics(Gate())
+    diagnostics = safe_transport_diagnostics(Gate())
 
     assert diagnostics == {
         "mutation": [{
