@@ -135,8 +135,8 @@ def test_observed_gate_polls_read_only_and_has_one_configure_call() -> None:
     configure_source = inspect.getsource(ObservedGoldenWebConfigGate._configure)
     observe_source = inspect.getsource(ObservedGoldenWebConfigGate._observe_unknown_target)
 
-    assert configure_source.count("configure_voip_bundle") == 1
+    assert configure_source.count("configure_voip_user_info") == 1
     assert '"retry_executed": False' in configure_source
-    assert "configure_voip_bundle" not in observe_source
+    assert "configure_voip_user_info" not in observe_source
     assert "WEB_READ_ACTION" in observe_source
     assert "self.web.execute" in observe_source

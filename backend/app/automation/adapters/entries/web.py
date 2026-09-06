@@ -319,5 +319,16 @@ class WebEntryAdapter:
     ) -> EntryResult:
         return await self.execute("voip.account.configure", {"bundle": dict(bundle)}, ctx)
 
+    async def configure_voip_user_info(
+        self,
+        value: Any,
+        ctx: Any = None,
+    ) -> EntryResult:
+        return await self.execute(
+            "voip.account.configure_user_info",
+            {"bundle": {"voipUserInfo": value}},
+            ctx,
+        )
+
     async def read_voip_account(self, line: int, ctx: Any = None) -> EntryResult:
         return await self.execute("voip.account.read", {"line": line}, ctx)

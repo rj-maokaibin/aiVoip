@@ -83,7 +83,9 @@ class ObservedGoldenWebConfigGate(GoldenWebConfigGate):
     No mutation retry is performed here. If the transport result is UNKNOWN,
     only bounded read-only observations can resolve it. A proven target readback
     is sufficient to continue to SIP registration; any other observation remains
-    INCONCLUSIVE and cleanup runs from the original five-module snapshot.
+    INCONCLUSIVE and cleanup restores only the mutated ``voipUserInfo`` module
+    from the original five-module snapshot; reverse verification still checks
+    the complete five-module snapshot for unintended drift.
     """
 
     async def _observe_unknown_target(
@@ -153,11 +155,23 @@ class ObservedGoldenWebConfigGate(GoldenWebConfigGate):
             current_bundle = snapshot_writable_bundle(current)
         except RuntimeBlocked:
             current_bundle = None
-        if current_bundle == snapshot:
-            return {"restore_required": False, "already_restored": True}
+        snapshot_user_info = snapshot.get("voipUserInfo")
+        if snapshot_user_info is None:
+            raise RuntimeError("WEB_GOLDEN_VOIP_USER_SNAPSHOT_MISSING")
+        current_user_info = (
+            current_bundle.get("voipUserInfo")
+            if isinstance(current_bundle, Mapping)
+            else None
+        )
+        if current_user_info == snapshot_user_info:
+            return {
+                "restore_required": False,
+                "target_module_already_restored": True,
+                "target_module": "voipUserInfo",
+            }
 
         self._validate_mutation_authority()
-        restored = await self.web.configure_voip_bundle(snapshot)
+        restored = await self.web.configure_voip_user_info(snapshot_user_info)
         if restored.unknown_result:
             # Never retry an UNKNOWN cleanup mutation. Observe only.
             observed = await self._cleanup_read()
@@ -165,16 +179,24 @@ class ObservedGoldenWebConfigGate(GoldenWebConfigGate):
                 actual = snapshot_writable_bundle(observed)
             except RuntimeBlocked:
                 actual = None
-            if actual == snapshot:
+            actual_user_info = (
+                actual.get("voipUserInfo") if isinstance(actual, Mapping) else None
+            )
+            if actual_user_info == snapshot_user_info:
                 return {
                     "restore_required": True,
+                    "target_module": "voipUserInfo",
                     "web_restore_result_unknown": True,
                     "web_restore_effect_observed": True,
                 }
             raise RuntimeError("WEB_GOLDEN_RESTORE_RESULT_UNKNOWN")
         if not restored.accepted:
             raise RuntimeError(f"WEB_GOLDEN_RESTORE_REJECTED:{restored.error}")
-        return {"restore_required": True, "web_restore_accepted": True}
+        return {
+            "restore_required": True,
+            "target_module": "voipUserInfo",
+            "web_restore_accepted": True,
+        }
 
     async def _restore_verify(self):
         snapshot = self.runtime.get("snapshot")
@@ -231,8 +253,12 @@ class ObservedGoldenWebConfigGate(GoldenWebConfigGate):
         if not isinstance(probe, Mapping):
             raise RuntimeError("WEB_GOLDEN_PROBE_NOT_PREPARED")
 
+        user_info = probe.get("voipUserInfo")
+        if user_info is None:
+            raise RuntimeError("WEB_GOLDEN_VOIP_USER_PROBE_MISSING")
+
         self._validate_mutation_authority()
-        mutation = await self.web.configure_voip_bundle(probe, context)
+        mutation = await self.web.configure_voip_user_info(user_info, context)
         evidence: list[ActionEvidence] = []
 
         if mutation.unknown_result:

@@ -56,14 +56,14 @@ def test_observed_unknown_gate_never_retries_web_mutation() -> None:
 
     # There is exactly one mutation call in the handler. UNKNOWN is resolved by
     # bounded read-only observation or remains INCONCLUSIVE; a second Save is forbidden.
-    assert configure_source.count("configure_voip_bundle") == 1
+    assert configure_source.count("configure_voip_user_info") == 1
     assert '"retry_executed": False' in configure_source
     assert "_observe_unknown_target" in configure_source
     assert "observed_unknown_target" in observe_source
     assert "WEB_READ_ACTION" in observe_source
     assert "asyncio.wait_for" in observe_source
     assert "_UNKNOWN_TARGET_OBSERVE_ATTEMPT_TIMEOUT_SECONDS" in observe_source
-    assert "configure_voip_bundle" not in observe_source
+    assert "configure_voip_user_info" not in observe_source
 
 
 def test_unknown_readback_forces_fresh_web_session_without_retrying_mutation() -> None:
@@ -73,7 +73,7 @@ def test_unknown_readback_forces_fresh_web_session_without_retrying_mutation() -
     assert "_request_operation(readback_op" in source
     assert "asyncio.wait_for" in source
     assert "_UNKNOWN_OBSERVE_ATTEMPT_TIMEOUT_SECONDS" in source
-    assert "configure_voip_bundle" not in source
+    assert "configure_voip_user_info" not in source
 
 
 def test_observed_unknown_gate_continues_registration_only_after_target_observation() -> None:
@@ -92,11 +92,11 @@ def test_cleanup_restore_unknown_is_observed_without_mutation_retry() -> None:
 
     # Cleanup may Save the original snapshot at most once. If that Save is
     # UNKNOWN, only bounded read-only observation is allowed afterwards.
-    assert restore_source.count("configure_voip_bundle") == 1
+    assert restore_source.count("configure_voip_user_info") == 1
     assert "if restored.unknown_result" in restore_source
     assert "_cleanup_read" in restore_source
     assert "web_restore_effect_observed" in restore_source
-    assert "configure_voip_bundle" not in cleanup_read_source
+    assert "configure_voip_user_info" not in cleanup_read_source
     assert "WEB_READ_ACTION" in cleanup_read_source
     assert "asyncio.wait_for" in cleanup_read_source
     assert "invalidate" in cleanup_read_source
