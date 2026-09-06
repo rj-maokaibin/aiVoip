@@ -1,0 +1,49 @@
+name: Temp Stage Consolidated PR151
+
+on:
+  push:
+    branches: [tmp-ignore]
+
+permissions:
+  contents: write
+
+jobs:
+  stage:
+    runs-on: [self-hosted, linux, x64, voip-controlled-linux]
+    timeout-minutes: 10
+    env:
+      EXPECTED_HEAD: 5f93ffdb01086ae18e64560f23d934c1b5ecec7d
+      TARGET_BRANCH: feat/generic-voip-automation-v1-pr-d-web-golden
+      STAGE_BRANCH: stage-consolidated-pr151-20260906
+      PATCH_PATH: /tmp/consolidated.patch
+      PATCH_SHA256: 48881fdf9d6a449e4fc89baf76fef58f21ca6b65d0ceb3d8e84e18f47c55f950
+    steps:
+      - name: Checkout exact target branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TARGET_BRANCH }}
+          fetch-depth: 0
+      - name: Verify exact head and patch identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD"
+          test -r "$PATCH_PATH"
+          test "$(sha256sum "$PATCH_PATH" | awk '{print $1}')" = "$PATCH_SHA256"
+          echo "STAGE_INPUT=PASS head=$EXPECTED_HEAD patch_sha256=$PATCH_SHA256"
+      - name: Apply validated consolidation patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'rj-maokaibin'
+          git config user.email 'mkv20241111@gmail.com'
+          git am "$PATCH_PATH"
+          test "$(git rev-parse HEAD^)" = "$EXPECTED_HEAD"
+          git diff --check HEAD^ HEAD
+          echo "STAGED_COMMIT_SHA=$(git rev-parse HEAD)"
+      - name: Push staging object without force
+        shell: bash
+        run: |
+          set -euo pipefail
+          git push origin "HEAD:refs/heads/$STAGE_BRANCH"
+          echo "STAGE_PUSH=PASS branch=$STAGE_BRANCH sha=$(git rev-parse HEAD)"
