@@ -12,11 +12,11 @@ jobs:
     runs-on: [self-hosted, linux, x64, voip-controlled-linux]
     timeout-minutes: 10
     env:
-      EXPECTED_HEAD: 5f93ffdb01086ae18e64560f23d934c1b5ecec7d
+      EXPECTED_HEAD: da2af31dd51508efde53485055ff2b0aae018e47
       TARGET_BRANCH: feat/generic-voip-automation-v1-pr-d-web-golden
-      STAGE_BRANCH: stage-consolidated-pr151-20260906
-      PATCH_PATH: /tmp/consolidated.patch
-      PATCH_SHA256: 48881fdf9d6a449e4fc89baf76fef58f21ca6b65d0ceb3d8e84e18f47c55f950
+      STAGE_BRANCH: stage-consolidated-pr151-fix1-20260906
+      PATCH_PATH: /tmp/consolidated-fix1.patch
+      PATCH_SHA256: 3d2c886d41810affd696375b0cd28afdf81f9a2c399c99414d048f67b8e78a65
     steps:
       - name: Checkout exact target branch
         uses: actions/checkout@v4
