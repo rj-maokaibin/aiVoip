@@ -189,6 +189,7 @@ class PersistedCleanupCoordinator:
             verified = set()
 
         executions: list[CleanupExecution] = []
+        failures: list[str] = []
         for ordinal, step in enumerate(self.steps, start=1):
             if step.name in verified:
                 executions.append(CleanupExecution(
@@ -213,9 +214,14 @@ class PersistedCleanupCoordinator:
                     status="FAILED",
                     details=details,
                 )
-                raise AutomationCleanupError(
+                failures.append(
                     f"CLEANUP_STEP_EXCEPTION:{step.name}:{type(exc).__name__}"
-                ) from exc
+                )
+                executions.append(CleanupExecution(step.name, False, details))
+                # Cleanup is fail-safe, not fail-fast. In particular an earlier
+                # restore/readback failure must never prevent the final
+                # DeviceAuthority release attempt. Ordering is still preserved.
+                continue
             if not ok:
                 self._record_safe(
                     run_id,
@@ -224,9 +230,9 @@ class PersistedCleanupCoordinator:
                     status="FAILED",
                     details=details,
                 )
-                raise AutomationCleanupError(
-                    f"CLEANUP_REVERSE_VERIFY_FAILED:{step.name}"
-                )
+                failures.append(f"CLEANUP_REVERSE_VERIFY_FAILED:{step.name}")
+                executions.append(CleanupExecution(step.name, False, details))
+                continue
             self._record_safe(
                 run_id,
                 ordinal=ordinal,
@@ -236,4 +242,6 @@ class PersistedCleanupCoordinator:
             )
             verified.add(step.name)
             executions.append(CleanupExecution(step.name, True, details))
+        if failures:
+            raise AutomationCleanupError("|".join(failures))
         return tuple(executions)

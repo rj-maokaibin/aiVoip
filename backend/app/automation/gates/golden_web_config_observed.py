@@ -13,6 +13,7 @@ from app.automation.gates.golden_web_config import (
     WEB_READ_ACTION,
     GoldenWebConfigGate,
     observed_account,
+    snapshot_writable_bundle,
 )
 from app.automation.orchestrator import RuntimeBlocked
 
@@ -24,6 +25,9 @@ _UNKNOWN_TARGET_OBSERVE_RETRYABLE = (
     asyncio.TimeoutError,
     TimeoutError,
 )
+
+_CLEANUP_WEB_READ_BACKOFF_SECONDS = (0.0, 1.0, 2.0, 4.0)
+_CLEANUP_WEB_READ_ATTEMPT_TIMEOUT_SECONDS = 8.0
 
 
 def utcnow() -> datetime:
@@ -100,6 +104,74 @@ class ObservedGoldenWebConfigGate(GoldenWebConfigGate):
             if account is not None:
                 return account
         return None
+
+    async def _cleanup_read(self, context=None) -> EntryResult:
+        """Bound cleanup observation time and recover only local WEB session state."""
+
+        invalidate = getattr(self.web.session_manager, "invalidate", None)
+        last_error: Exception | None = None
+        for delay in _CLEANUP_WEB_READ_BACKOFF_SECONDS:
+            if delay:
+                await asyncio.sleep(delay)
+            if callable(invalidate):
+                invalidate()
+            try:
+                result = await asyncio.wait_for(
+                    self.web.execute(WEB_READ_ACTION, {}, context),
+                    timeout=_CLEANUP_WEB_READ_ATTEMPT_TIMEOUT_SECONDS,
+                )
+            except _UNKNOWN_TARGET_OBSERVE_RETRYABLE as exc:
+                last_error = exc
+                continue
+            if result.accepted:
+                return result
+        raise RuntimeError("WEB_GOLDEN_CLEANUP_READ_UNAVAILABLE") from last_error
+
+    async def _restore_action(self) -> dict[str, Any]:
+        snapshot = self.runtime.get("snapshot")
+        if not isinstance(snapshot, Mapping):
+            return {"restore_required": False, "snapshot_not_captured": True}
+        current = await self._cleanup_read()
+        try:
+            current_bundle = snapshot_writable_bundle(current)
+        except RuntimeBlocked:
+            current_bundle = None
+        if current_bundle == snapshot:
+            return {"restore_required": False, "already_restored": True}
+
+        self._validate_mutation_authority()
+        restored = await self.web.configure_voip_bundle(snapshot)
+        if restored.unknown_result:
+            # Never retry an UNKNOWN cleanup mutation. Observe only.
+            observed = await self._cleanup_read()
+            try:
+                actual = snapshot_writable_bundle(observed)
+            except RuntimeBlocked:
+                actual = None
+            if actual == snapshot:
+                return {
+                    "restore_required": True,
+                    "web_restore_result_unknown": True,
+                    "web_restore_effect_observed": True,
+                }
+            raise RuntimeError("WEB_GOLDEN_RESTORE_RESULT_UNKNOWN")
+        if not restored.accepted:
+            raise RuntimeError(f"WEB_GOLDEN_RESTORE_REJECTED:{restored.error}")
+        return {"restore_required": True, "web_restore_accepted": True}
+
+    async def _restore_verify(self):
+        snapshot = self.runtime.get("snapshot")
+        if not isinstance(snapshot, Mapping):
+            return True, {"mutation_not_started": True}
+        current = await self._cleanup_read()
+        try:
+            actual = snapshot_writable_bundle(current)
+        except RuntimeBlocked as exc:
+            return False, {"reason": str(exc)}
+        return actual == snapshot, {
+            "web_reverse_verify": actual == snapshot,
+            "writable_modules": list(self.runtime.get("snapshot", {}).keys()),
+        }
 
     async def _finish_from_account(
         self,

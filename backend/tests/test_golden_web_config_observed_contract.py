@@ -82,3 +82,18 @@ def test_observed_unknown_gate_continues_registration_only_after_target_observat
     assert "unknown_result=True" in source
     assert "wait_registered" in finish_source
     assert "mutation_effect_observed" in finish_source
+
+def test_cleanup_restore_unknown_is_observed_without_mutation_retry() -> None:
+    restore_source = inspect.getsource(ObservedGoldenWebConfigGate._restore_action)
+    cleanup_read_source = inspect.getsource(ObservedGoldenWebConfigGate._cleanup_read)
+
+    # Cleanup may Save the original snapshot at most once. If that Save is
+    # UNKNOWN, only bounded read-only observation is allowed afterwards.
+    assert restore_source.count("configure_voip_bundle") == 1
+    assert "if restored.unknown_result" in restore_source
+    assert "_cleanup_read" in restore_source
+    assert "web_restore_effect_observed" in restore_source
+    assert "configure_voip_bundle" not in cleanup_read_source
+    assert "WEB_READ_ACTION" in cleanup_read_source
+    assert "asyncio.wait_for" in cleanup_read_source
+    assert "invalidate" in cleanup_read_source
