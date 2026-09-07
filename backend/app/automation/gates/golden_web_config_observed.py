@@ -12,10 +12,12 @@ from app.automation.adapters.web_auth.legacy_luci import LegacyLuciAuthError
 from app.automation.gates.golden_web_config import (
     WEB_READ_ACTION,
     GoldenWebConfigGate,
+    config_payload_from_web_module,
     observed_account,
     snapshot_writable_bundle,
 )
 from app.automation.orchestrator import RuntimeBlocked
+from app.infrastructure.config_framework.executor import ConfigFrameworkExecutor
 from app.infrastructure.transport.http import HttpEvidence
 
 _UNKNOWN_TARGET_OBSERVE_BACKOFF_SECONDS = (2.0, 5.0)
@@ -123,6 +125,40 @@ class ObservedGoldenWebConfigGate(GoldenWebConfigGate):
             if account is not None:
                 return account
         return None
+
+    async def _observe_unknown_target_via_config(self) -> dict[str, Any] | None:
+        """Prove an UNKNOWN WEB Save through the existing SSH read-only config path.
+
+        WEB remains the only mutation entry.  This path performs only
+        ``ConfigFrameworkExecutor.get`` and accepts the target only when the
+        returned ``voipUserInfo`` exactly matches the profile-bound probe.
+        """
+
+        probe = self.runtime.get("probe")
+        if not isinstance(probe, Mapping):
+            return None
+        probe_user_info = probe.get("voipUserInfo")
+        if probe_user_info is None:
+            return None
+        try:
+            expected = config_payload_from_web_module(probe_user_info)
+            current = await self.config.get("voipUserInfo")
+        except Exception:
+            return None
+        if not ConfigFrameworkExecutor.payload_matches_readback(expected, current):
+            return None
+        rows = expected.get("data")
+        if not isinstance(rows, list) or not rows or not isinstance(rows[0], Mapping):
+            return None
+        row = rows[0]
+        target = str(self.target_number)
+        if str(row.get("number")) != target or str(row.get("disName")) != target:
+            return None
+        return {
+            "number": row.get("number"),
+            "disName": row.get("disName"),
+            "authId": row.get("authId"),
+        }
 
     async def _cleanup_read(self, context=None) -> EntryResult:
         """Bound cleanup observation time and recover only local WEB session state."""
@@ -285,6 +321,11 @@ class ObservedGoldenWebConfigGate(GoldenWebConfigGate):
                 if isinstance(item, Mapping)
             ]
             account = await self._observe_unknown_target(context, mutation.readback)
+            observed_via = "web"
+            if account is None:
+                account = await self._observe_unknown_target_via_config()
+                if account is not None:
+                    observed_via = "ssh_config_read_only"
             if account is None:
                 evidence.append(
                     ActionEvidence(
@@ -322,6 +363,7 @@ class ObservedGoldenWebConfigGate(GoldenWebConfigGate):
                         "mutation_result_unknown": True,
                         "mutation_effect_observed": True,
                         "readback_accepted": True,
+                        "observation_transport": observed_via,
                         "transport_evidence": transport_evidence,
                     },
                     evidence_refs=("web-golden://unknown-target-observed",),

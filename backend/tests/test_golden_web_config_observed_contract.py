@@ -234,3 +234,16 @@ def test_observation_auth_detail_is_strictly_allowlisted() -> None:
     assert _safe_observation_error_detail(
         LegacyLuciAuthError("bad value with spaces password=secret")
     ) is None
+
+
+def test_unknown_gate_uses_ssh_config_only_as_read_only_effect_observation() -> None:
+    source = inspect.getsource(ObservedGoldenWebConfigGate._observe_unknown_target_via_config)
+    configure_source = inspect.getsource(ObservedGoldenWebConfigGate._configure)
+
+    assert 'self.config.get("voipUserInfo")' in source
+    assert "payload_matches_readback" in source
+    assert "self.config.set" not in source
+    assert "configure_voip_user_info" not in source
+    assert "_observe_unknown_target_via_config" in configure_source
+    assert 'observed_via = "ssh_config_read_only"' in configure_source
+    assert configure_source.count("configure_voip_user_info") == 1
