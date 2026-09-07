@@ -271,6 +271,45 @@ class WebEntryAdapter:
             return result, tuple(diagnostics)
 
         invalidate = getattr(self.session_manager, "invalidate", None)
+
+        # First preserve and reuse the session that issued the UNKNOWN mutation.
+        # A dropped mutation response does not itself prove that LuCI invalidated
+        # the session. Reusing it for one read-only observation avoids depending
+        # on a freshly rendered login key while the WEB service is still settling.
+        async def observe_preserved_session_once() -> EntryResult:
+            return self._to_result(
+                await self._request_operation(readback_op, args),
+                readback_op,
+            )
+
+        started = time.monotonic()
+        try:
+            preserved = await asyncio.wait_for(
+                observe_preserved_session_once(),
+                timeout=_UNKNOWN_OBSERVE_ATTEMPT_TIMEOUT_SECONDS,
+            )
+        except _UNKNOWN_OBSERVE_RETRYABLE as exc:
+            diagnostics.append({
+                "attempt": 0,
+                "phase": "preserved_session_readback",
+                "elapsed_ms": round((time.monotonic() - started) * 1000.0, 3),
+                "status_code": None,
+                "accepted": False,
+                "error": type(exc).__name__,
+                "detail": _safe_observation_error_detail(exc),
+            })
+        else:
+            diagnostics.append({
+                "attempt": 0,
+                "phase": "preserved_session_readback",
+                "elapsed_ms": round((time.monotonic() - started) * 1000.0, 3),
+                "status_code": preserved.status_code,
+                "accepted": preserved.accepted,
+                "error": preserved.error,
+            })
+            if preserved.accepted:
+                return preserved, tuple(diagnostics)
+
         if callable(invalidate):
             invalidate()
 

@@ -64,8 +64,9 @@ def _response(body: dict, request_id: str = "read-1") -> HttpResponse:
 
 
 class RecoveringSession:
-    def __init__(self, *, auth_failures: int):
+    def __init__(self, *, auth_failures: int, preserved_read_fails: bool = False):
         self.auth_failures = auth_failures
+        self.preserved_read_fails = preserved_read_fails
         self.auth_calls = 0
         self.invalidations = 0
         self.requests = []
@@ -98,10 +99,12 @@ class RecoveringSession:
                 evidence=evidence,
                 cause=TimeoutError("unknown"),
             )
+        if self.preserved_read_fails and self.auth_calls == 0:
+            raise LegacyLuciAuthError("APF3260M_RENDERED_AUTH_KEY_MISSING")
         return _response({"number": "7900", "disName": "7900"})
 
 
-def test_unknown_save_retries_only_reauth_and_readback(monkeypatch) -> None:
+def test_unknown_save_reuses_preserved_session_before_reauth(monkeypatch) -> None:
     monkeypatch.setattr(web_module, "_UNKNOWN_OBSERVE_BACKOFF_SECONDS", (0.0, 0.0, 0.0))
     session = RecoveringSession(auth_failures=2)
     adapter = WebEntryAdapter(profile=_profile(), session_manager=session)  # type: ignore[arg-type]
@@ -110,15 +113,16 @@ def test_unknown_save_retries_only_reauth_and_readback(monkeypatch) -> None:
 
     assert result.unknown_result is True
     assert result.readback == {"number": "7900", "disName": "7900"}
-    assert session.auth_calls == 3
+    assert session.auth_calls == 0
     assert sum(1 for request in session.requests if request.mutation) == 1
     assert sum(1 for request in session.requests if not request.mutation) == 1
-    assert session.invalidations >= 3
+    assert session.invalidations == 0
+    assert result.observation_diagnostics[0]["phase"] == "preserved_session_readback"
 
 
 def test_unknown_save_auth_outage_degrades_to_unknown_without_second_mutation(monkeypatch) -> None:
     monkeypatch.setattr(web_module, "_UNKNOWN_OBSERVE_BACKOFF_SECONDS", (0.0, 0.0, 0.0))
-    session = RecoveringSession(auth_failures=99)
+    session = RecoveringSession(auth_failures=99, preserved_read_fails=True)
     adapter = WebEntryAdapter(profile=_profile(), session_manager=session)  # type: ignore[arg-type]
 
     result = run(adapter.execute("voip.account.configure", {"number": "7900"}))
@@ -128,7 +132,9 @@ def test_unknown_save_auth_outage_degrades_to_unknown_without_second_mutation(mo
     assert result.error == "HTTP_MUTATION_RESULT_UNKNOWN_OBSERVE_UNAVAILABLE"
     assert session.auth_calls == 3
     assert sum(1 for request in session.requests if request.mutation) == 1
-    assert sum(1 for request in session.requests if not request.mutation) == 0
+    assert sum(1 for request in session.requests if not request.mutation) == 1
+    assert result.observation_diagnostics[0]["phase"] == "preserved_session_readback"
+    assert result.observation_diagnostics[0]["detail"] == "APF3260M_RENDERED_AUTH_KEY_MISSING"
 
 
 def test_observed_gate_polls_read_only_and_has_one_configure_call() -> None:
