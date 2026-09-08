@@ -233,13 +233,12 @@ def cleanup(project, desired_text, network_name):
             for ip in registry_ips:
                 if ip in s:
                     remaining_conflicts.append({'network': n['name'], 'subnet': str(s), 'registry_ip': str(ip)})
-    if remaining_conflicts:
-        write_evidence({
-            'status': 'FAIL', 'reason': 'REGISTRY_DOCKER_ROUTE_CONFLICT_REMAINS',
-            'conflicts': remaining_conflicts, 'removed': removed,
-        })
-        raise SystemExit(3)
 
+    # Only this project's legacy network is ours to remove. Other Docker
+    # networks may legitimately overlap the mirror's RFC1918 address space.
+    # Their presence is evidence, not authority to mutate another stack.
+    # The fail-closed condition is whether the host route is still hijacked
+    # by a Docker bridge after removing routes that this guard created.
     deleted_routes = []
     if MARKER.exists():
         try:
@@ -251,19 +250,24 @@ def cleanup(project, desired_text, network_name):
             deleted_routes.append(item)
         MARKER.unlink(missing_ok=True)
 
+    hijacked_routes = []
     for ip in registry_ips:
         route = route_get(str(ip))
         if 'dev br-' in route or 'dev docker0' in route:
-            write_evidence({
-                'status': 'FAIL', 'reason': 'REGISTRY_ROUTE_STILL_HIJACKED_AFTER_CLEANUP',
-                'registry_ip': str(ip), 'route': route,
-            })
-            raise SystemExit(3)
+            hijacked_routes.append({'registry_ip': str(ip), 'route': route})
+    if hijacked_routes:
+        write_evidence({
+            'status': 'FAIL', 'reason': 'REGISTRY_ROUTE_STILL_HIJACKED_AFTER_CLEANUP',
+            'routes': hijacked_routes, 'remaining_registry_subnet_conflicts': remaining_conflicts,
+            'removed_legacy_networks': removed, 'removed_temporary_routes': deleted_routes,
+        })
+        raise SystemExit(3)
 
     write_evidence({
         'status': 'PASS', 'phase': 'cleanup', 'project': project,
         'network_name': network_name, 'desired_subnet': str(desired),
         'removed_legacy_networks': removed, 'removed_temporary_routes': deleted_routes,
+        'remaining_registry_subnet_conflicts': remaining_conflicts,
     })
 
 
