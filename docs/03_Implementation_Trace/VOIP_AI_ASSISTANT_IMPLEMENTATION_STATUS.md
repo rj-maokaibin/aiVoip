@@ -1,10 +1,10 @@
 # VOIP AI 故障助手——实现状态与 PRD/SPEC/代码追踪（Living Document）
 
-> 文档属性：**持续维护 / Single Source of Truth（实现状态）**  
-> 首次建立日期：2026-08-28  
-> 当前审计基线分支：`master`  
-> 当前审计基线 Commit：`001851241ea28c6093e7d994715b1c40a0f07121`  
-> 当前总体状态：**Functional RC / Acceptance Closure，Production NOT READY**  
+> 文档属性：**持续维护 / Single Source of Truth（实现状态）**
+> 首次建立日期：2026-08-28
+> 当前审计基线分支：`master`
+> 当前审计基线 Commit：`c882f34959ab6cfee6010e3389ffd1aa5d11b9f6`
+> 当前总体状态：**Generic VOIP Automation Framework V1 / Production CLOSED；PBX Test Lab Infrastructure V1 DESIGN FROZEN**
 > 维护要求：本文件必须随 PRD、SPEC、核心实现、Acceptance Evidence、Golden Gate、Production Enablement 状态变化同步更新。
 
 ---
@@ -35,45 +35,24 @@
 
 ---
 
-## 2. 当前总体结论
+## 2. 当前总体结论（2026-09-09 权威刷新）
 
-截至当前基线，VOIP AI 故障助手已经从“原型/分析脚本”阶段进入**核心功能基本实现完成、Release Candidate 后期验收**阶段。
+当前 `master=c882f34959ab6cfee6010e3389ffd1aa5d11b9f6` 已完成 Generic VOIP Automation Framework V1 的真实闭环。以下结论覆盖本文后续仍保留的 2026-08 历史状态描述；历史段落用于追溯，不得再作为“当前 Release 状态”。
 
-当前可以确认：
+当前已确认：
 
-- Evidence-first 架构已建立；
-- Case / Session / Evidence Bundle 已形成主数据链；
-- DUT SSH 自动执行与采证能力已落地；
-- SIP / SDP / RTP 分析能力已基本落地；
-- PCM 采集与基础分析框架已落地；
-- Rule Engine 已建立 deterministic reason code + evidence ID 路径；
-- Report 已升级为 Evidence-driven report；
-- M6.2 自动复现 / Capture V2 已完成关键真实 DUT Gate 闭环；
-- Resource BUSY、hard timeout、cancel race、stop prompt-return 等可靠性问题已完成关键验收；
-- M7 AI Intelligence 严格功能 Acceptance 已达到 20/20 PASS；
-- DB Migration / Startup Gate 当前通过；
-- Frontend Security Gate 当前通过。
+- Golden WEB CONFIG PR Live Gate V3 最终真实 PASS；浏览器等价五模块 Save、SIP runtime、mandatory cleanup/reverse verify 均闭环。
+- PR exact-head 由 Consolidated Exact-Head Validation 统一提供 Source Manifest、Full Acceptance 与 Preliminary Authority。
+- Production Deploy 使用 accepted-head merge-tree identity、immutable source bundle 与 Exact Source Binding，当前权威 run `34243712261` SUCCESS。
+- Production runtime verification、persistent env unchanged、live container/image revision verification PASS。
+- Evidence V2 已经历 SHADOW → CANARY → DEFAULT；canonical Feishu remote read-back PASS。
+- 当前 FusionPBX/FreeSWITCH 已作为 read-only runtime observer 使用，7102 baseline 可真实 registration observation。
 
-但当前仍不能定义为 Production Ready，因为严格 Release Audit 仍显示：
+因此当前冻结 V1 范围正式定性为：
 
-```text
-GOLDEN_READY=true        (real-DUT C01 golden case VOIP-20260828-FBCF64, score 96, tier B — 2026-08-28)
-AI_PROMOTION_ELIGIBLE=false  (real GOLDEN_READY samples=1 < minimum=10; 契约未降阈值)
-WS3_ENABLEMENT_ELIGIBLE=false
-```
+> **Generic VOIP Automation Framework V1 = 100% CLOSED / Production Verified。**
 
-并且当前仍存在：
-
-- Full Backend Release Evidence Integrity blocker 已由 P0-1 revalidation 关闭（不成立，无需代码修改）；
-- Golden #00 已由 real-DUT C01 A-B-A golden case 达成 GOLDEN_READY（C06 保留为负样本）。
-
-因此当前正式定性为：
-
-> **核心平台与主要自动诊断链基本落地，已进入 RC/最终验收阶段；功能工程完成度约 90%～95%（工程估算），但 Production Release Gate（含 AI Promotion 样本门槛）尚未全部通过。**
-
-注意：90%～95% 为基于 PRD/SPEC 与当前代码覆盖的工程估算，不是官方 Release Gate。Production Ready 是二值判断，目前仍为 **NOT READY**（唯一剩余硬门槛为 AI promotion 的 real GOLDEN_READY 样本量 ≥10）。
-
----
+新的增量阶段不是 V1 遗留缺陷，而是 **PBX / FreeSWITCH Test Lab Infrastructure V1**：把 PBX 从 Managed Observer 升级为 Managed Mutable Resource，目标是动态 extension、resource lease、ESL runtime、SIPp peer 与真实 Call E2E Golden。该阶段当前为 `DESIGN FROZEN / IMPLEMENTATION READY`，尚未实现，不得提前标记 CLOSED。
 
 ## 3. 当前规格基线与工程原则
 

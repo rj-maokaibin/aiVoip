@@ -1,60 +1,46 @@
-# VOIP AI 故障助手 V1.0 — 最终交付包
+# VOIP AI 故障助手 — 当前交付与工程基线
 
-交付日期：2026-08-13
+更新日期：2026-09-09
+当前 master：`c882f34959ab6cfee6010e3389ffd1aa5d11b9f6`
 
-## 1. 本包包含什么
+## 1. 当前 Release 状态
 
-- `01_Source_Code/`：当前最新、累积完整的 V1.0 源码快照。代码基线为 Phase F3 Production Deployment Runner，包含 M0～M6.2、Web/飞书产品化基础、Production Hardening、Deployment Runner、Golden/E2E/Release Gate 等。
-- `02_Core_Documents/`：最终冻结的 PRD、总 SPEC、M6.2 SPEC、Engineering Contract、Implementation Plan。
-- 2026-08-15 后续修订：V1.1 复现采集合同保持有效；AI 群聊入口与诊断工作流新增
-  `VOIP_AI_故障助手_飞书AI诊断整体方案_V1.0.md` 和
-  `VOIP_AI_故障助手_SPEC_V1.2_AI诊断与飞书入口修订.md`。V1.2 当前为 DRAFT，不能
-  在实现与 Eval Gate 完成前视为已交付能力。
-- `03_Implementation_Trace/`：从 M0 到 F3 的实现与校准记录，用于追溯各阶段落地情况。
-- `04_Quality_and_Release/`：当前源码对应的 Phase F3 验证、Release Readiness、Field Golden、OpenAPI/Migration/Security/Deployment Gate 等机器可读证据。
-- `05_Pending_Platform/`：EC-02 真机 Platform Contract V0.1。该项按项目决策保持待定，不能视为生产就绪合同。
-- `06_Delivery_Manifest/`：文件校验和与交付清单。
+Generic VOIP Automation Framework V1 已完成真实 DUT Golden、exact-head governance、merge-commit、exact-master Production Deploy、Runtime Verify、Evidence V2 SHADOW→CANARY→DEFAULT 与 canonical Feishu remote read-back，当前冻结 V1 范围为 **100% CLOSED**。
 
-## 2. 当前代码基线
+Production Deploy authoritative run：`34243712261`，状态 SUCCESS。后续新增能力不得回写为“V1 未完成”；应作为独立增量里程碑管理。
 
-当前最终源码快照：`VOIP_AI_V1.0_FINAL_SOURCE_CODE.zip`
+## 2. 核心文档体系
 
-对应 Source Manifest：
+- 冻结基线：PRD V1.0、SPEC V1.0、Engineering Contract V1.0、Implementation Plan V1.0。
+- Reproduction 修订：PRD V1.1、SPEC V1.1。
+- AI/Feishu 修订：SPEC V1.2。
+- PBX Test Lab 修订（2026-09-09）：
+  - `VOIP_AI_故障助手_PRD_V1.2_PBX自动化测试基础设施修订.md`
+  - `VOIP_AI_故障助手_SPEC_V1.3_PBX自动化测试基础设施修订.md`
+  - `VOIP_AI_故障助手_Engineering_Contract_V1.1_PBX资源治理修订.md`
+  - `VOIP_AI_故障助手_Implementation_Plan_V1.1_PBX测试基础设施修订.md`
+  - `VOIP_AI_PBX_FusionPBX_FreeSWITCH_测试基础设施详细设计_V1.0.md`
 
-`8c4f6e503e3a9ce8d1aa28bac3ab9659b319ae789642dda22401e613a76289db`
+冻结 DOCX 保留历史基线；增量行为以同目录 Markdown 修订件覆盖冲突条款，不直接改写历史终稿。
 
-Phase F3 验证：
+## 3. 当前生产架构
 
-- Backend Tests：148 / 148 PASS
-- Static Gates：22 PASS
-- M6.2 C1 Mock Reproduction E2E：3 / 3 PASS
-- M6.2 C2 Evidence E2E：5 / 5 PASS
-- M6.2 C3 Experiment/Causal E2E：4 / 4 PASS
-- Synthetic Golden：21 / 21 PASS
-- Synthetic E2E：53 / 53 PASS
-- Baseline Regression：0 regression / 0 change
-- APF1250 Field Golden：PASS，且与当前源码绑定
+Production 由 Docker Compose 运行 PostgreSQL、Redis、MinIO、Backend、Frontend、采集/Packet/PCM/Media/Diagnosis/Reproduction Workers、Feishu Long Connection 等服务。正式 Deploy 强制 Source Manifest、Consolidated exact-head authority、merge-tree identity、Exact Source Binding、persistent env fingerprint 与 live container/image revision verification。
 
-## 3. Release 状态
+## 4. 当前自动化测试基础设施
 
-当前机器判定为：`STATIC_PASS_PRODUCTION_BLOCKED`。
+已 CLOSED：DUT WEB browser-equivalent mutation、SSH read-only cross-check、DeviceAuthority/CaptureLeaseManager、observe-before-retry、mandatory cleanup/reverse verify、FusionPBX/FreeSWITCH registration observer、Golden V3、immutable evidence、Production/Feishu verify。
 
-这表示静态合同、核心算法、Mock 自动复现、Evidence Pipeline、受控实验、Golden/E2E 和部署合同已通过，但**不能把当前包宣称为 Production Ready**。
+下一阶段：将现有 PBX Managed Observer 升级为 Managed Mutable Resource。FusionPBX 负责 Config Plane，FreeSWITCH 负责 Runtime Plane；新增 extension pool、PBX Resource Lease、source fence、ESL event observer、CallSession 与 SIPp peer。
 
-主要剩余条件：
+## 5. 使用原则
 
-1. EC-02 真机 Platform Contract 尚未完成，真实 DUT 自动复现仍被生产 Gate 阻断。
-2. 真实生产环境参数/Secrets/Auth/CORS/MinIO/飞书凭证尚未注入和验证。
-3. 当前执行环境无 Docker/Podman，因此 Docker Full-stack、真实 PostgreSQL Migration、Production Deployment Runtime 尚未执行。
-4. `frontend/package-lock.json` 尚缺，Frontend reproducible production build 尚未完成最终 Runtime 验证。
+1. 任何真实 mutation 必须有 authority/lease、readback、cleanup 与 reverse verification。
+2. UNKNOWN 禁止 blind retry，必须先 read-only observe。
+3. Raw secret 不进入 Evidence/普通日志/LLM。
+4. 测试与生产结论必须绑定 exact source/immutable evidence。
+5. PBX 自动化不得删除未证明 ownership 的资源，不得直接裸 SQL 修改 FusionPBX。
 
-## 4. 使用原则
+## 6. 当前下一阶段
 
-- 需求与行为以 `02_Core_Documents` 中的最终冻结文档为准。
-- EC-02 未确认的 DUT 命令不得由 Coding Agent 自行推断或补写。
-- 发布结论必须以 Release Gate 为准，不得用“代码已实现”替代 Production Runtime 验证。
-- Raw Evidence、规则、Analyzer/Profile、状态机、API/Schema 等必须遵守 Engineering Contract。
-
-## 5. 推荐的最终上线流程
-
-补齐 EC-02 → 配置真实生产 Secrets/Auth/MinIO/飞书 → 生成并锁定前端 lockfile → 在 Linux + Docker 环境执行 `deploy/voip-ai ... release` → 接真实 DUT 执行 Reproduction/Cleanup/Crash Recovery/Field E2E → Strict V1.0 Release Gate PASS。
+PBX / FreeSWITCH Test Lab Infrastructure V1 当前状态：**DESIGN FROZEN / IMPLEMENTATION READY**。实施顺序为 Health → Config Provider → Resource Pool/Lease → FreeSWITCH ESL → SIPp/CallSession → G-PBX-001 → G-PBX-002 → G-CALL-001 → exact-head/production-like closure。
