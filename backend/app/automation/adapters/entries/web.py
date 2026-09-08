@@ -33,10 +33,8 @@ _VOIP_USER_INFO_WRITE_FIELDS = (
 )
 _VOICE_VLAN_WRITE_FIELDS = ("enable", "vlanid", "aging", "cos")
 _VOIP_SERV_INFO_WRITE_FIELDS = ("hdl", "svrName", "svrPort", "svrNameBak", "svrPortBak")
-_VOIP_FXS_WRITE_FIELDS = (
-    "hdl", "inVol", "outVol", "dailTimeout", "hotlineActive", "hotlineTimeout", "hotlineNum",
-)
-_VOIP_ADVANCED_WRITE_FIELDS = ("sipTP", "dtmfMode", "dtmfPayload", "cidStd", "dspGain")
+_VOIP_FXS_WRITE_FIELDS = ("hdl", "inVol", "outVol", "dailTimeout")
+_VOIP_ADVANCED_WRITE_FIELDS = ("sipTP", "dtmfMode", "dtmfPayload", "cidStd", "dspGain", "version")
 _VOIP_DSP_GAIN_WRITE_FIELDS = ("inGain", "outGain")
 
 
@@ -174,6 +172,7 @@ def project_voip_writable_bundle(bundle: Mapping[str, Any]) -> dict[str, Any]:
             "dtmfPayload": advanced["dtmfPayload"],
             "cidStd": advanced["cidStd"],
             "dspGain": {field: gain[field] for field in _VOIP_DSP_GAIN_WRITE_FIELDS},
+            "version": advanced["version"],
         },
     }
 
