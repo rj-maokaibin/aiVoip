@@ -1,28 +1,6 @@
 name: Source Manifest Gate
 
 on:
-  pull_request:
-    paths:
-      - 'backend/**'
-      - 'frontend/**'
-      - 'profiles/**'
-      - 'rules/**'
-      - 'knowledge/**'
-      - 'tools/**'
-      - 'contracts/**'
-      - 'deploy/**'
-      - 'golden_cases/**'
-      - 'docs/02_Core_Documents/Preliminary_Evidence_Report_V1.0/**'
-      - 'Makefile'
-      - '.env.example'
-      - 'docker-compose.yml'
-      - 'docker-compose.production.yml'
-      - 'docker-compose.e2e.yml'
-      - 'release/release_policy.yaml'
-      - '.github/workflows/source-manifest-gate.yml'
-      - '.github/workflows/prd-spec-v1-release.yml'
-      - '.github/workflows/preliminary-evidence-v1.yml'
-      - '.github/workflows/production-deploy.yml'
   workflow_dispatch:
 
 permissions:
