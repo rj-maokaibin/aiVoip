@@ -101,9 +101,13 @@ def test_cleanup_restore_unknown_is_observed_without_mutation_retry() -> None:
     restore_source = inspect.getsource(ObservedGoldenWebConfigGate._restore_action)
     cleanup_read_source = inspect.getsource(ObservedGoldenWebConfigGate._cleanup_read)
 
-    # Cleanup may Save the original snapshot at most once. If that Save is
-    # UNKNOWN, only bounded read-only observation is allowed afterwards.
+    # Cleanup may Save one fresh-current browser bundle with only the original
+    # number/disName overlaid. If that Save is UNKNOWN, only bounded read-only
+    # observation is allowed afterwards.
     assert restore_source.count("configure_voip_bundle") == 1
+    assert "build_cleanup_restore_bundle(current_bundle, snapshot)" in restore_source
+    assert "configure_voip_bundle(restore_bundle)" in restore_source
+    assert "cleanup_user_restored" in restore_source
     assert "if restored.unknown_result" in restore_source
     assert "_cleanup_read" in restore_source
     assert "web_restore_effect_observed" in restore_source

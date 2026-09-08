@@ -14,6 +14,8 @@ from app.automation.gates.golden_web_config import (
     WEB_WRITABLE_MODULES,
     GoldenWebConfigGate,
     build_numeric_probe,
+    build_cleanup_restore_bundle,
+    cleanup_user_restored,
     config_payload_from_web_module,
     registration_identity_from_snapshot,
     snapshot_writable_bundle,
@@ -66,6 +68,28 @@ def test_numeric_probe_mutates_only_target_identity_fields_inside_full_five_modu
     assert account["authId"] == "auth-separate"
     assert account["passwd"] == "secret-not-to-be-rewritten"
     assert snapshot["voipUserInfo"]["data"][0]["number"] == "7102"
+
+
+def test_cleanup_restore_bundle_uses_fresh_current_bundle_and_only_restores_user_identity_fields() -> None:
+    snapshot = _snapshot()
+    current = build_numeric_probe(snapshot, "7900")
+    current["voice_vlan"] = {"mode": "fresh-current"}
+    current["voipServInfo"] = {"server": "fresh-current"}
+    current["voipFxsTbl"] = {"fxs": "fresh-current"}
+    current["voipAdvanced"] = {"advanced": "fresh-current"}
+
+    restore = build_cleanup_restore_bundle(current, snapshot)
+
+    assert restore["voice_vlan"] == {"mode": "fresh-current"}
+    assert restore["voipServInfo"] == {"server": "fresh-current"}
+    assert restore["voipFxsTbl"] == {"fxs": "fresh-current"}
+    assert restore["voipAdvanced"] == {"advanced": "fresh-current"}
+    assert restore["voipUserInfo"]["data"][0]["number"] == "7102"
+    assert restore["voipUserInfo"]["data"][0]["disName"] == "7102"
+    assert restore["voipUserInfo"]["data"][0]["authId"] == "auth-separate"
+    assert restore["voipUserInfo"]["data"][0]["passwd"] == "secret-not-to-be-rewritten"
+    assert cleanup_user_restored(restore, snapshot) is True
+    assert cleanup_user_restored(current, snapshot) is False
 
 
 def test_registration_identity_comes_from_preserved_auth_id_not_configured_number() -> None:
@@ -158,17 +182,20 @@ def test_pr_d_base_gate_applies_browser_equivalent_five_module_bundle() -> None:
     assert '"identity_fields_changed": ["number", "disName"]' in configure_source
 
 
-def test_pr_d_base_cleanup_restores_full_browser_bundle_and_runtime_registration() -> None:
+def test_pr_d_base_cleanup_rebuilds_browser_bundle_from_fresh_state_and_restores_runtime_registration() -> None:
     restore_source = inspect.getsource(GoldenWebConfigGate._restore_action)
     verify_source = inspect.getsource(GoldenWebConfigGate._restore_verify)
     reg_verify = inspect.getsource(GoldenWebConfigGate._registration_restore_verify)
 
     assert restore_source.count("configure_voip_bundle") == 1
     assert "configure_voip_user_info" not in restore_source
-    assert "current_bundle == snapshot" in restore_source
+    assert "build_cleanup_restore_bundle(current_bundle, snapshot)" in restore_source
+    assert "configure_voip_bundle(restore_bundle)" in restore_source
+    assert "cleanup_user_restored(current_bundle, snapshot)" in restore_source
     assert '"restore_modules": list(WEB_WRITABLE_MODULES)' in restore_source
     assert "snapshot_writable_bundle" in verify_source
-    assert '"snapshot_modules": list(WEB_WRITABLE_MODULES)' in verify_source
+    assert "cleanup_user_restored(actual, snapshot)" in verify_source
+    assert '"restored_identity_fields": ["number", "disName"]' in verify_source
     assert "wait_registered" in reg_verify
     assert "self._registration_identity()" in reg_verify
 

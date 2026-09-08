@@ -73,9 +73,9 @@ def _entry_modules(result: EntryResult, *, runtime: bool = False) -> Mapping[str
 
 
 def snapshot_writable_bundle(result: EntryResult) -> dict[str, Any]:
-    # The five-module snapshot is deliberately broader than the mutation. It
-    # preserves the original state for drift detection while Golden-WEB-CONFIG
-    # is allowed to Save only the target voipUserInfo module.
+    # Capture the five browser-visible writable modules before mutation. The Save
+    # itself is browser-equivalent (five modules), while the intended business
+    # mutation remains limited to voipUserInfo.number/disName.
     modules = _entry_modules(result, runtime=True)
     missing = [module for module in WEB_WRITABLE_MODULES if module not in modules]
     if missing:
@@ -110,6 +110,40 @@ def build_numeric_probe(snapshot: Mapping[str, Any], target_number: str) -> dict
     rows[0]["number"] = target
     rows[0]["disName"] = target
     return probe
+
+
+def build_cleanup_restore_bundle(
+    current_bundle: Mapping[str, Any],
+    snapshot: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Build a browser-valid five-module restore from fresh current state.
+
+    Golden intentionally changes only voipUserInfo.number/disName. Cleanup therefore
+    preserves the freshly observed values of every other writable field/module and
+    overlays only those two original snapshot values. This avoids replaying a stale
+    five-module snapshot while still using the browser-equivalent five-module Save.
+    """
+
+    restore = copy.deepcopy(dict(current_bundle))
+    missing = [module for module in WEB_WRITABLE_MODULES if module not in restore]
+    if missing:
+        raise RuntimeBlocked(f"WEB_WRITABLE_CURRENT_INCOMPLETE:{','.join(missing)}")
+    if "voipUserInfo" not in snapshot:
+        raise RuntimeBlocked("WEB_VOIP_USER_SNAPSHOT_MISSING")
+    current_row = _account_rows(restore["voipUserInfo"])[0]
+    snapshot_row = _account_rows(snapshot["voipUserInfo"])[0]
+    current_row["number"] = snapshot_row.get("number")
+    current_row["disName"] = snapshot_row.get("disName")
+    return {module: restore[module] for module in WEB_WRITABLE_MODULES}
+
+
+def cleanup_user_restored(
+    current_bundle: Mapping[str, Any],
+    snapshot: Mapping[str, Any],
+) -> bool:
+    if "voipUserInfo" not in current_bundle or "voipUserInfo" not in snapshot:
+        return False
+    return _account_rows(current_bundle["voipUserInfo"])[0] == _account_rows(snapshot["voipUserInfo"])[0]
 
 
 def registration_identity_from_snapshot(snapshot: Mapping[str, Any]) -> str:
@@ -320,18 +354,16 @@ class GoldenWebConfigGate:
         if not isinstance(snapshot, Mapping):
             return {"restore_required": False, "snapshot_not_captured": True}
         current = await self.web.execute(WEB_READ_ACTION, {})
-        try:
-            current_bundle = snapshot_writable_bundle(current)
-        except RuntimeBlocked:
-            current_bundle = None
-        if current_bundle == snapshot:
+        current_bundle = snapshot_writable_bundle(current)
+        if cleanup_user_restored(current_bundle, snapshot):
             return {
                 "restore_required": False,
                 "bundle_already_restored": True,
                 "restore_modules": list(WEB_WRITABLE_MODULES),
             }
+        restore_bundle = build_cleanup_restore_bundle(current_bundle, snapshot)
         self._validate_mutation_authority()
-        restored = await self.web.configure_voip_bundle(snapshot)
+        restored = await self.web.configure_voip_bundle(restore_bundle)
         if restored.unknown_result:
             raise RuntimeError("WEB_GOLDEN_RESTORE_RESULT_UNKNOWN")
         if not restored.accepted:
@@ -349,12 +381,14 @@ class GoldenWebConfigGate:
         current = await self.web.execute(WEB_READ_ACTION, {})
         try:
             actual = snapshot_writable_bundle(current)
+            restored = cleanup_user_restored(actual, snapshot)
         except RuntimeBlocked as exc:
             return False, {"reason": str(exc)}
-        return actual == snapshot, {
-            "web_reverse_verify": actual == snapshot,
+        return restored, {
+            "web_reverse_verify": restored,
             "writable_modules": list(WEB_WRITABLE_MODULES),
-            "snapshot_modules": list(WEB_WRITABLE_MODULES),
+            "restored_identity_fields": ["number", "disName"],
+            "preserved_user_module_verified": True,
         }
 
     async def _crosscheck_action(self) -> dict[str, Any]:

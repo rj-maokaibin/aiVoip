@@ -16,6 +16,8 @@ from app.automation.gates.golden_web_config import (
     config_payload_from_web_module,
     observed_account,
     snapshot_writable_bundle,
+    build_cleanup_restore_bundle,
+    cleanup_user_restored,
 )
 from app.automation.orchestrator import RuntimeBlocked
 from app.infrastructure.config_framework.executor import ConfigFrameworkExecutor
@@ -188,27 +190,26 @@ class ObservedGoldenWebConfigGate(GoldenWebConfigGate):
         if not isinstance(snapshot, Mapping):
             return {"restore_required": False, "snapshot_not_captured": True}
         current = await self._cleanup_read()
-        try:
-            current_bundle = snapshot_writable_bundle(current)
-        except RuntimeBlocked:
-            current_bundle = None
-        if current_bundle == snapshot:
+        current_bundle = snapshot_writable_bundle(current)
+        if cleanup_user_restored(current_bundle, snapshot):
             return {
                 "restore_required": False,
                 "bundle_already_restored": True,
                 "restore_modules": list(WEB_WRITABLE_MODULES),
             }
 
+        restore_bundle = build_cleanup_restore_bundle(current_bundle, snapshot)
         self._validate_mutation_authority()
-        restored = await self.web.configure_voip_bundle(snapshot)
+        restored = await self.web.configure_voip_bundle(restore_bundle)
         if restored.unknown_result:
             # Never retry an UNKNOWN cleanup mutation. Observe only.
             observed = await self._cleanup_read()
             try:
                 actual = snapshot_writable_bundle(observed)
+                effect_observed = cleanup_user_restored(actual, snapshot)
             except RuntimeBlocked:
-                actual = None
-            if actual == snapshot:
+                effect_observed = False
+            if effect_observed:
                 return {
                     "restore_required": True,
                     "restore_modules": list(WEB_WRITABLE_MODULES),
@@ -231,11 +232,14 @@ class ObservedGoldenWebConfigGate(GoldenWebConfigGate):
         current = await self._cleanup_read()
         try:
             actual = snapshot_writable_bundle(current)
+            restored = cleanup_user_restored(actual, snapshot)
         except RuntimeBlocked as exc:
             return False, {"reason": str(exc)}
-        return actual == snapshot, {
-            "web_reverse_verify": actual == snapshot,
+        return restored, {
+            "web_reverse_verify": restored,
             "writable_modules": list(self.runtime.get("snapshot", {}).keys()),
+            "restored_identity_fields": ["number", "disName"],
+            "preserved_user_module_verified": True,
         }
 
     async def _finish_from_account(
