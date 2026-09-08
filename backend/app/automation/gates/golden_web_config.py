@@ -112,6 +112,23 @@ def build_numeric_probe(snapshot: Mapping[str, Any], target_number: str) -> dict
     return probe
 
 
+def registration_identity_from_snapshot(snapshot: Mapping[str, Any]) -> str:
+    """Return the preserved SIP authentication identity from voipUserInfo.
+
+    The numeric Golden changes only ``number`` and ``disName``. SIP registration
+    therefore remains bound to the original ``authId`` rather than the configured
+    display/account number.
+    """
+
+    if "voipUserInfo" not in snapshot:
+        raise RuntimeBlocked("WEB_VOIP_USER_SNAPSHOT_MISSING")
+    row = _account_rows(snapshot["voipUserInfo"])[0]
+    identity = str(row.get("authId") or "").strip()
+    if not identity:
+        raise RuntimeBlocked("WEB_SIP_REGISTRATION_IDENTITY_REQUIRED")
+    return identity
+
+
 def observed_account(result: EntryResult) -> dict[str, Any]:
     modules = _entry_modules(result)
     if "voipUserInfo" not in modules:
@@ -171,7 +188,7 @@ class GoldenWebConfigGate:
             authority,
             interval_seconds=authority_keepalive_interval,
         )
-        self.runtime: dict[str, Any] = {"token": None, "snapshot": None, "probe": None}
+        self.runtime: dict[str, Any] = {"token": None, "snapshot": None, "probe": None, "registration_identity": None}
 
     async def _precheck(self, context: AutomationRunContext) -> PrecheckResult:
         if context.case.case_id != GOLDEN_WEB_CONFIG_CASE_ID:
@@ -214,8 +231,20 @@ class GoldenWebConfigGate:
         read = await self.web.execute(WEB_READ_ACTION, {}, context)
         snapshot = snapshot_writable_bundle(read)
         probe = build_numeric_probe(snapshot, self.target_number)
-        self.runtime.update(snapshot=snapshot, probe=probe)
+        registration_identity = registration_identity_from_snapshot(snapshot)
+        self.runtime.update(
+            snapshot=snapshot,
+            probe=probe,
+            registration_identity=registration_identity,
+        )
         self.case.parameters["target_number"] = self.target_number
+        self.case.parameters["registration_identity"] = registration_identity
+
+    def _registration_identity(self) -> str:
+        identity = self.runtime.get("registration_identity")
+        if not isinstance(identity, str) or not identity.strip():
+            raise RuntimeError("WEB_SIP_REGISTRATION_IDENTITY_MISSING")
+        return identity.strip()
 
     async def _configure(self, context, _args) -> ActionHandlerResult:
         probe = self.runtime.get("probe")
@@ -257,8 +286,9 @@ class GoldenWebConfigGate:
             source_timestamp=utcnow(),
         ))
 
+        registration_identity = self._registration_identity()
         registration = await self.registration_probe.wait_registered(
-            number=self.target_number,
+            number=registration_identity,
             timeout_seconds=self.registration_timeout_seconds,
         )
         evidence.append(ActionEvidence(
@@ -266,6 +296,8 @@ class GoldenWebConfigGate:
             data={
                 "registered": registration.registered,
                 "number": registration.number,
+                "registration_identity": registration.number,
+                "configured_number": self.target_number,
                 "details": dict(registration.details or {}),
             },
             evidence_refs=registration.evidence_refs,
@@ -277,6 +309,8 @@ class GoldenWebConfigGate:
                 "mutation_accepted": mutation.accepted,
                 "readback_accepted": readback.accepted,
                 "registration_observed": registration.registered,
+                "configured_number": self.target_number,
+                "registration_identity": registration_identity,
             },
             evidence=tuple(evidence),
         )

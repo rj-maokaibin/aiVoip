@@ -256,8 +256,9 @@ class ObservedGoldenWebConfigGate(GoldenWebConfigGate):
         mutation_accepted: bool,
         mutation_result_unknown: bool,
     ) -> ActionHandlerResult:
+        registration_identity = self._registration_identity()
         registration = await self.registration_probe.wait_registered(
-            number=self.target_number,
+            number=registration_identity,
             timeout_seconds=self.registration_timeout_seconds,
         )
         evidence.append(
@@ -266,6 +267,8 @@ class ObservedGoldenWebConfigGate(GoldenWebConfigGate):
                 data={
                     "registered": registration.registered,
                     "number": registration.number,
+                    "registration_identity": registration.number,
+                    "configured_number": self.target_number,
                     "details": dict(registration.details or {}),
                 },
                 evidence_refs=registration.evidence_refs,
@@ -280,6 +283,8 @@ class ObservedGoldenWebConfigGate(GoldenWebConfigGate):
                 "mutation_effect_observed": True,
                 "readback_accepted": True,
                 "registration_observed": registration.registered,
+                "configured_number": self.target_number,
+                "registration_identity": registration_identity,
             },
             evidence=tuple(evidence),
         )

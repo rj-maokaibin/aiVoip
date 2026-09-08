@@ -89,6 +89,10 @@ def test_observed_unknown_gate_continues_registration_only_after_target_observat
     assert "if account is None" in source
     assert "unknown_result=True" in source
     assert "wait_registered" in finish_source
+    assert "self._registration_identity()" in finish_source
+    assert "number=registration_identity" in finish_source
+    assert '"configured_number": self.target_number' in finish_source
+    assert '"registration_identity": registration.number' in finish_source
     assert "mutation_effect_observed" in finish_source
 
 

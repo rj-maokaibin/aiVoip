@@ -15,6 +15,7 @@ from app.automation.gates.golden_web_config import (
     GoldenWebConfigGate,
     build_numeric_probe,
     config_payload_from_web_module,
+    registration_identity_from_snapshot,
     snapshot_writable_bundle,
 )
 from app.automation.orchestrator import RuntimeBlocked
@@ -67,6 +68,15 @@ def test_numeric_probe_mutates_only_target_identity_fields_inside_full_five_modu
     assert snapshot["voipUserInfo"]["data"][0]["number"] == "7102"
 
 
+def test_registration_identity_comes_from_preserved_auth_id_not_configured_number() -> None:
+    snapshot = _snapshot()
+    probe = build_numeric_probe(snapshot, "7900")
+
+    assert registration_identity_from_snapshot(snapshot) == "auth-separate"
+    assert registration_identity_from_snapshot(probe) == "auth-separate"
+    assert probe["voipUserInfo"]["data"][0]["number"] == "7900"
+
+
 def test_web_restore_snapshot_uses_runtime_raw_bundle_while_public_output_stays_masked() -> None:
     raw = _snapshot()
     masked = _snapshot()
@@ -102,6 +112,9 @@ def test_golden_web_case_requires_config_and_protocol_assertions_and_cleanup() -
     assert case.entry is ActionEntry.WEB
     assert case.snapshot == ("web_voip_writable_bundle",)
     assert [a.source for a in case.assertions] == ["entry", "entry", "sip", "sip"]
+    sip_identity = case.assertions[3]
+    assert sip_identity.path == "registration_identity"
+    assert sip_identity.expected == "${registration_identity}"
     assert case.cleanup.strategy == "restore_snapshot"
     assert case.cleanup.verify is True
 

@@ -32,9 +32,9 @@ assertions:
     value: true
   - id: sip_registration_identity
     source: sip
-    path: number
+    path: registration_identity
     op: eq
-    value: ${target_number}
+    value: ${registration_identity}
 cleanup:
   strategy: restore_snapshot
   verify: true
