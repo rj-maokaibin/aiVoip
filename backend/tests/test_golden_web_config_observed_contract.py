@@ -115,6 +115,8 @@ def test_cleanup_restore_unknown_is_observed_without_mutation_retry() -> None:
     assert "configure_voip_bundle" not in cleanup_read_source
     assert "WEB_READ_ACTION" in cleanup_read_source
     assert "asyncio.wait_for" in cleanup_read_source
+    assert "enumerate(_CLEANUP_WEB_READ_BACKOFF_SECONDS)" in cleanup_read_source
+    assert "attempt > 0" in cleanup_read_source
     assert "invalidate" in cleanup_read_source
 
 

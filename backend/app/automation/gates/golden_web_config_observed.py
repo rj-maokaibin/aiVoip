@@ -168,10 +168,15 @@ class ObservedGoldenWebConfigGate(GoldenWebConfigGate):
 
         invalidate = getattr(self.web.session_manager, "invalidate", None)
         last_error: Exception | None = None
-        for delay in _CLEANUP_WEB_READ_BACKOFF_SECONDS:
+        for attempt, delay in enumerate(_CLEANUP_WEB_READ_BACKOFF_SECONDS):
             if delay:
                 await asyncio.sleep(delay)
-            if callable(invalidate):
+            # The test mutation has already proven this session can Save and read
+            # back the DUT. Reuse it for the first cleanup observation instead of
+            # forcing a fresh login while the five-module apply may still be
+            # settling. Only recover local auth/session state after a failed first
+            # attempt; retries remain read-only.
+            if attempt > 0 and callable(invalidate):
                 invalidate()
             try:
                 result = await asyncio.wait_for(
