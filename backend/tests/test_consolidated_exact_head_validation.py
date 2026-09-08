@@ -79,3 +79,15 @@ def test_consolidated_probe_has_no_mutation_api_path() -> None:
         "delete_extension(",
     ):
         assert forbidden not in source
+
+def test_production_deploy_consumes_consolidated_exact_head_authority() -> None:
+    text = (WORKFLOWS / "production-deploy.yml").read_text(encoding="utf-8")
+    assert "workflow_id: 'consolidated-exact-head-validation.yml'" in text
+    assert "event: 'pull_request'" in text
+    assert "head_sha: head" in text
+    for job_name in ("source-and-frontend", "self-hosted-validation", "preliminary-authority"):
+        assert job_name in text
+    release = text[text.index("- name: Require exact accepted PR head gates"):text.index("immutable-source-bundle:")]
+    assert "source-manifest-gate.yml" not in release
+    assert "prd-spec-v1-release.yml" not in release
+    assert "preliminary-evidence-v1.yml" not in release
