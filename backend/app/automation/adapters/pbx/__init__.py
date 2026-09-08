@@ -14,6 +14,9 @@ __all__ = [
     "FusionPbxSourceFenceError",
     "PbxHealthGate",
     "PbxHealthResult",
+    "PbxResourceManager",
+    "FreeSwitchRuntimeReadProbe",
+    "FusionPbxMutationProvider",
     "load_fusionpbx_profile",
 ]
 
@@ -37,4 +40,13 @@ def __getattr__(name: str):
     if name in {"PbxHealthGate", "PbxHealthResult"}:
         from app.automation.adapters.pbx.health import PbxHealthGate, PbxHealthResult
         return {"PbxHealthGate": PbxHealthGate, "PbxHealthResult": PbxHealthResult}[name]
+    if name == "FusionPbxMutationProvider":
+        from app.automation.adapters.pbx.fusionpbx_mutation import FusionPbxMutationProvider
+        return FusionPbxMutationProvider
+    if name == "FreeSwitchRuntimeReadProbe":
+        from app.automation.adapters.pbx.runtime_read import FreeSwitchRuntimeReadProbe
+        return FreeSwitchRuntimeReadProbe
+    if name == "PbxResourceManager":
+        from app.automation.adapters.pbx.resource_manager import PbxResourceManager
+        return PbxResourceManager
     raise AttributeError(name)

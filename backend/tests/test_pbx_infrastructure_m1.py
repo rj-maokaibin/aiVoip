@@ -80,6 +80,7 @@ def test_config_provider_is_read_only_and_redacts_password(tmp_path: Path) -> No
             rows = [
                 {
                     "domain_uuid": "d1",
+                    "extension_uuid": "e7102",
                     "extension": "7102",
                     "number_alias": None,
                     "enabled": True,
@@ -93,6 +94,7 @@ def test_config_provider_is_read_only_and_redacts_password(tmp_path: Path) -> No
             rows = [
                 {
                     "domain_uuid": "d1",
+                    "extension_uuid": "e7102",
                     "extension": "7102",
                     "number_alias": "7002",
                 }

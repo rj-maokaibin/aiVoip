@@ -81,3 +81,35 @@ class FusionPbxSourceFence:
         if not result.ok:
             raise FusionPbxSourceFenceError("PBX_PROVIDER_SOURCE_FENCE_FAILED")
         return result
+
+    def verify_mutation_contract(self) -> FusionPbxSourceFenceResult:
+        result = self.verify()
+        root = Path(self.profile.fusionpbx_root)
+        required = {
+            "resources/classes/database.php",
+            "resources/classes/permissions.php",
+            "resources/classes/event_socket.php",
+            "app/extensions/resources/classes/extension.php",
+            "app/extensions/extension_copy.php",
+        }
+        if not required.issubset(self.profile.source_hashes):
+            raise FusionPbxSourceFenceError("PBX_PROVIDER_SOURCE_FENCE_FAILED")
+        database_text = (root / "resources/classes/database.php").read_text(encoding="utf-8", errors="ignore")
+        permissions_text = (root / "resources/classes/permissions.php").read_text(encoding="utf-8", errors="ignore")
+        event_socket_text = (root / "resources/classes/event_socket.php").read_text(encoding="utf-8", errors="ignore")
+        facts = {
+            "database_save_method": bool(re.search(r"public\s+function\s+save\s*\(", database_text)),
+            "database_delete_method": bool(re.search(r"public\s+function\s+delete\s*\(", database_text)),
+            "permissions_add_method": bool(re.search(r"public\s+function\s+add\s*\(", permissions_text)),
+            "permissions_delete_method": bool(re.search(r"public\s+function\s+delete\s*\(", permissions_text)),
+            "event_socket_api_method": bool(re.search(r"public\s+static\s+function\s+api\s*\(", event_socket_text)),
+        }
+        if not all(facts.values()):
+            raise FusionPbxSourceFenceError("PBX_PROVIDER_SOURCE_FENCE_FAILED")
+        return FusionPbxSourceFenceResult(
+            ok=True,
+            version=result.version,
+            file_hashes=result.file_hashes,
+            contract_facts={**result.contract_facts, **facts},
+            mismatches=(),
+        )

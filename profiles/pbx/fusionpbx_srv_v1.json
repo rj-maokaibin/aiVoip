@@ -9,8 +9,13 @@
   "fs_cli_bin": "/usr/bin/fs_cli",
   "internal_profile": "internal",
   "internal_port": 5060,
-  "extension_pool": {"start": 7900, "end": 7999},
-  "protected_extensions": ["7102"],
+  "extension_pool": {
+    "start": 7900,
+    "end": 7999
+  },
+  "protected_extensions": [
+    "7102"
+  ],
   "source_fence": {
     "version": "fusionpbx-srv-source-20260909-v1",
     "files": {
@@ -18,7 +23,9 @@
       "resources/classes/database.php": "6a0b95eb29d1c27b24d4dcc4a8582b959c627a9173b973b19b2435e1e399dbbb",
       "app/extensions/resources/classes/extension.php": "842c070880ebe82cca676d8b04cda8377ca931180c91f72a499e813c3f3eaed9",
       "app/extensions/extension_edit.php": "5192deb5bfa991524fac80432a65e924a799ecee35d5f14cef80c9764cbb6899",
-      "app/extensions/extension_copy.php": "5be1b1f491559553f78f1af2573d982a73583b1cafae54823fd0be42c2827d76"
+      "app/extensions/extension_copy.php": "5be1b1f491559553f78f1af2573d982a73583b1cafae54823fd0be42c2827d76",
+      "resources/classes/event_socket.php": "0e4ca45d3d0de0b3d0ea42eec488d1e2d8ebf7f6362bd1ed8f6d028699555278",
+      "resources/classes/permissions.php": "7efa187998611b2e3f2a99a0e8de5bb2fdfa9ec75f1c63a4a5bbd779c6dd9c86"
     }
   }
 }

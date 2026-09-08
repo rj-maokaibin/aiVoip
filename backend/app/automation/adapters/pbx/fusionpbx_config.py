@@ -29,6 +29,7 @@ class FusionPbxDomain:
 @dataclass(frozen=True)
 class FusionPbxExtensionView:
     domain_id: str
+    extension_uuid: str
     extension: str
     number_alias: str | None
     enabled: bool
@@ -56,7 +57,7 @@ if ($action === 'domains') {
 elseif ($action === 'extension') {
   $identity = strval($req['identity'] ?? '');
   $rows = $database->select(
-    "select domain_uuid, extension, number_alias, enabled, description, accountcode, user_context, case when password is not null and password <> '' then true else false end as password_present from v_extensions where enabled = true and (extension = :identity or number_alias = :identity) order by extension",
+    "select domain_uuid, extension_uuid, extension, number_alias, enabled, description, accountcode, user_context, case when password is not null and password <> '' then true else false end as password_present from v_extensions where enabled = true and (extension = :identity or number_alias = :identity) order by extension",
     ['identity'=>$identity], 'all');
   $out['rows'] = is_array($rows) ? $rows : [];
 }
@@ -164,6 +165,7 @@ class FusionPbxConfigProvider:
             result.append(
                 FusionPbxExtensionView(
                     domain_id=str(row.get("domain_uuid") or ""),
+                    extension_uuid=str(row.get("extension_uuid") or ""),
                     extension=str(row.get("extension") or ""),
                     number_alias=(
                         str(row.get("number_alias"))
