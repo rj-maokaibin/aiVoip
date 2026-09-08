@@ -133,3 +133,40 @@ def test_pr_d_stops_keepalive_before_release_and_never_reacquires_in_cleanup() -
     release_source = inspect.getsource(GoldenWebConfigGate._release_action)
     assert release_source.index("await self.keepalive.stop()") < release_source.index("self.authority.release(token)")
     assert "self.authority.acquire(" not in release_source
+
+
+def test_pr_d_base_gate_mutates_only_voip_user_info() -> None:
+    configure_source = inspect.getsource(GoldenWebConfigGate._configure)
+
+    assert configure_source.count("configure_voip_user_info") == 1
+    assert "configure_voip_bundle" not in configure_source
+    assert 'probe.get("voipUserInfo")' in configure_source
+    assert '"writable_modules": ["voipUserInfo"]' in configure_source
+
+
+def test_pr_d_base_cleanup_restores_only_voip_user_info() -> None:
+    restore_source = inspect.getsource(GoldenWebConfigGate._restore_action)
+    verify_source = inspect.getsource(GoldenWebConfigGate._restore_verify)
+
+    assert restore_source.count("configure_voip_user_info") == 1
+    assert "configure_voip_bundle" not in restore_source
+    assert 'snapshot.get("voipUserInfo")' in restore_source
+    assert '"target_module": "voipUserInfo"' in restore_source
+    # Reverse verification intentionally remains full-snapshot so unrelated
+    # side effects are detected rather than silently accepted.
+    assert "snapshot_writable_bundle" in verify_source
+    assert '"snapshot_modules": list(WEB_WRITABLE_MODULES)' in verify_source
+
+
+def test_pr_d_web_profile_single_module_save_is_exactly_one_devconfig_set() -> None:
+    profile = yaml.safe_load(
+        (ROOT / "profiles/web_api/apf3260m_reyeeos_2_421_voip_v1.yaml").read_text(encoding="utf-8")
+    )
+    operation = profile["operations"]["voip.account.configure_user_info"]
+
+    assert operation["mutation"] is True
+    assert operation["readback_operation"] == "voip.account.read"
+    assert operation["rpc_items"] == [
+        {"method": "devConfig.set", "module": "voipUserInfo"}
+    ]
+    assert operation["side_effects"]["writable_modules"] == ["voipUserInfo"]
