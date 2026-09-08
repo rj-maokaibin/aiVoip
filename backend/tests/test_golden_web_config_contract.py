@@ -148,27 +148,29 @@ def test_pr_d_stops_keepalive_before_release_and_never_reacquires_in_cleanup() -
     assert "self.authority.acquire(" not in release_source
 
 
-def test_pr_d_base_gate_mutates_only_voip_user_info() -> None:
+def test_pr_d_base_gate_applies_browser_equivalent_five_module_bundle() -> None:
     configure_source = inspect.getsource(GoldenWebConfigGate._configure)
 
-    assert configure_source.count("configure_voip_user_info") == 1
-    assert "configure_voip_bundle" not in configure_source
+    assert configure_source.count("configure_voip_bundle") == 1
+    assert "configure_voip_user_info" not in configure_source
     assert 'probe.get("voipUserInfo")' in configure_source
-    assert '"writable_modules": ["voipUserInfo"]' in configure_source
+    assert '"writable_modules": list(WEB_WRITABLE_MODULES)' in configure_source
+    assert '"identity_fields_changed": ["number", "disName"]' in configure_source
 
 
-def test_pr_d_base_cleanup_restores_only_voip_user_info() -> None:
+def test_pr_d_base_cleanup_restores_full_browser_bundle_and_runtime_registration() -> None:
     restore_source = inspect.getsource(GoldenWebConfigGate._restore_action)
     verify_source = inspect.getsource(GoldenWebConfigGate._restore_verify)
+    reg_verify = inspect.getsource(GoldenWebConfigGate._registration_restore_verify)
 
-    assert restore_source.count("configure_voip_user_info") == 1
-    assert "configure_voip_bundle" not in restore_source
-    assert 'snapshot.get("voipUserInfo")' in restore_source
-    assert '"target_module": "voipUserInfo"' in restore_source
-    # Reverse verification intentionally remains full-snapshot so unrelated
-    # side effects are detected rather than silently accepted.
+    assert restore_source.count("configure_voip_bundle") == 1
+    assert "configure_voip_user_info" not in restore_source
+    assert "current_bundle == snapshot" in restore_source
+    assert '"restore_modules": list(WEB_WRITABLE_MODULES)' in restore_source
     assert "snapshot_writable_bundle" in verify_source
     assert '"snapshot_modules": list(WEB_WRITABLE_MODULES)' in verify_source
+    assert "wait_registered" in reg_verify
+    assert "self._registration_identity()" in reg_verify
 
 
 def test_pr_d_web_profile_single_module_save_is_exactly_one_devconfig_set() -> None:

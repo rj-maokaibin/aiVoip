@@ -29,14 +29,15 @@ _UNKNOWN_OBSERVE_BACKOFF_SECONDS = (0.0, 1.0, 2.0, 4.0)
 _UNKNOWN_OBSERVE_ATTEMPT_TIMEOUT_SECONDS = 20.0
 _SAFE_OBSERVATION_ERROR_CODE = re.compile(r"^[A-Z0-9_:-]{1,96}$")
 _VOIP_USER_INFO_WRITE_FIELDS = (
-    "hdl",
-    "active",
-    "timeout",
-    "disName",
-    "number",
-    "authId",
-    "passwd",
+    "hdl", "active", "timeout", "disName", "number", "authId", "passwd",
 )
+_VOICE_VLAN_WRITE_FIELDS = ("enable", "vlanid", "aging", "cos")
+_VOIP_SERV_INFO_WRITE_FIELDS = ("hdl", "svrName", "svrPort", "svrNameBak", "svrPortBak")
+_VOIP_FXS_WRITE_FIELDS = (
+    "hdl", "inVol", "outVol", "dailTimeout", "hotlineActive", "hotlineTimeout", "hotlineNum",
+)
+_VOIP_ADVANCED_WRITE_FIELDS = ("sipTP", "dtmfMode", "dtmfPayload", "cidStd", "dspGain")
+_VOIP_DSP_GAIN_WRITE_FIELDS = ("inGain", "outGain")
 
 
 def _safe_observation_error_detail(exc: Exception) -> str | None:
@@ -98,6 +99,83 @@ def project_voip_user_info_write_payload(value: Any) -> dict[str, Any]:
             )
         projected.append({field: row[field] for field in _VOIP_USER_INFO_WRITE_FIELDS})
     return {"data": projected}
+
+
+def _project_row_module(value: Any, *, module: str, fields: tuple[str, ...]) -> dict[str, Any]:
+    current = value
+    for _ in range(3):
+        if isinstance(current, list):
+            rows = current
+            break
+        if isinstance(current, Mapping) and "data" in current:
+            current = current["data"]
+            continue
+        rows = None
+        break
+    if not rows:
+        raise WebEntryError(f"WEB_{module.upper()}_WRITE_ROWS_REQUIRED")
+    projected = []
+    for index, row in enumerate(rows):
+        if not isinstance(row, Mapping):
+            raise WebEntryError(f"WEB_{module.upper()}_WRITE_ROW_INVALID:{index}")
+        missing = [field for field in fields if field not in row]
+        if missing:
+            raise WebEntryError(f"WEB_{module.upper()}_WRITE_FIELD_MISSING:" + ",".join(missing))
+        projected.append({field: row[field] for field in fields})
+    return {"data": projected}
+
+
+def project_voip_writable_bundle(bundle: Mapping[str, Any]) -> dict[str, Any]:
+    """Project the five-module WEB snapshot to the browser-equivalent Save shape.
+
+    The manual HAR saves all five VOIP modules in one ``cmdArr``.  Readback
+    metadata must never be echoed into ``devConfig.set``; only documented/HAR
+    writable fields are preserved.  This full-bundle apply is required to make
+    the VOIP runtime consume the changed account, while business mutation still
+    changes only ``voipUserInfo.number`` and ``disName``.
+    """
+    required = ("voice_vlan", "voipServInfo", "voipUserInfo", "voipFxsTbl", "voipAdvanced")
+    missing_modules = [module for module in required if module not in bundle]
+    if missing_modules:
+        raise WebEntryError("WEB_VOIP_WRITE_MODULE_MISSING:" + ",".join(missing_modules))
+
+    voice_vlan = bundle["voice_vlan"]
+    if not isinstance(voice_vlan, Mapping):
+        raise WebEntryError("WEB_VOICE_VLAN_WRITE_MAPPING_REQUIRED")
+    missing = [field for field in _VOICE_VLAN_WRITE_FIELDS if field not in voice_vlan]
+    if missing:
+        raise WebEntryError("WEB_VOICE_VLAN_WRITE_FIELD_MISSING:" + ",".join(missing))
+
+    advanced = bundle["voipAdvanced"]
+    if not isinstance(advanced, Mapping):
+        raise WebEntryError("WEB_VOIP_ADVANCED_WRITE_MAPPING_REQUIRED")
+    missing = [field for field in _VOIP_ADVANCED_WRITE_FIELDS if field not in advanced]
+    if missing:
+        raise WebEntryError("WEB_VOIP_ADVANCED_WRITE_FIELD_MISSING:" + ",".join(missing))
+    gain = advanced.get("dspGain")
+    if not isinstance(gain, Mapping):
+        raise WebEntryError("WEB_VOIP_ADVANCED_DSP_GAIN_REQUIRED")
+    missing_gain = [field for field in _VOIP_DSP_GAIN_WRITE_FIELDS if field not in gain]
+    if missing_gain:
+        raise WebEntryError("WEB_VOIP_ADVANCED_DSP_GAIN_FIELD_MISSING:" + ",".join(missing_gain))
+
+    return {
+        "voice_vlan": {field: voice_vlan[field] for field in _VOICE_VLAN_WRITE_FIELDS},
+        "voipServInfo": _project_row_module(
+            bundle["voipServInfo"], module="voipServInfo", fields=_VOIP_SERV_INFO_WRITE_FIELDS
+        ),
+        "voipUserInfo": project_voip_user_info_write_payload(bundle["voipUserInfo"]),
+        "voipFxsTbl": _project_row_module(
+            bundle["voipFxsTbl"], module="voipFxsTbl", fields=_VOIP_FXS_WRITE_FIELDS
+        ),
+        "voipAdvanced": {
+            "sipTP": advanced["sipTP"],
+            "dtmfMode": advanced["dtmfMode"],
+            "dtmfPayload": advanced["dtmfPayload"],
+            "cidStd": advanced["cidStd"],
+            "dspGain": {field: gain[field] for field in _VOIP_DSP_GAIN_WRITE_FIELDS},
+        },
+    }
 
 
 @dataclass(frozen=True)
@@ -458,7 +536,8 @@ class WebEntryAdapter:
         bundle: Mapping[str, Any],
         ctx: Any = None,
     ) -> EntryResult:
-        return await self.execute("voip.account.configure", {"bundle": dict(bundle)}, ctx)
+        writable = project_voip_writable_bundle(bundle)
+        return await self.execute("voip.account.configure", {"bundle": writable}, ctx)
 
     async def configure_voip_user_info(
         self,

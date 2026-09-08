@@ -250,11 +250,10 @@ class GoldenWebConfigGate:
         probe = self.runtime.get("probe")
         if not isinstance(probe, Mapping):
             raise RuntimeError("WEB_GOLDEN_PROBE_NOT_PREPARED")
-        user_info = probe.get("voipUserInfo")
-        if user_info is None:
+        if probe.get("voipUserInfo") is None:
             raise RuntimeError("WEB_GOLDEN_VOIP_USER_PROBE_MISSING")
         self._validate_mutation_authority()
-        mutation = await self.web.configure_voip_user_info(user_info, context)
+        mutation = await self.web.configure_voip_bundle(probe, context)
         evidence: list[ActionEvidence] = []
         if mutation.unknown_result:
             if isinstance(mutation.readback, Mapping):
@@ -279,7 +278,8 @@ class GoldenWebConfigGate:
                 **account,
                 "mutation_accepted": mutation.accepted,
                 "readback_accepted": readback.accepted,
-                "writable_modules": ["voipUserInfo"],
+                "writable_modules": list(WEB_WRITABLE_MODULES),
+                "identity_fields_changed": ["number", "disName"],
                 "snapshot_modules": list(WEB_WRITABLE_MODULES),
             },
             evidence_refs=("web-golden://config-readback",),
@@ -319,34 +319,26 @@ class GoldenWebConfigGate:
         snapshot = self.runtime.get("snapshot")
         if not isinstance(snapshot, Mapping):
             return {"restore_required": False, "snapshot_not_captured": True}
-        snapshot_user_info = snapshot.get("voipUserInfo")
-        if snapshot_user_info is None:
-            raise RuntimeError("WEB_GOLDEN_VOIP_USER_SNAPSHOT_MISSING")
         current = await self.web.execute(WEB_READ_ACTION, {})
         try:
             current_bundle = snapshot_writable_bundle(current)
         except RuntimeBlocked:
             current_bundle = None
-        current_user_info = (
-            current_bundle.get("voipUserInfo")
-            if isinstance(current_bundle, Mapping)
-            else None
-        )
-        if current_user_info == snapshot_user_info:
+        if current_bundle == snapshot:
             return {
                 "restore_required": False,
-                "target_module_already_restored": True,
-                "target_module": "voipUserInfo",
+                "bundle_already_restored": True,
+                "restore_modules": list(WEB_WRITABLE_MODULES),
             }
         self._validate_mutation_authority()
-        restored = await self.web.configure_voip_user_info(snapshot_user_info)
+        restored = await self.web.configure_voip_bundle(snapshot)
         if restored.unknown_result:
             raise RuntimeError("WEB_GOLDEN_RESTORE_RESULT_UNKNOWN")
         if not restored.accepted:
             raise RuntimeError(f"WEB_GOLDEN_RESTORE_REJECTED:{restored.error}")
         return {
             "restore_required": True,
-            "target_module": "voipUserInfo",
+            "restore_modules": list(WEB_WRITABLE_MODULES),
             "web_restore_accepted": True,
         }
 
@@ -361,7 +353,7 @@ class GoldenWebConfigGate:
             return False, {"reason": str(exc)}
         return actual == snapshot, {
             "web_reverse_verify": actual == snapshot,
-            "writable_modules": ["voipUserInfo"],
+            "writable_modules": list(WEB_WRITABLE_MODULES),
             "snapshot_modules": list(WEB_WRITABLE_MODULES),
         }
 
@@ -379,6 +371,24 @@ class GoldenWebConfigGate:
             "ssh_config_crosscheck": matched,
             "module": "voipUserInfo",
             "mutation": False,
+        }
+
+    async def _registration_restore_action(self) -> dict[str, Any]:
+        return {
+            "mutation": False,
+            "registration_identity": self._registration_identity(),
+        }
+
+    async def _registration_restore_verify(self):
+        identity = self._registration_identity()
+        registration = await self.registration_probe.wait_registered(
+            number=identity,
+            timeout_seconds=self.registration_timeout_seconds,
+        )
+        return bool(registration.registered), {
+            "registration_restored": bool(registration.registered),
+            "registration_identity": identity,
+            "provider": (registration.details or {}).get("provider"),
         }
 
     async def _release_action(self) -> dict[str, Any]:
@@ -415,9 +425,14 @@ class GoldenWebConfigGate:
             store=SqlAlchemyCleanupStepStore(self.session_factory),
             steps=(
                 # Keep the historical persisted step id for recovery compatibility;
-                # the implementation now restores only voipUserInfo.
+                # implementation now replays the browser-equivalent writable five-module bundle.
                 CleanupStepSpec("restore_web_voip_bundle", self._restore_action, self._restore_verify),
                 CleanupStepSpec("ssh_config_readback_crosscheck", self._crosscheck_action, self._crosscheck_verify),
+                CleanupStepSpec(
+                    "verify_sip_registration_restored",
+                    self._registration_restore_action,
+                    self._registration_restore_verify,
+                ),
                 CleanupStepSpec(
                     "release_device_authority",
                     self._release_action,

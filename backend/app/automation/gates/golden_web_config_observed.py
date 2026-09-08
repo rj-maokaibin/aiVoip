@@ -11,6 +11,7 @@ from app.automation.adapters.entries.web import EntryResult
 from app.automation.adapters.web_auth.legacy_luci import LegacyLuciAuthError
 from app.automation.gates.golden_web_config import (
     WEB_READ_ACTION,
+    WEB_WRITABLE_MODULES,
     GoldenWebConfigGate,
     config_payload_from_web_module,
     observed_account,
@@ -191,23 +192,15 @@ class ObservedGoldenWebConfigGate(GoldenWebConfigGate):
             current_bundle = snapshot_writable_bundle(current)
         except RuntimeBlocked:
             current_bundle = None
-        snapshot_user_info = snapshot.get("voipUserInfo")
-        if snapshot_user_info is None:
-            raise RuntimeError("WEB_GOLDEN_VOIP_USER_SNAPSHOT_MISSING")
-        current_user_info = (
-            current_bundle.get("voipUserInfo")
-            if isinstance(current_bundle, Mapping)
-            else None
-        )
-        if current_user_info == snapshot_user_info:
+        if current_bundle == snapshot:
             return {
                 "restore_required": False,
-                "target_module_already_restored": True,
-                "target_module": "voipUserInfo",
+                "bundle_already_restored": True,
+                "restore_modules": list(WEB_WRITABLE_MODULES),
             }
 
         self._validate_mutation_authority()
-        restored = await self.web.configure_voip_user_info(snapshot_user_info)
+        restored = await self.web.configure_voip_bundle(snapshot)
         if restored.unknown_result:
             # Never retry an UNKNOWN cleanup mutation. Observe only.
             observed = await self._cleanup_read()
@@ -215,13 +208,10 @@ class ObservedGoldenWebConfigGate(GoldenWebConfigGate):
                 actual = snapshot_writable_bundle(observed)
             except RuntimeBlocked:
                 actual = None
-            actual_user_info = (
-                actual.get("voipUserInfo") if isinstance(actual, Mapping) else None
-            )
-            if actual_user_info == snapshot_user_info:
+            if actual == snapshot:
                 return {
                     "restore_required": True,
-                    "target_module": "voipUserInfo",
+                    "restore_modules": list(WEB_WRITABLE_MODULES),
                     "web_restore_result_unknown": True,
                     "web_restore_effect_observed": True,
                 }
@@ -230,7 +220,7 @@ class ObservedGoldenWebConfigGate(GoldenWebConfigGate):
             raise RuntimeError(f"WEB_GOLDEN_RESTORE_REJECTED:{restored.error}")
         return {
             "restore_required": True,
-            "target_module": "voipUserInfo",
+            "restore_modules": list(WEB_WRITABLE_MODULES),
             "web_restore_accepted": True,
         }
 
@@ -294,12 +284,11 @@ class ObservedGoldenWebConfigGate(GoldenWebConfigGate):
         if not isinstance(probe, Mapping):
             raise RuntimeError("WEB_GOLDEN_PROBE_NOT_PREPARED")
 
-        user_info = probe.get("voipUserInfo")
-        if user_info is None:
+        if probe.get("voipUserInfo") is None:
             raise RuntimeError("WEB_GOLDEN_VOIP_USER_PROBE_MISSING")
 
         self._validate_mutation_authority()
-        mutation = await self.web.configure_voip_user_info(user_info, context)
+        mutation = await self.web.configure_voip_bundle(probe, context)
         evidence: list[ActionEvidence] = []
 
         if mutation.unknown_result:
