@@ -81,7 +81,7 @@ class HttpRetryPolicy:
             raise ValueError("HTTP_BACKOFF_INVALID")
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, repr=False)
 class HttpRequest:
     method: str
     path: str
@@ -102,6 +102,14 @@ class HttpRequest:
             raise ValueError("HTTP_PATH_MUST_BE_RELATIVE_ABSOLUTE_PATH")
         if self.connect_timeout <= 0 or self.read_timeout <= 0:
             raise ValueError("HTTP_TIMEOUT_INVALID")
+
+    def __repr__(self) -> str:
+        return (
+            "HttpRequest("
+            f"method={self.method!r}, path={self.path!r}, mutation={self.mutation!r}, "
+            f"connect_timeout={self.connect_timeout!r}, read_timeout={self.read_timeout!r}, "
+            f"request_id={self.request_id!r})"
+        )
 
     def with_auth(self, *, headers=None, query=None, cookies=None) -> "HttpRequest":
         return HttpRequest(

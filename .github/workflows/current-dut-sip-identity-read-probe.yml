@@ -1,0 +1,212 @@
+name: Current DUT SIP Identity Read Probe
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  exact-source-bundle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - name: Checkout exact PR head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.EXPECTED_SHA }}
+          fetch-depth: 0
+      - name: Build immutable source bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          git branch -f bundle-head "$EXPECTED_SHA"
+          git bundle create "$RUNNER_TEMP/source.bundle" refs/heads/bundle-head
+          printf '%s\n' "$EXPECTED_SHA" > "$RUNNER_TEMP/source.sha"
+          git bundle verify "$RUNNER_TEMP/source.bundle"
+      - name: Upload exact source bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: dut-sip-identity-exact-source-${{ env.EXPECTED_SHA }}
+          path: |
+            ${{ runner.temp }}/source.bundle
+            ${{ runner.temp }}/source.sha
+          if-no-files-found: error
+          retention-days: 1
+
+  read-only-identity:
+    needs: exact-source-bundle
+    runs-on: [self-hosted, linux, x64, voip-controlled-linux]
+    timeout-minutes: 12
+    env:
+      EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      PROD_ENV_FILE: /home/github-runner/.config/voip-ai/.env
+      RUNTIME_ROOT: /tmp/voip-dut-sip-identity-${{ github.run_id }}-${{ github.run_attempt }}
+      PROBE_VENV: /tmp/voip-dut-sip-identity-venv-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - name: Repair self-hosted workspace
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker image inspect python:3.12-slim >/dev/null
+          docker run --rm -v "$GITHUB_WORKSPACE:/workspace" python:3.12-slim \
+            sh -lc 'find /workspace -mindepth 1 -maxdepth 1 -exec rm -rf {} +'
+      - name: Download exact source bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: dut-sip-identity-exact-source-${{ env.EXPECTED_SHA }}
+          path: ${{ runner.temp }}/dut-sip-identity-exact-source
+      - name: Materialize exact PR head offline
+        shell: bash
+        run: |
+          set -euo pipefail
+          bundle="$RUNNER_TEMP/dut-sip-identity-exact-source/source.bundle"
+          test "$(cat "$RUNNER_TEMP/dut-sip-identity-exact-source/source.sha")" = "$EXPECTED_SHA"
+          cd "$RUNNER_TEMP"
+          rm -rf "$GITHUB_WORKSPACE"
+          git clone -q -b bundle-head "$bundle" "$GITHUB_WORKSPACE"
+          git -C "$GITHUB_WORKSPACE" checkout -q --detach "$EXPECTED_SHA"
+          test "$(git -C "$GITHUB_WORKSPACE" rev-parse HEAD)" = "$EXPECTED_SHA"
+          echo "DUT_SIP_IDENTITY_EXACT_SOURCE=PASS revision=$EXPECTED_SHA"
+      - name: Prepare private runtime and resolve Production DUT credential
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -r "$PROD_ENV_FILE"
+          rm -rf "$RUNTIME_ROOT" "$PROBE_VENV"
+          mkdir -p "$RUNTIME_ROOT"
+          chmod 0700 "$RUNTIME_ROOT"
+          python3 -m venv "$PROBE_VENV"
+          "$PROBE_VENV/bin/pip" install --disable-pip-version-check -q -r backend/requirements.txt
+          set -a
+          source "$PROD_ENV_FILE"
+          set +a
+          export PYTHONPATH="$GITHUB_WORKSPACE/backend"
+          "$PROBE_VENV/bin/python" tools/resolve_real_sip_aba_database_env.py > "$RUNTIME_ROOT/production_db.env"
+          chmod 0600 "$RUNTIME_ROOT/production_db.env"
+          set -a
+          source "$RUNTIME_ROOT/production_db.env"
+          set +a
+          "$PROBE_VENV/bin/python" tools/resolve_real_sip_aba_context.py \
+            --output-root "$RUNTIME_ROOT/context-evidence" \
+            --runtime-root "$RUNTIME_ROOT"
+          set -a
+          source "$RUNTIME_ROOT/db_runtime.env"
+          source "$RUNTIME_ROOT/resolved_dut.env"
+          set +a
+          "$PROBE_VENV/bin/python" tools/resolve_real_sip_aba_credential_env.py \
+            --container "$SIP_ABA_PRODUCTION_CREDENTIAL_CONTAINER" \
+            --expected-provider "$SIP_ABA_PRODUCTION_CREDENTIAL_PROVIDER" \
+            --sn "$DEVICE_SN" \
+            --ip "$DEVICE_HOST" \
+            --product "$DEVICE_MODEL" \
+            --fallback-user "$DEVICE_USER" \
+            --output "$RUNTIME_ROOT/credential.env"
+          chmod 0600 "$RUNTIME_ROOT/credential.env"
+          echo 'DUT_SIP_IDENTITY_CREDENTIAL_RESOLUTION=PASS mutation=false'
+      - name: Read voipUserInfo and emit identity relations only
+        shell: bash
+        run: |
+          set -euo pipefail
+          set -a
+          source "$RUNTIME_ROOT/resolved_dut.env"
+          source "$RUNTIME_ROOT/credential.env"
+          set +a
+          export PYTHONPATH="$GITHUB_WORKSPACE/backend"
+          mkdir -p dut-sip-identity-evidence
+          "$PROBE_VENV/bin/python" - <<'PY'
+          from __future__ import annotations
+
+          import asyncio
+          import json
+          import os
+          from pathlib import Path
+          from typing import Any, Mapping
+
+          from app.capture_v2.gate.context import build_asyncssh_adapter
+          from app.capture_v2.gate.models import GateDeviceSpec
+          from app.infrastructure.config_framework.executor import ConfigFrameworkExecutor
+          from app.infrastructure.transport.ssh import SharedSshTransport
+
+          def rows(value: Any) -> list[Mapping[str, Any]]:
+              current = value
+              for _ in range(3):
+                  if isinstance(current, list):
+                      return [item for item in current if isinstance(item, Mapping)]
+                  if isinstance(current, Mapping) and 'data' in current:
+                      current = current['data']
+                      continue
+                  break
+              return []
+
+          async def main() -> dict[str, Any]:
+              spec = GateDeviceSpec(
+                  device_id=os.environ['DEVICE_ID'],
+                  model=os.environ['DEVICE_MODEL'],
+                  host=os.environ['DEVICE_HOST'],
+                  port=int(os.environ.get('DEVICE_PORT') or '22'),
+                  username=os.environ['SIP_ABA_SSH_USERNAME'],
+                  platform_id=os.environ.get('DEVICE_PLATFORM') or None,
+              )
+              adapter = build_asyncssh_adapter(spec, password_env='ENV:SIP_ABA_SSH_PASSWORD')
+              transport = SharedSshTransport(adapter)
+              await transport.connect()
+              try:
+                  executor = ConfigFrameworkExecutor(transport, allowed_modules=('voipUserInfo',))
+                  result = await executor.get('voipUserInfo', timeout=30.0)
+              finally:
+                  await transport.disconnect()
+              account_rows = rows(result.data)
+              if not account_rows:
+                  raise RuntimeError('DUT_VOIP_USER_INFO_ACCOUNT_REQUIRED')
+              first = account_rows[0]
+              number = str(first.get('number') or '')
+              dis_name = str(first.get('disName') or '')
+              auth_id = str(first.get('authId') or '')
+              passwd = first.get('passwd')
+              return {
+                  'mutation_executed': False,
+                  'secret_values_emitted': False,
+                  'account_count': len(account_rows),
+                  'first_account': {
+                      'number_present': bool(number),
+                      'disName_present': bool(dis_name),
+                      'authId_present': bool(auth_id),
+                      'passwd_present': passwd not in (None, ''),
+                      'number_equals_disName': bool(number) and number == dis_name,
+                      'number_equals_authId': bool(number) and number == auth_id,
+                      'number_is_7102': number == '7102',
+                      'disName_is_7102': dis_name == '7102',
+                      'authId_is_7102': auth_id == '7102',
+                      'target_7900_differs_from_authId': auth_id != '7900',
+                  },
+              }
+
+          payload = asyncio.run(main())
+          Path('dut-sip-identity-evidence/dut-sip-identity.json').write_text(
+              json.dumps(payload, ensure_ascii=False, sort_keys=True, indent=2) + '\n',
+              encoding='utf-8',
+          )
+          print(json.dumps({
+              'DUT_SIP_IDENTITY_READ_PROBE': 'PASS',
+              'mutation': False,
+              'secret_values_emitted': False,
+              'account_count': payload['account_count'],
+              **payload['first_account'],
+          }, sort_keys=True))
+          PY
+      - name: Upload immutable sanitized identity evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: current-dut-sip-identity-${{ env.EXPECTED_SHA }}
+          path: dut-sip-identity-evidence/*.json
+          if-no-files-found: error
+          retention-days: 7
+      - name: Remove private runtime credentials
+        if: always()
+        shell: bash
+        run: |
+          rm -rf "$RUNTIME_ROOT" "$PROBE_VENV"

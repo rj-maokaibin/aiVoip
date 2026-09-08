@@ -1,0 +1,155 @@
+name: Current PBX Create Contract Probe
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: current-pbx-create-contract-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  source-contract:
+    runs-on: [self-hosted, linux, x64, voip-controlled-linux]
+    timeout-minutes: 10
+    env:
+      EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      FUSIONPBX_ROOT: /var/www/fusionpbx
+    steps:
+      - name: Repair self-hosted workspace
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker image inspect python:3.12-slim >/dev/null
+          docker run --rm -v "$GITHUB_WORKSPACE:/workspace" python:3.12-slim \
+            sh -lc 'find /workspace -mindepth 1 -maxdepth 1 -exec rm -rf {} +'
+
+      - name: Materialize exact PR head from GitHub archive read-only
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          api="https://api.github.com/repos/${GITHUB_REPOSITORY}"
+          actual="$(curl -fsSL \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H 'Accept: application/vnd.github+json' \
+            -H 'X-GitHub-Api-Version: 2022-11-28' \
+            "${api}/commits/${EXPECTED_SHA}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["sha"])')"
+          test "$actual" = "$EXPECTED_SHA"
+          archive="$RUNNER_TEMP/pbx-create-${EXPECTED_SHA}.tar.gz"
+          curl -fsSL \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H 'Accept: application/vnd.github+json' \
+            -H 'X-GitHub-Api-Version: 2022-11-28' \
+            "${api}/tarball/${EXPECTED_SHA}" -o "$archive"
+          test -s "$archive"
+          tar -xzf "$archive" -C "$GITHUB_WORKSPACE" --strip-components=1
+          echo "PBX_CREATE_EXACT_HEAD=PASS transport=GITHUB_EXACT_SHA_ARCHIVE revision=$EXPECTED_SHA"
+
+      - name: Inspect installed FusionPBX create path read-only
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p pbx-create-contract-evidence
+          python3 - <<'PY'
+          import hashlib, json, re, shutil, subprocess
+          from pathlib import Path
+
+          root = Path('/var/www/fusionpbx')
+          paths = {
+              'copy': root / 'app/extensions/extension_copy.php',
+              'extension': root / 'app/extensions/resources/classes/extension.php',
+              'database': root / 'resources/classes/database.php',
+              'require': root / 'resources/require.php',
+          }
+          if not all(p.is_file() for p in paths.values()):
+              raise SystemExit('FUSIONPBX_CREATE_SOURCE_NOT_FOUND')
+
+          def sha256(p):
+              return hashlib.sha256(p.read_bytes()).hexdigest()
+
+          copy = paths['copy'].read_text(encoding='utf-8', errors='ignore')
+          ext = paths['extension'].read_text(encoding='utf-8', errors='ignore')
+          copy_scalar_fields = [
+              'accountcode', 'effective_caller_id_name', 'effective_caller_id_number',
+              'outbound_caller_id_name', 'outbound_caller_id_number',
+              'emergency_caller_id_name', 'emergency_caller_id_number',
+              'directory_visible', 'directory_exten_visible', 'limit_max',
+              'limit_destination', 'user_context', 'missed_call_app', 'missed_call_data',
+              'toll_allow', 'call_timeout', 'call_group', 'user_record', 'hold_music',
+              'auth_acl', 'cidr', 'sip_force_contact', 'nibble_account',
+              'sip_force_expires', 'mwi_account', 'sip_bypass_media', 'dial_string',
+              'extension_type', 'enabled',
+          ]
+          copy_selects_scalar_fields = all(
+              re.search(r'\bsql\s*\.?=\s*["\']' + re.escape(field), copy)
+              or (field + ',') in copy
+              or (field + ' ') in copy
+              for field in copy_scalar_fields
+          )
+
+          fs_cli = shutil.which('fs_cli')
+          registration_probes = {}
+          if fs_cli:
+              for probe_name, command in {
+                  'show_registrations': 'show registrations',
+                  'sofia_internal_reg': 'sofia status profile internal reg',
+              }.items():
+                  try:
+                      cp = subprocess.run(
+                          [fs_cli, '-x', command],
+                          stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                          text=True, timeout=8, check=False,
+                      )
+                      text = cp.stdout or ''
+                      registration_probes[probe_name] = {
+                          'rc': cp.returncode,
+                          'current_7102_observed': bool(re.search(r'(?<![0-9A-Za-z_.+])7102(?![0-9A-Za-z_.+])', text)),
+                          'nonempty': bool(text.strip()),
+                      }
+                  except Exception:
+                      registration_probes[probe_name] = {
+                          'rc': None, 'current_7102_observed': False, 'nonempty': False
+                      }
+
+          facts = {
+              'mutation_executed': False,
+              'secret_values_emitted': False,
+              'source_sha256': {k: sha256(v) for k, v in paths.items()},
+              'copy_contract': {
+                  'array_root_extensions': "['extensions'][0]" in copy,
+                  'sets_domain_uuid': "['domain_uuid']" in copy,
+                  'sets_extension_uuid': "['extension_uuid']" in copy,
+                  'sets_extension': "['extension']" in copy,
+                  'sets_number_alias': "['number_alias']" in copy,
+                  'sets_password': "['password']" in copy,
+                  'sets_accountcode': "['accountcode']" in copy,
+                  'sets_enabled': "['enabled']" in copy,
+                  'database_save_array': bool(re.search(r'\$database->save\s*\(\$array\)', copy)),
+                  'copy_scalar_fields_source_bound': copy_selects_scalar_fields,
+              },
+              'registration_probe_contract': registration_probes,
+              'class_contract': {
+                  'exists': bool(re.search(r'public\s+function\s+exists\s*\(', ext)),
+                  'delete': bool(re.search(r'public\s+function\s+delete\s*\(', ext)),
+                  'exists_checks_number_alias': 'number_alias = :extension' in ext,
+              },
+          }
+          required = list(facts['copy_contract'].values()) + list(facts['class_contract'].values())
+          if not all(required):
+              raise SystemExit('FUSIONPBX_CREATE_CONTRACT_INCOMPLETE')
+          out = Path('pbx-create-contract-evidence/fusionpbx-create-contract.json')
+          out.write_text(json.dumps(facts, sort_keys=True, indent=2) + '\n', encoding='utf-8')
+          print(json.dumps({'PBX_CREATE_SOURCE_CONTRACT':'PASS','mutation':False,'secret_values_emitted':False}, sort_keys=True))
+          PY
+
+      - name: Upload immutable source contract evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: current-pbx-create-contract-${{ env.EXPECTED_SHA }}
+          path: pbx-create-contract-evidence/*.json
+          if-no-files-found: error
+          retention-days: 7

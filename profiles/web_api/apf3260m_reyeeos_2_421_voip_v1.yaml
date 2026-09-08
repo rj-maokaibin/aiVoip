@@ -27,6 +27,20 @@ operations:
       - method: devConfig.get
         module: voipAdvanced
 
+  voip.account.configure_user_info:
+    endpoint: /cgi-bin/luci/api/cmd
+    method: POST
+    rpc_method: cmdArr
+    rpc_style: cmd_array
+    mutation: true
+    readback_operation: voip.account.read
+    rpc_items:
+      - method: devConfig.set
+        module: voipUserInfo
+    side_effects:
+      writable_modules:
+        - voipUserInfo
+
   voip.account.configure:
     endpoint: /cgi-bin/luci/api/cmd
     method: POST

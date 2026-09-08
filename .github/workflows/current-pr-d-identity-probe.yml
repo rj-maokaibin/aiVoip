@@ -1,0 +1,338 @@
+name: Current PR-D Identity Probe
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  exact-source-bundle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - name: Checkout exact PR head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.EXPECTED_SHA }}
+          fetch-depth: 0
+      - name: Build immutable source bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          git branch -f bundle-head "$EXPECTED_SHA"
+          git bundle create "$RUNNER_TEMP/source.bundle" refs/heads/bundle-head
+          printf '%s\n' "$EXPECTED_SHA" > "$RUNNER_TEMP/source.sha"
+          git bundle verify "$RUNNER_TEMP/source.bundle"
+      - name: Upload exact source bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-d-identity-exact-source-${{ env.EXPECTED_SHA }}
+          path: |
+            ${{ runner.temp }}/source.bundle
+            ${{ runner.temp }}/source.sha
+          if-no-files-found: error
+          retention-days: 1
+
+  read-only-identity:
+    needs: exact-source-bundle
+    runs-on: [self-hosted, linux, x64, voip-controlled-linux]
+    timeout-minutes: 15
+    env:
+      EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      PROD_ENV_FILE: /home/github-runner/.config/voip-ai/.env
+      PROBE_VENV: /tmp/pr-d-identity-venv-${{ github.run_id }}-${{ github.run_attempt }}
+      RUNTIME_ROOT: /tmp/pr-d-identity-runtime-${{ github.run_id }}-${{ github.run_attempt }}
+      FUSIONPBX_ROOT: /var/www/fusionpbx
+      EXPECTED_REQUIRE_SHA256: 2d29ea99b786c5c111df4cfcc06319138f1544b30300f6aea70635f1100fd761
+      EXPECTED_DATABASE_SHA256: 6a0b95eb29d1c27b24d4dcc4a8582b959c627a9173b973b19b2435e1e399dbbb
+      EXPECTED_EXTENSION_SHA256: 842c070880ebe82cca676d8b04cda8377ca931180c91f72a499e813c3f3eaed9
+    steps:
+      - name: Repair self-hosted workspace
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker image inspect python:3.12-slim >/dev/null
+          docker run --rm -v "$GITHUB_WORKSPACE:/workspace" python:3.12-slim \
+            sh -lc 'find /workspace -mindepth 1 -maxdepth 1 -exec rm -rf {} +'
+      - name: Download exact source bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: pr-d-identity-exact-source-${{ env.EXPECTED_SHA }}
+          path: ${{ runner.temp }}/pr-d-identity-exact-source
+      - name: Materialize exact PR head offline
+        shell: bash
+        run: |
+          set -euo pipefail
+          bundle="$RUNNER_TEMP/pr-d-identity-exact-source/source.bundle"
+          test "$(cat "$RUNNER_TEMP/pr-d-identity-exact-source/source.sha")" = "$EXPECTED_SHA"
+          cd "$RUNNER_TEMP"
+          rm -rf "$GITHUB_WORKSPACE"
+          git clone -q -b bundle-head "$bundle" "$GITHUB_WORKSPACE"
+          git -C "$GITHUB_WORKSPACE" checkout -q --detach "$EXPECTED_SHA"
+          test "$(git -C "$GITHUB_WORKSPACE" rev-parse HEAD)" = "$EXPECTED_SHA"
+          echo "PR_D_IDENTITY_EXACT_SOURCE=PASS revision=$EXPECTED_SHA"
+      - name: Fence installed FusionPBX source identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(sha256sum "$FUSIONPBX_ROOT/resources/require.php" | awk '{print $1}')" = "$EXPECTED_REQUIRE_SHA256"
+          test "$(sha256sum "$FUSIONPBX_ROOT/resources/classes/database.php" | awk '{print $1}')" = "$EXPECTED_DATABASE_SHA256"
+          test "$(sha256sum "$FUSIONPBX_ROOT/app/extensions/resources/classes/extension.php" | awk '{print $1}')" = "$EXPECTED_EXTENSION_SHA256"
+          echo 'PR_D_IDENTITY_FUSIONPBX_SOURCE_FENCE=PASS mutation=false'
+      - name: Prepare isolated read-only DUT runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -r "$PROD_ENV_FILE"
+          rm -rf "$PROBE_VENV" "$RUNTIME_ROOT"
+          mkdir -p "$RUNTIME_ROOT"
+          chmod 0700 "$RUNTIME_ROOT"
+          python3 -m venv "$PROBE_VENV"
+          "$PROBE_VENV/bin/pip" install --disable-pip-version-check -q -r backend/requirements.txt
+      - name: Resolve production DUT and SSH credential read-only
+        shell: bash
+        run: |
+          set -euo pipefail
+          set -a
+          source "$PROD_ENV_FILE"
+          set +a
+          export PYTHONPATH="$GITHUB_WORKSPACE/backend"
+          "$PROBE_VENV/bin/python" tools/resolve_real_sip_aba_database_env.py > "$RUNTIME_ROOT/production_db.env"
+          chmod 0600 "$RUNTIME_ROOT/production_db.env"
+          set -a
+          source "$RUNTIME_ROOT/production_db.env"
+          set +a
+          "$PROBE_VENV/bin/python" tools/resolve_real_sip_aba_context.py \
+            --output-root "$RUNTIME_ROOT/context-evidence" \
+            --runtime-root "$RUNTIME_ROOT"
+          set -a
+          source "$RUNTIME_ROOT/db_runtime.env"
+          source "$RUNTIME_ROOT/resolved_dut.env"
+          set +a
+          "$PROBE_VENV/bin/python" tools/resolve_real_sip_aba_credential_env.py \
+            --container "$SIP_ABA_PRODUCTION_CREDENTIAL_CONTAINER" \
+            --expected-provider "$SIP_ABA_PRODUCTION_CREDENTIAL_PROVIDER" \
+            --sn "$DEVICE_SN" \
+            --ip "$DEVICE_HOST" \
+            --product "$DEVICE_MODEL" \
+            --fallback-user "$DEVICE_USER" \
+            --output "$RUNTIME_ROOT/credential.env"
+          chmod 0600 "$RUNTIME_ROOT/credential.env"
+          echo 'PR_D_IDENTITY_DUT_RESOLUTION=PASS mutation=false'
+      - name: Read current DUT account with SSH Config Framework GET only
+        shell: bash
+        run: |
+          set -euo pipefail
+          set -a
+          source "$RUNTIME_ROOT/resolved_dut.env"
+          source "$RUNTIME_ROOT/credential.env"
+          set +a
+          export PYTHONPATH="$GITHUB_WORKSPACE/backend"
+          "$PROBE_VENV/bin/python" - <<'PY'
+          import asyncio
+          import json
+          import os
+          from pathlib import Path
+          from collections.abc import Mapping
+
+          from app.capture_v2.gate.context import build_asyncssh_adapter
+          from app.capture_v2.gate.models import GateDeviceSpec
+          from app.infrastructure.config_framework.executor import ConfigFrameworkExecutor
+          from app.infrastructure.transport.ssh import SharedSshTransport
+
+          runtime_root = Path(os.environ['RUNTIME_ROOT'])
+
+          def extract_rows(result):
+              data = result.raw.get('data') if isinstance(result.raw, Mapping) else None
+              if data is None:
+                  data = result.data
+              if not isinstance(data, list) or not data or not isinstance(data[0], Mapping):
+                  raise RuntimeError('PR_D_IDENTITY_VOIP_ACCOUNT_REQUIRED')
+              return data
+
+          async def main():
+              spec = GateDeviceSpec(
+                  device_id=os.environ['DEVICE_ID'],
+                  model=os.environ['DEVICE_MODEL'],
+                  host=os.environ['DEVICE_HOST'],
+                  port=int(os.environ.get('DEVICE_PORT') or '22'),
+                  username=os.environ['SIP_ABA_SSH_USERNAME'],
+                  platform_id=os.environ.get('DEVICE_PLATFORM') or None,
+              )
+              os.environ['PR_D_IDENTITY_SSH_PASSWORD'] = os.environ['SIP_ABA_SSH_PASSWORD']
+              adapter = build_asyncssh_adapter(spec, password_env='ENV:PR_D_IDENTITY_SSH_PASSWORD')
+              executor = ConfigFrameworkExecutor(
+                  SharedSshTransport(adapter),
+                  allowed_modules=('voipUserInfo',),
+              )
+              await adapter.connect()
+              try:
+                  result = await executor.get('voipUserInfo', timeout=20.0)
+              finally:
+                  await adapter.disconnect()
+              if not result.success:
+                  raise RuntimeError(f'PR_D_IDENTITY_CONFIG_GET_FAILED:{result.rcode}')
+              row = dict(extract_rows(result)[0])
+              number = str(row.get('number') or '')
+              disname = str(row.get('disName') or '')
+              auth_id = str(row.get('authId') or '')
+              passwd = str(row.get('passwd') or '')
+              private = {
+                  'number': number,
+                  'disName': disname,
+                  'authId': auth_id,
+                  'passwd': passwd,
+              }
+              private_path = runtime_root / 'dut_identity_private.json'
+              private_path.write_text(json.dumps(private, ensure_ascii=False), encoding='utf-8')
+              private_path.chmod(0o600)
+              safe = {
+                  'mutation_executed': False,
+                  'transport': 'ssh',
+                  'backend': 'config_framework',
+                  'operation': 'get',
+                  'number': number,
+                  'number_ascii_digits': bool(number and number.isascii() and number.isdigit()),
+                  'disname_equals_number': disname == number,
+                  'auth_id_present': bool(auth_id),
+                  'auth_id_equals_number': auth_id == number if auth_id else None,
+                  'passwd_present': bool(passwd),
+                  'secret_values_emitted': False,
+              }
+              Path('pr-d-identity-evidence').mkdir(exist_ok=True)
+              Path('pr-d-identity-evidence/dut-identity-safe.json').write_text(
+                  json.dumps(safe, ensure_ascii=False, sort_keys=True, indent=2) + '\n', encoding='utf-8'
+              )
+              print(json.dumps({
+                  'PR_D_IDENTITY_DUT_READ': 'PASS',
+                  'mutation': False,
+                  'number_ascii_digits': safe['number_ascii_digits'],
+                  'auth_id_present': safe['auth_id_present'],
+                  'passwd_present': safe['passwd_present'],
+                  'secret_values_emitted': False,
+              }, sort_keys=True))
+
+          asyncio.run(main())
+          PY
+      - name: Correlate current identity against FusionPBX DB read-only
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p pr-d-identity-evidence
+          cat > "$RUNTIME_ROOT/pbx_identity_probe.php" <<'PHP'
+          <?php
+          declare(strict_types=1);
+          $root = getenv('FUSIONPBX_ROOT');
+          $runtime = getenv('RUNTIME_ROOT');
+          if (!$root || !$runtime) { fwrite(STDERR, "PR_D_IDENTITY_RUNTIME_REQUIRED\n"); exit(2); }
+          $private = json_decode(file_get_contents($runtime . '/dut_identity_private.json'), true);
+          if (!is_array($private)) { fwrite(STDERR, "PR_D_IDENTITY_PRIVATE_INPUT_INVALID\n"); exit(3); }
+          $number = strval($private['number'] ?? '');
+          $auth_id = strval($private['authId'] ?? '');
+          $passwd = strval($private['passwd'] ?? '');
+
+          require_once $root . '/resources/require.php';
+          global $database;
+          if (!$database) { fwrite(STDERR, "FUSIONPBX_DATABASE_UNAVAILABLE\n"); exit(4); }
+          $domains = $database->select(
+              "select domain_uuid, domain_name from v_domains where domain_enabled = true order by domain_name asc",
+              null,
+              'all'
+          );
+          if (!is_array($domains) || count($domains) === 0) {
+              fwrite(STDERR, "FUSIONPBX_ACTIVE_DOMAIN_REQUIRED\n"); exit(5);
+          }
+
+          $reg_as_number_alias = null;
+          $config_file = '/etc/fusionpbx/config.conf';
+          if (is_readable($config_file)) {
+              foreach (file($config_file, FILE_IGNORE_NEW_LINES) as $line) {
+                  if (preg_match('/^\s*xml_handler\.reg_as_number_alias\s*=\s*(\S+)\s*$/', $line, $m)) {
+                      $reg_as_number_alias = strtolower(trim($m[1]));
+                      break;
+                  }
+              }
+          }
+
+          $result = [
+              'mutation_executed' => false,
+              'secret_values_emitted' => false,
+              'reg_as_number_alias' => $reg_as_number_alias,
+              'active_domain_count' => count($domains),
+              'domains' => [],
+          ];
+          foreach ($domains as $domain) {
+              $domain_uuid = strval($domain['domain_uuid'] ?? '');
+              $domain_name = strval($domain['domain_name'] ?? '');
+              if ($domain_uuid === '' || $domain_name === '') { continue; }
+              $rows = $database->select(
+                  "select extension, number_alias, password from v_extensions " .
+                  "where domain_uuid = :domain_uuid and enabled = true " .
+                  "and (extension = :number or number_alias = :number or extension = :auth_id or number_alias = :auth_id)",
+                  ['domain_uuid' => $domain_uuid, 'number' => $number, 'auth_id' => $auth_id],
+                  'all'
+              );
+              if (!is_array($rows)) { $rows = []; }
+              $facts = [
+                  'domain_identity_sha256' => hash('sha256', $domain_uuid . '|' . $domain_name),
+                  'number_extension_exists' => false,
+                  'number_alias_exists' => false,
+                  'auth_extension_exists' => false,
+                  'auth_alias_exists' => false,
+                  'auth_password_matches' => false,
+                  'number_and_auth_same_row' => false,
+                  'matching_row_count' => count($rows),
+              ];
+              foreach ($rows as $row) {
+                  $ext = strval($row['extension'] ?? '');
+                  $alias = strval($row['number_alias'] ?? '');
+                  $row_password = strval($row['password'] ?? '');
+                  if ($ext === $number) { $facts['number_extension_exists'] = true; }
+                  if ($alias === $number) { $facts['number_alias_exists'] = true; }
+                  if ($auth_id !== '' && $ext === $auth_id) { $facts['auth_extension_exists'] = true; }
+                  if ($auth_id !== '' && $alias === $auth_id) { $facts['auth_alias_exists'] = true; }
+                  if ($auth_id !== '' && ($ext === $auth_id || $alias === $auth_id) && $passwd !== '' && hash_equals($row_password, $passwd)) {
+                      $facts['auth_password_matches'] = true;
+                  }
+                  if (($ext === $number || $alias === $number) && ($auth_id === '' || $ext === $auth_id || $alias === $auth_id)) {
+                      $facts['number_and_auth_same_row'] = true;
+                  }
+              }
+              $result['domains'][] = $facts;
+          }
+          echo json_encode($result, JSON_UNESCAPED_SLASHES) . PHP_EOL;
+          PHP
+          php "$RUNTIME_ROOT/pbx_identity_probe.php" > pr-d-identity-evidence/pbx-identity-safe.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          data = json.loads(Path('pr-d-identity-evidence/pbx-identity-safe.json').read_text(encoding='utf-8'))
+          assert data.get('mutation_executed') is False
+          assert data.get('secret_values_emitted') is False
+          assert int(data.get('active_domain_count') or 0) >= 1
+          assert isinstance(data.get('domains'), list) and data['domains']
+          print(json.dumps({
+              'PR_D_IDENTITY_PBX_CORRELATION': 'PASS',
+              'mutation': False,
+              'active_domain_count': data['active_domain_count'],
+              'reg_as_number_alias': data.get('reg_as_number_alias'),
+              'secret_values_emitted': False,
+          }, sort_keys=True))
+          PY
+      - name: Upload immutable read-only identity evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: current-pr-d-identity-${{ env.EXPECTED_SHA }}
+          path: pr-d-identity-evidence/*.json
+          if-no-files-found: error
+          retention-days: 7
+      - name: Remove runtime credentials and private identity data
+        if: always()
+        shell: bash
+        run: |
+          rm -rf "$RUNTIME_ROOT" "$PROBE_VENV"

@@ -401,14 +401,20 @@ def test_cleanup_is_crash_resumable_and_releases_authority_last():
         with pytest.raises(AutomationCleanupError):
             await coordinator.run(run_id="run-cleanup")
 
+        # Fail-safe cleanup still reaches the authority release in the first
+        # physical traversal even when restore crashes. The failed restore is
+        # the only step replayed on resume; an already-verified release is not.
+        assert calls == ["stop", "restore", "release"]
+        assert store.verified("run-cleanup") == {"stop", "release_authority"}
+
         await coordinator.run(run_id="run-cleanup")
-        assert calls == ["stop", "restore", "restore", "release"]
+        assert calls == ["stop", "restore", "release", "restore"]
+        assert calls.count("release") == 1
         assert store.verified("run-cleanup") == {
             "stop",
             "restore",
             "release_authority",
         }
-        assert calls[-1] == "release"
 
         with pytest.raises(ValueError, match="AUTHORITY_RELEASE_MUST_BE_LAST"):
             PersistedCleanupCoordinator(

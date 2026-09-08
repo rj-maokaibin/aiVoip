@@ -1,19 +1,6 @@
 name: PRD SPEC V1 Full Software Acceptance
 
 on:
-  pull_request:
-    paths:
-      - 'backend/**'
-      - 'frontend/**'
-      - 'tools/**'
-      - 'golden_cases/**'
-      - 'profiles/**'
-      - 'deploy/**'
-      - 'docs/02_Core_Documents/Preliminary_Evidence_Report_V1.0/**'
-      - '.github/workflows/source-manifest-gate.yml'
-      - '.github/workflows/preliminary-evidence-v1.yml'
-      - '.github/workflows/prd-spec-v1-release.yml'
-      - '.github/workflows/production-deploy.yml'
   workflow_dispatch:
 
 permissions:
@@ -113,7 +100,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
-      EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
+      EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     outputs:
       reusable: ${{ steps.resolve.outputs.reusable }}
       run_id: ${{ steps.resolve.outputs.run_id }}
@@ -238,7 +225,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
-      EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
+      EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - name: Checkout exact validator source
         uses: actions/checkout@v4

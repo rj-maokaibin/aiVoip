@@ -11,7 +11,7 @@ from app.infrastructure.transport.http import HttpApiTransport, HttpRequest, Htt
 class WebCredential:
     """Runtime-injected credential. Callers must never persist this object."""
     username: str
-    password: str
+    password: str = field(repr=False, compare=False)
 
 
 @dataclass(frozen=True)
@@ -43,6 +43,11 @@ class SessionManager:
         self.auth_provider = auth_provider
         self.credential_provider = credential_provider
         self._session: WebSession | None = None
+
+    def invalidate(self) -> None:
+        """Drop only local session state; this performs no network or mutation."""
+
+        self._session = None
 
     async def ensure_session(self, *, force: bool = False) -> WebSession:
         if force or self._session is None or self._session.expired():
