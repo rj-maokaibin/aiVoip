@@ -68,15 +68,23 @@ def project_voip_user_info_write_payload(value: Any) -> dict[str, Any]:
     APF3260-M WEB readback contains runtime/read-only metadata such as
     ``func``, ``version``, ``configTime``, ``currentTime``, ``configId`` and
     row-level ``encType``. The successful manual WEB Save omits those values and
-    sends only the actual writable account fields. Keeping this projection at
-    the semantic WEB-entry boundary makes both the Golden mutation and cleanup
-    restore use the same wire-compatible single-module payload.
+    sends only the actual writable account fields. The response adapter may
+    already unwrap one or more ``data`` envelopes, so both the HAR object shape
+    and the process-private row-list shape are accepted. All output still uses
+    the one source-bound writable shape required by ``devConfig.set``.
     """
 
-    if not isinstance(value, Mapping):
-        raise WebEntryError("WEB_VOIP_USER_INFO_WRITE_MAPPING_REQUIRED")
-    rows = value.get("data")
-    if not isinstance(rows, list) or not rows:
+    current = value
+    rows: list[Any] | None = None
+    for _ in range(3):
+        if isinstance(current, list):
+            rows = current
+            break
+        if isinstance(current, Mapping) and "data" in current:
+            current = current["data"]
+            continue
+        break
+    if not rows:
         raise WebEntryError("WEB_VOIP_USER_INFO_WRITE_ROWS_REQUIRED")
 
     projected: list[dict[str, Any]] = []
