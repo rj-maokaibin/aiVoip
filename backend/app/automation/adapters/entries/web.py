@@ -28,6 +28,15 @@ from app.infrastructure.transport.http import (
 _UNKNOWN_OBSERVE_BACKOFF_SECONDS = (0.0, 1.0, 2.0, 4.0)
 _UNKNOWN_OBSERVE_ATTEMPT_TIMEOUT_SECONDS = 20.0
 _SAFE_OBSERVATION_ERROR_CODE = re.compile(r"^[A-Z0-9_:-]{1,96}$")
+_VOIP_USER_INFO_WRITE_FIELDS = (
+    "hdl",
+    "active",
+    "timeout",
+    "disName",
+    "number",
+    "authId",
+    "passwd",
+)
 
 
 def _safe_observation_error_detail(exc: Exception) -> str | None:
@@ -51,6 +60,36 @@ class WebEntryError(RuntimeError):
 
 class WebProfileUnboundError(WebEntryError):
     pass
+
+
+def project_voip_user_info_write_payload(value: Any) -> dict[str, Any]:
+    """Project raw WEB readback into the source-bound writable Save shape.
+
+    APF3260-M WEB readback contains runtime/read-only metadata such as
+    ``func``, ``version``, ``configTime``, ``currentTime``, ``configId`` and
+    row-level ``encType``. The successful manual WEB Save omits those values and
+    sends only the actual writable account fields. Keeping this projection at
+    the semantic WEB-entry boundary makes both the Golden mutation and cleanup
+    restore use the same wire-compatible single-module payload.
+    """
+
+    if not isinstance(value, Mapping):
+        raise WebEntryError("WEB_VOIP_USER_INFO_WRITE_MAPPING_REQUIRED")
+    rows = value.get("data")
+    if not isinstance(rows, list) or not rows:
+        raise WebEntryError("WEB_VOIP_USER_INFO_WRITE_ROWS_REQUIRED")
+
+    projected: list[dict[str, Any]] = []
+    for index, row in enumerate(rows):
+        if not isinstance(row, Mapping):
+            raise WebEntryError(f"WEB_VOIP_USER_INFO_WRITE_ROW_INVALID:{index}")
+        missing = [field for field in _VOIP_USER_INFO_WRITE_FIELDS if field not in row]
+        if missing:
+            raise WebEntryError(
+                "WEB_VOIP_USER_INFO_WRITE_FIELD_MISSING:" + ",".join(missing)
+            )
+        projected.append({field: row[field] for field in _VOIP_USER_INFO_WRITE_FIELDS})
+    return {"data": projected}
 
 
 @dataclass(frozen=True)
@@ -418,9 +457,10 @@ class WebEntryAdapter:
         value: Any,
         ctx: Any = None,
     ) -> EntryResult:
+        writable = project_voip_user_info_write_payload(value)
         return await self.execute(
             "voip.account.configure_user_info",
-            {"bundle": {"voipUserInfo": value}},
+            {"bundle": {"voipUserInfo": writable}},
             ctx,
         )
 
