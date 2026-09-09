@@ -17,6 +17,9 @@ __all__ = [
     "PbxResourceManager",
     "FreeSwitchRuntimeReadProbe",
     "FusionPbxMutationProvider",
+    "FreeSwitchEventSocketClient",
+    "FreeSwitchRuntimeEvent",
+    "FreeSwitchEslError",
     "load_fusionpbx_profile",
 ]
 
@@ -43,6 +46,15 @@ def __getattr__(name: str):
     if name == "FusionPbxMutationProvider":
         from app.automation.adapters.pbx.fusionpbx_mutation import FusionPbxMutationProvider
         return FusionPbxMutationProvider
+    if name in {"FreeSwitchEventSocketClient", "FreeSwitchRuntimeEvent", "FreeSwitchEslError"}:
+        from app.automation.adapters.pbx.esl import (
+            FreeSwitchEventSocketClient, FreeSwitchRuntimeEvent, FreeSwitchEslError
+        )
+        return {
+            "FreeSwitchEventSocketClient": FreeSwitchEventSocketClient,
+            "FreeSwitchRuntimeEvent": FreeSwitchRuntimeEvent,
+            "FreeSwitchEslError": FreeSwitchEslError,
+        }[name]
     if name == "FreeSwitchRuntimeReadProbe":
         from app.automation.adapters.pbx.runtime_read import FreeSwitchRuntimeReadProbe
         return FreeSwitchRuntimeReadProbe

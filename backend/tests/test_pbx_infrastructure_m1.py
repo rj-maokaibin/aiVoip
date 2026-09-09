@@ -164,6 +164,7 @@ def test_health_gate_returns_safe_pbx_ready(tmp_path: Path) -> None:
         config_provider=FusionPbxConfigProvider(profile, runner=php_runner),
         fs_runner=fs_runner,
         socket_probe=lambda _h, _p, _t: True,
+        esl_probe=lambda: True,
     )
     result = gate.check()
     assert result.ready is True
@@ -201,11 +202,13 @@ def test_health_gate_fails_closed_on_source_or_runtime_failure(tmp_path: Path) -
         config_provider=FusionPbxConfigProvider(profile, runner=php_runner),
         fs_runner=lambda _a, _t: (1, ""),
         socket_probe=lambda _h, _p, _t: False,
+        esl_probe=lambda: False,
     ).check()
     assert result.ready is False
     assert result.checks["source_fence"] is False
     assert result.checks["freeswitch_runtime"] is False
     assert result.checks["internal_sip_port_reachable"] is False
+    assert result.checks["event_socket_runtime"] is False
 
 
 def test_pbx_migration_and_models_cover_frozen_resource_tables() -> None:

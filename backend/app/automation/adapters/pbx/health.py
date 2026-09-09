@@ -14,6 +14,7 @@ from app.automation.adapters.pbx.source_fence import FusionPbxSourceFence
 
 FsRunner = Callable[[tuple[str, ...], float], tuple[int | None, str]]
 SocketProbe = Callable[[str, int, float], bool]
+EslHealthProbe = Callable[[], bool]
 
 
 @dataclass(frozen=True)
@@ -55,6 +56,7 @@ class PbxHealthGate:
         source_fence: FusionPbxSourceFence | None = None,
         fs_runner: FsRunner | None = None,
         socket_probe: SocketProbe | None = None,
+        esl_probe: EslHealthProbe | None = None,
         timeout_seconds: float = 8.0,
     ) -> None:
         self.profile = profile
@@ -62,6 +64,7 @@ class PbxHealthGate:
         self.source_fence = source_fence or FusionPbxSourceFence(profile)
         self._fs_runner = fs_runner or self._run_fs
         self._socket_probe = socket_probe or self._probe_socket
+        self._esl_probe = esl_probe or self._probe_esl
         self.timeout_seconds = float(timeout_seconds)
 
     def _run_fs(
@@ -89,6 +92,20 @@ class PbxHealthGate:
                 return True
         except OSError:
             return False
+
+    def _probe_esl(self) -> bool:
+        from app.automation.adapters.pbx.esl import FreeSwitchEventSocketClient
+
+        client = FreeSwitchEventSocketClient(
+            self.profile, timeout_seconds=min(self.timeout_seconds, 5.0)
+        )
+        try:
+            health = client.safe_health()
+            return bool(health.get("connected") and health.get("authenticated") and health.get("subscribed"))
+        except Exception:
+            return False
+        finally:
+            client.close()
 
     @staticmethod
     def _registration_identities(output: str) -> set[str]:
@@ -170,6 +187,7 @@ class PbxHealthGate:
             self.profile.internal_port,
             min(self.timeout_seconds, 3.0),
         )
+        esl_ready = self._esl_probe()
         checks = {
             "source_fence": fence.ok,
             "fusionpbx_database": config_readable and bool(domains),
@@ -178,6 +196,7 @@ class PbxHealthGate:
             "internal_sip_port_reachable": port_ready,
             "extension_pool_enumerable": pool_enumerable,
             "registration_observable": reg_rc == 0,
+            "event_socket_runtime": esl_ready,
         }
         return PbxHealthResult(
             ready=all(checks.values()),

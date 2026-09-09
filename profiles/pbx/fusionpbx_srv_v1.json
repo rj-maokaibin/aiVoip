@@ -31,5 +31,10 @@
       "app/switch/resources/scripts/resources/functions/cache.lua": "1a053f96d24767ca1d55e08c7afa14e1316bfc240f3006728df59bd6b61a4c6d",
       "app/switch/resources/scripts/app/xml_handler/resources/scripts/directory/directory.lua": "ee849819d5898f8118e9e2dd4536e442708145af2615e5738e3ed3c8b6be41a1"
     }
+  },
+  "event_socket": {
+    "host": "127.0.0.1",
+    "port": 8021,
+    "config": "/etc/freeswitch/autoload_configs/event_socket.conf.xml"
   }
 }

@@ -20,6 +20,9 @@ class FusionPbxLabProfile:
     fs_cli_bin: str
     internal_profile: str
     internal_port: int
+    event_socket_host: str
+    event_socket_port: int
+    event_socket_config: str
     pool_start: int
     pool_end: int
     protected_extensions: tuple[str, ...]
@@ -29,6 +32,7 @@ class FusionPbxLabProfile:
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "FusionPbxLabProfile":
         pool = data.get("extension_pool") or {}
+        event_socket = data.get("event_socket") or {}
         fence = data.get("source_fence") or {}
         value = cls(
             schema_version=str(data.get("schema_version") or ""),
@@ -39,6 +43,9 @@ class FusionPbxLabProfile:
             fs_cli_bin=str(data.get("fs_cli_bin") or "/usr/bin/fs_cli"),
             internal_profile=str(data.get("internal_profile") or "internal"),
             internal_port=int(data.get("internal_port") or 0),
+            event_socket_host=str(event_socket.get("host") or "127.0.0.1"),
+            event_socket_port=int(event_socket.get("port") or 8021),
+            event_socket_config=str(event_socket.get("config") or "/etc/freeswitch/autoload_configs/event_socket.conf.xml"),
             pool_start=int(pool.get("start") or 0),
             pool_end=int(pool.get("end") or 0),
             protected_extensions=tuple(str(v) for v in data.get("protected_extensions") or ()),
@@ -55,6 +62,10 @@ class FusionPbxLabProfile:
             raise FusionPbxProfileError("PBX_PROFILE_IDENTITY_INVALID")
         if not (1 <= self.internal_port <= 65535):
             raise FusionPbxProfileError("PBX_PROFILE_PORT_INVALID")
+        if not self.event_socket_host or not (1 <= self.event_socket_port <= 65535):
+            raise FusionPbxProfileError("PBX_PROFILE_EVENT_SOCKET_INVALID")
+        if not self.event_socket_config.startswith("/"):
+            raise FusionPbxProfileError("PBX_PROFILE_EVENT_SOCKET_CONFIG_INVALID")
         if self.pool_start < 1 or self.pool_end < self.pool_start:
             raise FusionPbxProfileError("PBX_PROFILE_POOL_INVALID")
         if not self.source_fence_version or not self.source_hashes:
