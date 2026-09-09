@@ -16,6 +16,9 @@ __all__ = [
     "PbxHealthResult",
     "PbxResourceManager",
     "FreeSwitchRuntimeReadProbe",
+    "normalize_automation_identity",
+    "PbxExtensionIdentityError",
+    "FreeSwitchRegistrationObserver",
     "FusionPbxMutationProvider",
     "FreeSwitchEventSocketClient",
     "FreeSwitchRuntimeEvent",
@@ -58,6 +61,12 @@ def __getattr__(name: str):
     if name == "FreeSwitchRuntimeReadProbe":
         from app.automation.adapters.pbx.runtime_read import FreeSwitchRuntimeReadProbe
         return FreeSwitchRuntimeReadProbe
+    if name == "FreeSwitchRegistrationObserver":
+        from app.automation.adapters.pbx.registration_esl import FreeSwitchRegistrationObserver
+        return FreeSwitchRegistrationObserver
+    if name in {"PbxExtensionIdentityError", "normalize_automation_identity"}:
+        from app.automation.adapters.pbx.identity import PbxExtensionIdentityError, normalize_automation_identity
+        return {"PbxExtensionIdentityError": PbxExtensionIdentityError, "normalize_automation_identity": normalize_automation_identity}[name]
     if name == "PbxResourceManager":
         from app.automation.adapters.pbx.resource_manager import PbxResourceManager
         return PbxResourceManager

@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from typing import Any, Callable
 
 from app.automation.gates.golden_web_config import SipRegistrationEvidence
+from app.automation.adapters.pbx.identity import PbxExtensionIdentityError, normalize_automation_identity
 
 
 class FusionPbxRegistrationProbeError(RuntimeError):
@@ -104,10 +105,25 @@ class FusionPbxRegistrationProbe:
             "commands": commands,
         }, tuple(evidence_refs)
 
+    def observe_registered_once(self, *, number: str) -> SipRegistrationEvidence:
+        try:
+            target = normalize_automation_identity(number)
+        except PbxExtensionIdentityError as exc:
+            raise FusionPbxRegistrationProbeError("PBX_REGISTRATION_IDENTITY_INVALID") from exc
+        registered, details, refs = self._observe_once(target)
+        return SipRegistrationEvidence(
+            registered=registered,
+            number=target,
+            evidence_refs=refs,
+            source_timestamp=datetime.now(timezone.utc),
+            details=details,
+        )
+
     async def wait_registered(self, *, number: str, timeout_seconds: float) -> SipRegistrationEvidence:
-        target = str(number).strip()
-        if not target or not target.isascii() or not target.isdigit():
-            raise FusionPbxRegistrationProbeError("PBX_NUMERIC_REGISTRATION_TARGET_REQUIRED")
+        try:
+            target = normalize_automation_identity(number)
+        except PbxExtensionIdentityError as exc:
+            raise FusionPbxRegistrationProbeError("PBX_REGISTRATION_IDENTITY_INVALID") from exc
         timeout = float(timeout_seconds)
         if timeout <= 0 or timeout > 60.0:
             raise FusionPbxRegistrationProbeError("PBX_REGISTRATION_TIMEOUT_INVALID")

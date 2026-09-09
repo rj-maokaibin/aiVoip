@@ -41,7 +41,7 @@ def test_registration_probe_matches_exact_identity_and_never_persists_raw_output
     assert [call[-1] for call in calls] == ["show registrations", "sofia status profile internal reg"]
 
 
-def test_registration_probe_rejects_substring_and_non_numeric_target() -> None:
+def test_registration_probe_rejects_substring_and_out_of_contract_target() -> None:
     def runner(_argv: tuple[str, ...], _timeout: float):
         return 0, "17900@example.test 7900.foo@example.test"
 
@@ -49,5 +49,8 @@ def test_registration_probe_rejects_substring_and_non_numeric_target() -> None:
     evidence = asyncio.run(probe.wait_registered(number="7900", timeout_seconds=0.003))
     assert evidence.registered is False
 
-    with pytest.raises(FusionPbxRegistrationProbeError, match="PBX_NUMERIC_REGISTRATION_TARGET_REQUIRED"):
-        asyncio.run(probe.wait_registered(number="7900.x", timeout_seconds=0.01))
+    supported = asyncio.run(probe.wait_registered(number="7900.foo", timeout_seconds=0.01))
+    assert supported.registered is True
+
+    with pytest.raises(FusionPbxRegistrationProbeError, match="PBX_REGISTRATION_IDENTITY_INVALID"):
+        asyncio.run(probe.wait_registered(number="7900_x", timeout_seconds=0.01))

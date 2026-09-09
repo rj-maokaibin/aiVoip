@@ -126,3 +126,10 @@ PBX-T015 production/readback/closure evidence
 ## 15. 完成标准
 
 代码存在不算完成。M6 只有 exact-head unit/integration、真实 FusionPBX mutation、FreeSWITCH runtime、三条 Golden、mandatory cleanup、failure injection、secret audit 和 immutable evidence 全 PASS 才 CLOSED。
+
+## 非数字 identity 增量任务
+
+- PBX-T005A：统一 managed extension identity validator，移除 registration/resource 层 numeric-only 假设。
+- PBX-T005B：G-PBX-001N，真实验证 `7900.a` 与 `+7900` lifecycle。
+- PBX-T009A：ESL registration observer 支持非数字 exact identity。
+- PBX-T013：G-PBX-002 默认以非数字 identity 完成 DUT REGISTER/restore。

@@ -7,6 +7,7 @@ from enum import Enum
 from sqlalchemy import select
 
 from app.automation.pbx_models import PbxExtensionResource, PbxResourceLease
+from app.automation.adapters.pbx.identity import PbxExtensionIdentityError, normalize_automation_identity
 from app.core.ids import new_id
 
 
@@ -89,6 +90,10 @@ class PbxExtensionLeaseManager:
         run_id: str,
         owner_worker_id: str,
     ) -> PbxLeaseToken:
+        try:
+            extension = normalize_automation_identity(extension)
+        except PbxExtensionIdentityError as exc:
+            raise PbxResourceAuthorityError("PBX_AUTOMATION_IDENTITY_INVALID") from exc
         now = utcnow()
         with self.session_factory() as session:
             row = session.execute(

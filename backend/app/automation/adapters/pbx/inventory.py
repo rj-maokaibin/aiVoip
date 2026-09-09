@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 
 from app.automation.adapters.pbx.fusionpbx_config import FusionPbxConfigProvider
+from app.automation.adapters.pbx.identity import PbxExtensionIdentityError, normalize_automation_identity
 from app.automation.adapters.pbx.profile import FusionPbxLabProfile
 from app.automation.adapters.pbx.resource_authority import PbxResourceState, PbxResourceType
 from app.automation.adapters.pbx.source_fence import FusionPbxSourceFence
@@ -35,6 +36,65 @@ class PbxInventoryService:
         self.profile = profile
         self.config = config_provider or FusionPbxConfigProvider(profile)
         self.source_fence = source_fence or FusionPbxSourceFence(profile)
+
+    def ensure_automation_identity(
+        self,
+        *,
+        pbx_node_id: str,
+        domain_id: str,
+        extension: str,
+    ) -> PbxExtensionResource:
+        try:
+            identity = normalize_automation_identity(extension)
+        except PbxExtensionIdentityError as exc:
+            raise ValueError("PBX_AUTOMATION_IDENTITY_INVALID") from exc
+        if identity in self.profile.protected_extensions:
+            raise ValueError("PBX_RESOURCE_PROTECTED")
+
+        matches = [
+            view for view in self.config.get_extension(identity)
+            if view.domain_id == domain_id and (view.extension == identity or view.number_alias == identity)
+        ]
+        with self.session_factory() as session:
+            row = session.execute(
+                select(PbxExtensionResource).where(
+                    PbxExtensionResource.pbx_node_id == pbx_node_id,
+                    PbxExtensionResource.domain_id == domain_id,
+                    PbxExtensionResource.extension == identity,
+                )
+            ).scalar_one_or_none()
+            if matches:
+                if row is None:
+                    row = PbxExtensionResource(
+                        pbx_node_id=pbx_node_id, domain_id=domain_id, extension=identity,
+                        resource_type=PbxResourceType.STATIC_BASELINE.value,
+                        state=PbxResourceState.READY.value, deletable=False,
+                        created_by_automation=False, last_health_at=utcnow(),
+                    )
+                    session.add(row)
+                    session.commit()
+                raise ValueError("PBX_AUTOMATION_IDENTITY_ALREADY_EXISTS")
+            if row is None:
+                row = PbxExtensionResource(
+                    pbx_node_id=pbx_node_id, domain_id=domain_id, extension=identity,
+                    resource_type=PbxResourceType.TEMPORARY_AUTOMATION.value,
+                    state=PbxResourceState.FREE.value, lease_epoch=0,
+                    created_by_automation=False, deletable=False, last_health_at=utcnow(),
+                )
+                session.add(row)
+                session.commit()
+                session.refresh(row)
+                session.expunge(row)
+                return row
+            if row.resource_type != PbxResourceType.TEMPORARY_AUTOMATION.value:
+                raise ValueError("PBX_RESOURCE_PROTECTED")
+            if row.created_by_automation or row.lease_id is not None or row.state != PbxResourceState.FREE.value:
+                raise ValueError("PBX_RESOURCE_BUSY")
+            row.last_health_at = utcnow()
+            session.commit()
+            session.refresh(row)
+            session.expunge(row)
+            return row
 
     def sync(self) -> dict:
         fence = self.source_fence.verify()

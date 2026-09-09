@@ -10,6 +10,7 @@ from typing import Any, Callable, Protocol
 
 from app.automation.adapters.pbx.profile import FusionPbxLabProfile
 from app.automation.adapters.pbx.resource_authority import PbxLeaseToken
+from app.automation.adapters.pbx.identity import PbxExtensionIdentityError, normalize_automation_identity
 from app.automation.adapters.pbx.source_fence import FusionPbxSourceFence
 
 
@@ -288,6 +289,10 @@ class FusionPbxMutationProvider:
             raise FusionPbxMutationError("PBX_LEASE_FENCED")
         if token.extension in self.profile.protected_extensions:
             raise FusionPbxMutationError("PBX_RESOURCE_PROTECTED")
+        try:
+            normalize_automation_identity(token.extension)
+        except PbxExtensionIdentityError as exc:
+            raise FusionPbxMutationError("PBX_AUTOMATION_IDENTITY_INVALID") from exc
         self.source_fence.verify_mutation_contract()
 
     @staticmethod

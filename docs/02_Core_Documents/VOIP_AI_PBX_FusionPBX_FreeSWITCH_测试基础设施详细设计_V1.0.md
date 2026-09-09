@@ -159,7 +159,18 @@ FREE -> RESERVED -> PROVISIONING -> READY -> IN_USE -> CLEANUP -> FREE
 ```
 
 `7102`：`STATIC_BASELINE`、`deletable=false`。  
-`7900-7999`：候选 `TEMPORARY_AUTOMATION`；只有实际自动创建并写入 ownership marker 后才允许 delete。
+`7900-7999`：默认数字候选 `TEMPORARY_AUTOMATION`；它只是默认自动分配池，不构成 extension identity 的类型限制。
+
+### 6.1 Extension Identity Contract
+
+- Extension/Number Alias 在自动化框架内一律建模为字符串，不允许使用整数类型承载业务 identity。
+- V1 自动化主动创建/配置的 identity 支持 ASCII 字母、数字以及特殊字符 `.`、`+`，长度 1-64，且至少包含一个字母或数字。
+- V1 主动 mutation 不接受 `@`、空格、`/`、`:`、`_`、`-` 等超出本次市场需求的字符。
+- FusionPBX 只读 inventory 可以发现更宽的历史 identity；发现到的非托管资源必须保护为 `STATIC_BASELINE`，不得因为不符合 automation identity contract 而忽略或删除。
+- 数字 `7900-7999` 继续作为默认自动分配池；非数字 Golden/定向测试通过显式字符串 identity 申请资源。
+- 非数字基础设施 Gate 至少覆盖 `7900.a`（`.`）与 `+7900`（`+`）。
+
+只有实际自动创建并写入 ownership marker 后才允许 delete。
 
 ## 7. Ownership 与删除保护
 
@@ -333,8 +344,11 @@ PBX_RESOURCE_DIRTY
 ### G-PBX-001 Extension Lifecycle
 `acquire 7900 -> create -> readback -> FreeSWITCH visible -> delete -> absent -> release`。
 
+### G-PBX-001N Non-numeric Extension Lifecycle
+至少执行 `7900.a` 与 `+7900` 两条真实 lifecycle：`acquire -> create -> FreeSWITCH visible -> delete -> runtime absent -> release-last`。
+
 ### G-PBX-002 Registration Lifecycle
-`acquire/provision 7900 -> DUT WEB configure -> REGISTER 7900 -> DUT restore -> PBX cleanup -> unregistered -> release`。
+默认使用非数字 identity（首选 `7900.a`）：`acquire/provision -> DUT WEB configure number/disName/authId/passwd -> ESL REGISTER exact identity -> fs_cli reconcile -> DUT restore baseline -> PBX cleanup -> runtime absent -> release-last`。
 
 ### G-CALL-001 SIP Call E2E
 `7901 peer -> 7900 DUT -> RINGING -> ANSWER -> RTP -> DTMF -> BYE -> reverse cleanup`，并补反向呼叫。

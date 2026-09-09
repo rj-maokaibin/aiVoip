@@ -28,6 +28,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--evidence", required=True)
     parser.add_argument("--run-id", required=True)
     parser.add_argument("--owner", required=True)
+    parser.add_argument("--extension", default=None, help="Optional managed extension identity")
     return parser.parse_args()
 
 
@@ -55,11 +56,24 @@ def main() -> int:
         source_fence=fence,
     ).sync()
     authority = PbxExtensionLeaseManager(Session, ttl_seconds=180)
-    token = authority.acquire_first_available(
-        pbx_node_id=inventory["node_id"],
-        run_id=args.run_id,
-        owner_worker_id=args.owner,
-    )
+    if args.extension:
+        resource = PbxInventoryService(
+            Session, profile, config_provider=config, source_fence=fence
+        ).ensure_automation_identity(
+            pbx_node_id=inventory["node_id"],
+            domain_id=domain.domain_id,
+            extension=args.extension,
+        )
+        token = authority.acquire_extension(
+            pbx_node_id=inventory["node_id"], extension=resource.extension,
+            run_id=args.run_id, owner_worker_id=args.owner,
+        )
+    else:
+        token = authority.acquire_first_available(
+            pbx_node_id=inventory["node_id"],
+            run_id=args.run_id,
+            owner_worker_id=args.owner,
+        )
     mutation = FusionPbxMutationProvider(
         profile,
         authority=authority,

@@ -82,3 +82,7 @@ Mutation 前必须通过 PBX_READY：FusionPBX source/database、FreeSWITCH prof
 ## 16. PBX-INFRA-015｜生产/测试边界
 
 PBX infrastructure mutation 只允许在被标记为 Test Lab 的 PBX node/domain 上执行。不得把生产客户 PBX 作为动态资源池。Node eligibility 必须由后端配置与 policy 强制，不得由调用方自由传 `allow_mutation=true` 绕过。
+
+## 增量合同：Extension Identity
+
+Extension identity 统一使用 string。Automation-managed identity V1 允许 `[A-Za-z0-9.+]`（1-64，至少一个字母或数字）；PBX discovery 可读取更宽历史字符但不得主动 mutation。Registration observer、ESL event matching、ResourceAuthority、Evidence schema 均不得使用 `isdigit()` 作为 identity 合法性合同。

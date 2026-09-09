@@ -55,3 +55,7 @@ RECOVERING：系统正在执行确定性恢复。
 ## 7. 非目标
 
 本修订不承诺多 PBX HA、PSTN 真实外线、复杂 IVR/Call Center、大规模并发性能、自动物理摘挂机。上述能力可在 Test Lab Infrastructure V2 扩展。
+
+## 增量要求：非数字分机 identity
+
+PBX 自动化测试基础设施不得假设分机号为整数。产品验收范围必须支持字母/数字以及当前市场需求特殊字符 `.`、`+`；默认数字池仅用于资源自动分配。必须提供非数字 extension create/delete、REGISTER、cleanup 的真实 Golden 证据。

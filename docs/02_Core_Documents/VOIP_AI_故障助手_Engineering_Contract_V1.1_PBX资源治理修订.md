@@ -68,3 +68,7 @@ G-PBX-001、G-PBX-002、G-CALL-001 未通过前，不得宣布 PBX Infrastructur
 ## EC-PBX-13｜Contract Gap
 
 若 FusionPBX 当前版本的 create/update/delete/reload 真实 provider path、ESL REGISTER 事件语义或 SIPp media/DTMF 行为与本修订假设不一致，必须登记 `CONTRACT_GAP` 并通过 source/runtime evidence 修订合同；不得由实现自行猜测补齐。
+
+## 非数字 identity 工程约束
+
+禁止把 extension/number_alias/auth identity 转为 int 后比较、排序或持久化。自动化主动 mutation 统一经过 managed identity validator；当前仅开放字母、数字、`.`、`+`。历史 PBX identity 只读发现不得因此丢失。Golden 必须分别覆盖 `.` 与 `+`。
