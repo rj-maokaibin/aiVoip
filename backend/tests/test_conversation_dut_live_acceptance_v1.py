@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import inspect
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
+from tools import conversation_dut_case_resolver as resolver
 from tools import conversation_dut_live_acceptance as gate
 
 
@@ -113,13 +115,48 @@ def test_auditor_source_is_read_only_and_has_no_device_or_synthetic_execution_pa
     assert '"pbx_action_executed_by_gate": False' in source
 
 
-def test_live_workflow_is_observer_only_and_exact_master_guarded():
+def test_case_resolver_matches_only_explicit_tagged_real_feishu_sources():
+    tag = "CONV-DUT-E2E-ABCDEF12"
+    rows = [
+        SimpleNamespace(source_normalized_text=f"{tag} 单通无声", source_message_id="om_real_123"),
+        SimpleNamespace(source_normalized_text=f"{tag} duplicate transport without real id", source_message_id="fake"),
+        SimpleNamespace(source_normalized_text="普通客户故障", source_message_id="om_customer_456"),
+    ]
+    matches = resolver._matching_bindings(rows, tag)
+    assert len(matches) == 1
+    assert matches[0].source_message_id == "om_real_123"
+
+
+def test_case_resolver_is_read_only_unique_only_and_has_no_recent_case_fallback():
+    source = inspect.getsource(resolver)
+    for forbidden in [
+        "db.add(",
+        "db.commit(",
+        "db.delete(",
+        ".apply_async(",
+        "execute_shell(",
+        "execute_cli(",
+        "reply_feishu_text(",
+        "start_reproduction(",
+    ]:
+        assert forbidden not in source, forbidden
+    assert 'len(case_ids) != 1' in source
+    assert '"ACCEPTANCE_TAG_NOT_UNIQUE"' in source
+    assert '"fallback_to_recent_case": False' in source
+
+
+def test_live_workflow_is_observer_only_exact_master_and_tag_discovered():
     workflow = WORKFLOW.read_text(encoding="utf-8")
     assert "/run-conversation-dut-e2e " in workflow
     assert "github.event.comment.user.login == github.repository_owner" in workflow
     assert 'test "$(git rev-parse HEAD)" = "$LIVE_EXPECTED_SHA"' in workflow
     assert "CONV-DUT-E2E-[A-Z0-9_-]{8,64}" in workflow
+    assert "tools/conversation_dut_case_resolver.py" in workflow
     assert "tools/conversation_dut_live_acceptance.py" in workflow
+    assert "expected: /run-conversation-dut-e2e <master-sha> <acceptance-tag>" in workflow
+    assert "<case-no>" not in workflow
+    assert "--wait-seconds 900" in workflow
+    assert 'echo "LIVE_CASE_NO=$case_no" >> "$GITHUB_ENV"' in workflow
     for forbidden in [
         "reply_feishu_text",
         "start_reproduction",
