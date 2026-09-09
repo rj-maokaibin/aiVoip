@@ -1,7 +1,7 @@
 # VOIP AI 故障助手 Implementation Plan V1.1：PBX / FreeSWITCH 测试基础设施
 
-状态：IMPLEMENTATION READY / 2026-09-09  
-基线：`VOIP_AI_故障助手_Implementation_Plan_V1.0_终稿.docx`  
+状态：IMPLEMENTATION READY / 2026-09-09
+基线：`VOIP_AI_故障助手_Implementation_Plan_V1.0_终稿.docx`
 详细设计：`VOIP_AI_PBX_FusionPBX_FreeSWITCH_测试基础设施详细设计_V1.0.md`
 
 ## 1. 实施目标
@@ -14,7 +14,7 @@
 |---|---|---|---|
 | PBX-WP01 | Inventory/Health | PBX node model、source/runtime inventory、PBX_READY | 连续 health probe 稳定 PASS |
 | PBX-WP02 | Config Provider | FusionPbxConfigProvider、source fence、typed error | create/read/delete contract tests PASS |
-| PBX-WP03 | Resource Pool | 7900-7999 pool、lease/epoch/ownership、dirty recovery | concurrency/stale lease tests PASS |
+| PBX-WP03 | Resource Pool | string extension identity + 7900-7999 dial alias pool、lease/epoch/ownership、dirty recovery | concurrency/stale lease/alias collision tests PASS |
 | PBX-WP04 | Runtime Provider | ESL adapter、registration/call event schema、fs_cli reconcile | event/reconcile 一致 |
 | PBX-WP05 | Call Session | CallSession、originate/hangup/DTMF、SIPp peer | signaling E2E PASS |
 | PBX-WP06 | Framework/Gates | orchestrator integration、cleanup、evidence、CI Golden | 三条 Golden PASS |
@@ -46,28 +46,28 @@ backend/app/automation/gates/
 
 ## 5. M1｜Inventory + Health
 
-任务：记录现网 FusionPBX/FreeSWITCH 基线；固化 provider source hash；实现 PBX_READY；保留 registration probe read-only。  
+任务：记录现网 FusionPBX/FreeSWITCH 基线；固化 provider source hash；实现 PBX_READY；保留 registration probe read-only。
 退出：不执行任何 mutation 的情况下，可稳定识别 domain、internal profile、5060、extension pool 与当前 registration。
 
 ## 6. M2｜Config Provider
 
-先实现 read/exists/snapshot，再实现 create/delete，最后 update/alias。  
-首次真实 mutation 必须使用 `7900` 空闲号码；不得碰 7102。  
+先实现 read/exists/snapshot，再实现 create/delete，最后 update/alias。
+首次真实 mutation 从数字 `7900` 生命周期开始；非数字阶段使用 `7900.a` / `+7900`，dial alias 使用空闲数字 `7900`；不得碰 7102 baseline。
 完成 G-PBX-001 前不接 DUT。
 
 ## 7. M3｜Pool / Authority
 
-实现 acquire/release、lease epoch、ownership marker、STATIC_BASELINE/TEMPORARY_AUTOMATION、DIRTY/RECOVERING。  
+实现 acquire/release、lease epoch、ownership marker、STATIC_BASELINE/TEMPORARY_AUTOMATION、DIRTY/RECOVERING。
 必须做两个并发 runner 争抢同一 extension 的 contract test，并验证最多一个 winner。
 
 ## 8. M4｜FreeSWITCH Runtime / ESL
 
-建立持久 ESL client、event normalization、bounded reconnect；注册和 call event 均进入结构化模型。  
+建立持久 ESL client、event normalization、bounded reconnect；注册和 call event 均进入结构化模型。
 `fs_cli` 继续每次关键 terminal verification reconcile，不能因为 ESL 接入就删除 fallback observer。
 
 ## 9. M5｜SIPp / CallSession
 
-引入受控 SIPp scenario：REGISTER、incoming call answer、outgoing call、DTMF、BYE。  
+引入受控 SIPp scenario：REGISTER、incoming call answer、outgoing call、DTMF、BYE。
 先完成 SIP signaling，不把 FXS 物理摘挂机作为 V1 blocker。
 
 ## 10. M6｜Generic Framework Integration
@@ -89,6 +89,8 @@ Acquire DUT + PBX + Extension(s)
 
 ```text
 G-PBX-001 Extension Lifecycle
+  -> G-PBX-001N Non-numeric Lifecycle
+  -> G-PBX-003 Dial Alias Resolution
   -> G-PBX-002 Registration Lifecycle
   -> G-CALL-001 SIP Call E2E
 ```
@@ -133,3 +135,8 @@ PBX-T015 production/readback/closure evidence
 - PBX-T005B：G-PBX-001N，真实验证 `7900.a` 与 `+7900` lifecycle。
 - PBX-T009A：ESL registration observer 支持非数字 exact identity。
 - PBX-T013：G-PBX-002 默认以非数字 identity 完成 DUT REGISTER/restore。
+
+- PBX-T006A：`dial_alias` 一等 schema/migration，FusionPBX `number_alias` provider mapping。
+- PBX-T006B：alias collision + lease/ownership + stale cache failure injection。
+- PBX-T006C：G-PBX-003，真实 `7900 -> 7900.a` FreeSWITCH directory resolution 与 cleanup。
+- G-CALL 必须使用数字 `dial_alias` 模拟 FXS 用户拨号，不允许把 `7900.a` 当作模拟话机可直接按键输入。

@@ -10,7 +10,11 @@ from typing import Any, Callable, Protocol
 
 from app.automation.adapters.pbx.profile import FusionPbxLabProfile
 from app.automation.adapters.pbx.resource_authority import PbxLeaseToken
-from app.automation.adapters.pbx.identity import PbxExtensionIdentityError, normalize_automation_identity
+from app.automation.adapters.pbx.identity import (
+    PbxExtensionIdentityError,
+    normalize_automation_identity,
+    normalize_dial_alias,
+)
 from app.automation.adapters.pbx.source_fence import FusionPbxSourceFence
 
 
@@ -89,6 +93,7 @@ $ext = new extension(['database'=>$database,'domain_uuid'=>$domain_uuid,'domain_
 if ($operation === 'create') {
   $password = strval($req['password'] ?? '');
   $template = strval($req['template_identity'] ?? '');
+  $dial_alias = strval($req['dial_alias'] ?? '');
   if ($password === '' || $marker === '' || $template === '') { fwrite(STDERR, "PBX_CREATE_INPUT_REQUIRED\n"); exit(6); }
   if ($ext->exists($domain_uuid, $extension)) { fwrite(STDERR, "PBX_EXTENSION_ALREADY_EXISTS\n"); exit(7); }
   $row = $database->select(
@@ -99,7 +104,7 @@ if ($operation === 'create') {
   $array['extensions'][0]['domain_uuid'] = $domain_uuid;
   $array['extensions'][0]['extension_uuid'] = $extension_uuid;
   $array['extensions'][0]['extension'] = $extension;
-  $array['extensions'][0]['number_alias'] = null;
+  $array['extensions'][0]['number_alias'] = ($dial_alias === '' ? null : $dial_alias);
   $array['extensions'][0]['password'] = $password;
   $array['extensions'][0]['accountcode'] = $extension;
   $array['extensions'][0]['effective_caller_id_name'] = 'AIVOIP ' . $extension;
@@ -361,17 +366,24 @@ class FusionPbxMutationProvider:
         domain_name: str,
         password: str,
         template_identity: str,
+        dial_alias: str | None = None,
     ) -> FusionPbxMutationResult:
         if not password or len(password) < 12:
             raise FusionPbxMutationError("PBX_EXTENSION_PASSWORD_INVALID")
         if template_identity not in self.profile.protected_extensions:
             raise FusionPbxMutationError("PBX_TEMPLATE_NOT_PROTECTED")
+        if dial_alias is not None:
+            try:
+                dial_alias = normalize_dial_alias(dial_alias)
+            except PbxExtensionIdentityError as exc:
+                raise FusionPbxMutationError(str(exc)) from exc
         return self._invoke(
             "create",
             token,
             domain_name=domain_name,
             password=password,
             template_identity=template_identity,
+            dial_alias=dial_alias,
         )
 
     def delete_extension(
@@ -387,17 +399,27 @@ class FusionPbxMutationProvider:
         *,
         domain_name: str,
         user_context: str,
+        dial_alias: str | None = None,
         ownership_marker: str | None = None,
     ) -> FusionPbxMutationResult:
         self._preflight(token)
         domain_name = self._cache_identity(domain_name, code="PBX_DOMAIN_INVALID")
         user_context = self._cache_identity(user_context, code="PBX_USER_CONTEXT_INVALID")
+        if dial_alias is not None:
+            try:
+                dial_alias = normalize_dial_alias(dial_alias)
+            except PbxExtensionIdentityError as exc:
+                raise FusionPbxMutationError(str(exc)) from exc
         marker = ownership_marker or self._marker(token)
         if not marker.startswith("AIVOIP_AUTOMATION:"):
             raise FusionPbxMutationError("PBX_RESOURCE_OWNERSHIP_UNPROVEN")
         keys = [f"directory:{token.extension}@{domain_name}"]
         if user_context != domain_name:
             keys.append(f"directory:{token.extension}@{user_context}")
+        if dial_alias:
+            keys.append(f"directory:{dial_alias}@{domain_name}")
+            if user_context != domain_name:
+                keys.append(f"directory:{dial_alias}@{user_context}")
         ok = self._cache_reconcile_runner(tuple(keys), self.timeout_seconds)
         return FusionPbxMutationResult(
             status="CONFIRMED" if ok else "UNKNOWN",

@@ -49,7 +49,7 @@ def _profile() -> FusionPbxLabProfile:
         "source_fence": {"version": "test-v1", "files": {"x": "0" * 64}},
     })
 
-def _seed(Session):
+def _seed(Session, *, extension: str = "7900"):
     with Session() as session:
         node = PbxNode(
             node_key="test-pbx",
@@ -68,7 +68,7 @@ def _seed(Session):
         resource = PbxExtensionResource(
             pbx_node_id=node.id,
             domain_id="d1",
-            extension="7900",
+            extension=extension,
             resource_type=PbxResourceType.TEMPORARY_AUTOMATION.value,
             state=PbxResourceState.FREE.value,
             deletable=False,
@@ -99,7 +99,7 @@ class FakeRuntime:
     def user_visible(self, identity: str, *, domain_name: str) -> bool:
         return bool(
             self.stale_visible
-            or (self.config.view and self.config.view.extension == identity and domain_name == "pbx.test")
+            or (self.config.view and identity in {self.config.view.extension, self.config.view.number_alias} and domain_name == "pbx.test")
         )
 
     def user_context(self, identity: str, *, domain_name: str) -> str | None:
@@ -125,16 +125,19 @@ class FakeMutation:
         self.create_calls = 0
         self.delete_calls = 0
         self.reconcile_calls = 0
+        self.last_create_alias = None
+        self.last_reconcile_alias = None
 
-    def create_extension(self, token, *, domain_name: str, password: str, template_identity: str):
+    def create_extension(self, token, *, domain_name: str, password: str, template_identity: str, dial_alias: str | None = None):
         self.create_calls += 1
+        self.last_create_alias = dial_alias
         marker = f"AIVOIP_AUTOMATION:{token.run_id}:{token.lease_epoch}"
         if self.apply_create:
             self.config.view = FusionPbxExtensionView(
                 domain_id=token.domain_id,
                 extension_uuid="uuid-7900",
                 extension=token.extension,
-                number_alias=None,
+                number_alias=dial_alias,
                 enabled=True,                description=marker,
                 accountcode=token.extension,
                 user_context="default",
@@ -163,9 +166,10 @@ class FakeMutation:
             True,
         )
     def reconcile_absent_extension_cache(
-        self, token, *, domain_name: str, user_context: str, ownership_marker: str | None = None
+        self, token, *, domain_name: str, user_context: str, dial_alias: str | None = None, ownership_marker: str | None = None
     ):
         self.reconcile_calls += 1
+        self.last_reconcile_alias = dial_alias
         if self.runtime is not None:
             self.runtime.stale_visible = False
         marker = ownership_marker or f"AIVOIP_AUTOMATION:{token.run_id}:{token.lease_epoch}"
@@ -180,13 +184,14 @@ def _manager(
     delete_status="CONFIRMED",
     apply_create=True,
     apply_delete=True,
+    extension="7900",
 ):
     Session = _session_factory()
-    node_id, _ = _seed(Session)
+    node_id, _ = _seed(Session, extension=extension)
     authority = PbxExtensionLeaseManager(Session, ttl_seconds=60)
     token = authority.acquire_extension(
         pbx_node_id=node_id,
-        extension="7900",
+        extension=extension,
         run_id="run-1",
         owner_worker_id="worker-1",
     )
@@ -226,7 +231,7 @@ def test_full_extension_lifecycle_is_lease_owned_and_release_last() -> None:
         assert row.deletable is True
         assert row.ownership_marker == "AIVOIP_AUTOMATION:run-1:1"
         snapshots = session.execute(select(PbxMutationSnapshot)).scalars().all()
-        assert snapshots[0].snapshot_json == {"extension": "7900", "exists": False}
+        assert snapshots[0].snapshot_json == {"extension": "7900", "dial_alias": None, "exists": False}
         assert "unit-password-123" not in repr(row.__dict__)
 
     cleanup = manager.deprovision_extension(token)
@@ -388,3 +393,76 @@ def test_runtime_cache_reconcile_uses_domain_and_context_under_same_lease() -> N
     assert result.confirmed is True
     assert result.ownership_marker == marker
     assert cache_calls == [("directory:7900@pbx.test", "directory:7900@default")]
+
+
+def test_non_numeric_identity_with_numeric_dial_alias_is_managed_as_one_resource() -> None:
+    Session, authority, token, config, mutation, manager = _manager(extension="7900.a")
+    result = manager.provision_extension(
+        token, password="unit-password-123", dial_alias="7900"
+    )
+    assert result.extension == "7900.a"
+    assert result.dial_alias == "7900"
+    assert result.runtime_visible is True
+    assert config.view is not None and config.view.number_alias == "7900"
+    assert mutation.last_create_alias == "7900"
+    with Session() as session:
+        row = session.get(PbxExtensionResource, token.resource_id)
+        assert row.dial_alias == "7900"
+        snapshot = session.execute(select(PbxMutationSnapshot)).scalar_one()
+        assert snapshot.snapshot_json == {"extension": "7900.a", "dial_alias": "7900", "exists": False}
+    cleanup = manager.deprovision_extension(token)
+    assert cleanup.dial_alias == "7900"
+    assert authority.validate(token) is True
+    manager.release_extension(token)
+    assert authority.validate(token) is False
+
+
+def test_dial_alias_conflict_fails_before_mutation() -> None:
+    _, _, token, config, mutation, manager = _manager(extension="7900.a")
+    config.view = FusionPbxExtensionView(
+        domain_id="d1", extension_uuid="manual-1", extension="7109",
+        number_alias="7900", enabled=True, description="MANUAL", accountcode="7109",
+        user_context="default", password_present=True,
+    )
+    with pytest.raises(PbxResourceManagerError, match="PBX_DIAL_ALIAS_CONFLICT"):
+        manager.provision_extension(token, password="unit-password-123", dial_alias="7900")
+    assert mutation.create_calls == 0
+
+
+def test_dial_alias_stale_runtime_is_reconciled_under_same_lease() -> None:
+    _, authority, token, config, mutation, manager = _manager(extension="7900.a")
+    manager.provision_extension(token, password="unit-password-123", dial_alias="7900")
+    config.view = None
+    manager.runtime.stale_visible = True
+    result = manager.deprovision_extension(token)
+    assert result.status == "CONFIRMED_BY_OBSERVATION"
+    assert mutation.delete_calls == 0
+    assert mutation.reconcile_calls == 1
+    assert mutation.last_reconcile_alias == "7900"
+    assert authority.validate(token) is True
+
+
+def test_provider_writes_number_alias_and_rejects_non_numeric_alias() -> None:
+    profile = _profile()
+    token = SimpleNamespace(
+        lease_id="l1", resource_id="r1", pbx_node_id="n1", domain_id="d1",
+        extension="7900.a", run_id="run-1", owner_worker_id="worker-1", lease_epoch=7,
+    )
+    calls = []
+    def runner(script, req, _timeout):
+        calls.append((script, dict(req)))
+        return 0, ('{"status":"CONFIRMED","operation":"create","extension":"7900.a",'
+                   '"extension_uuid":"u1","ownership_marker":"AIVOIP_AUTOMATION:run-1:7",'
+                   '"runtime_reload_requested":true,"secret_values_emitted":false}')
+    provider = FusionPbxMutationProvider(
+        profile, authority=SimpleNamespace(validate=lambda _t: True),
+        source_fence=SimpleNamespace(verify_mutation_contract=lambda: SimpleNamespace(ok=True)),
+        runner=runner,
+    )
+    provider.create_extension(token, domain_name="pbx.test", password="unit-password-123",
+                              template_identity="7102", dial_alias="7900")
+    assert calls[0][1]["dial_alias"] == "7900"
+    assert "number_alias" in calls[0][0] and "$dial_alias" in calls[0][0]
+    with pytest.raises(FusionPbxMutationError, match="PBX_DIAL_ALIAS_INVALID"):
+        provider.create_extension(token, domain_name="pbx.test", password="unit-password-123",
+                                  template_identity="7102", dial_alias="7900.a")

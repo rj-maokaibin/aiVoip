@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 import shutil
 import subprocess
+from xml.etree import ElementTree
 from typing import Callable
 
 from app.automation.adapters.pbx.profile import FusionPbxLabProfile
@@ -97,3 +98,37 @@ class FreeSwitchRuntimeReadProbe:
         if not re.fullmatch(r"[0-9A-Za-z_.+-]{1,128}", value):
             raise FreeSwitchRuntimeReadError("PBX_FREESWITCH_USER_CONTEXT_INVALID")
         return value
+
+    def resolve_directory_identity(self, identity: str, *, domain_name: str) -> dict[str, str | None] | None:
+        identity = str(identity).strip()
+        domain_name = str(domain_name).strip()
+        if not _IDENTITY_RE.fullmatch(identity) or not _DOMAIN_RE.fullmatch(domain_name):
+            raise FreeSwitchRuntimeReadError("PBX_RUNTIME_IDENTITY_INVALID")
+        command = f"find_user_xml id {identity} {domain_name}"
+        rc, output = self._runner((self.profile.fs_cli_bin, "-x", command), self.timeout_seconds)
+        if rc != 0:
+            raise FreeSwitchRuntimeReadError("PBX_FREESWITCH_FIND_USER_FAILED")
+        text = (output or "").strip()
+        if not text or text.startswith("-ERR"):
+            return None
+        try:
+            root = ElementTree.fromstring(text)
+        except ElementTree.ParseError as exc:
+            raise FreeSwitchRuntimeReadError("PBX_FREESWITCH_FIND_USER_XML_INVALID") from exc
+        if root.tag != "user":
+            user = root.find(".//user")
+            if user is None:
+                return None
+        else:
+            user = root
+        resolved_id = str(user.attrib.get("id") or "").strip()
+        number_alias = str(user.attrib.get("number-alias") or "").strip() or None
+        resolved_domain = str(user.attrib.get("domain-name") or domain_name).strip()
+        if not _IDENTITY_RE.fullmatch(resolved_id) or not _DOMAIN_RE.fullmatch(resolved_domain):
+            raise FreeSwitchRuntimeReadError("PBX_FREESWITCH_FIND_USER_IDENTITY_INVALID")
+        return {
+            "resolved_identity": resolved_id,
+            "number_alias": number_alias,
+            "domain_name": resolved_domain,
+            "secret_values_emitted": False,
+        }

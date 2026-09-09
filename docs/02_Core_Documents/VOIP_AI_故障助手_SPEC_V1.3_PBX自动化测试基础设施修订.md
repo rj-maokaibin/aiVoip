@@ -27,7 +27,7 @@ Runtime Provider 必须输出结构化 Registration/Call/DTMF/Hangup Evidence，
 
 ## 5. PBX-INFRA-004｜Resource Pool
 
-第一版 extension pool 冻结为 `7900-7999`。资源状态：`FREE/RESERVED/PROVISIONING/READY/IN_USE/CLEANUP/DIRTY/RECOVERING/OFFLINE`。
+第一版数字 dial alias pool 冻结为 `7900-7999`；extension identity 不受数字池限制。资源状态：`FREE/RESERVED/PROVISIONING/READY/IN_USE/CLEANUP/DIRTY/RECOVERING/OFFLINE`。
 
 `STATIC_BASELINE` 与 `TEMPORARY_AUTOMATION` 必须显式区分；baseline 不得被自动 delete。
 
@@ -75,6 +75,7 @@ Mutation 前必须通过 PBX_READY：FusionPBX source/database、FreeSWITCH prof
 
 - G-PBX-001 Extension Lifecycle。
 - G-PBX-002 Registration Lifecycle。
+- G-PBX-003 Dial Alias Resolution。
 - G-CALL-001 SIP Call E2E。
 
 三条 Golden 均必须包含 cleanup、reverse verify、immutable evidence 和 failure injection；Golden 不能使用手工预配置才能 PASS。
@@ -86,3 +87,7 @@ PBX infrastructure mutation 只允许在被标记为 Test Lab 的 PBX node/domai
 ## 增量合同：Extension Identity
 
 Extension identity 统一使用 string。Automation-managed identity V1 允许 `[A-Za-z0-9.+]`（1-64，至少一个字母或数字）；PBX discovery 可读取更宽历史字符但不得主动 mutation。Registration observer、ESL event matching、ResourceAuthority、Evidence schema 均不得使用 `isdigit()` 作为 identity 合法性合同。
+
+## 增量合同：Dial Alias
+
+`pbx_extension_resources` 必须一等持久化 `dial_alias`，不得只放 provider metadata。`dial_alias` V1 合同为 `[0-9]{1,32}`。FusionPBX Provider 使用原生 `number_alias`。Provision 前必须检查 alias 与现有 extension/number_alias 双向冲突；cleanup 必须验证 extension identity、dial alias、FreeSWITCH directory resolution 均 absent 后才能 release。FreeSWITCH alias resolution 使用安全解析后的 root user attributes，禁止 Evidence 携带完整 directory XML/secret params。

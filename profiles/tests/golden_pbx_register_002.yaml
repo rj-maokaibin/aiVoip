@@ -1,0 +1,45 @@
+id: Golden-PBX-REGISTER-002
+version: 1
+name: Dynamic non-numeric PBX extension and DUT SIP registration lifecycle
+suite_id: pbx_lab
+entry: web
+contract_status: ACTIVE
+environment:
+  profile: real_controlled
+parameters:
+  target_identity: "7900.a"
+snapshot:
+  - web_voip_writable_bundle
+steps:
+  - action: voip.account.configure
+    purpose: test
+    args: {}
+assertions:
+  - id: web_number_readback
+    source: entry
+    path: number
+    op: eq
+    value: ${target_identity}
+  - id: web_display_name_readback
+    source: entry
+    path: disName
+    op: eq
+    value: ${target_identity}
+  - id: web_auth_identity_readback
+    source: entry
+    path: authId
+    op: eq
+    value: ${target_identity}
+  - id: sip_registration_observed
+    source: sip
+    path: registered
+    op: eq
+    value: true
+  - id: sip_registration_identity
+    source: sip
+    path: registration_identity
+    op: eq
+    value: ${target_identity}
+cleanup:
+  strategy: restore_snapshot
+  verify: true

@@ -40,14 +40,15 @@ RECOVERING：系统正在执行确定性恢复。
 
 ## 5. 第一阶段号码池
 
-`7900-7999` 作为自动化临时号码候选池；`7102` 等现有环境号码属于 STATIC_BASELINE。临时号码只有在系统确认 ownership 后才允许删除。
+`7900-7999` 作为默认数字 dial alias 候选池；Extension Identity 使用 string，可为非数字。`7102` 等现有环境号码属于 STATIC_BASELINE。临时 identity/alias 只有在系统确认 ownership 后才允许删除。
 
 ## 6. 验收补充
 
 产品验收新增三条正式 Golden：
 
 - `G-PBX-001`：Extension 生命周期 create/readback/runtime/delete/absence。
-- `G-PBX-002`：DUT 绑定动态 extension 后真实 REGISTER，并完整恢复。
+- `G-PBX-002`：DUT 绑定动态非数字 extension 后真实 REGISTER，并完整恢复。
+- `G-PBX-003`：数字 dial alias 在 FreeSWITCH 中解析到非数字 SIP identity，并在 cleanup 后完全消失。
 - `G-CALL-001`：自动化 peer 与 DUT 完成真实 SIP Call signaling，随后全资源 cleanup。
 
 其中 cleanup/recovery、secret hard-zero、无 ownership 删除 hard-zero、blind mutation retry hard-zero均为发布硬门禁。
@@ -59,3 +60,7 @@ RECOVERING：系统正在执行确定性恢复。
 ## 增量要求：非数字分机 identity
 
 PBX 自动化测试基础设施不得假设分机号为整数。产品验收范围必须支持字母/数字以及当前市场需求特殊字符 `.`、`+`；默认数字池仅用于资源自动分配。必须提供非数字 extension create/delete、REGISTER、cleanup 的真实 Golden 证据。
+
+## 增量产品语义：话机拨号与 SIP Identity
+
+普通 FXS 模拟话机不直接输入字母、`.`、`+`。产品体验按“非数字 SIP identity + 数字 dial alias”提供，例如 `7900.a` 注册、用户拨 `7900`。自动化验收必须分别记录 `registration_identity`、`dial_alias`、`dialed_digits`、`resolved_identity`，不得混称为同一个“分机号”。

@@ -172,6 +172,19 @@ FREE -> RESERVED -> PROVISIONING -> READY -> IN_USE -> CLEANUP -> FREE
 
 只有实际自动创建并写入 ownership marker 后才允许 delete。
 
+## 6.1 Extension Identity 与 Dial Alias
+
+FXS 模拟话机的用户拨号输入与 SIP 注册身份必须分离建模：
+
+```text
+extension_identity = "7900.a"   # SIP REGISTER / auth identity
+dial_alias         = "7900"     # 物理话机实际拨号串
+```
+
+V1 `extension_identity` 允许字母/数字以及 `.`、`+`；`dial_alias` 严格为 1-32 位数字。FusionPBX 使用原生 `number_alias` 持久化 dial alias。ResourceManager 必须对 extension 与 number_alias 做统一冲突检查。
+
+FreeSWITCH runtime 必须通过 `find_user_xml id <dial_alias> <domain>` 安全解析并证明 `dial_alias -> extension_identity`，不得仅以 `user_exists=true` 推断路由。Cleanup 必须同时证明 extension、alias、alias resolution 全部消失后才能 FREE/release。
+
 ## 7. Ownership 与删除保护
 
 自动化创建资源必须写入可回读 ownership marker，例如：
@@ -348,10 +361,13 @@ PBX_RESOURCE_DIRTY
 至少执行 `7900.a` 与 `+7900` 两条真实 lifecycle：`acquire -> create -> FreeSWITCH visible -> delete -> runtime absent -> release-last`。
 
 ### G-PBX-002 Registration Lifecycle
-默认使用非数字 identity（首选 `7900.a`）：`acquire/provision -> DUT WEB configure number/disName/authId/passwd -> ESL REGISTER exact identity -> fs_cli reconcile -> DUT restore baseline -> PBX cleanup -> runtime absent -> release-last`。
+默认使用 `extension_identity=7900.a` + `dial_alias=7900`：`acquire/provision -> alias resolution -> DUT WEB configure number/disName/authId/passwd -> ESL REGISTER exact identity -> fs_cli reconcile -> DUT restore baseline -> PBX cleanup -> extension/alias runtime absent -> release-last`。
+
+### G-PBX-003 Dial Alias Resolution
+`create 7900.a + number_alias 7900 -> FreeSWITCH find_user_xml id 7900 -> resolved_identity=7900.a -> cleanup -> alias resolution absent`。
 
 ### G-CALL-001 SIP Call E2E
-`7901 peer -> 7900 DUT -> RINGING -> ANSWER -> RTP -> DTMF -> BYE -> reverse cleanup`，并补反向呼叫。
+模拟话机只拨数字 alias：例如 peer/话机拨 `7900`，FusionPBX 解析到已注册的 `7900.a`；验证 `dialed_digits=7900 -> resolved_identity=7900.a -> RINGING -> ANSWER -> RTP -> DTMF -> BYE`。反向呼叫同样区分主叫 SIP identity 与被叫 dial alias。
 
 所有 Golden 必须包含 failure injection：timeout/UNKNOWN、duplicate request、cleanup crash、stale lease、ownership mismatch。
 

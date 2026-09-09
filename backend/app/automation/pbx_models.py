@@ -42,6 +42,7 @@ class PbxExtensionResource(Base):
     pbx_node_id: Mapped[str] = mapped_column(ForeignKey("pbx_nodes.id", ondelete="RESTRICT"), index=True)
     domain_id: Mapped[str] = mapped_column(String(128), index=True)
     extension: Mapped[str] = mapped_column(String(128), index=True)
+    dial_alias: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
     resource_type: Mapped[str] = mapped_column(String(32), index=True)
     state: Mapped[str] = mapped_column(String(32), index=True, default="FREE")
     lease_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)

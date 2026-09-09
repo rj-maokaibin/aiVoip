@@ -229,3 +229,12 @@ def test_pbx_migration_and_models_cover_frozen_resource_tables() -> None:
     assert 'down_revision = "0033_automation_test_runtime_v1"' in migration
     for table in required:
         assert f'"{table}"' in migration
+
+
+def test_pbx_dial_alias_migration_is_first_class_and_chained() -> None:
+    from app.automation.pbx_models import PbxExtensionResource
+    assert "dial_alias" in PbxExtensionResource.__table__.columns
+    migration = Path("backend/migrations/versions/0035_pbx_dial_alias_v1.py").read_text(encoding="utf-8")
+    assert 'down_revision = "0034_pbx_test_lab_v1"' in migration
+    assert '"dial_alias"' in migration
+    assert '"ix_pbx_extension_dial_alias"' in migration

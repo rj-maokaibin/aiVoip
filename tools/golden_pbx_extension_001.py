@@ -29,6 +29,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--run-id", required=True)
     parser.add_argument("--owner", required=True)
     parser.add_argument("--extension", default=None, help="Optional managed extension identity")
+    parser.add_argument("--dial-alias", default=None, help="Optional numeric dial alias for the managed identity")
     return parser.parse_args()
 
 
@@ -92,6 +93,7 @@ def main() -> int:
     evidence = {
         "schema": "g-pbx-001-v1",
         "extension": token.extension,
+        "dial_alias": args.dial_alias,
         "lease_epoch": token.lease_epoch,
         "source_fence": True,
         "mutation_entry": "FusionPBX-native-provider",
@@ -104,16 +106,25 @@ def main() -> int:
             token.extension,
             domain_name=domain.domain_name,
         )
+        evidence["before_alias_exists"] = bool(args.dial_alias and config.extension_exists(args.dial_alias))
+        evidence["before_alias_runtime_visible"] = bool(args.dial_alias and runtime.user_visible(args.dial_alias, domain_name=domain.domain_name))
         created = manager.provision_extension(
             token,
             password=credential,
             template_identity="7102",
+            dial_alias=args.dial_alias,
         )
         evidence["create"] = created.safe_dict()
         evidence["after_create_exists"] = config.extension_exists(token.extension)
         evidence["after_create_runtime_visible"] = runtime.user_visible(
             token.extension,
             domain_name=domain.domain_name,
+        )
+        evidence["after_create_alias_exists"] = bool(args.dial_alias and config.extension_exists(args.dial_alias))
+        evidence["after_create_alias_runtime_visible"] = bool(args.dial_alias and runtime.user_visible(args.dial_alias, domain_name=domain.domain_name))
+        evidence["alias_resolution"] = (
+            runtime.resolve_directory_identity(args.dial_alias, domain_name=domain.domain_name)
+            if args.dial_alias else None
         )
     except Exception as exc:
         evidence["create_error_code"] = getattr(exc, "code", type(exc).__name__)
@@ -126,9 +137,17 @@ def main() -> int:
                 token.extension,
                 domain_name=domain.domain_name,
             )
+            evidence["after_cleanup_alias_exists"] = bool(args.dial_alias and config.extension_exists(args.dial_alias))
+            evidence["after_cleanup_alias_runtime_visible"] = bool(args.dial_alias and runtime.user_visible(args.dial_alias, domain_name=domain.domain_name))
+            evidence["after_cleanup_alias_resolution"] = (
+                runtime.resolve_directory_identity(args.dial_alias, domain_name=domain.domain_name)
+                if args.dial_alias else None
+            )
             cleanup_ok = (
                 evidence["after_cleanup_exists"] is False
                 and evidence["after_cleanup_runtime_visible"] is False
+                and (not args.dial_alias or evidence["after_cleanup_alias_exists"] is False)
+                and (not args.dial_alias or evidence["after_cleanup_alias_runtime_visible"] is False)
             )
         except Exception as exc:
             evidence["cleanup_error_code"] = getattr(exc, "code", type(exc).__name__)
@@ -149,6 +168,13 @@ def main() -> int:
         and evidence.get("before_runtime_visible") is False
         and evidence.get("after_create_exists") is True
         and evidence.get("after_create_runtime_visible") is True
+        and (not args.dial_alias or evidence.get("before_alias_exists") is False)
+        and (not args.dial_alias or evidence.get("before_alias_runtime_visible") is False)
+        and (not args.dial_alias or evidence.get("after_create_alias_exists") is True)
+        and (not args.dial_alias or evidence.get("after_create_alias_runtime_visible") is True)
+        and (not args.dial_alias or (evidence.get("alias_resolution") or {}).get("resolved_identity") == token.extension)
+        and (not args.dial_alias or (evidence.get("alias_resolution") or {}).get("number_alias") == args.dial_alias)
+        and (not args.dial_alias or evidence.get("after_cleanup_alias_resolution") is None)
         and cleanup_ok
         and evidence.get("release_last") is True
         and evidence["7102_still_exists"] is True

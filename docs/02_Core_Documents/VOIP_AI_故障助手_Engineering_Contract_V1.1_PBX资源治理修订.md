@@ -72,3 +72,12 @@ G-PBX-001、G-PBX-002、G-CALL-001 未通过前，不得宣布 PBX Infrastructur
 ## 非数字 identity 工程约束
 
 禁止把 extension/number_alias/auth identity 转为 int 后比较、排序或持久化。自动化主动 mutation 统一经过 managed identity validator；当前仅开放字母、数字、`.`、`+`。历史 PBX identity 只读发现不得因此丢失。Golden 必须分别覆盖 `.` 与 `+`。
+
+## EC-PBX-ALIAS｜拨号别名治理
+
+- `extension_identity` 与 `dial_alias` 是不同字段，不得互相覆盖或转 int。
+- `dial_alias` 仅允许 `[0-9]{1,32}`，不把 `*`/`#` 当作普通 alias 字符。
+- FusionPBX `number_alias` 是唯一 V1 provider mapping，不允许另建未治理旁路映射表。
+- Alias collision 必须在 mutation 前 fail-closed。
+- Cleanup 必须同时清 extension/alias 两组 FusionPBX/FreeSWITCH cache，并用 `find_user_xml` 证明 alias resolution absent。
+- Evidence 必须区分 `registration_identity` / `dial_alias` / `dialed_digits` / `resolved_identity`。

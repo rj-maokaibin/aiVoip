@@ -28,3 +28,21 @@ def is_automation_identity(value: str) -> bool:
     except PbxExtensionIdentityError:
         return False
     return True
+
+
+_DIAL_ALIAS_RE = re.compile(r"^[0-9]{1,32}$")
+
+
+def normalize_dial_alias(value: str) -> str:
+    alias = str(value)
+    if alias != alias.strip() or not _DIAL_ALIAS_RE.fullmatch(alias):
+        raise PbxExtensionIdentityError("PBX_DIAL_ALIAS_INVALID")
+    return alias
+
+
+def is_dial_alias(value: str) -> bool:
+    try:
+        normalize_dial_alias(value)
+    except PbxExtensionIdentityError:
+        return False
+    return True
