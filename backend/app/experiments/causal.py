@@ -38,7 +38,7 @@ class CausalConfirmationEngine:
     determined by experiment pattern + environment comparability + contradiction rules.
     """
 
-    version = "1.0.0"
+    version = "1.1.0"
 
     @staticmethod
     def _run_by_variant(runs: list[ExperimentRun], variant: ExperimentVariant) -> ExperimentRun | None:
@@ -109,8 +109,15 @@ class CausalConfirmationEngine:
         aba_cmp = self._comparison_between(comparisons, a1, a2) if a1 and a2 else None
         comparable_ab = bool(ab_cmp and ab_cmp.status != EnvironmentComparisonStatus.NOT_COMPARABLE.value)
         comparable_aba = bool(aba_cmp and aba_cmp.status != EnvironmentComparisonStatus.NOT_COMPARABLE.value)
-        pattern_ab = target(a1) and control(b) and comparable_ab
-        pattern_aba = pattern_ab and target(a2) and comparable_aba
+
+        if profile.causal_pattern == "A1_CONTROL_B_TARGET_A2_CONTROL":
+            pattern_ab = control(a1) and target(b) and comparable_ab
+            pattern_aba = pattern_ab and control(a2) and comparable_aba
+            same_direction_ab = bool(a1 and b and ((control(a1) and control(b)) or (target(a1) and target(b))))
+        else:
+            pattern_ab = target(a1) and control(b) and comparable_ab
+            pattern_aba = pattern_ab and target(a2) and comparable_aba
+            same_direction_ab = bool(a1 and b and ((target(a1) and target(b)) or (control(a1) and control(b))))
 
         policy = profile.confirmation_policy
         if policy == ConfirmationPolicy.AB_SUFFICIENT:
@@ -120,7 +127,7 @@ class CausalConfirmationEngine:
                 state = CausalConclusionState.ROOT_CAUSE_CONFIRMED
             elif pattern_ab:
                 state = CausalConclusionState.STRONGLY_SUPPORTED
-            elif a1 and b and ((target(a1) and target(b)) or (control(a1) and control(b))):
+            elif same_direction_ab:
                 state = CausalConclusionState.CONTRADICTED
             else:
                 state = CausalConclusionState.INCONCLUSIVE
@@ -159,6 +166,7 @@ class CausalConfirmationEngine:
             (),
             {
                 "policy": policy.value,
+                "causal_pattern": profile.causal_pattern,
                 "pattern_ab": pattern_ab,
                 "pattern_aba": pattern_aba,
                 "a1_verdict": a1.target_verdict if a1 else None,
