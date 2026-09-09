@@ -20,6 +20,9 @@ class PbxTokenValidator(Protocol):
 MutationRunner = Callable[[str, dict[str, Any], float], tuple[int | None, str]]
 
 
+CacheReconcileRunner = Callable[[tuple[str, ...], float], bool]
+
+
 class FusionPbxMutationError(RuntimeError):
     pass
 
@@ -48,6 +51,20 @@ class FusionPbxMutationResult:
             "mutation_executed": self.status in {"CONFIRMED", "UNKNOWN"},
             "secret_values_emitted": False,
         }
+
+
+_CACHE_RECONCILE_LUA = r'''
+local Cache = require "resources.functions.cache"
+local ok_all = true
+for i = 1, #argv do
+  local key = argv[i]
+  local ok = Cache.del(key)
+  if not ok then ok_all = false end
+end
+local api = freeswitch.API()
+api:execute("reloadxml", "")
+if ok_all then stream:write("OK") else stream:write("ERROR") end
+'''
 
 
 _MUTATION_PHP = r'''<?php
@@ -110,9 +127,29 @@ if ($operation === 'create') {
   exit(0);
 }
 
+if ($operation === 'reconcile_absent_cache') {
+  $user_context = strval($req['user_context'] ?? '');
+  if ($marker === '' || $user_context === '') { fwrite(STDERR, "PBX_CACHE_RECONCILE_INPUT_REQUIRED\n"); exit(15); }
+  $cache = new cache;
+  // FusionPBX Lua XML handler caches directory entries by domain_name.
+  // Native extension deletion uses user_context, which may be "default".
+  // Invalidate both identities so runtime cannot retain a deleted user.
+  $cache->delete('directory:' . $extension . '@' . $domain_name);
+  if ($user_context !== $domain_name) {
+    $cache->delete('directory:' . $extension . '@' . $user_context);
+  }
+  event_socket::api('reloadxml');
+  echo json_encode([
+    'status'=>'CONFIRMED','operation'=>'reconcile_absent_cache','extension'=>$extension,
+    'extension_uuid'=>null,'ownership_marker'=>$marker,
+    'runtime_reload_requested'=>true,'secret_values_emitted'=>false
+  ], JSON_UNESCAPED_SLASHES) . PHP_EOL;
+  exit(0);
+}
+
 if ($operation === 'delete') {
   $row = $database->select(
-    "select extension_uuid, description from v_extensions where domain_uuid = :domain_uuid and extension = :extension limit 1",
+    "select extension_uuid, description, number_alias, user_context from v_extensions where domain_uuid = :domain_uuid and extension = :extension limit 1",
     ['domain_uuid'=>$domain_uuid,'extension'=>$extension], 'row');
   if (!is_array($row)) { fwrite(STDERR, "PBX_EXTENSION_NOT_FOUND\n"); exit(10); }
   if (strval($row['description'] ?? '') !== $marker || $marker === '') { fwrite(STDERR, "PBX_RESOURCE_OWNERSHIP_UNPROVEN\n"); exit(11); }
@@ -127,6 +164,19 @@ if ($operation === 'delete') {
     $p->delete('extension_delete', 'temp');
   }
   if ($ok === false) { fwrite(STDERR, "PBX_DELETE_FAILED\n"); exit(13); }
+  $user_context = strval($row['user_context'] ?? '');
+  $alias = strval($row['number_alias'] ?? '');
+  $cache = new cache;
+  $cache->delete('directory:' . $extension . '@' . $domain_name);
+  if ($user_context !== '' && $user_context !== $domain_name) {
+    $cache->delete('directory:' . $extension . '@' . $user_context);
+  }
+  if ($alias !== '') {
+    $cache->delete('directory:' . $alias . '@' . $domain_name);
+    if ($user_context !== '' && $user_context !== $domain_name) {
+      $cache->delete('directory:' . $alias . '@' . $user_context);
+    }
+  }
   $ext->xml();
   event_socket::api('reloadxml');
   echo json_encode([
@@ -155,12 +205,14 @@ class FusionPbxMutationProvider:
         authority: PbxTokenValidator,
         source_fence: FusionPbxSourceFence | None = None,
         runner: MutationRunner | None = None,
+        cache_reconcile_runner: CacheReconcileRunner | None = None,
         timeout_seconds: float = 20.0,
     ) -> None:
         self.profile = profile
         self.authority = authority
         self.source_fence = source_fence or FusionPbxSourceFence(profile)
         self._runner = runner or self._run_php
+        self._cache_reconcile_runner = cache_reconcile_runner or self._run_cache_reconcile_lua
         self.timeout_seconds = float(timeout_seconds)
 
     def _run_php(
@@ -193,6 +245,44 @@ class FusionPbxMutationProvider:
                 except OSError:
                     pass
 
+    def _run_cache_reconcile_lua(self, keys: tuple[str, ...], timeout_seconds: float) -> bool:
+        if not keys:
+            return False
+        path: str | None = None
+        try:
+            fd, path = tempfile.mkstemp(
+                prefix="aivoip-pbx-cache-", suffix=".lua", dir="/tmp", text=True
+            )
+            # FreeSWITCH runs as www-data and must be able to read this secret-free helper.
+            os.fchmod(fd, 0o644)
+            with os.fdopen(fd, "w", encoding="utf-8") as stream:
+                stream.write(_CACHE_RECONCILE_LUA)
+            command = "lua " + path + " " + " ".join(keys)
+            cp = subprocess.run(
+                [self.profile.fs_cli_bin, "-x", command],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                text=True,
+                timeout=timeout_seconds,
+                check=False,
+            )
+            return cp.returncode == 0 and (cp.stdout or "").strip() == "OK"
+        except (OSError, subprocess.TimeoutExpired):
+            return False
+        finally:
+            if path:
+                try:
+                    Path(path).unlink(missing_ok=True)
+                except OSError:
+                    pass
+
+    @staticmethod
+    def _cache_identity(value: str, *, code: str) -> str:
+        import re
+        if not value or len(value) > 255 or re.fullmatch(r"[A-Za-z0-9_.+:-]+", value) is None:
+            raise FusionPbxMutationError(code)
+        return value
+
     def _preflight(self, token: PbxLeaseToken) -> None:
         if not self.authority.validate(token):
             raise FusionPbxMutationError("PBX_LEASE_FENCED")
@@ -204,9 +294,13 @@ class FusionPbxMutationProvider:
     def _marker(token: PbxLeaseToken) -> str:
         return f"AIVOIP_AUTOMATION:{token.run_id}:{token.lease_epoch}"
 
-    def _invoke(self, operation: str, token: PbxLeaseToken, **request: Any) -> FusionPbxMutationResult:
+    def _invoke(
+        self, operation: str, token: PbxLeaseToken, *, ownership_marker: str | None = None, **request: Any
+    ) -> FusionPbxMutationResult:
         self._preflight(token)
-        marker = self._marker(token)
+        marker = ownership_marker or self._marker(token)
+        if not marker.startswith("AIVOIP_AUTOMATION:"):
+            raise FusionPbxMutationError("PBX_RESOURCE_OWNERSHIP_UNPROVEN")
         payload = {
             "fusionpbx_root": self.profile.fusionpbx_root,
             "operation": operation,
@@ -276,6 +370,35 @@ class FusionPbxMutationProvider:
         )
 
     def delete_extension(
-        self, token: PbxLeaseToken, *, domain_name: str
+        self, token: PbxLeaseToken, *, domain_name: str, ownership_marker: str | None = None
     ) -> FusionPbxMutationResult:
-        return self._invoke("delete", token, domain_name=domain_name)
+        return self._invoke(
+            "delete", token, domain_name=domain_name, ownership_marker=ownership_marker
+        )
+
+    def reconcile_absent_extension_cache(
+        self,
+        token: PbxLeaseToken,
+        *,
+        domain_name: str,
+        user_context: str,
+        ownership_marker: str | None = None,
+    ) -> FusionPbxMutationResult:
+        self._preflight(token)
+        domain_name = self._cache_identity(domain_name, code="PBX_DOMAIN_INVALID")
+        user_context = self._cache_identity(user_context, code="PBX_USER_CONTEXT_INVALID")
+        marker = ownership_marker or self._marker(token)
+        if not marker.startswith("AIVOIP_AUTOMATION:"):
+            raise FusionPbxMutationError("PBX_RESOURCE_OWNERSHIP_UNPROVEN")
+        keys = [f"directory:{token.extension}@{domain_name}"]
+        if user_context != domain_name:
+            keys.append(f"directory:{token.extension}@{user_context}")
+        ok = self._cache_reconcile_runner(tuple(keys), self.timeout_seconds)
+        return FusionPbxMutationResult(
+            status="CONFIRMED" if ok else "UNKNOWN",
+            operation="reconcile_absent_cache",
+            extension=token.extension,
+            extension_uuid=None,
+            ownership_marker=marker,
+            runtime_reload_requested=ok,
+        )

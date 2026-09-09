@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from types import SimpleNamespace
 
 import pytest
@@ -210,3 +212,73 @@ def test_release_is_fail_closed_until_cleanup_marks_free() -> None:
     with Session() as session:
         lease = session.get(PbxResourceLease, token.lease_id)
         assert lease.state == "ACTIVE"
+
+
+def test_resume_active_lease_preserves_epoch_for_dirty_recovery() -> None:
+    Session = _session_factory()
+    with Session() as session:
+        node = PbxNode(
+            node_key="recovery-pbx", provider="fusionpbx", runtime_provider="freeswitch",
+            host="127.0.0.1", fusionpbx_root="/tmp/fusionpbx", internal_profile="internal",
+            internal_port=5060, status="PBX_READY", source_fence_version="test-v1",
+        )
+        session.add(node); session.flush()
+        resource = PbxExtensionResource(
+            pbx_node_id=node.id, domain_id="d1", extension="7900",
+            resource_type=PbxResourceType.TEMPORARY_AUTOMATION.value,
+            state=PbxResourceState.FREE.value,
+        )
+        session.add(resource); session.commit(); node_id = node.id
+    manager = PbxExtensionLeaseManager(Session, ttl_seconds=60)
+    token = manager.acquire_extension(
+        pbx_node_id=node_id, extension="7900", run_id="run-r", owner_worker_id="worker-r"
+    )
+    with Session() as session:
+        row = session.get(PbxExtensionResource, token.resource_id)
+        row.state = PbxResourceState.DIRTY.value
+        row.created_by_automation = True
+        row.ownership_marker = "AIVOIP_AUTOMATION:run-r:1"
+        session.commit()
+    resumed = manager.resume_active_lease(
+        pbx_node_id=node_id, extension="7900", run_id="run-r", owner_worker_id="worker-r"
+    )
+    assert resumed.lease_id == token.lease_id
+    assert resumed.lease_epoch == token.lease_epoch
+
+
+def test_expired_dirty_resource_can_only_reacquire_as_recovery() -> None:
+    Session = _session_factory()
+    with Session() as session:
+        node = PbxNode(
+            node_key="expired-recovery-pbx", provider="fusionpbx", runtime_provider="freeswitch",
+            host="127.0.0.1", fusionpbx_root="/tmp/fusionpbx", internal_profile="internal",
+            internal_port=5060, status="PBX_READY", source_fence_version="test-v1",
+        )
+        session.add(node); session.flush()
+        resource = PbxExtensionResource(
+            pbx_node_id=node.id, domain_id="d1", extension="7900",
+            resource_type=PbxResourceType.TEMPORARY_AUTOMATION.value,
+            state=PbxResourceState.FREE.value,
+        )
+        session.add(resource); session.commit(); node_id = node.id
+    manager = PbxExtensionLeaseManager(Session, ttl_seconds=60)
+    token = manager.acquire_extension(
+        pbx_node_id=node_id, extension="7900", run_id="run-a", owner_worker_id="worker-a"
+    )
+    from datetime import timedelta
+    with Session() as session:
+        row = session.get(PbxExtensionResource, token.resource_id)
+        row.state = PbxResourceState.DIRTY.value
+        row.created_by_automation = True
+        row.ownership_marker = "AIVOIP_AUTOMATION:run-a:1"
+        lease = session.get(PbxResourceLease, token.lease_id)
+        lease.expires_at = datetime.now(timezone.utc) - timedelta(seconds=1)
+        session.commit()
+    recovered = manager.acquire_recovery(
+        pbx_node_id=node_id, extension="7900", run_id="run-r", owner_worker_id="worker-r"
+    )
+    assert recovered.lease_epoch == token.lease_epoch + 1
+    with Session() as session:
+        row = session.get(PbxExtensionResource, recovered.resource_id)
+        assert row.state == PbxResourceState.RECOVERING.value
+        assert row.ownership_marker == "AIVOIP_AUTOMATION:run-a:1"

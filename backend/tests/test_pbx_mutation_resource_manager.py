@@ -94,13 +94,16 @@ class FakeConfig:
 class FakeRuntime:
     def __init__(self, config: FakeConfig):
         self.config = config
+        self.stale_visible = False
 
     def user_visible(self, identity: str, *, domain_name: str) -> bool:
         return bool(
-            self.config.view
-            and self.config.view.extension == identity
-            and domain_name == "pbx.test"
+            self.stale_visible
+            or (self.config.view and self.config.view.extension == identity and domain_name == "pbx.test")
         )
+
+    def user_context(self, identity: str, *, domain_name: str) -> str | None:
+        return "default" if self.stale_visible else None
 
 class FakeMutation:
     def __init__(
@@ -111,14 +114,17 @@ class FakeMutation:
         delete_status="CONFIRMED",
         apply_create=True,
         apply_delete=True,
+        runtime=None,
     ):
         self.config = config
+        self.runtime = runtime
         self.create_status = create_status
         self.delete_status = delete_status
         self.apply_create = apply_create
         self.apply_delete = apply_delete
         self.create_calls = 0
         self.delete_calls = 0
+        self.reconcile_calls = 0
 
     def create_extension(self, token, *, domain_name: str, password: str, template_identity: str):
         self.create_calls += 1
@@ -143,7 +149,7 @@ class FakeMutation:
             True,
         )
 
-    def delete_extension(self, token, *, domain_name: str):
+    def delete_extension(self, token, *, domain_name: str, ownership_marker: str | None = None):
         self.delete_calls += 1
         marker = f"AIVOIP_AUTOMATION:{token.run_id}:{token.lease_epoch}"
         if self.apply_delete:
@@ -156,6 +162,17 @@ class FakeMutation:
             marker,
             True,
         )
+    def reconcile_absent_extension_cache(
+        self, token, *, domain_name: str, user_context: str, ownership_marker: str | None = None
+    ):
+        self.reconcile_calls += 1
+        if self.runtime is not None:
+            self.runtime.stale_visible = False
+        marker = ownership_marker or f"AIVOIP_AUTOMATION:{token.run_id}:{token.lease_epoch}"
+        return FusionPbxMutationResult(
+            "CONFIRMED", "reconcile_absent_cache", token.extension, None, marker, True
+        )
+
 
 def _manager(
     *,
@@ -181,6 +198,7 @@ def _manager(
         delete_status=delete_status,
         apply_create=apply_create,
         apply_delete=apply_delete,
+        runtime=runtime,
     )
     manager = PbxResourceManager(
         Session,
@@ -306,6 +324,8 @@ def test_mutation_provider_enforces_token_fence_and_redacts_password() -> None:
     assert len(calls) == 1
     assert calls[0][1]["password"] == "unit-password-123"
     assert "unit-password-123" not in repr(result.safe_dict())
+    assert "$cache->delete('directory:' . $extension . '@' . $domain_name);" in calls[0][0]
+    assert "$cache->delete('directory:' . $extension . '@' . $user_context);" in calls[0][0]
 
     fenced = FusionPbxMutationProvider(
         profile,
@@ -320,3 +340,51 @@ def test_mutation_provider_enforces_token_fence_and_redacts_password() -> None:
             password="unit-password-123",
             template_identity="7102",
         )
+
+
+def test_delete_with_stale_runtime_reconciles_cache_once_without_second_delete() -> None:
+    _, authority, token, _, mutation, manager = _manager()
+    manager.provision_extension(token, password="unit-password-123")
+    manager.runtime.stale_visible = True
+    result = manager.deprovision_extension(token)
+    assert result.status == "CONFIRMED"
+    assert manager.runtime.stale_visible is False
+    assert mutation.delete_calls == 1
+    assert mutation.reconcile_calls == 1
+    assert authority.validate(token) is True
+
+
+def test_absent_pbx_with_stale_runtime_reconciles_cache_once() -> None:
+    Session, authority, token, config, mutation, manager = _manager()
+    manager.provision_extension(token, password="unit-password-123")
+    config.view = None
+    manager.runtime.stale_visible = True
+    result = manager.deprovision_extension(token)
+    assert result.status == "CONFIRMED_BY_OBSERVATION"
+    assert manager.runtime.stale_visible is False
+    assert mutation.delete_calls == 0
+    assert mutation.reconcile_calls == 1
+    assert authority.validate(token) is True
+
+
+def test_runtime_cache_reconcile_uses_domain_and_context_under_same_lease() -> None:
+    profile = _profile()
+    token = SimpleNamespace(
+        lease_id="l1", resource_id="r1", pbx_node_id="n1", domain_id="d1",
+        extension="7900", run_id="recovery-run", owner_worker_id="worker-1", lease_epoch=9,
+    )
+    cache_calls = []
+    provider = FusionPbxMutationProvider(
+        profile,
+        authority=SimpleNamespace(validate=lambda _t: True),
+        source_fence=SimpleNamespace(verify_mutation_contract=lambda: SimpleNamespace(ok=True)),
+        runner=lambda *_a: pytest.fail("cache reconcile must not use PHP mutation runner"),
+        cache_reconcile_runner=lambda keys, _timeout: cache_calls.append(keys) or True,
+    )
+    marker = "AIVOIP_AUTOMATION:original-run:1"
+    result = provider.reconcile_absent_extension_cache(
+        token, domain_name="pbx.test", user_context="default", ownership_marker=marker,
+    )
+    assert result.confirmed is True
+    assert result.ownership_marker == marker
+    assert cache_calls == [("directory:7900@pbx.test", "directory:7900@default")]

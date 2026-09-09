@@ -89,20 +89,41 @@ class FusionPbxSourceFence:
             "resources/classes/database.php",
             "resources/classes/permissions.php",
             "resources/classes/event_socket.php",
+            "resources/classes/cache.php",
             "app/extensions/resources/classes/extension.php",
             "app/extensions/extension_copy.php",
+            "app/switch/resources/scripts/resources/functions/config.lua",
+            "app/switch/resources/scripts/resources/functions/cache.lua",
+            "app/switch/resources/scripts/app/xml_handler/resources/scripts/directory/directory.lua",
         }
         if not required.issubset(self.profile.source_hashes):
             raise FusionPbxSourceFenceError("PBX_PROVIDER_SOURCE_FENCE_FAILED")
         database_text = (root / "resources/classes/database.php").read_text(encoding="utf-8", errors="ignore")
         permissions_text = (root / "resources/classes/permissions.php").read_text(encoding="utf-8", errors="ignore")
         event_socket_text = (root / "resources/classes/event_socket.php").read_text(encoding="utf-8", errors="ignore")
+        cache_text = (root / "resources/classes/cache.php").read_text(encoding="utf-8", errors="ignore")
+        lua_config_text = (
+            root / "app/switch/resources/scripts/resources/functions/config.lua"
+        ).read_text(encoding="utf-8", errors="ignore")
+        lua_cache_text = (
+            root / "app/switch/resources/scripts/resources/functions/cache.lua"
+        ).read_text(encoding="utf-8", errors="ignore")
+        directory_lua_text = (
+            root / "app/switch/resources/scripts/app/xml_handler/resources/scripts/directory/directory.lua"
+        ).read_text(encoding="utf-8", errors="ignore")
         facts = {
             "database_save_method": bool(re.search(r"public\s+function\s+save\s*\(", database_text)),
             "database_delete_method": bool(re.search(r"public\s+function\s+delete\s*\(", database_text)),
             "permissions_add_method": bool(re.search(r"public\s+function\s+add\s*\(", permissions_text)),
             "permissions_delete_method": bool(re.search(r"public\s+function\s+delete\s*\(", permissions_text)),
             "event_socket_api_method": bool(re.search(r"public\s+static\s+function\s+api\s*\(", event_socket_text)),
+            "cache_delete_method": bool(re.search(r"public\s+function\s+delete\s*\(", cache_text)),
+            "lua_cache_method_from_config": 'if (k == "cache.method")' in lua_config_text,
+            "lua_cache_file_key_mapping": "key = key2file(key)" in lua_cache_text,
+            "lua_cache_file_delete": "File.remove(key)" in lua_cache_text,
+            "directory_cache_key_uses_domain_name": (
+                '"directory:" .. (from_user or user) .. "@" .. domain_name' in directory_lua_text
+            ),
         }
         if not all(facts.values()):
             raise FusionPbxSourceFenceError("PBX_PROVIDER_SOURCE_FENCE_FAILED")

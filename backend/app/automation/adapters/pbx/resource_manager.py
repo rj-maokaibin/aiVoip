@@ -136,6 +136,7 @@ class PbxResourceManager:
                 self._set_resource(
                     token, state=PbxResourceState.READY.value, created_by_automation=True,
                     deletable=True, ownership_marker=marker, dirty_reason=None,
+                    provider_metadata_json={"user_context": before.user_context, "extension_uuid": before.extension_uuid},
                 )
                 return PbxProvisionResult("CONFIRMED_BY_OBSERVATION", token.extension, marker, visible, True)
             raise PbxResourceManagerError("PBX_EXTENSION_ALREADY_EXISTS")
@@ -160,12 +161,14 @@ class PbxResourceManager:
             self._set_resource(
                 token, state=PbxResourceState.DIRTY.value,
                 created_by_automation=True, deletable=True, ownership_marker=marker,
+                provider_metadata_json={"user_context": after.user_context, "extension_uuid": after.extension_uuid},
                 dirty_reason="PBX_RUNTIME_NOT_APPLIED",
             )
             raise PbxResourceManagerError("PBX_RUNTIME_NOT_APPLIED")
         self._set_resource(
             token, state=PbxResourceState.READY.value,
             created_by_automation=True, deletable=True, ownership_marker=marker, dirty_reason=None,
+            provider_metadata_json={"user_context": after.user_context, "extension_uuid": after.extension_uuid},
         )
         status = "CONFIRMED_BY_OBSERVATION" if observed_after_unknown else "CONFIRMED"
         return PbxProvisionResult(status, token.extension, marker, True, observed_after_unknown)
@@ -174,10 +177,40 @@ class PbxResourceManager:
         if not self.authority.validate(token):
             raise PbxResourceManagerError("PBX_LEASE_FENCED")
         _, domain_name = self._node_domain(token)
-        marker = self.ownership_marker(token)
+        with self.session_factory() as session:
+            owned = session.get(PbxExtensionResource, token.resource_id)
+            marker = str((owned.ownership_marker if owned else None) or self.ownership_marker(token))
+        if not marker.startswith("AIVOIP_AUTOMATION:"):
+            raise PbxResourceManagerError("PBX_RESOURCE_OWNERSHIP_UNPROVEN")
         self._set_resource(token, state=PbxResourceState.CLEANUP.value)
         current = self._exact_view(token)
         if current is None:
+            runtime_visible = self.runtime.user_visible(token.extension, domain_name=domain_name)
+            if runtime_visible:
+                with self.session_factory() as session:
+                    row = session.get(PbxExtensionResource, token.resource_id)
+                    metadata = (row.provider_metadata_json or {}) if row is not None else {}
+                user_context = str(metadata.get("user_context") or "")
+                if not user_context:
+                    user_context = self.runtime.user_context(token.extension, domain_name=domain_name) or ""
+                if not user_context:
+                    self._set_resource(
+                        token, state=PbxResourceState.DIRTY.value,
+                        dirty_reason="PBX_RUNTIME_RECONCILE_CONTEXT_MISSING",
+                    )
+                    raise PbxResourceManagerError("PBX_RUNTIME_RECONCILE_CONTEXT_MISSING")
+                self.mutation.reconcile_absent_extension_cache(
+                    token,
+                    domain_name=domain_name,
+                    user_context=user_context,
+                    ownership_marker=marker,
+                )
+                runtime_visible = self.runtime.user_visible(token.extension, domain_name=domain_name)
+                if runtime_visible:
+                    self._set_resource(
+                        token, state=PbxResourceState.DIRTY.value, dirty_reason="PBX_RUNTIME_NOT_APPLIED"
+                    )
+                    raise PbxResourceManagerError("PBX_RUNTIME_NOT_APPLIED")
             self._mark_free(token)
             return PbxProvisionResult("CONFIRMED_BY_OBSERVATION", token.extension, marker, False, True)
         if current.description != marker:
@@ -186,7 +219,9 @@ class PbxResourceManager:
                 dirty_reason="PBX_RESOURCE_OWNERSHIP_UNPROVEN",
             )
             raise PbxResourceManagerError("PBX_RESOURCE_OWNERSHIP_UNPROVEN")
-        result = self.mutation.delete_extension(token, domain_name=domain_name)
+        result = self.mutation.delete_extension(
+            token, domain_name=domain_name, ownership_marker=marker
+        )
         after = self._exact_view(token)
         if after is not None:
             self._set_resource(
@@ -196,11 +231,30 @@ class PbxResourceManager:
             raise PbxResourceManagerError(
                 "PBX_MUTATION_UNKNOWN" if result.status == "UNKNOWN" else "PBX_CLEANUP_FAILED"
             )
-        if self.runtime.user_visible(token.extension, domain_name=domain_name):
-            self._set_resource(
-                token, state=PbxResourceState.DIRTY.value, dirty_reason="PBX_RUNTIME_NOT_APPLIED"
+        runtime_visible = self.runtime.user_visible(token.extension, domain_name=domain_name)
+        if runtime_visible:
+            user_context = current.user_context or self.runtime.user_context(
+                token.extension, domain_name=domain_name
+            ) or ""
+            if not user_context:
+                self._set_resource(
+                    token,
+                    state=PbxResourceState.DIRTY.value,
+                    dirty_reason="PBX_RUNTIME_RECONCILE_CONTEXT_MISSING",
+                )
+                raise PbxResourceManagerError("PBX_RUNTIME_RECONCILE_CONTEXT_MISSING")
+            self.mutation.reconcile_absent_extension_cache(
+                token,
+                domain_name=domain_name,
+                user_context=user_context,
+                ownership_marker=marker,
             )
-            raise PbxResourceManagerError("PBX_RUNTIME_NOT_APPLIED")
+            runtime_visible = self.runtime.user_visible(token.extension, domain_name=domain_name)
+            if runtime_visible:
+                self._set_resource(
+                    token, state=PbxResourceState.DIRTY.value, dirty_reason="PBX_RUNTIME_NOT_APPLIED"
+                )
+                raise PbxResourceManagerError("PBX_RUNTIME_NOT_APPLIED")
         self._mark_free(token)
         status = "CONFIRMED_BY_OBSERVATION" if result.status == "UNKNOWN" else "CONFIRMED"
         return PbxProvisionResult(status, token.extension, marker, False, result.status == "UNKNOWN")

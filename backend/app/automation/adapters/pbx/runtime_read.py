@@ -81,3 +81,19 @@ class FreeSwitchRuntimeReadProbe:
         if normalized == "false":
             return False
         raise FreeSwitchRuntimeReadError("PBX_FREESWITCH_USER_EXISTS_INVALID")
+
+    def user_context(self, identity: str, *, domain_name: str) -> str | None:
+        identity = str(identity).strip()
+        domain_name = str(domain_name).strip()
+        if not _IDENTITY_RE.fullmatch(identity) or not _DOMAIN_RE.fullmatch(domain_name):
+            raise FreeSwitchRuntimeReadError("PBX_RUNTIME_IDENTITY_INVALID")
+        command = f"user_data {identity}@{domain_name} var user_context"
+        rc, output = self._runner((self.profile.fs_cli_bin, "-x", command), self.timeout_seconds)
+        if rc != 0:
+            raise FreeSwitchRuntimeReadError("PBX_FREESWITCH_USER_DATA_FAILED")
+        value = (output or "").strip()
+        if value in {"", "_undef_", "-ERR"}:
+            return None
+        if not re.fullmatch(r"[0-9A-Za-z_.+-]{1,128}", value):
+            raise FreeSwitchRuntimeReadError("PBX_FREESWITCH_USER_CONTEXT_INVALID")
+        return value
