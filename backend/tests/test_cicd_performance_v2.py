@@ -25,7 +25,8 @@ def test_production_deploy_records_timing_and_keeps_governance():
     assert "CICD_PERFORMANCE_V2_EVIDENCE" in text
     assert "perf_phase runtime_verify verify_stack" in text
     assert "source_binding_preflight" in text
-    assert "python3 tools/source_manifest_gate.py" in text
+    assert "python3 tools/source_manifest_gate.py || return $?" in text
+    assert "--out validation/exact_source_binding_source_result.json || return $?" in text
     assert "compose config >/dev/null" in text
 
 

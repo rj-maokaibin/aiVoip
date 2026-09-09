@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "file_count": 791,
-  "aggregate_sha256": "18c6c6b88478dbd1a43169e38eca6f6559c56eb35b21fe632dc2673011bb5483",
+  "file_count": 797,
+  "aggregate_sha256": "dd55cd2dfe1a6a476f6905aa39a2c4eb3c9d4174ce35af3e484b244fdf19bef1",
   "files": [
     {
       "path": ".env.example",
@@ -449,9 +449,14 @@
       "sha256": "785ccd7c563228c84b398e52d094213f0008e076af5b692e7287f08b6021fdb1"
     },
     {
+      "path": "backend/app/automation/adapters/pbx/call_session.py",
+      "size": 7997,
+      "sha256": "b396beedda3d28e53e5e1388af501daa6fc1fbe7f362d59cda253ed7fe79e5f1"
+    },
+    {
       "path": "backend/app/automation/adapters/pbx/esl.py",
-      "size": 10385,
-      "sha256": "ce713422b0e1776dd7ac47332fd6da1ff5f13cbd174d2ec6bc41faf0d3289877"
+      "size": 11867,
+      "sha256": "9194a0698ae631f794e0ddb13c076756cd78bab490becf9bb5471570d5837119"
     },
     {
       "path": "backend/app/automation/adapters/pbx/fusionpbx_config.py",
@@ -485,8 +490,8 @@
     },
     {
       "path": "backend/app/automation/adapters/pbx/registration.py",
-      "size": 6493,
-      "sha256": "af56105c37684c3f36be86466251e708aac6f629ac8344fb2834a53647f6cb82"
+      "size": 8124,
+      "sha256": "4e60d7d75350527333e1df5b4b9c5e2b1c808f7b36e4bea9e468ce2bc189bdf9"
     },
     {
       "path": "backend/app/automation/adapters/pbx/registration_esl.py",
@@ -500,13 +505,18 @@
     },
     {
       "path": "backend/app/automation/adapters/pbx/resource_manager.py",
-      "size": 16526,
-      "sha256": "ae0f000c47c095e3cbe98df25376d522dcc217f21fdb1041771b84eadacb4145"
+      "size": 17212,
+      "sha256": "8887355db58af2817eaf66fe1862ff8dd246a3619159c093d552ee10be6558e7"
+    },
+    {
+      "path": "backend/app/automation/adapters/pbx/runtime_control.py",
+      "size": 7171,
+      "sha256": "623fda52aa36843a20b8f1fcf15259a7224e2521e29ffeedfce88acf7e316e75"
     },
     {
       "path": "backend/app/automation/adapters/pbx/runtime_read.py",
-      "size": 8488,
-      "sha256": "c91b07ca0b97629d1ea3d77abe66f3bc3716e276cee5d579f53df1e23d5e182d"
+      "size": 10201,
+      "sha256": "5d5ee203da639b7059c2efda097572427508c4c29f384f90d97954a6f0ab5dcd"
     },
     {
       "path": "backend/app/automation/adapters/pbx/source_fence.py",
@@ -605,8 +615,8 @@
     },
     {
       "path": "backend/app/automation/gates/golden_web_config_observed.py",
-      "size": 17266,
-      "sha256": "eaab0e5c53a8df82cf6d023370c8056de7cd0d3e5bc198aa1da51278b96c385a"
+      "size": 17291,
+      "sha256": "76288a4a67efe085df94f1e7826b60080dfc7053fffa93d9bd15f7251b1c7c4d"
     },
     {
       "path": "backend/app/automation/gates/runtime_binding.py",
@@ -890,8 +900,8 @@
     },
     {
       "path": "backend/app/capture_v2/gate/context.py",
-      "size": 4796,
-      "sha256": "cfb90d6d11b233858be67ccbf8f69fd678dd3d4796591cd7743b59b5952179b4"
+      "size": 5381,
+      "sha256": "f4831a30d3d8b2cc4f9a2efb17b9a8cc3779854a17d48bc0d9fdb4017658f37f"
     },
     {
       "path": "backend/app/capture_v2/gate/coverage_db_validation.py",
@@ -1795,8 +1805,8 @@
     },
     {
       "path": "backend/app/integrations/credentials.py",
-      "size": 10098,
-      "sha256": "b9e8b9351ce13aaa2da7256560b1831e1a97f10816a305337a71bc4244805372"
+      "size": 10501,
+      "sha256": "24fc1b382d998c344e279ad2098ecccca2eb01375a211186b391d6f73beb4992"
     },
     {
       "path": "backend/app/integrations/feishu/__init__.py",
@@ -2975,8 +2985,8 @@
     },
     {
       "path": "deploy/voip-ai",
-      "size": 31110,
-      "sha256": "6e2ceef8d539174a0ea10206ba1fac546c51005d78d0ecbc3fc7afa675622115"
+      "size": 31136,
+      "sha256": "f3ba64b2e87b3f504b934418d42b31bcaae53356f4c64e9224d1545e23ed8768"
     },
     {
       "path": "docker-compose.e2e.yml",
@@ -3102,6 +3112,16 @@
       "path": "profiles/pbx/fusionpbx_srv_v1.json",
       "size": 2127,
       "sha256": "4190eb3c8f6fa5974b372414607da6cca1eefd322b040fcb99c49cdb30cd7146"
+    },
+    {
+      "path": "profiles/pbx/sipp/g_call_001_answer.xml",
+      "size": 1217,
+      "sha256": "1ceee9ee37baf725570886b379a13e919b48e71cf99b2597e8235d8c14340022"
+    },
+    {
+      "path": "profiles/pbx/sipp/g_call_001_register.xml",
+      "size": 993,
+      "sha256": "703569212551c347b4153a429a32540a751c516e798cfd0fefa33db8a46049f2"
     },
     {
       "path": "profiles/pcm/ruijie_aim_diag_v1.yaml",
@@ -3880,8 +3900,8 @@
     },
     {
       "path": "tools/resolve_current_web_credential_env.py",
-      "size": 16556,
-      "sha256": "aabaab84d29f15967e55039dc043d7e5f9aa486cf98394d92eddc0c0b51ae1b2"
+      "size": 16697,
+      "sha256": "031fd39b22bf530a0cd448d9e467470c2281f1ab881e7dd0fe5e5aa221514110"
     },
     {
       "path": "tools/resolve_real_sip_aba_context.py",
@@ -3909,6 +3929,11 @@
       "sha256": "b0ffcd9d62688d800f4c96fa338a02dd5f131772f17cb844d43485cce80020fd"
     },
     {
+      "path": "tools/run_golden_pbx_call_001.py",
+      "size": 17345,
+      "sha256": "f25d2949e37a2372159b755151a073f724fe8384485ae02a4a9e148133254816"
+    },
+    {
       "path": "tools/run_golden_pbx_register_002.py",
       "size": 11910,
       "sha256": "4903321f32c6f1f8f9057aba25214ea1f4d2e6217954bf210cab6c83757ebe30"
@@ -3922,6 +3947,11 @@
       "path": "tools/run_golden_web_config_observed.py",
       "size": 4078,
       "sha256": "e26404fa463b080c4da303ef5e64051ade070c09039b213c687718e083d9f101"
+    },
+    {
+      "path": "tools/run_srv_golden_pbx_register_002.py",
+      "size": 7046,
+      "sha256": "75626195b32b03c65a6e794e0322f51d3f5601b0f24180360a95b8158a9d215a"
     },
     {
       "path": "tools/security_release_gate.py",
