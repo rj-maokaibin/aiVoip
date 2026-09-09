@@ -65,9 +65,9 @@ def main() -> int:
             domain_id=domain.domain_id,
             extension=args.extension,
         )
-        token = authority.acquire_extension(
+        token = authority.acquire_endpoint(
             pbx_node_id=inventory["node_id"], extension=resource.extension,
-            run_id=args.run_id, owner_worker_id=args.owner,
+            dial_alias=args.dial_alias, run_id=args.run_id, owner_worker_id=args.owner,
         )
     else:
         token = authority.acquire_first_available(
@@ -167,7 +167,10 @@ def main() -> int:
         evidence.get("before_exists") is False
         and evidence.get("before_runtime_visible") is False
         and evidence.get("after_create_exists") is True
-        and evidence.get("after_create_runtime_visible") is True
+        and (
+            (not args.dial_alias and evidence.get("after_create_runtime_visible") is True)
+            or (args.dial_alias and (evidence.get("alias_resolution") or {}).get("resolved_identity") == token.extension)
+        )
         and (not args.dial_alias or evidence.get("before_alias_exists") is False)
         and (not args.dial_alias or evidence.get("before_alias_runtime_visible") is False)
         and (not args.dial_alias or evidence.get("after_create_alias_exists") is True)

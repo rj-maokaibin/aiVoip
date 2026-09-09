@@ -17,7 +17,7 @@
     "7102"
   ],
   "source_fence": {
-    "version": "fusionpbx-srv-source-20260909-v2",
+    "version": "fusionpbx-srv-source-20260909-v3",
     "files": {
       "resources/require.php": "2d29ea99b786c5c111df4cfcc06319138f1544b30300f6aea70635f1100fd761",
       "resources/classes/database.php": "6a0b95eb29d1c27b24d4dcc4a8582b959c627a9173b973b19b2435e1e399dbbb",
@@ -29,6 +29,7 @@
       "resources/classes/cache.php": "e4795fa3154ead2b8ac3a8c6179162a8dacb7dd39743d3cefc5beaccc54d41b3",
       "app/switch/resources/scripts/resources/functions/config.lua": "8b04f7250abdfcd8f05732470fbf8a3713aba75dab2e77f6c44fe7debed84c2e",
       "app/switch/resources/scripts/resources/functions/cache.lua": "1a053f96d24767ca1d55e08c7afa14e1316bfc240f3006728df59bd6b61a4c6d",
+      "app/switch/resources/scripts/resources/functions/xml.lua": "5a5949ef4490fcaef59e657b2cc2b7b958f79a81c0ceca9dc5b48f83df04fdb3",
       "app/switch/resources/scripts/app/xml_handler/resources/scripts/directory/directory.lua": "ee849819d5898f8118e9e2dd4536e442708145af2615e5738e3ed3c8b6be41a1"
     }
   },

@@ -6,7 +6,7 @@ import time
 from datetime import datetime, timezone
 
 from app.automation.adapters.pbx.esl import FreeSwitchEventSocketClient
-from app.automation.adapters.pbx.identity import PbxExtensionIdentityError, normalize_automation_identity
+from app.automation.adapters.pbx.identity import PbxExtensionIdentityError, normalize_sip_user_wire_identity
 from app.automation.adapters.pbx.profile import FusionPbxLabProfile
 from app.automation.adapters.pbx.registration import FusionPbxRegistrationProbe
 from app.automation.gates.golden_web_config import SipRegistrationEvidence
@@ -54,7 +54,7 @@ class FreeSwitchRegistrationObserver:
         require_esl_event: bool = False,
     ) -> SipRegistrationEvidence:
         try:
-            target = normalize_automation_identity(number)
+            target = normalize_sip_user_wire_identity(number)
         except PbxExtensionIdentityError as exc:
             raise FreeSwitchRegistrationObserverError("PBX_REGISTRATION_IDENTITY_INVALID") from exc
         timeout = float(timeout_seconds)

@@ -91,3 +91,9 @@ Extension identity 统一使用 string。Automation-managed identity V1 允许 `
 ## 增量合同：Dial Alias
 
 `pbx_extension_resources` 必须一等持久化 `dial_alias`，不得只放 provider metadata。`dial_alias` V1 合同为 `[0-9]{1,32}`。FusionPBX Provider 使用原生 `number_alias`。Provision 前必须检查 alias 与现有 extension/number_alias 双向冲突；cleanup 必须验证 extension identity、dial alias、FreeSWITCH directory resolution 均 absent 后才能 release。FreeSWITCH alias resolution 使用安全解析后的 root user attributes，禁止 Evidence 携带完整 directory XML/secret params。
+
+## 增量合同：Protocol-complete Test Identity
+
+测试基础设施不得以产品 whitelist 代替协议能力。SIP Identity Core 必须支持 RFC3261 direct user 字符和 `%HH` escaped wire identity；Product Capability、PBX Provider Capability 分别判定。协议合法但 Provider 有已证实风险时，必须返回结构化 `PROVIDER_UNSAFE/PROVIDER_IDENTITY_LOSS`，不得主动 mutation，也不得把它误报为 Core 不支持。
+
+当前 FusionPBX Provider 已实机确认 `$` 会被 `xml.sanitize()` 删除、`/` 存在 file-cache path 风险，因此两者是 Provider hard block；其余 direct 特殊字符的 PBX lifecycle matrix PASS。

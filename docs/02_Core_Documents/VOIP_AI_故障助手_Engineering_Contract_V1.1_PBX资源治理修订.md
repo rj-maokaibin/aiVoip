@@ -81,3 +81,7 @@ G-PBX-001、G-PBX-002、G-CALL-001 未通过前，不得宣布 PBX Infrastructur
 - Alias collision 必须在 mutation 前 fail-closed。
 - Cleanup 必须同时清 extension/alias 两组 FusionPBX/FreeSWITCH cache，并用 `find_user_xml` 证明 alias resolution absent。
 - Evidence 必须区分 `registration_identity` / `dial_alias` / `dialed_digits` / `resolved_identity`。
+
+## Protocol Identity Safety Contract
+
+RFC-valid identity、产品支持 identity、Provider-safe mutation identity 是三个独立集合。所有 Provider mutation 必须使用数据通道传值，不允许把 identity 拼入 shell、Lua 或 SQL 语法；当前 FreeSWITCH runtime/cache helper 使用 hex transport。`$`/`/` 在当前 FusionPBX Source Fence V3 下 fail-closed。Provider capability 变化必须由 Source Fence 变化触发重新发现。

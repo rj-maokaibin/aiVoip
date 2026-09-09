@@ -140,3 +140,11 @@ PBX-T015 production/readback/closure evidence
 - PBX-T006B：alias collision + lease/ownership + stale cache failure injection。
 - PBX-T006C：G-PBX-003，真实 `7900 -> 7900.a` FreeSWITCH directory resolution 与 cleanup。
 - G-CALL 必须使用数字 `dial_alias` 模拟 FXS 用户拨号，不允许把 `7900.a` 当作模拟话机可直接按键输入。
+
+## 增量执行项：Identity Capability Matrix
+
+- PBX-T005C：RFC3261 Core identity codec（direct + `%HH` escaped）。
+- PBX-T005D：FusionPBX Provider-safe identity policy + Source Fence V3。
+- PBX-T005E：全 direct 特殊字符真实 lifecycle matrix；当前 15/15 attempted PASS，`$`、`/` 按风险策略不 mutation，cleanup failure=0。
+- PBX-T005F：runtime/cache transport 改为 hex data channel，消除特殊字符命令解释风险。
+- PBX-T005G：extension identity + numeric dial alias 双资源 exact-term lease/fence。

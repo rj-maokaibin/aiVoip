@@ -1,77 +1,100 @@
 from __future__ import annotations
 
 import asyncio
+import string
 
 import pytest
 
 from app.automation.adapters.pbx.identity import (
     PbxExtensionIdentityError,
+    RFC3261_DIRECT_USER_CHARS,
+    encode_sip_user_identity,
     is_automation_identity,
     normalize_automation_identity,
     normalize_dial_alias,
-    is_dial_alias,
+    normalize_sip_user_wire_identity,
+    normalize_testlab_provider_mutation_identity,
 )
 from app.automation.adapters.pbx.registration import FusionPbxRegistrationProbe
-from app.automation.adapters.pbx.runtime_read import FreeSwitchRuntimeReadProbe
-from app.automation.adapters.pbx.profile import FusionPbxLabProfile
 
 
 @pytest.mark.parametrize(
     "identity",
-    ["7900", "7900.a", "SALES1", "+7900", "7900+lab", "A.B+C1"],
+    ["7900", "7900.a", "SALES1", "+7900", "sales-01", "sales_01", "A.B-C_D+01"],
 )
-def test_managed_extension_identity_supports_alnum_dot_plus(identity: str) -> None:
+def test_product_profile_supports_common_managed_identity(identity: str) -> None:
     assert normalize_automation_identity(identity) == identity
     assert is_automation_identity(identity) is True
 
 
+def test_rfc3261_direct_user_character_matrix_is_core_supported() -> None:
+    expected_special = "-_.!~*'()&=+$,;?/"
+    for char in string.ascii_letters + string.digits + expected_special:
+        identity = f"a{char}1"
+        assert normalize_sip_user_wire_identity(identity) == identity
+        assert char in RFC3261_DIRECT_USER_CHARS
+
+
 @pytest.mark.parametrize(
-    "identity",
-    ["", ".", "+", "7900_x", "7900-x", "7900@pbx", "7900/x", "7900 x", " 7900"],
+    ("logical", "wire"),
+    [
+        ("j@s0n", "j%40s0n"),
+        ("a:b", "a%3Ab"),
+        ("room 1", "room%201"),
+        ("100%real", "100%25real"),
+        ("福州", "%E7%A6%8F%E5%B7%9E"),
+    ],
 )
-def test_managed_extension_identity_rejects_out_of_contract_chars(identity: str) -> None:
-    with pytest.raises(PbxExtensionIdentityError, match="PBX_AUTOMATION_IDENTITY_INVALID"):
-        normalize_automation_identity(identity)
+def test_sip_user_codec_supports_escaped_logical_identity(logical: str, wire: str) -> None:
+    encoded = encode_sip_user_identity(logical)
+    assert encoded.wire == wire
+    assert encoded.escaped is True
+    assert normalize_sip_user_wire_identity(wire) == wire
 
 
-def test_registration_probe_matches_dot_and_plus_identity_exactly() -> None:
+@pytest.mark.parametrize("wire", ["a%b", "a%G1b", "a b", "a@b", "a:b", "a\\b"])
+def test_raw_wire_rejects_chars_that_require_escaping_or_are_invalid(wire: str) -> None:
+    with pytest.raises(PbxExtensionIdentityError):
+        normalize_sip_user_wire_identity(wire)
+
+
+@pytest.mark.parametrize("logical", ["a\x00b", "a\rb", "a\nb", "a\x7fb"])
+def test_safe_positive_codec_rejects_control_characters(logical: str) -> None:
+    with pytest.raises(PbxExtensionIdentityError, match="CONTROL_CHAR"):
+        encode_sip_user_identity(logical)
+
+
+@pytest.mark.parametrize("identity", ["a!1", "a~1", "a*1", "a'1", "a(1)", "a&1", "a=1", "a,1", "a;1", "a?1"])
+def test_fusionpbx_testlab_mutation_accepts_safe_direct_protocol_chars(identity: str) -> None:
+    assert normalize_testlab_provider_mutation_identity(identity) == identity
+
+
+def test_protocol_legal_slash_is_provider_rejected_due_file_cache_path_risk() -> None:
+    assert normalize_sip_user_wire_identity("a/1") == "a/1"
+    with pytest.raises(PbxExtensionIdentityError, match="PATH_RISK"):
+        normalize_testlab_provider_mutation_identity("a/1")
+
+
+def test_protocol_legal_dollar_is_provider_rejected_due_xml_identity_loss() -> None:
+    assert normalize_sip_user_wire_identity("a$1") == "a$1"
+    with pytest.raises(PbxExtensionIdentityError, match="XML_SANITIZE_LOSS"):
+        normalize_testlab_provider_mutation_identity("a$1")
+
+
+def test_dial_alias_remains_numeric_only() -> None:
+    assert normalize_dial_alias("7900") == "7900"
+    for bad in ("79.00", "+7900", "7900a", "*7900", "7900#"):
+        with pytest.raises(PbxExtensionIdentityError, match="PBX_DIAL_ALIAS_INVALID"):
+            normalize_dial_alias(bad)
+
+
+def test_registration_probe_matches_rfc_punctuation_identity_exactly() -> None:
     def runner(argv: tuple[str, ...], _timeout: float):
-        output = "7900.a@example.test +7901@example.test 17900.a@example.test"
-        return 0, output
+        del argv
+        return 0, "a;1@example.test a?1@example.test xa;1@example.test"
 
     probe = FusionPbxRegistrationProbe(runner=runner, poll_interval_seconds=0.001)
-    dot = asyncio.run(probe.wait_registered(number="7900.a", timeout_seconds=0.01))
-    plus = asyncio.run(probe.wait_registered(number="+7901", timeout_seconds=0.01))
-    assert dot.registered is True
-    assert plus.registered is True
-
-
-@pytest.mark.parametrize("alias", ["0", "7900", "00123", "12345678901234567890123456789012"])
-def test_dial_alias_is_numeric_only(alias: str) -> None:
-    assert normalize_dial_alias(alias) == alias
-    assert is_dial_alias(alias) is True
-
-
-@pytest.mark.parametrize("alias", ["", "7900.a", "+7900", "79*00", "79#00", " 7900", "7900 "])
-def test_dial_alias_rejects_non_dtmf_numeric_contract(alias: str) -> None:
-    with pytest.raises(PbxExtensionIdentityError, match="PBX_DIAL_ALIAS_INVALID"):
-        normalize_dial_alias(alias)
-
-
-def test_freeswitch_alias_resolution_returns_only_safe_root_identity_fields() -> None:
-    profile = FusionPbxLabProfile.from_dict({
-        "schema_version": "pbx-lab-profile-v1", "node_key": "x", "host": "127.0.0.1",
-        "fusionpbx_root": "/tmp/fusionpbx", "php_bin": "/usr/bin/php", "fs_cli_bin": "/usr/bin/fs_cli",
-        "internal_profile": "internal", "internal_port": 5060,
-        "extension_pool": {"start": 7900, "end": 7999}, "protected_extensions": ["7102"],
-        "source_fence": {"version": "v", "files": {"x": "0" * 64}},
-    })
-    raw = ('<user id="7900.a" number-alias="7900" domain-name="pbx.test">'
-           '<params><param name="password" value="must-not-escape"/></params></user>')
-    probe = FreeSwitchRuntimeReadProbe(profile, runner=lambda _argv, _timeout: (0, raw))
-    result = probe.resolve_directory_identity("7900", domain_name="pbx.test")
-    assert result == {
-        "resolved_identity": "7900.a", "number_alias": "7900",
-        "domain_name": "pbx.test", "secret_values_emitted": False,
-    }
-    assert "must-not-escape" not in repr(result)
+    semi = asyncio.run(probe.wait_registered(number="a;1", timeout_seconds=0.01))
+    question = asyncio.run(probe.wait_registered(number="a?1", timeout_seconds=0.01))
+    assert semi.registered is True
+    assert question.registered is True

@@ -282,3 +282,56 @@ def test_expired_dirty_resource_can_only_reacquire_as_recovery() -> None:
         row = session.get(PbxExtensionResource, recovered.resource_id)
         assert row.state == PbxResourceState.RECOVERING.value
         assert row.ownership_marker == "AIVOIP_AUTOMATION:run-a:1"
+
+
+def _seed_endpoint_resources(Session):
+    with Session() as session:
+        node = PbxNode(
+            node_key="endpoint-pbx", provider="fusionpbx", runtime_provider="freeswitch",
+            host="127.0.0.1", fusionpbx_root="/tmp/fusionpbx", internal_profile="internal",
+            internal_port=5060, status="PBX_READY", source_fence_version="test-v1",
+        )
+        session.add(node); session.flush()
+        for identity in ("test.a", "test.b", "7900"):
+            session.add(PbxExtensionResource(
+                pbx_node_id=node.id, domain_id="d1", extension=identity,
+                resource_type=PbxResourceType.TEMPORARY_AUTOMATION.value,
+                state=PbxResourceState.FREE.value,
+            ))
+        session.commit()
+        return node.id
+
+
+def test_endpoint_alias_namespace_is_exclusive_across_extensions() -> None:
+    Session = _session_factory()
+    node_id = _seed_endpoint_resources(Session)
+    manager = PbxExtensionLeaseManager(Session, ttl_seconds=60)
+    token = manager.acquire_endpoint(
+        pbx_node_id=node_id, extension="test.a", dial_alias="7900",
+        run_id="run-a", owner_worker_id="worker-a",
+    )
+    assert manager.validate(token) is True
+    with pytest.raises(PbxResourceAuthorityError, match="PBX_RESOURCE_BUSY"):
+        manager.acquire_endpoint(
+            pbx_node_id=node_id, extension="test.b", dial_alias="7900",
+            run_id="run-b", owner_worker_id="worker-b",
+        )
+
+
+def test_primary_validation_fences_exact_alias_lease_term() -> None:
+    Session = _session_factory()
+    node_id = _seed_endpoint_resources(Session)
+    manager = PbxExtensionLeaseManager(Session, ttl_seconds=60)
+    token = manager.acquire_endpoint(
+        pbx_node_id=node_id, extension="test.a", dial_alias="7900",
+        run_id="run-a", owner_worker_id="worker-a",
+    )
+    assert manager.validate(token) is True
+    with Session() as session:
+        primary = session.get(PbxExtensionResource, token.resource_id)
+        alias = session.get(PbxExtensionResource, primary.dial_alias_resource_id)
+        alias.lease_epoch = int(alias.lease_epoch) + 1
+        session.commit()
+    assert manager.validate(token) is False
+    with pytest.raises(PbxResourceAuthorityError, match="PBX_DIAL_ALIAS_LEASE_FENCED"):
+        manager.renew(token)

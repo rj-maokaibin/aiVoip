@@ -74,6 +74,12 @@ def _seed(Session, *, extension: str = "7900"):
             deletable=False,
         )
         session.add(resource)
+        if extension != "7900":
+            session.add(PbxExtensionResource(
+                pbx_node_id=node.id, domain_id="d1", extension="7900",
+                resource_type=PbxResourceType.TEMPORARY_AUTOMATION.value,
+                state=PbxResourceState.FREE.value, deletable=False,
+            ))
         session.commit()
         return node.id, resource.id
 
@@ -104,6 +110,18 @@ class FakeRuntime:
 
     def user_context(self, identity: str, *, domain_name: str) -> str | None:
         return "default" if self.stale_visible else None
+
+    def resolve_directory_identity(self, identity: str, *, domain_name: str):
+        if self.config.view is None or domain_name != "pbx.test":
+            return None
+        if identity not in {self.config.view.extension, self.config.view.number_alias}:
+            return None
+        return {
+            "resolved_identity": self.config.view.extension,
+            "number_alias": self.config.view.number_alias,
+            "domain_name": domain_name,
+            "secret_values_emitted": False,
+        }
 
 class FakeMutation:
     def __init__(
@@ -185,15 +203,14 @@ def _manager(
     apply_create=True,
     apply_delete=True,
     extension="7900",
+    dial_alias: str | None = None,
 ):
     Session = _session_factory()
     node_id, _ = _seed(Session, extension=extension)
     authority = PbxExtensionLeaseManager(Session, ttl_seconds=60)
-    token = authority.acquire_extension(
-        pbx_node_id=node_id,
-        extension=extension,
-        run_id="run-1",
-        owner_worker_id="worker-1",
+    token = authority.acquire_endpoint(
+        pbx_node_id=node_id, extension=extension, dial_alias=dial_alias,
+        run_id="run-1", owner_worker_id="worker-1",
     )
     config = FakeConfig()
     runtime = FakeRuntime(config)
@@ -396,7 +413,7 @@ def test_runtime_cache_reconcile_uses_domain_and_context_under_same_lease() -> N
 
 
 def test_non_numeric_identity_with_numeric_dial_alias_is_managed_as_one_resource() -> None:
-    Session, authority, token, config, mutation, manager = _manager(extension="7900.a")
+    Session, authority, token, config, mutation, manager = _manager(extension="7900.a", dial_alias="7900")
     result = manager.provision_extension(
         token, password="unit-password-123", dial_alias="7900"
     )
@@ -418,7 +435,7 @@ def test_non_numeric_identity_with_numeric_dial_alias_is_managed_as_one_resource
 
 
 def test_dial_alias_conflict_fails_before_mutation() -> None:
-    _, _, token, config, mutation, manager = _manager(extension="7900.a")
+    _, _, token, config, mutation, manager = _manager(extension="7900.a", dial_alias="7900")
     config.view = FusionPbxExtensionView(
         domain_id="d1", extension_uuid="manual-1", extension="7109",
         number_alias="7900", enabled=True, description="MANUAL", accountcode="7109",
@@ -430,7 +447,7 @@ def test_dial_alias_conflict_fails_before_mutation() -> None:
 
 
 def test_dial_alias_stale_runtime_is_reconciled_under_same_lease() -> None:
-    _, authority, token, config, mutation, manager = _manager(extension="7900.a")
+    _, authority, token, config, mutation, manager = _manager(extension="7900.a", dial_alias="7900")
     manager.provision_extension(token, password="unit-password-123", dial_alias="7900")
     config.view = None
     manager.runtime.stale_visible = True

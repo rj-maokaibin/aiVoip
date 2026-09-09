@@ -64,3 +64,7 @@ PBX 自动化测试基础设施不得假设分机号为整数。产品验收范�
 ## 增量产品语义：话机拨号与 SIP Identity
 
 普通 FXS 模拟话机不直接输入字母、`.`、`+`。产品体验按“非数字 SIP identity + 数字 dial alias”提供，例如 `7900.a` 注册、用户拨 `7900`。自动化验收必须分别记录 `registration_identity`、`dial_alias`、`dialed_digits`、`resolved_identity`，不得混称为同一个“分机号”。
+
+## 增量产品目标：测试系统全量字符能力
+
+测试系统本身需要覆盖完整 SIP identity 合法空间，而不是只覆盖设备当前承诺字符。对协议合法但当前 Provider 有安全/保真风险的字符，系统必须能够构造、分类和验证拒绝行为，但不得执行不安全 mutation。当前 FusionPBX Provider 已明确 `$` 为 identity-loss、`/` 为 file-cache path risk；其余 RFC direct 特殊字符已完成真实 PBX lifecycle 验证。

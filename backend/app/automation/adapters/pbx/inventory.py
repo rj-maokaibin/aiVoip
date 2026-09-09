@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 
 from app.automation.adapters.pbx.fusionpbx_config import FusionPbxConfigProvider
-from app.automation.adapters.pbx.identity import PbxExtensionIdentityError, normalize_automation_identity
+from app.automation.adapters.pbx.identity import PbxExtensionIdentityError, normalize_testlab_provider_mutation_identity
 from app.automation.adapters.pbx.profile import FusionPbxLabProfile
 from app.automation.adapters.pbx.resource_authority import PbxResourceState, PbxResourceType
 from app.automation.adapters.pbx.source_fence import FusionPbxSourceFence
@@ -45,9 +45,9 @@ class PbxInventoryService:
         extension: str,
     ) -> PbxExtensionResource:
         try:
-            identity = normalize_automation_identity(extension)
+            identity = normalize_testlab_provider_mutation_identity(extension)
         except PbxExtensionIdentityError as exc:
-            raise ValueError("PBX_AUTOMATION_IDENTITY_INVALID") from exc
+            raise ValueError("PBX_PROVIDER_IDENTITY_INVALID") from exc
         if identity in self.profile.protected_extensions:
             raise ValueError("PBX_RESOURCE_PROTECTED")
 

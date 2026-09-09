@@ -18,6 +18,18 @@ def upgrade():
         "pbx_extension_resources",
         sa.Column("dial_alias", sa.String(32), nullable=True),
     )
+    op.add_column(
+        "pbx_extension_resources",
+        sa.Column("dial_alias_resource_id", sa.String(36), nullable=True),
+    )
+    op.add_column(
+        "pbx_extension_resources",
+        sa.Column("dial_alias_lease_id", sa.String(36), nullable=True),
+    )
+    op.add_column(
+        "pbx_extension_resources",
+        sa.Column("dial_alias_lease_epoch", sa.BigInteger(), nullable=True),
+    )
     op.create_index(
         "ix_pbx_extension_dial_alias",
         "pbx_extension_resources",
@@ -28,4 +40,7 @@ def upgrade():
 
 def downgrade():
     op.drop_index("ix_pbx_extension_dial_alias", table_name="pbx_extension_resources")
+    op.drop_column("pbx_extension_resources", "dial_alias_lease_epoch")
+    op.drop_column("pbx_extension_resources", "dial_alias_lease_id")
+    op.drop_column("pbx_extension_resources", "dial_alias_resource_id")
     op.drop_column("pbx_extension_resources", "dial_alias")

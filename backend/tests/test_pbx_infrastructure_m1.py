@@ -122,10 +122,13 @@ def test_config_provider_is_read_only_and_redacts_password(tmp_path: Path) -> No
         "reloadxml",
     ):
         assert forbidden not in source
+    # Read-only discovery is intentionally broader than the mutation profile;
+    # parameterized SQL can safely observe historical/provider-specific punctuation.
+    assert provider.extension_exists("7102;drop") is True
     with pytest.raises(
         FusionPbxConfigProviderError, match="PBX_EXTENSION_IDENTITY_INVALID"
     ):
-        provider.extension_exists("7102;drop")
+        provider.extension_exists("7102\ninvalid")
 
 
 def test_health_gate_returns_safe_pbx_ready(tmp_path: Path) -> None:

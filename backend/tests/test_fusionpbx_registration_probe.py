@@ -53,4 +53,4 @@ def test_registration_probe_rejects_substring_and_out_of_contract_target() -> No
     assert supported.registered is True
 
     with pytest.raises(FusionPbxRegistrationProbeError, match="PBX_REGISTRATION_IDENTITY_INVALID"):
-        asyncio.run(probe.wait_registered(number="7900_x", timeout_seconds=0.01))
+        asyncio.run(probe.wait_registered(number="7900@pbx", timeout_seconds=0.01))

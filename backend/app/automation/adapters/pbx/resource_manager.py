@@ -141,6 +141,8 @@ class PbxResourceManager:
                 raise PbxResourceManagerError(str(exc)) from exc
             if dial_alias == token.extension:
                 raise PbxResourceManagerError("PBX_DIAL_ALIAS_EQUALS_IDENTITY")
+            if not self.authority.validate_dial_alias_binding(token, dial_alias):
+                raise PbxResourceManagerError("PBX_DIAL_ALIAS_AUTHORITY_REQUIRED")
             conflicts = self.config.get_extension(dial_alias)
             foreign_conflicts = [view for view in conflicts if view.extension != token.extension]
             if foreign_conflicts or (conflicts and before is None):
@@ -150,11 +152,20 @@ class PbxResourceManager:
                 if before.number_alias != dial_alias:
                     raise PbxResourceManagerError("PBX_DIAL_ALIAS_READBACK_MISMATCH")
                 visible = self.runtime.user_visible(token.extension, domain_name=domain_name)
+                if dial_alias:
+                    resolution = self.runtime.resolve_directory_identity(dial_alias, domain_name=domain_name)
+                    visible = bool(
+                        resolution is not None
+                        and resolution.get("resolved_identity") == token.extension
+                        and resolution.get("number_alias") == dial_alias
+                    )
                 self._set_resource(
                     token, state=PbxResourceState.READY.value, created_by_automation=True,
                     deletable=True, ownership_marker=marker, dial_alias=dial_alias, dirty_reason=None,
                     provider_metadata_json={"user_context": before.user_context, "extension_uuid": before.extension_uuid, "dial_alias": dial_alias},
                 )
+                if dial_alias is not None:
+                    self.authority.mark_dial_alias_in_use(token)
                 return PbxProvisionResult("CONFIRMED_BY_OBSERVATION", token.extension, marker, visible, True, dial_alias)
             raise PbxResourceManagerError("PBX_EXTENSION_ALREADY_EXISTS")
 
@@ -176,7 +187,17 @@ class PbxResourceManager:
             )
         visible = self.runtime.user_visible(token.extension, domain_name=domain_name)
         alias_visible = bool(dial_alias and self.runtime.user_visible(dial_alias, domain_name=domain_name))
-        if not visible or (dial_alias is not None and not alias_visible):
+        alias_resolution = (
+            self.runtime.resolve_directory_identity(dial_alias, domain_name=domain_name)
+            if dial_alias else None
+        )
+        runtime_confirmed = visible if dial_alias is None else bool(
+            alias_visible
+            and alias_resolution is not None
+            and alias_resolution.get("resolved_identity") == token.extension
+            and alias_resolution.get("number_alias") == dial_alias
+        )
+        if not runtime_confirmed:
             self._set_resource(
                 token, state=PbxResourceState.DIRTY.value,
                 created_by_automation=True, deletable=True, ownership_marker=marker, dial_alias=dial_alias,
@@ -189,8 +210,10 @@ class PbxResourceManager:
             created_by_automation=True, deletable=True, ownership_marker=marker, dial_alias=dial_alias, dirty_reason=None,
             provider_metadata_json={"user_context": after.user_context, "extension_uuid": after.extension_uuid, "dial_alias": dial_alias},
         )
+        if dial_alias is not None:
+            self.authority.mark_dial_alias_in_use(token)
         status = "CONFIRMED_BY_OBSERVATION" if observed_after_unknown else "CONFIRMED"
-        return PbxProvisionResult(status, token.extension, marker, True, observed_after_unknown, dial_alias)
+        return PbxProvisionResult(status, token.extension, marker, runtime_confirmed, observed_after_unknown, dial_alias)
 
     def deprovision_extension(self, token: PbxLeaseToken) -> PbxProvisionResult:
         if not self.authority.validate(token):
@@ -290,13 +313,17 @@ class PbxResourceManager:
         return PbxProvisionResult(status, token.extension, marker, False, result.status == "UNKNOWN", dial_alias)
 
     def _mark_free(self, token: PbxLeaseToken) -> None:
+        with self.session_factory() as session:
+            row = session.get(PbxExtensionResource, token.resource_id)
+            has_alias = bool(row is not None and row.dial_alias)
+        if has_alias:
+            self.authority.mark_dial_alias_free(token)
         self._set_resource(
             token,
             state=PbxResourceState.FREE.value,
             created_by_automation=False,
             deletable=False,
             ownership_marker=None,
-            dial_alias=None,
             dirty_reason=None,
             last_cleanup_at=utcnow(),
         )

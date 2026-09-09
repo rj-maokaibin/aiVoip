@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import os
-import re
 import subprocess
 import tempfile
 from dataclasses import dataclass
@@ -10,6 +9,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from app.automation.adapters.pbx.profile import FusionPbxLabProfile
+from app.automation.adapters.pbx.identity import PbxExtensionIdentityError, normalize_read_only_identity
 
 
 class FusionPbxConfigProviderError(RuntimeError):
@@ -17,8 +17,6 @@ class FusionPbxConfigProviderError(RuntimeError):
 
 
 PhpRunner = Callable[[str, dict[str, Any], float], tuple[int | None, str]]
-_EXTENSION_RE = re.compile(r"^[0-9A-Za-z.+_-]{1,64}$")
-
 
 @dataclass(frozen=True)
 class FusionPbxDomain:
@@ -141,10 +139,10 @@ class FusionPbxConfigProvider:
 
     @staticmethod
     def _validate_identity(identity: str) -> str:
-        value = str(identity).strip()
-        if not _EXTENSION_RE.fullmatch(value):
-            raise FusionPbxConfigProviderError("PBX_EXTENSION_IDENTITY_INVALID")
-        return value
+        try:
+            return normalize_read_only_identity(identity)
+        except PbxExtensionIdentityError as exc:
+            raise FusionPbxConfigProviderError("PBX_EXTENSION_IDENTITY_INVALID") from exc
 
     def discover_domains(self) -> tuple[FusionPbxDomain, ...]:
         rows = self._call("domains").get("rows") or []

@@ -12,7 +12,7 @@ from app.automation.adapters.pbx.profile import FusionPbxLabProfile
 from app.automation.adapters.pbx.resource_authority import PbxLeaseToken
 from app.automation.adapters.pbx.identity import (
     PbxExtensionIdentityError,
-    normalize_automation_identity,
+    normalize_testlab_provider_mutation_identity,
     normalize_dial_alias,
 )
 from app.automation.adapters.pbx.source_fence import FusionPbxSourceFence
@@ -60,11 +60,17 @@ class FusionPbxMutationResult:
 
 _CACHE_RECONCILE_LUA = r'''
 local Cache = require "resources.functions.cache"
+local function hex_decode(value)
+  if value == nil or string.len(value) % 2 ~= 0 or string.match(value, "[^0-9A-Fa-f]") then return nil end
+  return (string.gsub(value, "..", function(cc) return string.char(tonumber(cc, 16)) end))
+end
 local ok_all = true
 for i = 1, #argv do
-  local key = argv[i]
-  local ok = Cache.del(key)
-  if not ok then ok_all = false end
+  local key = hex_decode(argv[i])
+  if key == nil then ok_all = false else
+    local ok = Cache.del(key)
+    if not ok then ok_all = false end
+  end
 end
 local api = freeswitch.API()
 api:execute("reloadxml", "")
@@ -263,7 +269,8 @@ class FusionPbxMutationProvider:
             os.fchmod(fd, 0o644)
             with os.fdopen(fd, "w", encoding="utf-8") as stream:
                 stream.write(_CACHE_RECONCILE_LUA)
-            command = "lua " + path + " " + " ".join(keys)
+            encoded_keys = tuple(key.encode("utf-8").hex() for key in keys)
+            command = "lua " + path + " " + " ".join(encoded_keys)
             cp = subprocess.run(
                 [self.profile.fs_cli_bin, "-x", command],
                 stdout=subprocess.PIPE,
@@ -295,9 +302,9 @@ class FusionPbxMutationProvider:
         if token.extension in self.profile.protected_extensions:
             raise FusionPbxMutationError("PBX_RESOURCE_PROTECTED")
         try:
-            normalize_automation_identity(token.extension)
+            normalize_testlab_provider_mutation_identity(token.extension)
         except PbxExtensionIdentityError as exc:
-            raise FusionPbxMutationError("PBX_AUTOMATION_IDENTITY_INVALID") from exc
+            raise FusionPbxMutationError("PBX_PROVIDER_IDENTITY_INVALID") from exc
         self.source_fence.verify_mutation_contract()
 
     @staticmethod

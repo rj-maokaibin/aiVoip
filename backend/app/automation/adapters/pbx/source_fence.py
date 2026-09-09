@@ -94,6 +94,7 @@ class FusionPbxSourceFence:
             "app/extensions/extension_copy.php",
             "app/switch/resources/scripts/resources/functions/config.lua",
             "app/switch/resources/scripts/resources/functions/cache.lua",
+            "app/switch/resources/scripts/resources/functions/xml.lua",
             "app/switch/resources/scripts/app/xml_handler/resources/scripts/directory/directory.lua",
         }
         if not required.issubset(self.profile.source_hashes):
@@ -108,6 +109,9 @@ class FusionPbxSourceFence:
         lua_cache_text = (
             root / "app/switch/resources/scripts/resources/functions/cache.lua"
         ).read_text(encoding="utf-8", errors="ignore")
+        lua_xml_text = (
+            root / "app/switch/resources/scripts/resources/functions/xml.lua"
+        ).read_text(encoding="utf-8", errors="ignore")
         directory_lua_text = (
             root / "app/switch/resources/scripts/app/xml_handler/resources/scripts/directory/directory.lua"
         ).read_text(encoding="utf-8", errors="ignore")
@@ -121,6 +125,8 @@ class FusionPbxSourceFence:
             "lua_cache_method_from_config": 'if (k == "cache.method")' in lua_config_text,
             "lua_cache_file_key_mapping": "key = key2file(key)" in lua_cache_text,
             "lua_cache_file_delete": "File.remove(key)" in lua_cache_text,
+            "lua_xml_sanitize_strips_dollar": '["$"] = ""' in lua_xml_text,
+            "lua_xml_sanitize_escapes_apostrophe": '["\'"] = "&apos;"' in lua_xml_text,
             "directory_cache_key_uses_domain_name": (
                 '"directory:" .. (from_user or user) .. "@" .. domain_name' in directory_lua_text
             ),

@@ -118,9 +118,10 @@ async def _run_combined(args) -> tuple[int, dict]:
         extension=target_identity,
     )
     pbx_authority = PbxExtensionLeaseManager(Session, ttl_seconds=300)
-    pbx_token = pbx_authority.acquire_extension(
+    pbx_token = pbx_authority.acquire_endpoint(
         pbx_node_id=inventory["node_id"],
         extension=resource.extension,
+        dial_alias=args.dial_alias,
         run_id=f"{GOLDEN_PBX_REGISTER_CASE_ID}:{target_identity}",
         owner_worker_id=args.worker_id,
     )

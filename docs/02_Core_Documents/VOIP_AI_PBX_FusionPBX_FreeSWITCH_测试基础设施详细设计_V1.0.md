@@ -389,3 +389,11 @@ V1 不建设多 PBX 节点调度、FusionPBX HA、FreeSWITCH cluster、PSTN trun
 ## 20. 完成定义
 
 只有以下全部满足才可将 PBX Infrastructure V1 标记 CLOSED：provider mutation contract、source fence、lease/ownership、cleanup/recovery、ESL runtime observation、G-PBX-001、G-PBX-002、G-CALL-001、failure injection、exact-head acceptance 与生产/测试环境 readback 全部 PASS。
+
+## 增量设计：RFC3261 Identity Test-System Core
+
+测试系统 Core 与产品能力、Provider mutation 能力必须分层。Core 支持 RFC3261 SIP user 的 direct 字符集 `A-Za-z0-9-_.!~*'()&=+$,;?/`，并支持 `%HH` escaped wire identity；产品 Profile 可声明更窄集合。
+
+当前 FusionPBX Test Lab 真实 capability matrix 已验证：除 `$`、`/` 外，其余 direct 特殊字符均完成 `create -> DB readback -> FreeSWITCH alias resolve -> delete -> absent -> release-last`。`$` 因现网 `xml.sanitize()` 删除字符而标记 `PROVIDER_IDENTITY_LOSS`；`/` 因 file-cache path 风险标记 `PROVIDER_UNSAFE`，两者均不允许主动 mutation。escaped identity（含 `@`、`:`、空格、`%`、Unicode）由 Core codec 支持，但在 Provider decoded-vs-wire 存储语义完成验证前不执行 FusionPBX mutation。
+
+FreeSWITCH runtime read 与 FusionPBX cache reconcile 均使用 hex data channel，禁止将特殊 identity 原样拼接进 shell/Lua command grammar。
