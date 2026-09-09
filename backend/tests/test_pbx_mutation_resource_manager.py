@@ -8,6 +8,7 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from app.automation.adapters.pbx.call_session import PbxCallSessionManager
 from app.automation.adapters.pbx.fusionpbx_config import FusionPbxDomain, FusionPbxExtensionView
 from app.automation.adapters.pbx.fusionpbx_mutation import (
     FusionPbxMutationError,
@@ -483,3 +484,18 @@ def test_provider_writes_number_alias_and_rejects_non_numeric_alias() -> None:
     with pytest.raises(FusionPbxMutationError, match="PBX_DIAL_ALIAS_INVALID"):
         provider.create_extension(token, domain_name="pbx.test", password="unit-password-123",
                                   template_identity="7102", dial_alias="7900.a")
+
+
+def test_cleanup_blocks_active_call_until_session_is_terminal() -> None:
+    Session, authority, token, _, mutation, manager = _manager()
+    manager.provision_extension(token, password="unit-password-123")
+    calls = PbxCallSessionManager(Session, authority=authority)
+    call = calls.create(run_id="run-1", callee=token)
+    with pytest.raises(PbxResourceManagerError, match="PBX_ACTIVE_CALL_SESSION"):
+        manager.deprovision_extension(token)
+    assert mutation.delete_calls == 0
+    calls.fail(call.id, state="FAILED", cause="INJECTED_WORKER_CRASH")
+    result = manager.deprovision_extension(token)
+    assert result.status == "CONFIRMED"
+    manager.release_extension(token)
+    assert authority.validate(token) is False

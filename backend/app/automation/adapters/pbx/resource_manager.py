@@ -12,7 +12,7 @@ from app.automation.adapters.pbx.resource_authority import (
     PbxExtensionLeaseManager, PbxLeaseToken, PbxResourceAuthorityError, PbxResourceState,
 )
 from app.automation.adapters.pbx.runtime_read import FreeSwitchRuntimeReadProbe
-from app.automation.pbx_models import PbxExtensionResource, PbxMutationSnapshot, PbxNode
+from app.automation.pbx_models import PbxCallSession, PbxExtensionResource, PbxMutationSnapshot, PbxNode
 
 
 def utcnow() -> datetime:
@@ -218,6 +218,19 @@ class PbxResourceManager:
     def deprovision_extension(self, token: PbxLeaseToken) -> PbxProvisionResult:
         if not self.authority.validate(token):
             raise PbxResourceManagerError("PBX_LEASE_FENCED")
+        active_call_states = {"CREATED", "ORIGINATING", "RINGING", "ANSWERED", "MEDIA"}
+        with self.session_factory() as session:
+            active_call = session.execute(
+                select(PbxCallSession.id).where(
+                    (
+                        (PbxCallSession.caller_resource_id == token.resource_id)
+                        | (PbxCallSession.callee_resource_id == token.resource_id)
+                    ),
+                    PbxCallSession.state.in_(active_call_states),
+                ).limit(1)
+            ).scalar_one_or_none()
+        if active_call is not None:
+            raise PbxResourceManagerError("PBX_ACTIVE_CALL_SESSION")
         _, domain_name = self._node_domain(token)
         with self.session_factory() as session:
             owned = session.get(PbxExtensionResource, token.resource_id)

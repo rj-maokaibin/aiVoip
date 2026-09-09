@@ -300,7 +300,7 @@ class ObservedGoldenWebConfigGate(GoldenWebConfigGate):
         mutation = await self.web.configure_voip_bundle(probe, context)
         evidence: list[ActionEvidence] = []
 
-        if mutation.unknown_result:
+        if mutation.unknown_result or not mutation.accepted:
             transport_evidence = [_http_evidence_summary(item) for item in mutation.evidence]
             # Keep only the already-sanitized completion metadata in process-local
             # runtime so the live runner can persist an actionable UNKNOWN reason.

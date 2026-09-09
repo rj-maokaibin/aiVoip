@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import select
 import socket
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -158,19 +159,8 @@ def map_runtime_event(payload: dict[str, object]) -> FreeSwitchRuntimeEvent | No
 
 
 class FreeSwitchEventSocketClient:
-    DEFAULT_EVENTS = (
-        "CUSTOM",
-        "sofia::register",
-        "sofia::pre_register",
-        "sofia::unregister",
-        "sofia::expire",
-        "CHANNEL_CREATE",
-        "CHANNEL_PROGRESS",
-        "CHANNEL_PROGRESS_MEDIA",
-        "CHANNEL_ANSWER",
-        "DTMF",
-        "CHANNEL_HANGUP_COMPLETE",
-    )
+    DEFAULT_EVENTS = ("ALL",)
+
 
     def __init__(
         self,
@@ -215,15 +205,41 @@ class FreeSwitchEventSocketClient:
             raise FreeSwitchEslError("FREESWITCH_ESL_NOT_CONNECTED")
         return self._socket, self._stream
 
-    def api(self, command: str) -> str:
-        if not command or "\n" in command or "\r" in command:
+    @staticmethod
+    def _validate_command(command: str) -> str:
+        value = str(command or "")
+        if not value or "\n" in value or "\r" in value:
             raise FreeSwitchEslError("FREESWITCH_ESL_COMMAND_INVALID")
+        return value
+
+    def api(self, command: str) -> str:
+        command = self._validate_command(command)
         sock, stream = self._require_connection()
         sock.sendall(f"api {command}\n\n".encode("utf-8"))
         frame = _read_frame(stream)
         if frame.header("content-type") != "api/response":
             raise FreeSwitchEslError("FREESWITCH_ESL_API_RESPONSE_INVALID")
         return frame.body
+
+    def bgapi(self, command: str) -> str:
+        """Submit a long-running FreeSWITCH command without blocking event observation."""
+        command = self._validate_command(command)
+        sock, stream = self._require_connection()
+        sock.sendall(f"bgapi {command}\n\n".encode("utf-8"))
+        frame = _read_frame(stream)
+        if frame.header("content-type") != "command/reply":
+            raise FreeSwitchEslError("FREESWITCH_ESL_BGAPI_RESPONSE_INVALID")
+        reply = str(frame.header("reply-text") or "")
+        if not reply.startswith("+OK"):
+            raise FreeSwitchEslError("FREESWITCH_ESL_BGAPI_FAILED")
+        job_uuid = str(frame.header("job-uuid") or "").strip()
+        if not job_uuid:
+            marker = "Job-UUID:"
+            if marker in reply:
+                job_uuid = reply.split(marker, 1)[1].strip().split()[0]
+        if not job_uuid:
+            raise FreeSwitchEslError("FREESWITCH_ESL_BGAPI_JOB_UUID_MISSING")
+        return job_uuid
 
     def subscribe(self, events: Iterable[str] | None = None) -> None:
         selected = tuple(events or self.DEFAULT_EVENTS)
@@ -256,9 +272,19 @@ class FreeSwitchEventSocketClient:
         if not str(frame.header("reply-text") or "").startswith("+OK"):
             raise FreeSwitchEslError("FREESWITCH_ESL_PROBE_EVENT_FAILED")
 
-    def read_event(self) -> FreeSwitchRuntimeEvent | None:
-        _, stream = self._require_connection()
+    def read_event(self, *, timeout_seconds: float | None = None) -> FreeSwitchRuntimeEvent | None:
+        sock, stream = self._require_connection()
+        timeout = self.timeout_seconds if timeout_seconds is None else float(timeout_seconds)
+        if timeout <= 0:
+            raise FreeSwitchEslError("FREESWITCH_ESL_EVENT_TIMEOUT_INVALID")
         while True:
+            try:
+                readable, _, _ = select.select((sock,), (), (), timeout)
+            except (AttributeError, TypeError, ValueError, OSError):
+                # In-memory test sockets do not expose a real file descriptor.
+                readable = (sock,)
+            if not readable:
+                raise socket.timeout("FREESWITCH_ESL_EVENT_TIMEOUT")
             frame = _read_frame(stream)
             if frame.header("content-type") != "text/event-json":
                 continue

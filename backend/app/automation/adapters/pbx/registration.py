@@ -168,3 +168,35 @@ class FusionPbxRegistrationProbe:
                     details=last_details,
                 )
             await asyncio.sleep(min(self.poll_interval_seconds, remaining))
+
+    async def wait_unregistered(self, *, number: str, timeout_seconds: float) -> SipRegistrationEvidence:
+        try:
+            target = normalize_sip_user_wire_identity(number)
+        except PbxExtensionIdentityError as exc:
+            raise FusionPbxRegistrationProbeError("PBX_REGISTRATION_IDENTITY_INVALID") from exc
+        timeout = float(timeout_seconds)
+        if timeout <= 0 or timeout > 60.0:
+            raise FusionPbxRegistrationProbeError("PBX_REGISTRATION_TIMEOUT_INVALID")
+
+        deadline = time.monotonic() + timeout
+        last_details: dict[str, Any] = {}
+        last_refs: tuple[str, ...] = ()
+        while True:
+            registered, last_details, last_refs = await asyncio.to_thread(self._observe_once, target)
+            if not registered:
+                details = dict(last_details)
+                details["expected_registered"] = False
+                return SipRegistrationEvidence(
+                    registered=False, number=target, evidence_refs=last_refs,
+                    source_timestamp=datetime.now(timezone.utc), details=details,
+                )
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                details = dict(last_details)
+                details["expected_registered"] = False
+                details["timeout"] = True
+                return SipRegistrationEvidence(
+                    registered=True, number=target, evidence_refs=last_refs,
+                    source_timestamp=datetime.now(timezone.utc), details=details,
+                )
+            await asyncio.sleep(min(self.poll_interval_seconds, remaining))

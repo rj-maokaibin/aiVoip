@@ -30,6 +30,8 @@ elseif op == "context" then
   stream:write(api:execute("user_data", identity .. "@" .. domain .. " var user_context") or "")
 elseif op == "find" then
   stream:write(api:execute("find_user_xml", "id " .. identity .. " " .. domain) or "")
+elseif op == "contact" then
+  stream:write(api:execute("sofia_contact", identity .. "@" .. domain) or "")
 else
   stream:write("-ERR")
 end
@@ -151,6 +153,40 @@ class FreeSwitchRuntimeReadProbe:
         if not re.fullmatch(r"[0-9A-Za-z_.+-]{1,128}", value):
             raise FreeSwitchRuntimeReadError("PBX_FREESWITCH_USER_CONTEXT_INVALID")
         return value
+
+    def registration_contact_visible(self, identity: str, *, domain_name: str) -> bool:
+        try:
+            identity = normalize_sip_user_wire_identity(identity)
+        except PbxExtensionIdentityError as exc:
+            raise FreeSwitchRuntimeReadError("PBX_RUNTIME_IDENTITY_INVALID") from exc
+        domain_name = str(domain_name).strip()
+        if not _DOMAIN_RE.fullmatch(domain_name):
+            raise FreeSwitchRuntimeReadError("PBX_RUNTIME_IDENTITY_INVALID")
+        rc, output = self._api(
+            "contact", identity, domain_name, f"sofia_contact {identity}@{domain_name}"
+        )
+        if rc != 0:
+            raise FreeSwitchRuntimeReadError("PBX_FREESWITCH_CONTACT_FAILED")
+        value = (output or "").strip()
+        if value.startswith("error/user_not_registered") or value in {"", "_undef_"}:
+            return False
+        return value.startswith("sofia/")
+
+    def wait_registration_absent(
+        self, identity: str, *, domain_name: str, timeout_seconds: float, poll_seconds: float = 0.25
+    ) -> bool:
+        import time
+        timeout = float(timeout_seconds)
+        if timeout <= 0 or timeout > 60 or poll_seconds <= 0:
+            raise FreeSwitchRuntimeReadError("PBX_REGISTRATION_TIMEOUT_INVALID")
+        deadline = time.monotonic() + timeout
+        while True:
+            if not self.registration_contact_visible(identity, domain_name=domain_name):
+                return True
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return False
+            time.sleep(min(float(poll_seconds), remaining))
 
     def resolve_directory_identity(self, identity: str, *, domain_name: str) -> dict[str, str | None] | None:
         try:

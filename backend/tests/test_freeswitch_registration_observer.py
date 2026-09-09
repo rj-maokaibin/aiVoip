@@ -75,3 +75,17 @@ def test_esl_registration_observer_allows_plus_identity_and_fallback_reconcile()
     assert result.registered is True
     assert result.details["event_observed"] is False
     assert result.details["fallback_observed"] is True
+
+
+def test_esl_disconnect_does_not_false_pass_registration() -> None:
+    class BrokenClient(FakeClient):
+        def read_event(self):
+            raise OSError("injected disconnect")
+    observer = FreeSwitchRegistrationObserver(
+        _profile(), client=BrokenClient([]), fallback=FakeFallback(False)
+    )
+    result = asyncio.run(observer.wait_registered(
+        number="7900.a", timeout_seconds=0.02, require_esl_event=True
+    ))
+    assert result.registered is False
+    assert result.details["event_stream_error"] == "OSError"

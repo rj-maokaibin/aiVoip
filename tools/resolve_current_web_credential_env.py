@@ -137,7 +137,8 @@ def _matching_secret_candidates_from_root(
         if isinstance(value, dict):
             lowered = {str(key).lower(): key for key in value}
             username_key = lowered.get("username")
-            password_key = lowered.get("password")
+            password_key = (lowered.get("webpass") or lowered.get("web_password")
+                            or lowered.get("password"))
             host_key = lowered.get("host") or lowered.get("ip")
             if username_key is not None and password_key is not None and host_key is not None:
                 host = str(value.get(host_key) or "").strip().lower()
@@ -167,7 +168,7 @@ def _safe_secret_schema_metadata(
     rows: list[dict[str, Any]] = []
     interesting = {
         "username", "user", "admin", "account", "login",
-        "password", "passwd", "pwd", "pass",
+        "password", "passwd", "pwd", "pass", "webpass", "web_password",
         "host", "ip", "url", "web", "luci", "http", "https",
     }
 
@@ -190,7 +191,7 @@ def _safe_secret_schema_metadata(
                         set(lowered) & {"username", "user", "admin", "account", "login"}
                     ),
                     "password_like_key_present": bool(
-                        set(lowered) & {"password", "passwd", "pwd", "pass"}
+                        set(lowered) & {"password", "passwd", "pwd", "pass", "webpass", "web_password"}
                     ),
                     "value_types": {
                         str(key): type(value.get(original_key)).__name__
