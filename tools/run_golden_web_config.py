@@ -145,6 +145,27 @@ def _summary(result, gate: GoldenWebConfigGate, *, device_id: str, model: str) -
     }
 
 
+def _build_registration_probe(args):
+    del args
+    return FusionPbxRegistrationProbe()
+
+
+def _build_gate(*, args, definition, run_id, web, config, registration, authority):
+    return GoldenWebConfigGate(
+        definition=definition,
+        run_id=run_id,
+        device_id=args.device_id,
+        worker_id=args.worker_id,
+        target_number=str(args.target_number or definition.case.parameters.get("target_number") or ""),
+        web=web,
+        config=config,
+        registration_probe=registration,
+        authority=authority,
+        session_factory=SessionLocal,
+        registration_timeout_seconds=args.registration_timeout,
+    )
+
+
 async def _run(args) -> tuple[int, dict]:
     if not args.allow_live_mutation or os.getenv("REAL_LIVE_MUTATION") != "EXPLICIT_ONLY":
         raise RuntimeError("WEB_GOLDEN_LIVE_MUTATION_NOT_EXPLICITLY_AUTHORIZED")
@@ -213,19 +234,10 @@ async def _run(args) -> tuple[int, dict]:
         allowed_modules=("voipUserInfo",),
         authority=authority,
     )
-    registration = FusionPbxRegistrationProbe()
-    gate = GoldenWebConfigGate(
-        definition=definition,
-        run_id=run_id,
-        device_id=args.device_id,
-        worker_id=args.worker_id,
-        target_number=target_number,
-        web=web,
-        config=config,
-        registration_probe=registration,
-        authority=authority,
-        session_factory=SessionLocal,
-        registration_timeout_seconds=args.registration_timeout,
+    registration = _build_registration_probe(args)
+    gate = _build_gate(
+        args=args, definition=definition, run_id=run_id, web=web, config=config,
+        registration=registration, authority=authority,
     )
 
     result = None

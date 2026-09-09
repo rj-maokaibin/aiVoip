@@ -1,12 +1,17 @@
 {
   "schema_version": 1,
-  "file_count": 692,
-  "aggregate_sha256": "398425ce2ab95849c5a2edff0dae028d0b362408e8a412ac8a3eaf6427b40529",
+  "file_count": 797,
+  "aggregate_sha256": "dd55cd2dfe1a6a476f6905aa39a2c4eb3c9d4174ce35af3e484b244fdf19bef1",
   "files": [
     {
       "path": ".env.example",
       "size": 1520,
       "sha256": "a83862a9db77aeb35ecb8d8e8e3935041e669965808c356f5dfdf8ac1148ad36"
+    },
+    {
+      "path": ".github/workflows/consolidated-exact-head-validation.yml",
+      "size": 19493,
+      "sha256": "70d09fa5c679db113c8bd571557171e1f8e3d32bda3dd6e3fc39063ef961e0d3"
     },
     {
       "path": ".github/workflows/evidence-v2-production-golden-bootstrap.yml",
@@ -15,13 +20,13 @@
     },
     {
       "path": ".github/workflows/production-deploy.yml",
-      "size": 11565,
-      "sha256": "237961525d242dadfbdc0cba580d5336458454caf8e72e011391d0e18de18aad"
+      "size": 16839,
+      "sha256": "2c47b889c32640b545cce7a34573e11275e2de7f784deee22d08f720132468f6"
     },
     {
       "path": ".github/workflows/source-manifest-gate.yml",
-      "size": 3757,
-      "sha256": "1e7fe773dd89de4f1516f0ff69fe8ef529c341916a9548b82acdf781f60b49f5"
+      "size": 3971,
+      "sha256": "e260a9d7c10cd5f9512a64c9c5fb1debaaa1868963d6b422272f66bf6d9f3439"
     },
     {
       "path": "Makefile",
@@ -409,6 +414,246 @@
       "sha256": "76350edaf61cbcea056b173526a3c9d0fece67a0e98b2007327738d8ab238c52"
     },
     {
+      "path": "backend/app/automation/__init__.py",
+      "size": 106,
+      "sha256": "c6d5c5e9ff03ed0d734adb84b772a2edad0e939a082d09283d4980b96b5793bf"
+    },
+    {
+      "path": "backend/app/automation/actions/__init__.py",
+      "size": 95,
+      "sha256": "2bd73f47632f9827f07a7a7fb84d15d677c6ea7d63d4720692bd3fdf59971136"
+    },
+    {
+      "path": "backend/app/automation/actions/dispatcher.py",
+      "size": 4754,
+      "sha256": "ce55abdc023a3624a7105cdcb49f0ad525ee7218bfa35dca48e58dd3029a6eea"
+    },
+    {
+      "path": "backend/app/automation/adapters/__init__.py",
+      "size": 589,
+      "sha256": "43134ba5f7a4684ef497cc9ff9411228714e7388b35947d81eac645ac81a6adc"
+    },
+    {
+      "path": "backend/app/automation/adapters/entries/__init__.py",
+      "size": 181,
+      "sha256": "d65abbfe6711864a6aad7b835a9ee18e0638c083fdec01d07f03dca013860653"
+    },
+    {
+      "path": "backend/app/automation/adapters/entries/web.py",
+      "size": 22275,
+      "sha256": "f88a5854b961cea2873334c572c3ee409fe237aade69627d975fca17a6d1c7e1"
+    },
+    {
+      "path": "backend/app/automation/adapters/pbx/__init__.py",
+      "size": 3876,
+      "sha256": "785ccd7c563228c84b398e52d094213f0008e076af5b692e7287f08b6021fdb1"
+    },
+    {
+      "path": "backend/app/automation/adapters/pbx/call_session.py",
+      "size": 7997,
+      "sha256": "b396beedda3d28e53e5e1388af501daa6fc1fbe7f362d59cda253ed7fe79e5f1"
+    },
+    {
+      "path": "backend/app/automation/adapters/pbx/esl.py",
+      "size": 11867,
+      "sha256": "9194a0698ae631f794e0ddb13c076756cd78bab490becf9bb5471570d5837119"
+    },
+    {
+      "path": "backend/app/automation/adapters/pbx/fusionpbx_config.py",
+      "size": 8348,
+      "sha256": "a79311717b014c2be647e97b9ae235d5c61f55eead792af3a1913a5a51b3eed7"
+    },
+    {
+      "path": "backend/app/automation/adapters/pbx/fusionpbx_mutation.py",
+      "size": 18397,
+      "sha256": "6a81fe18f236a7edff0526fe3ed558d12e254af15667ce14c45c0706295b4b27"
+    },
+    {
+      "path": "backend/app/automation/adapters/pbx/health.py",
+      "size": 7505,
+      "sha256": "a0b71669a55145ddcbe20bd1b085558c6b128127c4ee5ed002c821f6e9c34714"
+    },
+    {
+      "path": "backend/app/automation/adapters/pbx/identity.py",
+      "size": 5210,
+      "sha256": "73396c285a8e1186a3bac6f582829432413d46e14e5f35324193bbbf4623b656"
+    },
+    {
+      "path": "backend/app/automation/adapters/pbx/inventory.py",
+      "size": 8422,
+      "sha256": "e892aab4cc301feb98dafd776f726f8f13ea94c7cd0a38a1ed570e191230b54f"
+    },
+    {
+      "path": "backend/app/automation/adapters/pbx/profile.py",
+      "size": 3601,
+      "sha256": "0492a256d18a253fc6ec5afce87d630d059811f4e3e351ce2926e658c5b69c6e"
+    },
+    {
+      "path": "backend/app/automation/adapters/pbx/registration.py",
+      "size": 8124,
+      "sha256": "4e60d7d75350527333e1df5b4b9c5e2b1c808f7b36e4bea9e468ce2bc189bdf9"
+    },
+    {
+      "path": "backend/app/automation/adapters/pbx/registration_esl.py",
+      "size": 5773,
+      "sha256": "22c416d3aa8dce1b47e1978284ddbf27265d72401c19cb5d0b0dc9d21e7f9bff"
+    },
+    {
+      "path": "backend/app/automation/adapters/pbx/resource_authority.py",
+      "size": 23731,
+      "sha256": "893154be4daef56c761d187fba871ca4bfa5f2155459017b1772be8774c6d9c0"
+    },
+    {
+      "path": "backend/app/automation/adapters/pbx/resource_manager.py",
+      "size": 17212,
+      "sha256": "8887355db58af2817eaf66fe1862ff8dd246a3619159c093d552ee10be6558e7"
+    },
+    {
+      "path": "backend/app/automation/adapters/pbx/runtime_control.py",
+      "size": 7171,
+      "sha256": "623fda52aa36843a20b8f1fcf15259a7224e2521e29ffeedfce88acf7e316e75"
+    },
+    {
+      "path": "backend/app/automation/adapters/pbx/runtime_read.py",
+      "size": 10201,
+      "sha256": "5d5ee203da639b7059c2efda097572427508c4c29f384f90d97954a6f0ab5dcd"
+    },
+    {
+      "path": "backend/app/automation/adapters/pbx/source_fence.py",
+      "size": 6484,
+      "sha256": "4b1d88500b2aedaf75194fdf16c4402c19066aaf00e65e77bf39dda903c958f3"
+    },
+    {
+      "path": "backend/app/automation/adapters/web_auth/__init__.py",
+      "size": 692,
+      "sha256": "443faff75474d5b010073ad6d1c1b97a01f238b5006d92bfb1676f3caed80fc5"
+    },
+    {
+      "path": "backend/app/automation/adapters/web_auth/apf3260m.py",
+      "size": 9082,
+      "sha256": "c1fb3d86f03ba298c3ecd699cfe935790e252d32a7817318510554ca829661e9"
+    },
+    {
+      "path": "backend/app/automation/adapters/web_auth/base.py",
+      "size": 2753,
+      "sha256": "4b81ebc313a0c7be6b53df80de950da229cb0801b869f5e61f3766364743a6a4"
+    },
+    {
+      "path": "backend/app/automation/adapters/web_auth/legacy_luci.py",
+      "size": 3670,
+      "sha256": "a11703d8736b39e6181248412e412cfc353b138aa497ba68f222dec2a53d78bf"
+    },
+    {
+      "path": "backend/app/automation/adapters/web_profiles/__init__.py",
+      "size": 229,
+      "sha256": "4d42d6141e68bc795b0042786db434fc0e88a142c2afddc54d89a7bcf00fdd9e"
+    },
+    {
+      "path": "backend/app/automation/adapters/web_profiles/schema.py",
+      "size": 7774,
+      "sha256": "b248f07d3accad9309ad8caa52ae4d56b181e0129bbe5d0e5e744b3a0ad28947"
+    },
+    {
+      "path": "backend/app/automation/assertions/__init__.py",
+      "size": 92,
+      "sha256": "8e709200625344d44e5cd22e824b8763f688876db2b857fa66902172f8dbc13f"
+    },
+    {
+      "path": "backend/app/automation/assertions/engine.py",
+      "size": 5024,
+      "sha256": "751036c0d863e596c44a12714f329278f47832a468f99046a00cdc6760ed6a95"
+    },
+    {
+      "path": "backend/app/automation/assertions/operators.py",
+      "size": 3030,
+      "sha256": "786f648f0efbaded9583812e9099a292efe5adb3267e7cc2808dc81d1756cb0c"
+    },
+    {
+      "path": "backend/app/automation/assertions/resolver.py",
+      "size": 1778,
+      "sha256": "34a9d05fa25886e4a90878bf48affc415d5e9ffb1b89c4a6b88708c1e0825ecd"
+    },
+    {
+      "path": "backend/app/automation/cleanup.py",
+      "size": 8436,
+      "sha256": "74d5a9aea8da2f64284d2b58b47b1b966ed36d3b0c0bebbc844c5889c32509ec"
+    },
+    {
+      "path": "backend/app/automation/contracts.py",
+      "size": 12235,
+      "sha256": "a91704843546f02ef3fb60c4669e8fd0fa6faefac1a5aafa7e4e6c7626e799be"
+    },
+    {
+      "path": "backend/app/automation/event_wait.py",
+      "size": 2413,
+      "sha256": "f65a8948785dd2dbbdeddd20cd07636b762beb87655927285550547200d5cfdf"
+    },
+    {
+      "path": "backend/app/automation/gates/__init__.py",
+      "size": 190,
+      "sha256": "844ffeace9a32faa32e6790ffbc65d672d7aab3c740d3af1ca87e2f03b833ea9"
+    },
+    {
+      "path": "backend/app/automation/gates/g0_recovery.py",
+      "size": 2884,
+      "sha256": "845076cf795164db4e3a5d576a86fdafb71e1727e2d843013edd8b5f4260265c"
+    },
+    {
+      "path": "backend/app/automation/gates/golden_cfg_config.py",
+      "size": 12469,
+      "sha256": "c68424b61f513b8084bf1e88431ee199843980464a7d3fd7f0bfe851180c0911"
+    },
+    {
+      "path": "backend/app/automation/gates/golden_pbx_register.py",
+      "size": 13659,
+      "sha256": "8a99f47f48e4b91cd81692fc909ae3a308a0f326df7dbd0234452d9a58368c01"
+    },
+    {
+      "path": "backend/app/automation/gates/golden_web_config.py",
+      "size": 20817,
+      "sha256": "6e4d6a90deb4492753f2ee193e2163e63fe05ac593a566056d5ba851f0026baa"
+    },
+    {
+      "path": "backend/app/automation/gates/golden_web_config_observed.py",
+      "size": 17291,
+      "sha256": "76288a4a67efe085df94f1e7826b60080dfc7053fffa93d9bd15f7251b1c7c4d"
+    },
+    {
+      "path": "backend/app/automation/gates/runtime_binding.py",
+      "size": 6321,
+      "sha256": "db07f0fa17fee49a320fe1a8b735a1e2a9b2a800ce8583d1bf51c4ce5b4951b6"
+    },
+    {
+      "path": "backend/app/automation/models.py",
+      "size": 4528,
+      "sha256": "c8d03b5f5177f1fc81a1190a4210f87c5935fc211dfe0d1bb1e98278de12cb37"
+    },
+    {
+      "path": "backend/app/automation/orchestrator.py",
+      "size": 16865,
+      "sha256": "28cb7ded09f1f050b70033728e5bfa8bfadf73079a3a1a26b60ef4e943f52881"
+    },
+    {
+      "path": "backend/app/automation/pbx_models.py",
+      "size": 7280,
+      "sha256": "63670261635234337863a4d4250c63aec14d63eef08e3e9550610074fd82300c"
+    },
+    {
+      "path": "backend/app/automation/persistence.py",
+      "size": 8585,
+      "sha256": "6e8dfa8588ef39959654b7f49bd1ed1e1d6c548481d0f98df6fc768552c7f614"
+    },
+    {
+      "path": "backend/app/automation/registry.py",
+      "size": 3768,
+      "sha256": "940b15171d4dc1c26ec50081873d5291c168448e97e303857f182496fff92a7e"
+    },
+    {
+      "path": "backend/app/automation/state_machine.py",
+      "size": 3335,
+      "sha256": "7a8fbe14c912ac61ac44cbf64aaa0bebef4db59414200cd6a7e8d21f09e31f68"
+    },
+    {
       "path": "backend/app/capture_v2/__init__.py",
       "size": 91,
       "sha256": "223f648a770ef254496c520cafcacd355052f3558a16bbb814a0fa8a5b934014"
@@ -655,8 +900,8 @@
     },
     {
       "path": "backend/app/capture_v2/gate/context.py",
-      "size": 4796,
-      "sha256": "cfb90d6d11b233858be67ccbf8f69fd678dd3d4796591cd7743b59b5952179b4"
+      "size": 5381,
+      "sha256": "f4831a30d3d8b2cc4f9a2efb17b9a8cc3779854a17d48bc0d9fdb4017658f37f"
     },
     {
       "path": "backend/app/capture_v2/gate/coverage_db_validation.py",
@@ -1479,14 +1724,89 @@
       "sha256": "3c76afde19535083894c4c3a0ae29a6f6245d639f6736530be3988246d3e1718"
     },
     {
+      "path": "backend/app/infrastructure/__init__.py",
+      "size": 507,
+      "sha256": "540113228a64e91ebb46fd34128a8364f68d89826e0376d2ff990d40bd8633ad"
+    },
+    {
+      "path": "backend/app/infrastructure/action_route.py",
+      "size": 1393,
+      "sha256": "a9d3dc8b8fe0279584a7acf3304bd56ccd903c1852cf96ff45ff19ac820b91c8"
+    },
+    {
+      "path": "backend/app/infrastructure/config_framework/__init__.py",
+      "size": 552,
+      "sha256": "5fd22e8ae6918011f7a201226ef4789c3408e3fc7c78513c67b3fbccfeeffd50"
+    },
+    {
+      "path": "backend/app/infrastructure/config_framework/executor.py",
+      "size": 6230,
+      "sha256": "eb38d5cdaef71a7c4e5a2e04a9d3bfc60391b5e748d20e76aa42daab438d7f51"
+    },
+    {
+      "path": "backend/app/infrastructure/config_framework/schema.py",
+      "size": 3881,
+      "sha256": "a1bae3d41e9c05208fc162186e1fc8f6c9b53785f87401563292b112c264e2bc"
+    },
+    {
+      "path": "backend/app/infrastructure/config_framework/voip_contracts.py",
+      "size": 1443,
+      "sha256": "bb2b9cd83fc9ac4d4f85cb5d08a808b28cc94c11e0c6ffc097f906bcfbfdfa30"
+    },
+    {
+      "path": "backend/app/infrastructure/device_authority/__init__.py",
+      "size": 271,
+      "sha256": "53c048226b6adddc2c90fa9eab23688b4b5aa8e993b3861b51d174f4893b7be7"
+    },
+    {
+      "path": "backend/app/infrastructure/device_authority/base.py",
+      "size": 731,
+      "sha256": "ea593a40d051de1746c5e3dda9d5c914d6e18344251a952110c49b6538f05e60"
+    },
+    {
+      "path": "backend/app/infrastructure/device_authority/capture_lease_adapter.py",
+      "size": 1383,
+      "sha256": "d19221cd13b29fbac80917cf0d6ef2c9e669b058fb2d011782b8320eeb70e201"
+    },
+    {
+      "path": "backend/app/infrastructure/device_authority/keepalive.py",
+      "size": 2839,
+      "sha256": "0f06e3ce68c69c2de918fa25ed06ced8c9098bfab515f8ec250e45b1df03d401"
+    },
+    {
+      "path": "backend/app/infrastructure/mutation/__init__.py",
+      "size": 270,
+      "sha256": "9e5e87a69a0a7ae2bc1a61a0cb85b7a11fa8a9cd51e511692e5ded93a955933a"
+    },
+    {
+      "path": "backend/app/infrastructure/mutation/contract.py",
+      "size": 3498,
+      "sha256": "38b19b52860d051ed66f47ebef8fb54e8b627328f7fbcb28b290d692f49f1001"
+    },
+    {
+      "path": "backend/app/infrastructure/transport/__init__.py",
+      "size": 515,
+      "sha256": "805176c3bfc9f328c2f0ce51b6ef9ae76600a125bff8e16665cccf6af20036f4"
+    },
+    {
+      "path": "backend/app/infrastructure/transport/http.py",
+      "size": 11665,
+      "sha256": "59d4d99a7241b77f9f80d3ced2357d3b5cff1cfadfc33136fa5f2b50acee9cea"
+    },
+    {
+      "path": "backend/app/infrastructure/transport/ssh.py",
+      "size": 2226,
+      "sha256": "07f0b84f5b7247dd81f9ffebb982f2bf58485e0f8f8bad614c9af62bf4111d14"
+    },
+    {
       "path": "backend/app/integrations/__init__.py",
       "size": 0,
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
     {
       "path": "backend/app/integrations/credentials.py",
-      "size": 10098,
-      "sha256": "b9e8b9351ce13aaa2da7256560b1831e1a97f10816a305337a71bc4244805372"
+      "size": 10501,
+      "sha256": "24fc1b382d998c344e279ad2098ecccca2eb01375a211186b391d6f73beb4992"
     },
     {
       "path": "backend/app/integrations/feishu/__init__.py",
@@ -2345,8 +2665,8 @@
     },
     {
       "path": "backend/migrations/env.py",
-      "size": 1519,
-      "sha256": "89e87144d4a99c00f98efbc93fae36d0c42e8ab24668e3361d88622a65976589"
+      "size": 1585,
+      "sha256": "67bc81d3d134fbf287b68a7a40c5b50337900c1d17ed7558c37a65ebf0800481"
     },
     {
       "path": "backend/migrations/script.py.mako",
@@ -2514,9 +2834,24 @@
       "sha256": "085f84681b7ab27db550fcd44f642eed250e8d29c96c0ddeed789e20722c96e3"
     },
     {
+      "path": "backend/migrations/versions/0033_automation_test_runtime_v1.py",
+      "size": 5685,
+      "sha256": "6a64b1fc97ab810a775c0e932309abe34d46e7c68be2fa52b5a896a4a5971739"
+    },
+    {
+      "path": "backend/migrations/versions/0034_pbx_test_lab_v1.py",
+      "size": 8247,
+      "sha256": "dd3c3e493d6a8502aefc2767c6a322efa67043d3c375ec5a8c09f075d8f1000e"
+    },
+    {
+      "path": "backend/migrations/versions/0035_pbx_dial_alias_v1.py",
+      "size": 1419,
+      "sha256": "d0b7100633906811466c367c53135b7c3c133c3a0e67cf65f2b01a9930da151d"
+    },
+    {
       "path": "backend/requirements.txt",
-      "size": 341,
-      "sha256": "37fa44f4e5207a27e045dea10d4b42f34127d123a79673a04ce1782e61bfaf95"
+      "size": 362,
+      "sha256": "912dd9576b4c3eb4b881a0134679c5ea634e453c9974daf4dc2831588376d02e"
     },
     {
       "path": "backend/run_feishu_long_connection.py",
@@ -2555,8 +2890,8 @@
     },
     {
       "path": "deploy/docker_network_guard.py",
-      "size": 11247,
-      "sha256": "106d6f7a17eb91aa12b490b6d2504b8034b7a162d1d670c2036822ca713a7f2f"
+      "size": 11690,
+      "sha256": "a34439d5f3bda9a07b49c0cc4785603db5ba68066e75a5ba798f120605927908"
     },
     {
       "path": "deploy/evidence_v2_rollout.json",
@@ -2650,8 +2985,8 @@
     },
     {
       "path": "deploy/voip-ai",
-      "size": 31110,
-      "sha256": "6e2ceef8d539174a0ea10206ba1fac546c51005d78d0ecbc3fc7afa675622115"
+      "size": 31136,
+      "sha256": "f3ba64b2e87b3f504b934418d42b31bcaae53356f4c64e9224d1545e23ed8768"
     },
     {
       "path": "docker-compose.e2e.yml",
@@ -2764,9 +3099,29 @@
       "sha256": "b2d90fcfc08493ee8753647b5c7fb4ee457d08b95207d355055ac6854133b909"
     },
     {
+      "path": "profiles/environments/mock-lab.yaml",
+      "size": 96,
+      "sha256": "7a508a5882d2d8ae32c42cecb20161606180d3f1424640359439a5fae1db8ceb"
+    },
+    {
       "path": "profiles/experiments/voip_v1.yaml",
       "size": 5648,
       "sha256": "3511d2b0fe4dde3e26c3d856058699b6dcfaa5ccba63636ead870636707f5556"
+    },
+    {
+      "path": "profiles/pbx/fusionpbx_srv_v1.json",
+      "size": 2127,
+      "sha256": "4190eb3c8f6fa5974b372414607da6cca1eefd322b040fcb99c49cdb30cd7146"
+    },
+    {
+      "path": "profiles/pbx/sipp/g_call_001_answer.xml",
+      "size": 1217,
+      "sha256": "1ceee9ee37baf725570886b379a13e919b48e71cf99b2597e8235d8c14340022"
+    },
+    {
+      "path": "profiles/pbx/sipp/g_call_001_register.xml",
+      "size": 993,
+      "sha256": "703569212551c347b4153a429a32540a751c516e798cfd0fefa33db8a46049f2"
     },
     {
       "path": "profiles/pcm/ruijie_aim_diag_v1.yaml",
@@ -2802,6 +3157,36 @@
       "path": "profiles/reproduction/voip_v1.yaml",
       "size": 9918,
       "sha256": "6936e91bf6578883aaf4cd1d525b6ee2ae762e08d11390382ab90bed75e4b23c"
+    },
+    {
+      "path": "profiles/tests/golden_cfg_config_001.yaml",
+      "size": 509,
+      "sha256": "5f247bef9c497b090b4e84083f122baa7123997cc888d29ef3173c0b4da68f54"
+    },
+    {
+      "path": "profiles/tests/golden_pbx_register_002.yaml",
+      "size": 971,
+      "sha256": "d4b3f688d0950cd97be57d31eefeaf266e9ecefb524550828c833e18582f72ad"
+    },
+    {
+      "path": "profiles/tests/golden_web_config_001.yaml",
+      "size": 855,
+      "sha256": "f140f61dcc8ea0b99ef39cecec182a575535fcbfcd8d5ed9431347665e124e37"
+    },
+    {
+      "path": "profiles/tests/mock_framework_v1.yaml",
+      "size": 3028,
+      "sha256": "66827dbbba9fee2d403034c08cf4c68c7a04a6418a9520829d34b701d7c0a39b"
+    },
+    {
+      "path": "profiles/web_api/apf3260m_reyeeos_2_421_voip_v1.yaml",
+      "size": 1734,
+      "sha256": "226600f1316d41bc6b1864d2d307a85f4bf93d6782571a25edf01a3da50ca8fd"
+    },
+    {
+      "path": "profiles/web_api/legacy_luci_v1.yaml",
+      "size": 372,
+      "sha256": "3f5cbec8d5ebb8a09892745bc747ba1c9b67a93b25367015cc9e77a9de20a176"
     },
     {
       "path": "release/release_policy.yaml",
@@ -2914,9 +3299,24 @@
       "sha256": "2588d2bca6735898a8070bcb840a18425e60559c67b8948165c794b9caff8de6"
     },
     {
+      "path": "tools/ci_dependency_runtime.sh",
+      "size": 6454,
+      "sha256": "3811809360c37063f47c4188c04ecd8f13370220ca5d97a389ee5cc2ed34976e"
+    },
+    {
+      "path": "tools/cicd_performance_v3.py",
+      "size": 3106,
+      "sha256": "ba69932735e41c055f4d74d9a62c01bb7e817a76925d8a60cce5b73d3e69c388"
+    },
+    {
       "path": "tools/compose_contract_gate.py",
       "size": 3648,
       "sha256": "47a7f2849142aa8c2b81988f2810ff608b56c92ea834c97a492e1c0b1f75e80e"
+    },
+    {
+      "path": "tools/consolidated_exact_head_probes.py",
+      "size": 19063,
+      "sha256": "4765f06d9cb5fd8da83da02e8e2f2323f0c6cc925bf04f695fe0fcac46b83342"
     },
     {
       "path": "tools/conversation_dut_live_acceptance.py",
@@ -3239,6 +3639,11 @@
       "sha256": "e9e30823cc66500984f315aa8cb1affc860b650dfea5f876502839dbf650bfc9"
     },
     {
+      "path": "tools/full_acceptance_evidence_gate.py",
+      "size": 4378,
+      "sha256": "eb977233e073f605dea99317fdddf4b778128d27e0471f1ddc123066c03b573b"
+    },
+    {
       "path": "tools/fullstack_e2e.py",
       "size": 15016,
       "sha256": "f497666c0b86272acadd7d0c7698a2f2badf6d0144fb50734f20eb729b34e130"
@@ -3262,6 +3667,16 @@
       "path": "tools/golden_audio_replay.py",
       "size": 5774,
       "sha256": "3f2ca14d51b493c7f6a4d64b57e696c0e710f7f620ef9443dd29bb7c02f3f1d3"
+    },
+    {
+      "path": "tools/golden_pbx_extension_001.py",
+      "size": 8763,
+      "sha256": "fbf9a05743cfc748182324a9b99cd474735417cf9e881c5e94aa997d1fe7dad5"
+    },
+    {
+      "path": "tools/golden_pbx_identity_matrix.py",
+      "size": 5850,
+      "sha256": "d32738ea7cea24f5e77178116ed8dfc35ebe21119f545aeec0f04de433a892b9"
     },
     {
       "path": "tools/golden_synthetic_replay.py",
@@ -3309,6 +3724,11 @@
       "sha256": "56c1502fd1b260dbbe65e581715516b196a3be1cb560154ccaed781dcce479e4"
     },
     {
+      "path": "tools/observe_g0_recovery_state.py",
+      "size": 6980,
+      "sha256": "af8fe4aba1f18eb44539c18e126658444edb8d198c3f193d1fae7a3e82011471"
+    },
+    {
       "path": "tools/offline_analysis_golden_replay.py",
       "size": 4759,
       "sha256": "2e27de20f30d733fe854b7251925394f7bdf92d55b5be7a0c3b5711d3cab9e56"
@@ -3327,6 +3747,11 @@
       "path": "tools/packet_analyze.py",
       "size": 684,
       "sha256": "5f392f1da8a83be09306b0d32b13be10eecc3587464d6da803beeb8dbab37f11"
+    },
+    {
+      "path": "tools/pbx_health_gate.py",
+      "size": 998,
+      "sha256": "a3c4233ec02549c50af5e4c01249cea24251b7970c89c6f05758eb50574273fd"
     },
     {
       "path": "tools/pcm_analyze.py",
@@ -3360,8 +3785,58 @@
     },
     {
       "path": "tools/preliminary_evidence_v1_gate.sh",
-      "size": 1497,
-      "sha256": "53b65b1ff004e1c3d2bede404149e5bdfbccddf350517133b17f309dcb4cea2a"
+      "size": 1598,
+      "sha256": "cadd3015832b42542801a914c8a0125357fb781b4bccc2fe8d7fb2598f679074"
+    },
+    {
+      "path": "tools/probe_current_web_auth_source.py",
+      "size": 5609,
+      "sha256": "ac0e36dcc9ec712f9b3f1df49516f9eaa8624f376cbd8dec3bd01d63866a7be9"
+    },
+    {
+      "path": "tools/probe_dut_web_auth_source_ssh.py",
+      "size": 6311,
+      "sha256": "4399002ee7f4d2464e36b5ed1a4a2295f707be40e2f75cf38613611c1e5f8add"
+    },
+    {
+      "path": "tools/probe_dut_web_auth_symbols.py",
+      "size": 9402,
+      "sha256": "64b6a8019b3e95d2bdf7dd17672e716d3b01a31baee5c05b3c1529a510b7accb"
+    },
+    {
+      "path": "tools/probe_dut_web_authres_flow.py",
+      "size": 6788,
+      "sha256": "c3fcf6df00c1e0b3dfd2a8b5ad78a513e31a844b1f984c854987138e70841270"
+    },
+    {
+      "path": "tools/probe_dut_web_checkpasswd.py",
+      "size": 11179,
+      "sha256": "5077470187546b7d3ad8f9f0825bceac079ad2a4d2415dbc70d7bce52589e03d"
+    },
+    {
+      "path": "tools/probe_dut_web_checkpasswd_flow.py",
+      "size": 6688,
+      "sha256": "5df482e70e0db16cee778eaf0bf790def354011c7891b731668bf1eead7874e9"
+    },
+    {
+      "path": "tools/probe_dut_web_login_backend.py",
+      "size": 13158,
+      "sha256": "05a873907ed2acd280bdd76b3f7d751f6076eb7b3bd82820fc56f48a88c97b95"
+    },
+    {
+      "path": "tools/probe_dut_web_login_flow.py",
+      "size": 8256,
+      "sha256": "392e23b4d691c3ad570700bbca6d45a87cc54fddf1d4f77a4af3e821f647421c"
+    },
+    {
+      "path": "tools/probe_freeswitch_esl.py",
+      "size": 757,
+      "sha256": "5a4657ddafeba105b48a151357a014fb699e93a964437beb53cfe2e0330fa800"
+    },
+    {
+      "path": "tools/probe_freeswitch_esl_event.py",
+      "size": 1692,
+      "sha256": "da559c63f0c7f59ae3eae20e72130410b5ca230be6133de5939582fa6b1dcb91"
     },
     {
       "path": "tools/production_compose_config_gate.sh",
@@ -3387,6 +3862,11 @@
       "path": "tools/publish_markdown_to_feishu.py",
       "size": 8910,
       "sha256": "64f30ac09cfd71594ea3740e0448e1a4d263ed9b57d4ed80949634de75403adb"
+    },
+    {
+      "path": "tools/recover_pbx_extension_resource.py",
+      "size": 3551,
+      "sha256": "3eef67bb4c34e12d96a289b6e5a20378f2374a05f0b2b653ef4c4a7c9cf09699"
     },
     {
       "path": "tools/release_evidence.py",
@@ -3419,24 +3899,59 @@
       "sha256": "d33f51ce0dd3fee1fa8c4ab2493e2b403f5c8565d2c589c472aa5fa4641ac179"
     },
     {
+      "path": "tools/resolve_current_web_credential_env.py",
+      "size": 16697,
+      "sha256": "031fd39b22bf530a0cd448d9e467470c2281f1ab881e7dd0fe5e5aa221514110"
+    },
+    {
       "path": "tools/resolve_real_sip_aba_context.py",
       "size": 11296,
       "sha256": "e04afdd289685279fbaca1b55e7c2ccc1fecc87461d5c02f4632a12cef6bb033"
     },
     {
       "path": "tools/resolve_real_sip_aba_credential_env.py",
-      "size": 5987,
-      "sha256": "5b771547ca3162741e427e2335df59363b51f0137c07ab5b34027bc9410b03f2"
+      "size": 6089,
+      "sha256": "72d771361269971a1cc3b84be40a2aaed7734de591518906b4789be8cdb3ce06"
     },
     {
       "path": "tools/resolve_real_sip_aba_database_env.py",
-      "size": 3007,
-      "sha256": "1e7b565155872237460f1ee69363182777e1a050621b81ec620f854a2e3b255a"
+      "size": 3257,
+      "sha256": "31a7072dfbf959f92f39d4bc64f88e0346e7c6cec9f8591cde456340814bd6aa"
     },
     {
       "path": "tools/rule_validate.py",
       "size": 600,
       "sha256": "ed462592fa4a6f6d517bda3fd34edc8e026322570be36a8b8e08de5d9de3903f"
+    },
+    {
+      "path": "tools/run_golden_cfg_config.py",
+      "size": 6703,
+      "sha256": "b0ffcd9d62688d800f4c96fa338a02dd5f131772f17cb844d43485cce80020fd"
+    },
+    {
+      "path": "tools/run_golden_pbx_call_001.py",
+      "size": 17345,
+      "sha256": "f25d2949e37a2372159b755151a073f724fe8384485ae02a4a9e148133254816"
+    },
+    {
+      "path": "tools/run_golden_pbx_register_002.py",
+      "size": 11910,
+      "sha256": "4903321f32c6f1f8f9057aba25214ea1f4d2e6217954bf210cab6c83757ebe30"
+    },
+    {
+      "path": "tools/run_golden_web_config.py",
+      "size": 12099,
+      "sha256": "87c61ebcc9e0a50861508c16e8e38d1eabeaf2975d0aa15596c8ed6c5ed32675"
+    },
+    {
+      "path": "tools/run_golden_web_config_observed.py",
+      "size": 4078,
+      "sha256": "e26404fa463b080c4da303ef5e64051ade070c09039b213c687718e083d9f101"
+    },
+    {
+      "path": "tools/run_srv_golden_pbx_register_002.py",
+      "size": 7046,
+      "sha256": "75626195b32b03c65a6e794e0322f51d3f5601b0f24180360a95b8158a9d215a"
     },
     {
       "path": "tools/security_release_gate.py",
@@ -3445,8 +3960,8 @@
     },
     {
       "path": "tools/source_manifest_gate.py",
-      "size": 3074,
-      "sha256": "d750120d4fbd2235231e58321deca2cfbeee8e36706157c010167d763e6a48a5"
+      "size": 5178,
+      "sha256": "489051b927f67f307655a7c9ebf075580f4d8d16f26af1784e4fbc77cfa4b8f3"
     },
     {
       "path": "tools/ssh_poc.py",
@@ -3454,9 +3969,19 @@
       "sha256": "68dde6d3fe32a9c39d974d328a64c3ea66608bf44144e9264208b48c7d9a0038"
     },
     {
+      "path": "tools/validate_golden_web_live_control.py",
+      "size": 1142,
+      "sha256": "212908c125a1fa120154e009cc0dbae4fe2b36fc93f846d17afb374b6cb4b330"
+    },
+    {
+      "path": "tools/validate_golden_web_live_control_v3.py",
+      "size": 1431,
+      "sha256": "f6905f4ea2853ec4d188a69519feafbaa2a14d93f4c63f5fd4decbda702540d9"
+    },
+    {
       "path": "tools/voip_ai_release_gate.sh",
-      "size": 5062,
-      "sha256": "5d35e045d3a140f6128e51ffa9815ebe9b9f7fbfc69d235e885bede4049323da"
+      "size": 6260,
+      "sha256": "b4dd5a0bb6f01bb3b2b52ef3c4045b264d63a06cc0a446ad573aa16f1a9f5740"
     },
     {
       "path": "tools/workbench_contract_gate.py",

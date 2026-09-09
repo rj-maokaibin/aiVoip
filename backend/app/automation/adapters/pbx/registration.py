@@ -9,6 +9,9 @@ from datetime import datetime, timezone
 from typing import Any, Callable
 
 from app.automation.gates.golden_web_config import SipRegistrationEvidence
+from app.automation.adapters.pbx.identity import (
+    PbxExtensionIdentityError, RFC3261_DIRECT_USER_CHARS, normalize_sip_user_wire_identity,
+)
 
 
 class FusionPbxRegistrationProbeError(RuntimeError):
@@ -67,13 +70,25 @@ class FusionPbxRegistrationProbe:
 
     @staticmethod
     def _identity_observed(output: str, number: str) -> bool:
-        # Match the identifier as an exact SIP-ish token, not as an IP/UUID/
-        # larger extension substring. This is intentionally the same boundary
-        # contract used by the controlled-runner read-only source probe.
-        pattern = re.compile(
-            rf"(?<![0-9A-Za-z_.+]){re.escape(number)}(?![0-9A-Za-z_.+])"
-        )
-        return bool(pattern.search(output or ""))
+        text = output or ""
+        needle = number + "@"
+        start = 0
+        while True:
+            index = text.find(needle, start)
+            if index < 0:
+                break
+            prefix_end = index
+            prefix_start = prefix_end
+            token_chars = RFC3261_DIRECT_USER_CHARS | {"%"}
+            while prefix_start > 0 and text[prefix_start - 1] in token_chars:
+                prefix_start -= 1
+            prefix = text[prefix_start:prefix_end]
+            if not prefix or prefix == "reg/":
+                return True
+            start = index + 1
+
+        escaped = re.escape(number)
+        return bool(re.search(rf"(?:^|[\s,|]){escaped}(?:$|[\s,|])", text))
 
     def _observe_once(self, number: str) -> tuple[bool, dict[str, Any], tuple[str, ...]]:
         if self._uses_default_runner and shutil.which(self.fs_cli_bin) is None:
@@ -104,10 +119,25 @@ class FusionPbxRegistrationProbe:
             "commands": commands,
         }, tuple(evidence_refs)
 
+    def observe_registered_once(self, *, number: str) -> SipRegistrationEvidence:
+        try:
+            target = normalize_sip_user_wire_identity(number)
+        except PbxExtensionIdentityError as exc:
+            raise FusionPbxRegistrationProbeError("PBX_REGISTRATION_IDENTITY_INVALID") from exc
+        registered, details, refs = self._observe_once(target)
+        return SipRegistrationEvidence(
+            registered=registered,
+            number=target,
+            evidence_refs=refs,
+            source_timestamp=datetime.now(timezone.utc),
+            details=details,
+        )
+
     async def wait_registered(self, *, number: str, timeout_seconds: float) -> SipRegistrationEvidence:
-        target = str(number).strip()
-        if not target or not target.isascii() or not target.isdigit():
-            raise FusionPbxRegistrationProbeError("PBX_NUMERIC_REGISTRATION_TARGET_REQUIRED")
+        try:
+            target = normalize_sip_user_wire_identity(number)
+        except PbxExtensionIdentityError as exc:
+            raise FusionPbxRegistrationProbeError("PBX_REGISTRATION_IDENTITY_INVALID") from exc
         timeout = float(timeout_seconds)
         if timeout <= 0 or timeout > 60.0:
             raise FusionPbxRegistrationProbeError("PBX_REGISTRATION_TIMEOUT_INVALID")
@@ -136,5 +166,37 @@ class FusionPbxRegistrationProbe:
                     evidence_refs=last_refs,
                     source_timestamp=datetime.now(timezone.utc),
                     details=last_details,
+                )
+            await asyncio.sleep(min(self.poll_interval_seconds, remaining))
+
+    async def wait_unregistered(self, *, number: str, timeout_seconds: float) -> SipRegistrationEvidence:
+        try:
+            target = normalize_sip_user_wire_identity(number)
+        except PbxExtensionIdentityError as exc:
+            raise FusionPbxRegistrationProbeError("PBX_REGISTRATION_IDENTITY_INVALID") from exc
+        timeout = float(timeout_seconds)
+        if timeout <= 0 or timeout > 60.0:
+            raise FusionPbxRegistrationProbeError("PBX_REGISTRATION_TIMEOUT_INVALID")
+
+        deadline = time.monotonic() + timeout
+        last_details: dict[str, Any] = {}
+        last_refs: tuple[str, ...] = ()
+        while True:
+            registered, last_details, last_refs = await asyncio.to_thread(self._observe_once, target)
+            if not registered:
+                details = dict(last_details)
+                details["expected_registered"] = False
+                return SipRegistrationEvidence(
+                    registered=False, number=target, evidence_refs=last_refs,
+                    source_timestamp=datetime.now(timezone.utc), details=details,
+                )
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                details = dict(last_details)
+                details["expected_registered"] = False
+                details["timeout"] = True
+                return SipRegistrationEvidence(
+                    registered=True, number=target, evidence_refs=last_refs,
+                    source_timestamp=datetime.now(timezone.utc), details=details,
                 )
             await asyncio.sleep(min(self.poll_interval_seconds, remaining))

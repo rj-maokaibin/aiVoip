@@ -41,7 +41,7 @@ def test_registration_probe_matches_exact_identity_and_never_persists_raw_output
     assert [call[-1] for call in calls] == ["show registrations", "sofia status profile internal reg"]
 
 
-def test_registration_probe_rejects_substring_and_non_numeric_target() -> None:
+def test_registration_probe_rejects_substring_and_out_of_contract_target() -> None:
     def runner(_argv: tuple[str, ...], _timeout: float):
         return 0, "17900@example.test 7900.foo@example.test"
 
@@ -49,5 +49,33 @@ def test_registration_probe_rejects_substring_and_non_numeric_target() -> None:
     evidence = asyncio.run(probe.wait_registered(number="7900", timeout_seconds=0.003))
     assert evidence.registered is False
 
-    with pytest.raises(FusionPbxRegistrationProbeError, match="PBX_NUMERIC_REGISTRATION_TARGET_REQUIRED"):
-        asyncio.run(probe.wait_registered(number="7900.x", timeout_seconds=0.01))
+    supported = asyncio.run(probe.wait_registered(number="7900.foo", timeout_seconds=0.01))
+    assert supported.registered is True
+
+    with pytest.raises(FusionPbxRegistrationProbeError, match="PBX_REGISTRATION_IDENTITY_INVALID"):
+        asyncio.run(probe.wait_registered(number="7900@pbx", timeout_seconds=0.01))
+
+
+def test_wait_unregistered_confirms_absence_without_raw_output() -> None:
+    calls = 0
+    def runner(_argv: tuple[str, ...], _timeout: float):
+        nonlocal calls
+        calls += 1
+        if calls <= 2:
+            return 0, "7900.a@example.test"
+        return 0, "7102@example.test"
+    probe = FusionPbxRegistrationProbe(runner=runner, poll_interval_seconds=0.001)
+    evidence = asyncio.run(probe.wait_unregistered(number="7900.a", timeout_seconds=0.05))
+    assert evidence.registered is False
+    assert evidence.details["expected_registered"] is False
+    assert evidence.details["secret_values_emitted"] is False
+    assert "7900.a@example.test" not in repr(evidence.details)
+
+
+def test_wait_unregistered_times_out_fail_closed() -> None:
+    def runner(_argv: tuple[str, ...], _timeout: float):
+        return 0, "7900.a@example.test"
+    probe = FusionPbxRegistrationProbe(runner=runner, poll_interval_seconds=0.001)
+    evidence = asyncio.run(probe.wait_unregistered(number="7900.a", timeout_seconds=0.003))
+    assert evidence.registered is True
+    assert evidence.details["timeout"] is True

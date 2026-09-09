@@ -155,6 +155,15 @@ class LocalSecretCredentialProvider(CredentialProvider):
             return dev
         raise CredentialError("LOCAL_SECRET_DEVICE_NOT_FOUND")
 
+    def resolve_password(self, *, ip: str, port: int | None = None) -> str:
+        dev = self._db_cred(ip=ip) if self._session_factory is not None else None
+        if dev is None:
+            dev = self._find(ip=ip, port=port)
+        password = str(dev.get("password") or "")
+        if not password:
+            raise CredentialError("LOCAL_SECRET_DEVICE_MISSING_PASSWORD")
+        return password
+
     async def get_password(self, *, sn: str, ip: str, product: str | None = None) -> str:
         dev = self._db_cred(ip=ip, sn=sn) if self._session_factory is not None else None
         if dev is None:

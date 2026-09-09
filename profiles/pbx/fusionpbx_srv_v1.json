@@ -1,0 +1,41 @@
+{
+  "schema_version": "pbx-lab-profile-v1",
+  "node_key": "srv-fusionpbx-01",
+  "provider": "fusionpbx",
+  "runtime_provider": "freeswitch",
+  "host": "10.51.230.212",
+  "fusionpbx_root": "/var/www/fusionpbx",
+  "php_bin": "/usr/bin/php",
+  "fs_cli_bin": "/usr/bin/fs_cli",
+  "internal_profile": "internal",
+  "internal_port": 5060,
+  "extension_pool": {
+    "start": 7900,
+    "end": 7999
+  },
+  "protected_extensions": [
+    "7102"
+  ],
+  "source_fence": {
+    "version": "fusionpbx-srv-source-20260909-v3",
+    "files": {
+      "resources/require.php": "2d29ea99b786c5c111df4cfcc06319138f1544b30300f6aea70635f1100fd761",
+      "resources/classes/database.php": "6a0b95eb29d1c27b24d4dcc4a8582b959c627a9173b973b19b2435e1e399dbbb",
+      "app/extensions/resources/classes/extension.php": "842c070880ebe82cca676d8b04cda8377ca931180c91f72a499e813c3f3eaed9",
+      "app/extensions/extension_edit.php": "5192deb5bfa991524fac80432a65e924a799ecee35d5f14cef80c9764cbb6899",
+      "app/extensions/extension_copy.php": "5be1b1f491559553f78f1af2573d982a73583b1cafae54823fd0be42c2827d76",
+      "resources/classes/event_socket.php": "0e4ca45d3d0de0b3d0ea42eec488d1e2d8ebf7f6362bd1ed8f6d028699555278",
+      "resources/classes/permissions.php": "7efa187998611b2e3f2a99a0e8de5bb2fdfa9ec75f1c63a4a5bbd779c6dd9c86",
+      "resources/classes/cache.php": "e4795fa3154ead2b8ac3a8c6179162a8dacb7dd39743d3cefc5beaccc54d41b3",
+      "app/switch/resources/scripts/resources/functions/config.lua": "8b04f7250abdfcd8f05732470fbf8a3713aba75dab2e77f6c44fe7debed84c2e",
+      "app/switch/resources/scripts/resources/functions/cache.lua": "1a053f96d24767ca1d55e08c7afa14e1316bfc240f3006728df59bd6b61a4c6d",
+      "app/switch/resources/scripts/resources/functions/xml.lua": "5a5949ef4490fcaef59e657b2cc2b7b958f79a81c0ceca9dc5b48f83df04fdb3",
+      "app/switch/resources/scripts/app/xml_handler/resources/scripts/directory/directory.lua": "ee849819d5898f8118e9e2dd4536e442708145af2615e5738e3ed3c8b6be41a1"
+    }
+  },
+  "event_socket": {
+    "host": "127.0.0.1",
+    "port": 8021,
+    "config": "/etc/freeswitch/autoload_configs/event_socket.conf.xml"
+  }
+}

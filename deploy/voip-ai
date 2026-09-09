@@ -269,11 +269,11 @@ source_binding_preflight() {
     return 1
   fi
   mkdir -p validation
-  python3 tools/source_manifest_gate.py
+  python3 tools/source_manifest_gate.py || return $?
   python3 deploy/exact_source_binding_gate.py \
     --env-file "$ENV_FILE" \
     --phase source \
-    --out validation/exact_source_binding_source_result.json
+    --out validation/exact_source_binding_source_result.json || return $?
   echo "EXACT_SOURCE_PREDEPLOY_GATE=PASS revision=$expected"
 }
 

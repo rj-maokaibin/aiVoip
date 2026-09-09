@@ -44,6 +44,16 @@ def password_from_source(source: str = "CAPTURE_GATE_SSH_PASSWORD") -> str:
     ref = str(source or "CAPTURE_GATE_SSH_PASSWORD").strip()
     if ref.startswith("ENV:"):
         return password_from_env(ref[4:])
+    if ref.startswith("LOCAL_SECRET:"):
+        target = ref[len("LOCAL_SECRET:"):].strip()
+        host, sep, port_text = target.rpartition(":")
+        if not sep or not host or not port_text.isdigit():
+            raise CaptureV2Error("CAPTURE_GATE_SSH_CREDENTIAL_REF_INVALID")
+        from app.integrations.credentials import LocalSecretCredentialProvider
+        try:
+            return LocalSecretCredentialProvider().resolve_password(ip=host, port=int(port_text))
+        except Exception as exc:
+            raise CaptureV2Error("CAPTURE_GATE_SSH_CREDENTIAL_MISSING") from exc
     if not ref.startswith("DB:"):
         return password_from_env(ref)
 
